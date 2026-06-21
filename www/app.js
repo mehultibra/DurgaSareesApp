@@ -454,6 +454,46 @@ function updateCartHeader() {
 // ====================================
 // 4. PRODUCT DETAIL (SWIPE DECK)
 // ====================================
+function loadAndCacheDesignImage(imgEl, url, productId, fileName) {
+    var cacheKey = url;
+
+    getImageFromDB(cacheKey).then(blob => {
+        if (blob) {
+            // Found in cache!
+            imgEl.src = URL.createObjectURL(blob);
+        } else {
+            // Not found in cache. Fetch from network, cache it, and show it!
+            fetch(url)
+                .then(res => {
+                    if (!res.ok) throw new Error("HTTP error " + res.status);
+                    return res.blob();
+                })
+                .then(newBlob => {
+                    saveImageToDB(cacheKey, newBlob); // Save to IndexedDB asynchronously
+                    imgEl.src = URL.createObjectURL(newBlob);
+                })
+                .catch(err => {
+                    console.error("Network fetch failed for design image, trying fallback", err);
+                    if (url.includes('%2F0')) {
+                        var fallbackUrl = url.replace('%2F0', '%2F');
+                        loadAndCacheDesignImage(imgEl, fallbackUrl, productId, fileName);
+                    } else {
+                        imgEl.src = url;
+                        imgEl.onerror = function() {
+                            imgEl.parentElement.style.display = 'none';
+                        };
+                    }
+                });
+        }
+    }).catch(err => {
+        console.error("Cache read failed, loading directly", err);
+        imgEl.src = url;
+        imgEl.onerror = function() {
+            imgEl.parentElement.style.display = 'none';
+        };
+    });
+}
+
 function openDetail(productId, skipShow, keepSearchShown) {
     if (!skipShow) {
         cameFromDetail = false;
@@ -482,92 +522,171 @@ function openDetail(productId, skipShow, keepSearchShown) {
     document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
 
     var deck = document.getElementById('dtDesigns');
-    var folderPath = p.gridUrl; // 🛡️ Load fast Grid URL first!
-    var zoomPath = p.zoomUrl; // 🛡️ Tell engine to fetch HD Zoom in background
-
-    if (!folderPath || folderPath === "" || folderPath === "None") {
-        deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="https://placehold.co/600x800/f0f0f0/a0a0a0?text=No+Image"></div>';
-        if (!skipShow) {
-            document.getElementById('detailPanel').classList.add('open');
-            pushHistoryState('detail');
-        }
-        return;
-    }
-
-    var html = '';
-
-    // 🚀 THE RAW FOLDER FIX: Parses comma-separated ready column and ignores old Google Drive image names/IDs.
-    var bucket = "durga-sarees.firebasestorage.app";
-    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var encPath = folderPath.split('/').map(encodeURIComponent).join('%2F');
-
-    var rawDesigns = String(p.ready || "").split(',').map(d => d.trim()).filter(Boolean);
-    var validDesigns = [];
-    rawDesigns.forEach(d => {
-        var cleanNum = d.replace(/\D/g, '');
-        // A valid design name is short (e.g. not a GDrive ID) and extracts to a number >= 2
-        if (d.length <= 10 && cleanNum !== "") {
-            var numVal = parseInt(cleanNum);
-            if (numVal >= 2 && numVal <= 99) {
-                validDesigns.push({
-                    name: d,
-                    numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum
-                });
-            }
-        }
-    });
-
-    if (validDesigns.length > 0) {
-        // Fetch only valid WebP columns defined in Excel
-        validDesigns.forEach((dObj, idx) => {
-            var url = fbBase + encPath + "%2F" + dObj.numStr + ".webp?alt=media";
-            var dKey = p.id + '_' + dObj.name;
-
-            html += `
-            <div class="swipe-card" style="display:none;" onclick="openFs('${p.id}', ${idx}, '${dObj.name}')">
-                <img src="${url}" loading="lazy" onload="this.parentElement.style.display='block'" onerror="this.parentElement.style.display='none'">
-                <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${dObj.name}</div>
-                    <div class="qty-clean">
-                        <button onclick="changeQty('${p.id}', '${dObj.name}', -1)">−</button>
-                        <input type="number" id="qty_${p.id}_${dObj.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
-                        <button onclick="changeQty('${p.id}', '${dObj.name}', 1)">+</button>
-                    </div>
-                </div>
-            </div>`;
-        });
-    } else {
-        // Fallback: build perfect D2-D15 (excluding files that fail to load)
-        for (var i = 1; i <= 14; i++) {
-            var numStr = (i + 1) < 10 ? "0" + (i + 1) : (i + 1);
-            var url = fbBase + encPath + "%2F" + numStr + ".webp?alt=media";
-            var dKey = p.id + '_D' + (i + 1);
-
-            html += `
-            <div class="swipe-card" style="display:none;" onclick="openFs('${p.id}', ${i - 1}, 'D${i + 1}')">
-                <img src="${url}" loading="lazy" onload="this.parentElement.style.display='block'" onerror="this.parentElement.style.display='none'">
-                <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">D${i + 1}</div>
-                    <div class="qty-clean">
-                        <button onclick="changeQty('${p.id}', 'D${i + 1}', -1)">−</button>
-                        <input type="number" id="qty_${p.id}_D${i + 1}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
-                        <button onclick="changeQty('${p.id}', 'D${i + 1}', 1)">+</button>
-                    </div>
-                </div>
-            </div>`;
-        }
-    }
-
-    deck.innerHTML = html;
-
-    // Initial prefill of bottom row cover quantity
-    setTimeout(updateBottomQtyFromActiveDesign, 50);
-
+    
     if (!skipShow) {
         document.getElementById('detailPanel').classList.add('open');
         pushHistoryState('detail');
     }
-    updateLiveDetailHeader();
+
+    var folderPath = p.gridUrl;
+    if (!folderPath || folderPath === "" || folderPath === "None") {
+        deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="https://placehold.co/600x800/f0f0f0/a0a0a0?text=No+Image"></div>';
+        return;
+    }
+
+    // Show loading state
+    deck.innerHTML = `
+    <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; width:100%; height:200px; color:var(--text-light); gap: 10px;">
+        <i class="fas fa-circle-notch spin" style="font-size:24px; color:var(--myntra-pink);"></i>
+        <span style="font-size:13px; font-weight:bold;">Loading ready designs...</span>
+    </div>`;
+
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    var prefix = encodeURIComponent(folderPath + "/");
+    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix;
+
+    fetch(listUrl)
+        .then(res => {
+            if (!res.ok) throw new Error("HTTP error " + res.status);
+            return res.json();
+        })
+        .then(data => {
+            var items = data.items || [];
+            var validFiles = [];
+
+            items.forEach(item => {
+                var fullPath = item.name;
+                var filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
+                var lowerName = filename.toLowerCase();
+
+                // Filter out cover images
+                if (lowerName === "01.webp" || lowerName === "1.webp" || lowerName === "cover.webp") {
+                    return;
+                }
+
+                var ext = lowerName.substring(lowerName.lastIndexOf('.'));
+                var isVideo = [".mp4", ".mov", ".webm", ".avi", ".mkv", ".3gp", ".ogg"].includes(ext);
+                var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
+
+                if (isVideo || isImage) {
+                    var encName = fullPath.split('/').map(encodeURIComponent).join('%2F');
+                    var mediaUrl = fbBase + encName + "?alt=media";
+                    var designName = filename.substring(0, filename.lastIndexOf('.'));
+
+                    validFiles.push({
+                        name: designName,
+                        url: mediaUrl,
+                        isVideo: isVideo,
+                        isImage: isImage
+                    });
+                }
+            });
+
+            if (validFiles.length > 0) {
+                renderSwipeDeck(validFiles);
+            } else {
+                // Fallback to p.ready parsing or D2-D15 fallback if no files returned
+                useFallbackDesignList();
+            }
+        })
+        .catch(err => {
+            console.error("Firebase list error, using fallback", err);
+            useFallbackDesignList();
+        });
+
+    function renderSwipeDeck(files) {
+        var html = '';
+        files.forEach((file, idx) => {
+            var dKey = p.id + '_' + file.name;
+            if (file.isVideo) {
+                html += `
+                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
+                    <video src="${file.url}" controls playsinline style="width: 100%; height: calc(100% - 40px); object-fit: cover;" onclick="event.stopPropagation()"></video>
+                    <div class="swipe-card-bot" onclick="event.stopPropagation()">
+                        <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
+                        <div class="qty-clean">
+                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
+                            <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
+                            <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
+                        </div>
+                    </div>
+                </div>`;
+            } else {
+                var imgId = "design_img_" + p.id + "_" + idx;
+                html += `
+                <div class="swipe-card" style="display:none;" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
+                    <img id="${imgId}" onload="this.parentElement.style.display='block'" onerror="this.src.includes('%2F0') ? this.src = this.src.replace('%2F0', '%2F') : this.parentElement.style.display='none'">
+                    <div class="swipe-card-bot" onclick="event.stopPropagation()">
+                        <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
+                        <div class="qty-clean">
+                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
+                            <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
+                            <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
+                        </div>
+                    </div>
+                </div>`;
+            }
+        });
+        deck.innerHTML = html;
+
+        // Trigger load and cache for all image files in parallel
+        files.forEach((file, idx) => {
+            if (!file.isVideo) {
+                var imgId = "design_img_" + p.id + "_" + idx;
+                var imgEl = document.getElementById(imgId);
+                if (imgEl) {
+                    loadAndCacheDesignImage(imgEl, file.url, p.id, file.name);
+                }
+            }
+        });
+
+        setTimeout(updateBottomQtyFromActiveDesign, 50);
+        updateLiveDetailHeader();
+    }
+
+    function useFallbackDesignList() {
+        var encPath = folderPath.split('/').map(encodeURIComponent).join('%2F');
+        var rawDesigns = String(p.ready || "").split(',').map(d => d.trim()).filter(Boolean);
+        var validDesigns = [];
+        rawDesigns.forEach(d => {
+            var cleanNum = d.replace(/\D/g, '');
+            if (d.length <= 10 && cleanNum !== "") {
+                var numVal = parseInt(cleanNum);
+                if (numVal >= 2 && numVal <= 99) {
+                    validDesigns.push({
+                        name: d,
+                        numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum
+                    });
+                }
+            }
+        });
+
+        var fallbackFiles = [];
+        if (validDesigns.length > 0) {
+            validDesigns.forEach(dObj => {
+                var url = fbBase + encPath + "%2F" + dObj.numStr + ".webp?alt=media";
+                fallbackFiles.push({
+                    name: dObj.name,
+                    url: url,
+                    isVideo: false,
+                    isImage: true
+                });
+            });
+        } else {
+            for (var i = 1; i <= 14; i++) {
+                var numStr = (i + 1) < 10 ? "0" + (i + 1) : (i + 1);
+                var url = fbBase + encPath + "%2F" + numStr + ".webp?alt=media";
+                fallbackFiles.push({
+                    name: 'D' + (i + 1),
+                    url: url,
+                    isVideo: false,
+                    isImage: true
+                });
+            }
+        }
+        renderSwipeDeck(fallbackFiles);
+    }
 }
 
 window.changeQty = function (pid, designId, amount) {
@@ -635,7 +754,7 @@ function openFs(arg1, arg2, arg3) {
     var deck = document.getElementById('dtDesigns');
     if (!deck) return;
 
-    // 📱 Filter to only visible cards (images that successfully loaded and aren't hidden)
+    // 📱 Filter to only visible cards (images/videos that successfully loaded and aren't hidden)
     var cards = Array.from(deck.querySelectorAll('.swipe-card')).filter(card => card.style.display !== 'none');
 
     if (dId) {
@@ -667,7 +786,39 @@ function openFs(arg1, arg2, arg3) {
 
     var dName = dId === 'DIRECT' ? "Cover" : dId;
     document.getElementById('fsTitle').innerText = curProduct.name + " - " + dName;
-    document.getElementById('fsImg').src = targetCard.querySelector('img').src; // Pulls from what's currently rendered
+
+    var videoEl = targetCard.querySelector('video');
+    var imgEl = targetCard.querySelector('img');
+    var fsImg = document.getElementById('fsImg');
+    var fsVideo = document.getElementById('fsVideo');
+
+    if (!fsVideo && fsImg) {
+        fsVideo = document.createElement('video');
+        fsVideo.id = 'fsVideo';
+        fsVideo.style.maxWidth = '100%';
+        fsVideo.style.maxHeight = '100%';
+        fsVideo.style.objectFit = 'contain';
+        fsVideo.controls = true;
+        fsVideo.playsInline = true;
+        fsImg.parentNode.appendChild(fsVideo);
+    }
+
+    if (videoEl) {
+        if (fsImg) fsImg.style.display = 'none';
+        if (fsVideo) {
+            fsVideo.style.display = 'block';
+            fsVideo.src = videoEl.src;
+        }
+    } else {
+        if (fsVideo) {
+            fsVideo.style.display = 'none';
+            fsVideo.src = '';
+        }
+        if (fsImg) {
+            fsImg.style.display = 'block';
+            fsImg.src = imgEl ? imgEl.src : '';
+        }
+    }
 
     var key = pId + '_' + fsDesignId;
     document.getElementById('fsQty').innerText = cart[key] ? cart[key].qty : 0;
@@ -681,6 +832,11 @@ function openFs(arg1, arg2, arg3) {
 
 function closeFs() {
     document.getElementById('fsModal').style.display = 'none';
+    var fsVideo = document.getElementById('fsVideo');
+    if (fsVideo) {
+        fsVideo.pause();
+        fsVideo.src = '';
+    }
     history.back();
 }
 
@@ -1028,19 +1184,29 @@ async function syncImages() {
             var batch = productsToDownload.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
                 var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
-                var url = fbBase + encGridPath + "%2F01.webp?alt=media";
+                var urlsToTry = [
+                    fbBase + encGridPath + "%2F01.webp?alt=media",
+                    fbBase + encGridPath + "%2Fcover.webp?alt=media",
+                    fbBase + encGridPath + "%2F1.webp?alt=media"
+                ];
 
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error("HTTP error " + response.status);
-                    const blob = await response.blob();
-                    
-                    var saved = await saveImageToDB(p.gridUrl, blob);
-                    if (!saved) {
-                        failed++;
+                var downloaded = false;
+                for (var u = 0; u < urlsToTry.length; u++) {
+                    try {
+                        const response = await fetch(urlsToTry[u]);
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            var saved = await saveImageToDB(p.gridUrl, blob);
+                            if (saved) {
+                                downloaded = true;
+                                break;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("Attempt " + u + " failed for url: " + urlsToTry[u], err);
                     }
-                } catch (err) {
-                    console.error("Failed to download image for: " + p.name, err);
+                }
+                if (!downloaded) {
                     failed++;
                 }
                 count++;
