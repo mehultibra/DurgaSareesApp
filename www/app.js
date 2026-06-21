@@ -229,6 +229,33 @@ function getImageFromDB(key) {
     });
 }
 
+function getCachedImageBlob(url) {
+    return getImageFromDB(url).then(blob => {
+        if (blob) return blob;
+        if (url.includes('%2F0')) {
+            var fallbackUrl = url.replace('%2F0', '%2F');
+            return getImageFromDB(fallbackUrl);
+        }
+        return null;
+    });
+}
+
+function getCachedDesignUrl(zoomUrl, gridUrl) {
+    // 1. Check if the zoom image is cached
+    return getCachedImageBlob(zoomUrl).then(zoomBlob => {
+        if (zoomBlob) {
+            return { src: URL.createObjectURL(zoomBlob), isZoom: true };
+        }
+        // 2. Check if the grid image is cached
+        return getCachedImageBlob(gridUrl).then(gridBlob => {
+            if (gridBlob) {
+                return { src: URL.createObjectURL(gridBlob), isZoom: false };
+            }
+            return { src: "", isZoom: false };
+        });
+    });
+}
+
 // 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
 // ==========================================
 // 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
@@ -454,7 +481,18 @@ function updateCartHeader() {
 // ====================================
 // 4. PRODUCT DETAIL (SWIPE DECK)
 // ====================================
-function loadAndCacheDesignImage(imgEl, url, productId, fileName) {
+var missingDesignSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800">
+    <rect width="100%" height="100%" fill="#f5f5f6"/>
+    <text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="bold" fill="#6c757d">Design Image</text>
+    <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#adb5bd">Not Found on Server</text>
+</svg>
+`);
+
+function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName) {
+    if (imgEl.getAttribute('data-loaded-zoom') === 'true') {
+        return; // Already loaded zoom image from cache!
+    }
     var cacheKey = url;
 
     // Check if we are already in the process of retrying
@@ -477,14 +515,13 @@ function loadAndCacheDesignImage(imgEl, url, productId, fileName) {
         } else {
             // If it's not a retry, let's load grid image from IndexedDB cache if our src is empty or uses constructed firebase URL
             if (!isRetry) {
-                var p = allProducts.find(x => x.id === productId);
-                if (p && p.gridUrl && p.gridUrl !== "None") {
-                    getImageFromDB(p.gridUrl).then(gridBlob => {
+                if (designGridUrl) {
+                    getCachedImageBlob(designGridUrl).then(gridBlob => {
                         if (gridBlob && imgEl && !imgEl.dataset.loadedZoom) {
                             imgEl.src = URL.createObjectURL(gridBlob);
                         }
                     }).catch(e => {
-                        console.warn("Error getting grid image blob from cache", e);
+                        console.warn("Error getting design grid image blob from cache", e);
                     });
                 }
             }
@@ -514,10 +551,11 @@ function loadAndCacheDesignImage(imgEl, url, productId, fileName) {
                     if (url.includes('%2F0')) {
                         var fallbackUrl = url.replace('%2F0', '%2F');
                         imgEl.dataset.retrying = "true";
-                        loadAndCacheDesignImage(imgEl, fallbackUrl, productId, fileName);
+                        loadAndCacheDesignImage(imgEl, fallbackUrl, designGridUrl, productId, fileName);
                     } else {
                         imgEl.dataset.retrying = "";
-                        // Keep grid placeholder visible, do not hide card
+                        imgEl.onerror = null;
+                        imgEl.src = missingDesignSvg;
                     }
                 });
         }
@@ -527,9 +565,10 @@ function loadAndCacheDesignImage(imgEl, url, productId, fileName) {
         imgEl.onerror = function() {
             if (url.includes('%2F0')) {
                 var fallbackUrl = url.replace('%2F0', '%2F');
-                loadAndCacheDesignImage(imgEl, fallbackUrl, productId, fileName);
+                loadAndCacheDesignImage(imgEl, fallbackUrl, designGridUrl, productId, fileName);
             } else {
-                // Keep grid placeholder visible, do not hide card
+                imgEl.onerror = null;
+                imgEl.src = missingDesignSvg;
             }
         };
         imgEl.src = url;
@@ -564,21 +603,24 @@ function openDetail(productId, skipShow, keepSearchShown) {
     document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
 
     var deck = document.getElementById('dtDesigns');
+    if (deck) deck.innerHTML = '';
     
     if (!skipShow) {
         document.getElementById('detailPanel').classList.add('open');
         pushHistoryState('detail');
     }
 
-    var folderPath = p.gridUrl;
-    if (!folderPath || folderPath === "" || folderPath === "None") {
+    var gridPath = p.gridUrl;
+    var zoomPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
+
+    if (!gridPath || gridPath === "" || gridPath === "None") {
         deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="https://placehold.co/600x800/f0f0f0/a0a0a0?text=No+Image"></div>';
         return;
     }
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var prefix = encodeURIComponent(folderPath + "/");
+    var prefix = encodeURIComponent(zoomPath + "/");
     var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix;
 
     var renderedFilesJson = "";
@@ -613,13 +655,17 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
 
                     if (isVideo || isImage) {
-                        var encName = fullPath.split('/').map(encodeURIComponent).join('%2F');
-                        var mediaUrl = fbBase + encName + "?alt=media";
+                        var gridEncName = fullPath.replace(zoomPath, gridPath).split('/').map(encodeURIComponent).join('%2F');
+                        var zoomEncName = fullPath.replace(gridPath, zoomPath).split('/').map(encodeURIComponent).join('%2F');
+                        
+                        var gridUrl = fbBase + gridEncName + "?alt=media";
+                        var zoomUrl = fbBase + zoomEncName + "?alt=media";
                         var designName = filename.substring(0, filename.lastIndexOf('.'));
 
                         validFiles.push({
                             name: designName,
-                            url: mediaUrl,
+                            gridUrl: gridUrl,
+                            url: zoomUrl,
                             isVideo: isVideo,
                             isImage: isImage
                         });
@@ -629,8 +675,42 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 if (validFiles.length > 0) {
                     var newJson = JSON.stringify(validFiles);
                     if (renderedFilesJson !== newJson) {
-                        renderSwipeDeck(validFiles);
+                        Promise.all(validFiles.map(file => {
+                            if (file.isVideo) return Promise.resolve();
+                            return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
+                                if (res.src) {
+                                    file.cachedUrl = res.src;
+                                    file.isZoom = res.isZoom;
+                                }
+                            }).catch(() => {});
+                        })).then(() => {
+                            if (renderedFilesJson !== newJson) {
+                                renderSwipeDeck(validFiles);
+                            }
+                        });
                     }
+                } else {
+                    // Firebase Storage folder is empty: Clear fallback cards and show only the cover image
+                    var gridImgEl = document.getElementById("img_" + p.id);
+                    var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
+                    if (!coverSrc && p.gridUrl && p.gridUrl !== "None") {
+                        var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
+                        coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+                    }
+                    deck.innerHTML = `
+                    <div class="swipe-card" data-design="DIRECT">
+                        <img src="${coverSrc || ''}" style="width: 100%; height: calc(100% - 40px); object-fit: cover;">
+                        <div class="swipe-card-bot" onclick="event.stopPropagation()">
+                            <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
+                            <div class="qty-clean">
+                                <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
+                                <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
+                                <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
+                            </div>
+                        </div>
+                    </div>`;
+                    setTimeout(updateBottomQtyFromActiveDesign, 50);
+                    updateLiveDetailHeader();
                 }
             })
             .catch(err => {
@@ -642,12 +722,9 @@ function openDetail(productId, skipShow, keepSearchShown) {
         renderedFilesJson = JSON.stringify(files);
 
         // Get the grid/cover image source synchronously for instant placeholder rendering
+        // Only use it if it's already a local Blob URL to avoid making duplicate network requests
         var gridImgEl = document.getElementById("img_" + p.id);
-        var initialSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
-        if (!initialSrc && p.gridUrl && p.gridUrl !== "None") {
-            var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
-            initialSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
-        }
+        var initialSrc = (gridImgEl && gridImgEl.src && gridImgEl.src.startsWith("blob:")) ? gridImgEl.src : "";
 
         var html = '';
         files.forEach((file, idx) => {
@@ -669,7 +746,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 html += `
                 <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
-                    <img id="${imgId}" src="${initialSrc || ''}">
+                    <img id="${imgId}" src="${file.cachedUrl || file.gridUrl || ''}" data-loaded-zoom="${file.isZoom ? 'true' : 'false'}">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
@@ -689,7 +766,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgEl = document.getElementById(imgId);
                 if (imgEl) {
-                    loadAndCacheDesignImage(imgEl, file.url, p.id, file.name);
+                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name);
                 }
             }
         });
@@ -699,7 +776,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
     }
 
     function useFallbackDesignList() {
-        var encPath = folderPath.split('/').map(encodeURIComponent).join('%2F');
+        var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
+        var encZoomPath = zoomPath.split('/').map(encodeURIComponent).join('%2F');
         var rawDesigns = String(p.ready || "").split(',').map(d => d.trim()).filter(Boolean);
         var validDesigns = [];
         rawDesigns.forEach(d => {
@@ -718,27 +796,49 @@ function openDetail(productId, skipShow, keepSearchShown) {
         var fallbackFiles = [];
         if (validDesigns.length > 0) {
             validDesigns.forEach(dObj => {
-                var url = fbBase + encPath + "%2F" + dObj.numStr + ".webp?alt=media";
+                var gridUrl = fbBase + encGridPath + "%2F" + dObj.numStr + ".webp?alt=media";
+                var zoomUrl = fbBase + encZoomPath + "%2F" + dObj.numStr + ".webp?alt=media";
                 fallbackFiles.push({
                     name: dObj.name,
-                    url: url,
+                    gridUrl: gridUrl,
+                    url: zoomUrl,
                     isVideo: false,
                     isImage: true
                 });
             });
+            Promise.all(fallbackFiles.map(file => {
+                return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
+                    if (res.src) {
+                        file.cachedUrl = res.src;
+                        file.isZoom = res.isZoom;
+                    }
+                }).catch(() => {});
+            })).then(() => {
+                renderSwipeDeck(fallbackFiles);
+            });
         } else {
-            for (var i = 1; i <= 14; i++) {
-                var numStr = (i + 1) < 10 ? "0" + (i + 1) : (i + 1);
-                var url = fbBase + encPath + "%2F" + numStr + ".webp?alt=media";
-                fallbackFiles.push({
-                    name: 'D' + (i + 1),
-                    url: url,
-                    isVideo: false,
-                    isImage: true
-                });
+            // Render a single cover card initially
+            var gridImgEl = document.getElementById("img_" + p.id);
+            var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
+            if (!coverSrc && p.gridUrl && p.gridUrl !== "None") {
+                var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
+                coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
             }
+            deck.innerHTML = `
+            <div class="swipe-card" data-design="DIRECT">
+                <img src="${coverSrc || ''}" style="width: 100%; height: calc(100% - 40px); object-fit: cover;">
+                <div class="swipe-card-bot" onclick="event.stopPropagation()">
+                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
+                    <div class="qty-clean">
+                        <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
+                        <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
+                        <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
+                    </div>
+                </div>
+            </div>`;
+            setTimeout(updateBottomQtyFromActiveDesign, 50);
+            updateLiveDetailHeader();
         }
-        renderSwipeDeck(fallbackFiles);
     }
 }
 
@@ -1208,10 +1308,12 @@ async function syncImages() {
             var f = d.fields || {};
             var name = f.name ? f.name.stringValue : "";
             var gridUrl = f.gridUrl ? f.gridUrl.stringValue : "";
+            var ready = f.ready ? f.ready.stringValue : "";
             if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
                 productsToDownload.push({
                     name: name,
-                    gridUrl: gridUrl
+                    gridUrl: gridUrl,
+                    ready: ready
                 });
             }
         });
@@ -1262,6 +1364,50 @@ async function syncImages() {
                 if (!downloaded) {
                     failed++;
                 }
+
+                // Download ready design grid images
+                if (p.ready && p.ready.trim() !== "") {
+                    var rawDesigns = String(p.ready).split(',').map(d => d.trim()).filter(Boolean);
+                    var validDesigns = [];
+                    rawDesigns.forEach(d => {
+                        var cleanNum = d.replace(/\D/g, '');
+                        if (d.length <= 10 && cleanNum !== "") {
+                            var numVal = parseInt(cleanNum);
+                            if (numVal >= 2 && numVal <= 99) {
+                                validDesigns.push({
+                                    name: d,
+                                    numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum,
+                                    cleanNum: cleanNum
+                                });
+                            }
+                        }
+                    });
+
+                    for (var d = 0; d < validDesigns.length; d++) {
+                        var dObj = validDesigns[d];
+                        var designKey = fbBase + encGridPath + "%2F" + dObj.numStr + ".webp?alt=media";
+                        var designUrlsToTry = [
+                            designKey,
+                            fbBase + encGridPath + "%2F" + dObj.cleanNum + ".webp?alt=media"
+                        ];
+
+                        for (var u = 0; u < designUrlsToTry.length; u++) {
+                            try {
+                                const response = await fetch(designUrlsToTry[u]);
+                                if (response.ok) {
+                                    const blob = await response.blob();
+                                    var saved = await saveImageToDB(designKey, blob);
+                                    if (saved) {
+                                        break;
+                                    }
+                                }
+                            } catch (err) {
+                                console.warn("Attempt " + u + " failed for design url: " + designUrlsToTry[u], err);
+                            }
+                        }
+                    }
+                }
+
                 count++;
             }));
 
