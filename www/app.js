@@ -22,42 +22,6 @@ var searchingTransition = false;
 // Escapes text safely
 function esc(s) { return (!s) ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
-// ==========================================
-// 🚀 NEW IMAGE URL HELPERS
-// ==========================================
-function getFirebaseImageUrl(path, targetFile) {
-    if (!path || path.trim() === "" || path.toLowerCase() === "none") {
-        return "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
-    }
-    const bucket = "durga-sarees.firebasestorage.app";
-    const fbBase = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/`;
-    const fileToFetch = targetFile || "01.webp";
-    const encPath = path.split('/').map(encodeURIComponent).join('%2F');
-    return `${fbBase}${encPath}%2F${fileToFetch}?alt=media`;
-}
-
-function handleImgError(imgElement, gridPath) {
-    const bucket = "durga-sarees.firebasestorage.app";
-    const fbBase = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/`;
-    const encGridPath = gridPath ? gridPath.split('/').map(encodeURIComponent).join('%2F') : null;
-
-    if (!encGridPath) {
-        imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
-        imgElement.onerror = null;
-        return;
-    }
-
-    const src = imgElement.src;
-    if (src.includes('01.webp')) {
-        imgElement.src = `${fbBase}${encGridPath}%2Fcover.webp?alt=media`;
-    } else if (src.includes('cover.webp')) {
-        imgElement.src = `${fbBase}${encGridPath}%2F1.webp?alt=media`;
-    } else {
-        imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
-        imgElement.onerror = null;
-    }
-}
-
 window.addEventListener('DOMContentLoaded', function () {
     try {
         try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
@@ -67,15 +31,13 @@ window.addEventListener('DOMContentLoaded', function () {
         var loginScreen = document.getElementById('loginScreen');
         var appBody = document.getElementById('appBody');
 
-        if (activeUser) {
-            if (loginScreen) loginScreen.style.display = 'none';
-            if (appBody) appBody.style.display = 'flex';
-            initApp();
-        } else {
-            if (loginScreen) loginScreen.style.display = 'flex';
-            if (appBody) appBody.style.display = 'none';
+        // Bypass login for debugging
+        if (loginScreen && appBody) {
+            loginScreen.style.display = 'none';
+            appBody.style.display = 'flex';
+            activeUser = "debug_user";
+            setTimeout(initApp, 100);
         }
-
         setupEditableFields();
         setupFsGestures();
     } catch (err) { console.error("Init error:", err); }
@@ -201,15 +163,16 @@ function initApp() {
             if (typeof populateCategories === "function") populateCategories();
             renderProductGrid(displayList);
             updateCartHeader();
-            
-            // Start silent background pre-fetching of all grid images
-            setTimeout(startImagePrefetch, 1500);
         })
         .catch(err => alert("Firebase Load Error: " + err.message));
 }
 
 // ==========================================
-// 🚀 IMAGE CACHING & PRE-FETCHING
+// 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
+// ==========================================
+// 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
+// ==========================================
+// 📦 INDEXEDDB CACHE DATABASE FOR IMAGES
 // ==========================================
 var dbName = "DurgaSareesCache";
 var storeName = "images";
@@ -232,7 +195,6 @@ function getDB() {
             resolve(cachedDB);
         };
         request.onerror = function (e) {
-            console.error("IndexedDB error:", e.target.error);
             reject(e.target.error);
         };
     });
@@ -241,19 +203,14 @@ function getDB() {
 function saveImageToDB(key, blob) {
     return getDB().then(db => {
         return new Promise((resolve, reject) => {
-            try {
-                var tx = db.transaction(storeName, "readwrite");
-                var store = tx.objectStore(storeName);
-                var req = store.put(blob, key);
-                req.onsuccess = () => resolve(true);
-                req.onerror = () => reject(req.error);
-            } catch (e) {
-                console.error("IndexedDB save transaction failed", e);
-                reject(e);
-            }
+            var tx = db.transaction(storeName, "readwrite");
+            var store = tx.objectStore(storeName);
+            var req = store.put(blob, key);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => reject(req.error);
         });
     }).catch(e => {
-        console.error("IndexedDB save failed", e);
+        console.error("IndexedDB write failed", e);
         return false;
     });
 }
@@ -261,19 +218,14 @@ function saveImageToDB(key, blob) {
 function getImageFromDB(key) {
     return getDB().then(db => {
         return new Promise((resolve, reject) => {
-            try {
-                var tx = db.transaction(storeName, "readonly");
-                var store = tx.objectStore(storeName);
-                var req = store.get(key);
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
-            } catch (e) {
-                console.error("IndexedDB get transaction failed", e);
-                reject(e);
-            }
+            var tx = db.transaction(storeName, "readonly");
+            var store = tx.objectStore(storeName);
+            var req = store.get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
         });
     }).catch(e => {
-        console.error("IndexedDB get failed", e);
+        console.error("IndexedDB read failed", e);
         return null;
     });
 }
@@ -281,7 +233,6 @@ function getImageFromDB(key) {
 function getCachedImageBlob(url) {
     return getImageFromDB(url).then(blob => {
         if (blob) return blob;
-        // Fallback for older cache keys that had /0 in them
         if (url.includes('%2F0')) {
             var fallbackUrl = url.replace('%2F0', '%2F');
             return getImageFromDB(fallbackUrl);
@@ -301,11 +252,78 @@ function getCachedDesignUrl(zoomUrl, gridUrl) {
             if (gridBlob) {
                 return { src: URL.createObjectURL(gridBlob), isZoom: false };
             }
-            // 3. If nothing is in IndexedDB, return the direct grid URL to be rendered
-            return { src: gridUrl, isZoom: false };
+            return { src: "", isZoom: false };
         });
     });
 }
+
+// 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
+// ==========================================
+// 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
+window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFile) {
+    if (!gridPath || gridPath.trim() === "" || gridPath.toLowerCase() === "none") {
+        imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
+        return;
+    }
+
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+
+    // File target (e.g., "01.webp", "cover.webp")
+    var fileToFetch = targetFile ? targetFile : "01.webp";
+
+    var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
+    var lowResUrl = fbBase + encGridPath + "%2F" + fileToFetch + "?alt=media";
+
+    if (fileToFetch === "01.webp") {
+        getImageFromDB(gridPath).then(function (blob) {
+            if (blob) {
+                var objectUrl = URL.createObjectURL(blob);
+                imgElement.src = objectUrl;
+
+                imgElement.onerror = function () {
+                    loadFromNetwork();
+                };
+            } else {
+                loadFromNetwork();
+            }
+        }).catch(function (err) {
+            loadFromNetwork();
+        });
+    } else {
+        loadFromNetwork();
+    }
+
+    function loadFromNetwork() {
+        imgElement.src = lowResUrl;
+
+        // Fallback if 01.webp fails on Grid
+        imgElement.onerror = function () {
+            if (fileToFetch === "01.webp") {
+                imgElement.src = fbBase + encGridPath + "%2Fcover.webp?alt=media";
+                imgElement.onerror = function () {
+                    imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
+                    if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
+                }
+            } else {
+                if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
+            }
+        };
+    }
+
+    // 2. Background Load High-Res Zoom Image (if applicable)
+    if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
+        var encZoomPath = zoomPath.split('/').map(encodeURIComponent).join('%2F');
+        var highResUrl = fbBase + encZoomPath + "%2F" + fileToFetch + "?alt=media";
+
+        var hdImage = new Image();
+        hdImage.onload = function () {
+            // Swap to HD image silently once downloaded
+            imgElement.src = highResUrl;
+        };
+        hdImage.src = highResUrl;
+    }
+};
 
 // ====================================
 // EXACT UI RESTORATION (MRP, PACKING, ADD BTN)
@@ -329,7 +347,7 @@ function buildCardDetails(p) {
     var packLen = String(p.packing || "1").length;
     var displayLen = Math.min(packLen, 8);
     h.push('<input type="text" class="pack-input-inline" value="' + esc(p.packing) + '" readonly onclick="event.stopPropagation()" style="flex-shrink:0; text-align:right; width:' + (displayLen + 0.5) + 'ch !important; min-width:1ch !important; max-width:7.5ch !important; font-size:11px !important; padding:0; margin:0;">');
-    h.push('<div class="fav-btn-inline" style="flex-shrink:0; padding-left:0;" onclick="toggleFav('' + p.id + '', event)"><i class="' + favClass + '"></i></div>');
+    h.push('<div class="fav-btn-inline" style="flex-shrink:0; padding-left:0;" onclick="toggleFav(\'' + p.id + '\', event)"><i class="' + favClass + '"></i></div>');
     h.push('</div>');
 
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
@@ -342,12 +360,12 @@ function buildCardDetails(p) {
 
     h.push('<div style="flex-shrink:0;">');
     if (coverQty === 0 || isNaN(coverQty)) {
-        h.push('<div class="add-btn-clean" onclick="chgMainRow('' + p.id + '', 1); event.stopPropagation();">ADD</div>');
+        h.push('<div class="add-btn-clean" onclick="chgMainRow(\'' + p.id + '\', 1); event.stopPropagation();">ADD</div>');
     } else {
         h.push('<div class="qty-clean" onclick="event.stopPropagation()">');
-        h.push('<button onclick="chgMainRow('' + p.id + '', -1)">−</button>');
+        h.push('<button onclick="chgMainRow(\'' + p.id + '\', -1)">−</button>');
         h.push('<input type="number" id="mqty-' + p.id + '" value="' + coverQty + '" readonly>');
-        h.push('<button onclick="chgMainRow('' + p.id + '', 1)">+</button>');
+        h.push('<button onclick="chgMainRow(\'' + p.id + '\', 1)">+</button>');
         h.push('</div>');
     }
     h.push('</div></div>');
@@ -379,14 +397,23 @@ function renderProductGrid(products) {
         return;
     }
 
+    // Sort products primarily by category (alphabetically), and secondarily by the active sort rule
     var sorted = [...products].sort((a, b) => {
         var catA = (a.cat || "Uncategorized").toLowerCase();
         var catB = (b.cat || "Uncategorized").toLowerCase();
+
+        // Primary sort: Category name alphabetically
         if (catA < catB) return -1;
         if (catA > catB) return 1;
-        if (currentSort === 'priceAsc') return a.price - b.price;
-        if (currentSort === 'priceDesc') return b.price - a.price;
-        return 0;
+
+        // Secondary sort: Selected sorting rule
+        if (currentSort === 'priceAsc') {
+            return a.price - b.price;
+        } else if (currentSort === 'priceDesc') {
+            return b.price - a.price;
+        } else {
+            return 0;
+        }
     });
 
     let htmlBuffer = [];
@@ -396,19 +423,22 @@ function renderProductGrid(products) {
         for (var k in cart) { if (cart[k].p.id === p.id) totalQty += parseInt(cart[k].qty) || 0; }
         var bHtml = totalQty > 0 ? `<div class="item-qty-badge" id="badge-${p.id}">${totalQty} in cart</div>` : `<div class="item-qty-badge" id="badge-${p.id}" style="display:none;"></div>`;
 
-        const gridImageUrl = getFirebaseImageUrl(p.gridUrl, "01.webp");
-
         htmlBuffer.push(`
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" src="${gridImageUrl}" alt="${esc(p.name)}" onerror="handleImgError(this, '${p.gridUrl}')">
+                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}" style="padding: 8px 0 0 0;">
                 ${buildCardDetails(p)}
             </div>
         </div>
         `);
+
+        setTimeout(() => {
+            let imgEl = document.getElementById(imgElementId);
+            if (imgEl) window.renderWebpFromFolder(imgEl, p.gridUrl, null, "01.webp"); // Only needs Grid for main page
+        }, 0);
     });
 
     gridEl.innerHTML = htmlBuffer.join('');
@@ -464,37 +494,85 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
     if (imgEl.getAttribute('data-loaded-zoom') === 'true') {
         return; // Already loaded zoom image from cache!
     }
-    var cacheKey = url; // Zoom URL is the key
+    var cacheKey = url;
 
-    // 1. Check for high-res (zoom) image in cache
+    // Check if we are already in the process of retrying
+    var isRetry = imgEl.dataset.retrying === "true";
+
     getImageFromDB(cacheKey).then(blob => {
         if (blob) {
-            // Found in cache! Use it.
+            // Found in cache!
             imgEl.src = URL.createObjectURL(blob);
-            imgEl.setAttribute('data-loaded-zoom', 'true');
+            imgEl.dataset.loadedZoom = "true";
+            imgEl.dataset.retrying = "";
+
+            // Live update FS modal if open on this design
+            if (typeof fsDesignId !== 'undefined' && fsDesignId === fileName && curProduct && curProduct.id === productId) {
+                var fsImg = document.getElementById('fsImg');
+                if (fsImg && fsImg.style.display !== 'none') {
+                    fsImg.src = imgEl.src;
+                }
+            }
         } else {
-            // 2. Not in cache, so fetch from network
+            // If it's not a retry, let's load grid image from IndexedDB cache if our src is empty or uses constructed firebase URL
+            if (!isRetry) {
+                if (designGridUrl) {
+                    getCachedImageBlob(designGridUrl).then(gridBlob => {
+                        if (gridBlob && imgEl && !imgEl.dataset.loadedZoom) {
+                            imgEl.src = URL.createObjectURL(gridBlob);
+                        }
+                    }).catch(e => {
+                        console.warn("Error getting design grid image blob from cache", e);
+                    });
+                }
+            }
+
             fetch(url)
                 .then(res => {
                     if (!res.ok) throw new Error("HTTP error " + res.status);
                     return res.blob();
                 })
                 .then(newBlob => {
-                    // 3. Save to cache for next time
                     saveImageToDB(cacheKey, newBlob);
-                    // 4. Display the newly fetched high-res image
-                    imgEl.src = URL.createObjectURL(newBlob);
-                    imgEl.setAttribute('data-loaded-zoom', 'true');
+                    var zoomObjectUrl = URL.createObjectURL(newBlob);
+                    imgEl.src = zoomObjectUrl;
+                    imgEl.dataset.loadedZoom = "true";
+                    imgEl.dataset.retrying = "";
+
+                    // Live update FS modal if open on this design
+                    if (typeof fsDesignId !== 'undefined' && fsDesignId === fileName && curProduct && curProduct.id === productId) {
+                        var fsImg = document.getElementById('fsImg');
+                        if (fsImg && fsImg.style.display !== 'none') {
+                            fsImg.src = zoomObjectUrl;
+                        }
+                    }
                 })
                 .catch(err => {
-                    // 5. If network fails, show missing image placeholder
-                    console.error("Network fetch failed for design image, no fallback available.", err);
-                    imgEl.src = missingDesignSvg;
+                    console.error("Network fetch failed for design image, trying fallback", err);
+                    if (url.includes('%2F0')) {
+                        var fallbackUrl = url.replace('%2F0', '%2F');
+                        imgEl.dataset.retrying = "true";
+                        loadAndCacheDesignImage(imgEl, fallbackUrl, designGridUrl, productId, fileName);
+                    } else {
+                        imgEl.dataset.retrying = "";
+                        imgEl.onerror = null;
+                        imgEl.src = missingDesignSvg;
+                    }
                 });
         }
     }).catch(err => {
-        console.error("Cache read failed for zoom image", err);
-        imgEl.src = missingDesignSvg;
+        console.error("Cache read failed, loading directly", err);
+        // Fallback: load directly from url
+        imgEl.onerror = function () {
+            if (url.includes('%2F0')) {
+                var fallbackUrl = url.replace('%2F0', '%2F');
+                loadAndCacheDesignImage(imgEl, fallbackUrl, designGridUrl, productId, fileName);
+            } else {
+                imgEl.onerror = null;
+                imgEl.src = missingDesignSvg;
+            }
+        };
+        imgEl.src = url;
     });
 }
 
@@ -548,12 +626,17 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
     var renderedFilesJson = "";
 
+    // 1. Render fallback list instantly so the UI loads immediately
     useFallbackDesignList();
 
+    // 2. Fetch actual folder files in background to update/upgrade the swipe deck only if p.ready is empty
     var hasReadyList = p.ready && String(p.ready).trim() !== "";
     if (!hasReadyList) {
         fetch(listUrl)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP error " + res.status);
+                return res.json();
+            })
             .then(data => {
                 var items = data.items || [];
                 var validFiles = [];
@@ -563,21 +646,27 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     var filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
                     var lowerName = filename.toLowerCase();
 
-                    if (lowerName === "01.webp" || lowerName === "1.webp" || lowerName === "cover.webp") return;
+                    // Filter out cover images
+                    if (lowerName === "01.webp" || lowerName === "1.webp" || lowerName === "cover.webp") {
+                        return;
+                    }
 
                     var ext = lowerName.substring(lowerName.lastIndexOf('.'));
-                    var isVideo = [".mp4", ".mov", ".webm"].includes(ext);
-                    var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif"].includes(ext);
+                    var isVideo = [".mp4", ".mov", ".webm", ".avi", ".mkv", ".3gp", ".ogg"].includes(ext);
+                    var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
 
                     if (isVideo || isImage) {
                         var gridEncName = fullPath.replace(zoomPath, gridPath).split('/').map(encodeURIComponent).join('%2F');
                         var zoomEncName = fullPath.replace(gridPath, zoomPath).split('/').map(encodeURIComponent).join('%2F');
+
+                        var gridUrl = fbBase + gridEncName + "?alt=media";
+                        var zoomUrl = fbBase + zoomEncName + "?alt=media";
                         var designName = filename.substring(0, filename.lastIndexOf('.'));
 
                         validFiles.push({
                             name: designName,
-                            gridUrl: fbBase + gridEncName + "?alt=media",
-                            url: fbBase + zoomEncName + "?alt=media",
+                            gridUrl: gridUrl,
+                            url: zoomUrl,
                             isVideo: isVideo,
                             isImage: isImage
                         });
@@ -590,8 +679,10 @@ function openDetail(productId, skipShow, keepSearchShown) {
                         Promise.all(validFiles.map(file => {
                             if (file.isVideo) return Promise.resolve();
                             return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
-                                file.cachedUrl = res.src;
-                                file.isZoom = res.isZoom;
+                                if (res.src) {
+                                    file.cachedUrl = res.src;
+                                    file.isZoom = res.isZoom;
+                                }
                             }).catch(() => { });
                         })).then(() => {
                             if (renderedFilesJson !== newJson) {
@@ -600,7 +691,27 @@ function openDetail(productId, skipShow, keepSearchShown) {
                         });
                     }
                 } else {
-                    renderSwipeDeck([]); // Render empty to show cover only
+                    // Firebase Storage folder is empty: Clear fallback cards and show only the cover image
+                    var gridImgEl = document.getElementById("img_" + p.id);
+                    var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
+                    if (!coverSrc && p.gridUrl && p.gridUrl !== "None") {
+                        var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
+                        coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+                    }
+                    deck.innerHTML = `
+                    <div class="swipe-card" data-design="DIRECT">
+                        <img src="${coverSrc || ''}" style="width: 100%; object-fit: cover;">
+                        <div class="swipe-card-bot" onclick="event.stopPropagation()">
+                            <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
+                            <div class="qty-clean">
+                                <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
+                                <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
+                                <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
+                            </div>
+                        </div>
+                    </div>`;
+                    setTimeout(updateBottomQtyFromActiveDesign, 50);
+                    updateLiveDetailHeader();
                 }
             })
             .catch(err => {
@@ -611,28 +722,17 @@ function openDetail(productId, skipShow, keepSearchShown) {
     function renderSwipeDeck(files) {
         renderedFilesJson = JSON.stringify(files);
 
-        var coverSrc = getFirebaseImageUrl(p.gridUrl, "01.webp");
-        var coverKey = p.id + '_DIRECT';
-        var coverQty = cart[coverKey] ? cart[coverKey].qty : 0;
+        // Get the grid/cover image source synchronously for instant placeholder rendering
+        // Only use it if it's already a local Blob URL to avoid making duplicate network requests
+        var gridImgEl = document.getElementById("img_" + p.id);
+        var initialSrc = (gridImgEl && gridImgEl.src && gridImgEl.src.startsWith("blob:")) ? gridImgEl.src : "";
 
-        var html = `
-        <div class="swipe-card" data-design="DIRECT">
-            <img src="${coverSrc}" style="width: 100%; object-fit: cover;" onerror="handleImgError(this, '${p.gridUrl}')">
-            <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
-                <div class="qty-clean">
-                    <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
-                    <input type="number" id="qty_${p.id}_DIRECT" value="${coverQty}" readonly>
-                    <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
-                </div>
-            </div>
-        </div>`;
-
+        var html = '';
         files.forEach((file, idx) => {
             var dKey = p.id + '_' + file.name;
             if (file.isVideo) {
                 html += `
-                <div class="swipe-card" onclick="openFs('${p.id}', ${idx + 1}, '${file.name}')">
+                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
                     <video src="${file.url}" controls playsinline style="width: 100%; object-fit: cover;" onclick="event.stopPropagation()"></video>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
@@ -644,10 +744,10 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     </div>
                 </div>`;
             } else {
-                var imgId = `design_img_${p.id}_${idx}`;
+                var imgId = "design_img_" + p.id + "_" + idx;
                 html += `
-                <div class="swipe-card" onclick="openFs('${p.id}', ${idx + 1}, '${file.name}')">
-                    <img id="${imgId}" src="${file.cachedUrl || file.gridUrl}" data-loaded-zoom="${file.isZoom ? 'true' : 'false'}" onerror="this.onerror=null; this.src=missingDesignSvg;">
+                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
+                    <img id="${imgId}" src="${file.cachedUrl || file.gridUrl || ''}" data-loaded-zoom="${file.isZoom ? 'true' : 'false'}">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
@@ -661,10 +761,12 @@ function openDetail(productId, skipShow, keepSearchShown) {
         });
         deck.innerHTML = html;
 
+        // Trigger load and cache for all image files in parallel
         files.forEach((file, idx) => {
-            if (file.isImage) {
-                var imgEl = document.getElementById(`design_img_${p.id}_${idx}`);
-                if (imgEl && !file.isZoom) { // Only load zoom if we are not already showing it from cache
+            if (!file.isVideo) {
+                var imgId = "design_img_" + p.id + "_" + idx;
+                var imgEl = document.getElementById(imgId);
+                if (imgEl) {
                     loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name);
                 }
             }
@@ -675,6 +777,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
     }
 
     function useFallbackDesignList() {
+        var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
+        var encZoomPath = zoomPath.split('/').map(encodeURIComponent).join('%2F');
         var rawDesigns = String(p.ready || "").split(',').map(d => d.trim()).filter(Boolean);
         var validDesigns = [];
         rawDesigns.forEach(d => {
@@ -682,7 +786,10 @@ function openDetail(productId, skipShow, keepSearchShown) {
             if (d.length <= 10 && cleanNum !== "") {
                 var numVal = parseInt(cleanNum);
                 if (numVal >= 2 && numVal <= 99) {
-                    validDesigns.push({ name: d, numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum });
+                    validDesigns.push({
+                        name: d,
+                        numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum
+                    });
                 }
             }
         });
@@ -690,18 +797,48 @@ function openDetail(productId, skipShow, keepSearchShown) {
         var fallbackFiles = [];
         if (validDesigns.length > 0) {
             validDesigns.forEach(dObj => {
-                var gridImgUrl = getFirebaseImageUrl(gridPath, dObj.numStr + ".webp");
-                var zoomImgUrl = getFirebaseImageUrl(zoomPath, dObj.numStr + ".webp");
-                fallbackFiles.push({ name: dObj.name, gridUrl: gridImgUrl, url: zoomImgUrl, isVideo: false, isImage: true });
+                var gridUrl = fbBase + encGridPath + "%2F" + dObj.numStr + ".webp?alt=media";
+                var zoomUrl = fbBase + encZoomPath + "%2F" + dObj.numStr + ".webp?alt=media";
+                fallbackFiles.push({
+                    name: dObj.name,
+                    gridUrl: gridUrl,
+                    url: zoomUrl,
+                    isVideo: false,
+                    isImage: true
+                });
             });
             Promise.all(fallbackFiles.map(file => {
                 return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
-                    file.cachedUrl = res.src;
-                    file.isZoom = res.isZoom;
-                });
-            })).then(() => renderSwipeDeck(fallbackFiles));
+                    if (res.src) {
+                        file.cachedUrl = res.src;
+                        file.isZoom = res.isZoom;
+                    }
+                }).catch(() => { });
+            })).then(() => {
+                renderSwipeDeck(fallbackFiles);
+            });
         } else {
-            renderSwipeDeck([]);
+            // Render a single cover card initially
+            var gridImgEl = document.getElementById("img_" + p.id);
+            var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
+            if (!coverSrc && p.gridUrl && p.gridUrl !== "None") {
+                var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
+                coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+            }
+            deck.innerHTML = `
+            <div class="swipe-card" data-design="DIRECT">
+                <img src="${coverSrc || ''}" style="width: 100%; object-fit: cover;">
+                <div class="swipe-card-bot" onclick="event.stopPropagation()">
+                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
+                    <div class="qty-clean">
+                        <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
+                        <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
+                        <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
+                    </div>
+                </div>
+            </div>`;
+            setTimeout(updateBottomQtyFromActiveDesign, 50);
+            updateLiveDetailHeader();
         }
     }
 }
@@ -715,9 +852,11 @@ window.changeQty = function (pid, designId, amount) {
     if (newQ === 0 || isNaN(newQ)) delete cart[key];
     else cart[key] = { p: p, design: designId, qty: newQ };
 
+    // 1. Update Swipe Card Input
     var input = document.getElementById('qty_' + pid + '_' + designId);
     if (input) input.value = newQ;
 
+    // 2. 🛡️ THE FIX: Update Full Screen Bottom Row instantly if it's open
     if (typeof fsDesignId !== 'undefined' && fsDesignId === designId) {
         var fsInp = document.getElementById('fsQty');
         if (fsInp) fsInp.innerText = newQ;
@@ -725,8 +864,8 @@ window.changeQty = function (pid, designId, amount) {
 
     try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
     refreshCardUI(pid);
-    updateLiveDetailHeader();
-    updateBottomQtyFromActiveDesign();
+    updateLiveDetailHeader(); // Updates the total Master Qty at bottom!
+    updateBottomQtyFromActiveDesign(); // 🛡️ Keep bottom row selection updated
 };
 
 function updateLiveDetailHeader() {
@@ -734,14 +873,17 @@ function updateLiveDetailHeader() {
     var totalQty = 0;
     for (var k in cart) { if (cart[k].p.id === curProduct.id) totalQty += cart[k].qty; }
 
+    // Top Header Badge
     var dtTotTop = document.getElementById('dtTotalQtyTop');
     if (dtTotTop) dtTotTop.innerText = totalQty > 0 ? totalQty : "0";
 
+    // Display live total quantity next to product name
     var dtNameTop = document.getElementById('dtNameTop');
     if (dtNameTop) {
         dtNameTop.innerHTML = esc(curProduct.name) + ' <span style="color: var(--myntra-pink); font-weight: bold; font-size: 14px;">(' + totalQty + ' pcs)</span>';
     }
 
+    // Update design quantities summary in bottom row
     var summaryEl = document.getElementById('dtDesignsSummary');
     if (summaryEl) {
         var parts = [];
@@ -754,6 +896,7 @@ function updateLiveDetailHeader() {
                 }
             }
         }
+        // Sort by design name naturally (e.g., D2, D3, D10)
         parts.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         var displayParts = parts.map(p => p.name + '*' + p.qty);
         summaryEl.innerText = displayParts.length > 0 ? displayParts.join(' + ') : '';
@@ -763,7 +906,7 @@ function updateLiveDetailHeader() {
 function closeDetail() {
     var panel = document.getElementById('detailPanel');
     if (panel) panel.classList.remove('open');
-    history.back();
+    history.back(); // Standard browser back to trigger popstate
 }
 
 // ====================================
@@ -782,38 +925,58 @@ function setupFsGestures() {
 
     var startTouchX = 0;
     var startTouchY = 0;
+
+    // Pinch variables
     var initialPinchDistance = 0;
     var initialScale = 1;
     var isPinching = false;
+
+    // Pan variables
     var startPanX = 0;
     var startPanY = 0;
     var isPanning = false;
+
+    // Double tap variable
     var lastTapTime = 0;
 
+    // Helper: calculate distance between two fingers
     function getDistance(t1, t2) {
         var dx = t1.clientX - t2.clientX;
         var dy = t1.clientY - t2.clientY;
         return Math.sqrt(dx * dx + dy * dy);
     }
 
+    // Swipe navigation logic
     function handleSwipe(diffX) {
-        if (Math.abs(diffX) > 50) {
-            openFs(diffX > 0 ? fsIndex - 1 : fsIndex + 1);
+        var threshold = 50;
+        if (Math.abs(diffX) > threshold) {
+            if (diffX > 0) {
+                // Swipe Right (Go to previous image)
+                openFs(fsIndex - 1);
+            } else {
+                // Swipe Left (Go to next image)
+                openFs(fsIndex + 1);
+            }
         }
     }
 
+    // Touch Start
     fsImg.addEventListener('touchstart', function (e) {
         if (e.touches.length === 1) {
+            // Potential pan, swipe, or double-tap
             isPanning = false;
             isPinching = false;
+
             startTouchX = e.touches[0].clientX;
             startTouchY = e.touches[0].clientY;
+
             if (fsScale > 1) {
                 isPanning = true;
                 startPanX = e.touches[0].clientX - fsTranslateX;
                 startPanY = e.touches[0].clientY - fsTranslateY;
             }
         } else if (e.touches.length === 2) {
+            // Pinch to zoom
             isPinching = true;
             isPanning = false;
             initialPinchDistance = getDistance(e.touches[0], e.touches[1]);
@@ -821,12 +984,15 @@ function setupFsGestures() {
         }
     }, { passive: true });
 
+    // Touch Move
     fsImg.addEventListener('touchmove', function (e) {
         if (isPinching && e.touches.length === 2) {
             var newDistance = getDistance(e.touches[0], e.touches[1]);
             if (initialPinchDistance > 0) {
                 var factor = newDistance / initialPinchDistance;
                 fsScale = Math.max(1, Math.min(4, initialScale * factor));
+
+                // If we zoom out to 1, reset offsets
                 if (fsScale === 1) {
                     fsTranslateX = 0;
                     fsTranslateY = 0;
@@ -834,37 +1000,65 @@ function setupFsGestures() {
                 fsImg.style.transform = `translate3d(${fsTranslateX}px, ${fsTranslateY}px, 0) scale(${fsScale})`;
             }
         } else if (isPanning && e.touches.length === 1 && fsScale > 1) {
+            // Drag panning when zoomed
             fsTranslateX = e.touches[0].clientX - startPanX;
             fsTranslateY = e.touches[0].clientY - startPanY;
+
+            // Constrain translation bounds based on scale
             var maxTranslateX = (fsScale - 1) * (fsImg.clientWidth / 2);
             var maxTranslateY = (fsScale - 1) * (fsImg.clientHeight / 2);
             fsTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, fsTranslateX));
             fsTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, fsTranslateY));
+
             fsImg.style.transform = `translate3d(${fsTranslateX}px, ${fsTranslateY}px, 0) scale(${fsScale})`;
         }
     }, { passive: true });
 
+    // Touch End
     fsImg.addEventListener('touchend', function (e) {
-        isPinching = false;
-        isPanning = false;
+        if (isPinching) {
+            isPinching = false;
+        }
+        if (isPanning) {
+            isPanning = false;
+        }
+
+        // If it was a single finger and scale === 1, detect horizontal swipe
         if (e.touches.length === 0 && fsScale === 1) {
-            var diffX = e.changedTouches[0].clientX - startTouchX;
-            var diffY = e.changedTouches[0].clientY - startTouchY;
+            var endX = e.changedTouches[0].clientX;
+            var endY = e.changedTouches[0].clientY;
+            var diffX = endX - startTouchX;
+            var diffY = endY - startTouchY;
+
+            // Ensure it is mostly horizontal swipe
             if (Math.abs(diffX) > Math.abs(diffY)) {
                 handleSwipe(diffX);
             }
         }
     }, { passive: true });
 
+    // Double Tap detection
     fsImg.addEventListener('click', function (e) {
         var now = new Date().getTime();
-        if (now - lastTapTime < 300) {
-            fsScale = (fsScale > 1) ? 1 : 2.5;
-            fsTranslateX = 0;
-            fsTranslateY = 0;
+        var timespan = now - lastTapTime;
+        if (timespan < 300 && timespan > 0) {
+            // Double Tap!
+            if (fsScale > 1) {
+                // Reset zoom
+                fsScale = 1;
+                fsTranslateX = 0;
+                fsTranslateY = 0;
+            } else {
+                // Zoom in to 2.5
+                fsScale = 2.5;
+                fsTranslateX = 0;
+                fsTranslateY = 0;
+            }
             fsImg.style.transition = 'transform 0.2s ease-out';
             fsImg.style.transform = `translate3d(${fsTranslateX}px, ${fsTranslateY}px, 0) scale(${fsScale})`;
-            setTimeout(() => { fsImg.style.transition = ''; }, 200);
+            setTimeout(() => {
+                fsImg.style.transition = '';
+            }, 200);
             e.preventDefault();
         }
         lastTapTime = now;
@@ -883,11 +1077,18 @@ function openFs(arg1, arg2, arg3) {
     var deck = document.getElementById('dtDesigns');
     if (!deck) return;
 
+    // 📱 Filter to only visible cards (images/videos that successfully loaded and aren't hidden)
     var cards = Array.from(deck.querySelectorAll('.swipe-card')).filter(card => card.style.display !== 'none');
 
     if (dId) {
-        var foundIdx = cards.findIndex(card => (card.dataset.design || '') === dId);
-        if (foundIdx !== -1) index = foundIdx;
+        var foundIdx = cards.findIndex(card => {
+            var inputField = card.querySelector('input[type="number"]');
+            var cardDId = inputField ? inputField.id.replace("qty_" + pId + "_", "") : 'DIRECT';
+            return cardDId === dId;
+        });
+        if (foundIdx !== -1) {
+            index = foundIdx;
+        }
     }
 
     if (cards.length === 0) return;
@@ -897,9 +1098,12 @@ function openFs(arg1, arg2, arg3) {
     var targetCard = cards[index];
     if (!targetCard) return;
 
+    // Keep detail panel swipe deck scrolled to align with full screen active card
     targetCard.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
 
-    dId = targetCard.dataset.design || 'DIRECT';
+    var inputField = targetCard.querySelector('input[type="number"]');
+    dId = inputField ? inputField.id.replace("qty_" + pId + "_", "") : 'DIRECT';
+
     fsIndex = index;
     fsDesignId = dId;
 
@@ -911,29 +1115,37 @@ function openFs(arg1, arg2, arg3) {
     var fsImg = document.getElementById('fsImg');
     var fsVideo = document.getElementById('fsVideo');
 
-    if (!fsVideo) {
+    if (!fsVideo && fsImg) {
         fsVideo = document.createElement('video');
         fsVideo.id = 'fsVideo';
-        fsVideo.style.cssText = 'max-width:100%; max-height:100%; object-fit:contain;';
+        fsVideo.style.maxWidth = '100%';
+        fsVideo.style.maxHeight = '100%';
+        fsVideo.style.objectFit = 'contain';
         fsVideo.controls = true;
         fsVideo.playsInline = true;
         fsImg.parentNode.appendChild(fsVideo);
     }
 
     if (videoEl) {
-        fsImg.style.display = 'none';
-        fsVideo.style.display = 'block';
-        fsVideo.src = videoEl.src;
+        if (fsImg) fsImg.style.display = 'none';
+        if (fsVideo) {
+            fsVideo.style.display = 'block';
+            fsVideo.src = videoEl.src;
+        }
     } else {
-        fsVideo.style.display = 'none';
-        fsVideo.src = '';
-        fsImg.style.display = 'block';
-        fsImg.style.transition = '';
-        fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
-        fsScale = 1;
-        fsTranslateX = 0;
-        fsTranslateY = 0;
-        fsImg.src = imgEl ? imgEl.src : '';
+        if (fsVideo) {
+            fsVideo.style.display = 'none';
+            fsVideo.src = '';
+        }
+        if (fsImg) {
+            fsImg.style.display = 'block';
+            fsImg.style.transition = '';
+            fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
+            fsScale = 1;
+            fsTranslateX = 0;
+            fsTranslateY = 0;
+            fsImg.src = imgEl ? imgEl.src : '';
+        }
     }
 
     var key = pId + '_' + fsDesignId;
@@ -942,7 +1154,7 @@ function openFs(arg1, arg2, arg3) {
     var fsModal = document.getElementById('fsModal');
     if (fsModal.style.display !== 'flex') {
         fsModal.style.display = 'flex';
-        pushHistoryState('fs');
+        pushHistoryState('fs'); // 🛡️ TRAPS BACK BUTTON
     }
 }
 
@@ -969,11 +1181,17 @@ function openCart() {
     try {
         var cb = document.getElementById('cartBody');
         if (!cb) return;
-        var count = 0, grouped = {};
+        cb.innerHTML = '';
+        var count = 0;
+        var grouped = {};
 
+        function safeText(str) { return str ? String(str).replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''; }
+
+        // 🛡️ INTERNAL CACHE LOADING
         for (var k in cart) {
             var c = cart[k];
             if (!c || !c.p || !c.p.id) { delete cart[k]; continue; }
+            var safeDesign = c.design || 'DIRECT';
             count += (parseInt(c.qty) || 0);
             if (!grouped[c.p.id]) grouped[c.p.id] = { p: c.p, items: [] };
             grouped[c.p.id].items.push(c);
@@ -982,33 +1200,63 @@ function openCart() {
         var cHtml = [];
         for (var r in grouped) {
             var g = grouped[r];
-            var pTot = g.items.reduce((sum, i) => sum + (parseInt(i.qty) || 0), 0);
+            var pTot = 0;
+            g.items.forEach(function (i) { pTot += (parseInt(i.qty) || 0); });
 
             cHtml.push('<div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden;">');
-            cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="closeCart(true); setTimeout(() => openDetail(\'' + g.p.id + '\'), 100);">');
-            cHtml.push('<div style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + esc(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></div>');
-            cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + esc(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + esc(g.p.packing) + ' | Total: ' + pTot + ' pcs</div>');
+            cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="closeCart(true); setTimeout(()=>{openDetail(\'' + g.p.id + '\');},100);">');
+            cHtml.push('<div style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></div>');
+            cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
             cHtml.push('</div><div style="display:flex; flex-wrap:wrap; gap:10px; padding:10px;">');
 
-            g.items.forEach(item => {
+            g.items.forEach(function (item) {
                 var safeDesignLabel = item.design || 'DIRECT';
                 var dLabel = safeDesignLabel === 'DIRECT' ? 'Cover' : safeDesignLabel;
-                var targetFile = (safeDesignLabel === 'DIRECT') ? "01.webp" : (safeDesignLabel.replace(/\D/g, '').padStart(2, '0') + ".webp");
-                const cartImgUrl = getFirebaseImageUrl(g.p.gridUrl, targetFile);
+                var imgId = "cart_img_" + g.p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
 
                 cHtml.push('<div style="width: 80px; text-align: center;">');
-                cHtml.push(`<img src="${cartImgUrl}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border);" onerror="this.onerror=null; this.src='https://placehold.co/80x80/f0f0f0/a0a0a0?text=...';">`);
-                cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + esc(dLabel) + '</div>');
+                cHtml.push('<img id="' + imgId + '" src="https://placehold.co/300x300/f0f0f0/a0a0a0?text=..." style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); cursor: pointer;">');
+                cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + dLabel + '</div>');
                 cHtml.push('<div style="font-size: 12px; font-weight: bold; color: var(--myntra-pink);">' + (item.qty || 0) + ' pcs</div>');
                 cHtml.push('</div>');
             });
             cHtml.push('</div></div>');
         }
 
-        cb.innerHTML = (count === 0) ? '<div style="text-align:center; padding:40px 20px; color:var(--text-light); font-weight:bold;">Your Cart is empty.</div>' : cHtml.join('');
+        if (count === 0) {
+            cb.innerHTML = '<div style="text-align:center; padding:40px 20px; color:var(--text-light); font-weight:bold;">Your Cart is empty.</div>';
+        } else {
+            cb.innerHTML = cHtml.join('');
 
-        document.getElementById('cartCountHeader').innerText = count;
-        document.getElementById('cartTotalQty').innerText = count + " pcs";
+            // Progressive load Cart images
+            setTimeout(() => {
+                for (var r in grouped) {
+                    grouped[r].items.forEach(function (item) {
+                        var safeDesignLabel = item.design || 'DIRECT';
+                        var imgId = "cart_img_" + grouped[r].p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
+                        var imgEl = document.getElementById(imgId);
+                        if (imgEl) {
+                            var gridPath = grouped[r].p.gridUrl;
+                            var zoomPath = grouped[r].p.zoomUrl;
+
+                            var targetFile = "01.webp";
+                            if (safeDesignLabel !== 'DIRECT') {
+                                var cleanNum = safeDesignLabel.replace(/\D/g, '');
+                                if (cleanNum.length === 1) cleanNum = "0" + cleanNum;
+                                if (cleanNum === "") cleanNum = "02";
+                                targetFile = cleanNum + ".webp";
+                            }
+                            window.renderWebpFromFolder(imgEl, gridPath, zoomPath, targetFile);
+                        }
+                    });
+                }
+            }, 50);
+        }
+
+        var headerCount = document.getElementById('cartCountHeader');
+        if (headerCount) headerCount.innerText = count;
+        var footerQty = document.getElementById('cartTotalQty');
+        if (footerQty) footerQty.innerText = count + " pcs";
 
         localStorage.setItem("dsCart", JSON.stringify(cart));
 
@@ -1038,15 +1286,20 @@ function clearCart() {
         try { localStorage.removeItem("dsCart"); } catch (e) { }
         closeCart();
         updateCartHeader();
-        renderProductGrid(displayList);
+        renderProductGrid(displayList); // Reload main screen inputs
     }
 }
 
+// ====================================
+// 💬 SMART WHATSAPP ROUTING (PC & Mobile)
+// ====================================
 function sendWhatsapp() {
-    if (Object.keys(cart).length === 0) return alert("Your cart is empty!");
+    var keys = Object.keys(cart);
+    if (keys.length === 0) return alert("Your cart is empty!");
 
     var msg = "🛍️ *New Order from Web App*\n\n";
-    var totalQty = 0, groups = {};
+    var totalQty = 0;
+    var groups = {};
 
     for (var k in cart) {
         var item = cart[k];
@@ -1057,7 +1310,7 @@ function sendWhatsapp() {
     for (var r in groups) {
         var g = groups[r];
         msg += "🏷️ *" + g.p.name + "* (SKU: " + g.p.sku + ")\n";
-        g.items.forEach(item => {
+        g.items.forEach(function (item) {
             var dName = item.design === 'DIRECT' ? 'Cover' : item.design;
             msg += "  - " + dName + ": " + item.qty + " pcs\n";
             totalQty += item.qty;
@@ -1066,15 +1319,22 @@ function sendWhatsapp() {
     }
     msg += "📦 *Total Quantity:* " + totalQty + " pcs\n";
 
-    var number = "919099887766";
+    var number = "919099887766"; // <<< REPLACE THIS WITH YOUR REAL WHATSAPP NUMBER
     var encodedMsg = encodeURIComponent(msg);
+
+    // 🧠 Detects if you are on a PC or a Mobile phone
     var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    window.open((isMobile ? "whatsapp://send?phone=" : "https://web.whatsapp.com/send?phone=") + number + "&text=" + encodedMsg, '_blank');
+
+    if (isMobile) {
+        // Triggers the actual WhatsApp app on phones
+        window.open("whatsapp://send?phone=" + number + "&text=" + encodedMsg, '_blank');
+    } else {
+        // Triggers WhatsApp Web on Desktop PCs
+        window.open("https://web.whatsapp.com/send?phone=" + number + "&text=" + encodedMsg, '_blank');
+    }
 }
 
-// ====================================
-// UTILS & HELPERS
-// ====================================
+// Utilities are defined at the bottom of the file
 
 async function triggerShare(action) {
     closeModals();
@@ -1089,17 +1349,20 @@ async function triggerShare(action) {
         return;
     }
 
+    // Grab all loaded images from the current Swipe Deck
     var deck = document.getElementById('dtDesigns');
     var imgArray = [];
     if (deck) {
         var imgs = deck.querySelectorAll('img');
         imgs.forEach(img => {
+            // Only grab real images, not placeholders
             if (img.src && !img.src.includes('placehold.co') && !img.src.includes('data:image')) {
                 imgArray.push(img.src);
             }
         });
     }
 
+    // Deduplicate array
     imgArray = [...new Set(imgArray)];
 
     if (imgArray.length === 0) {
@@ -1107,6 +1370,7 @@ async function triggerShare(action) {
         return;
     }
 
+    // Calls your PDF Engine
     if (typeof generateNativePDF === 'function') {
         await generateNativePDF(curProduct.name, curProduct.price, imgArray, action);
     } else {
@@ -1114,61 +1378,94 @@ async function triggerShare(action) {
     }
 }
 
-window.goToHome = function () {
-    cameFromDetail = false;
-    closeDetail();
-    closeCart();
-    document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
-};
-
-async function startImagePrefetch() {
-    console.log("Starting background image pre-fetch...");
-    if (!allProducts || allProducts.length === 0) return;
-
-    const productsToDownload = allProducts.filter(p => p.gridUrl && p.gridUrl.trim() !== "" && p.gridUrl.toLowerCase() !== "none");
-    if (productsToDownload.length === 0) return;
-
-    const urlsToFetch = new Map();
-
-    productsToDownload.forEach(p => {
-        // Key for main grid image is the gridUrl folder path
-        urlsToFetch.set(p.gridUrl, getFirebaseImageUrl(p.gridUrl, "01.webp"));
-
-        if (p.ready && p.ready.trim() !== "") {
-            const rawDesigns = String(p.ready).split(',').map(d => d.trim()).filter(Boolean);
-            rawDesigns.forEach(d => {
-                const cleanNum = d.replace(/\D/g, '');
-                if (d.length <= 10 && cleanNum !== "" && parseInt(cleanNum) >= 2 && parseInt(cleanNum) <= 99) {
-                    const numStr = cleanNum.length === 1 ? "0" + cleanNum : cleanNum;
-                    const designUrl = getFirebaseImageUrl(p.gridUrl, numStr + ".webp");
-                    urlsToFetch.set(designUrl, designUrl); // Key is the full URL itself
-                }
-            });
-        }
-    });
-
-    const urlArray = Array.from(urlsToFetch.entries());
-    const batchSize = 5;
-    for (let i = 0; i < urlArray.length; i += batchSize) {
-        const batch = urlArray.slice(i, i + batchSize);
-        await Promise.all(batch.map(async ([key, url]) => {
-            try {
-                const isCached = await getImageFromDB(key).then(blob => !!blob);
-                if (!isCached) {
-                    const response = await fetch(url);
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        await saveImageToDB(key, blob);
-                    }
-                }
-            } catch (err) {
-                // Silently fail and continue
-            }
-        }));
+function testPdfEngine() {
+    if (!curProduct) {
+        alert("Open a product first!");
+        return;
     }
-    console.log("Background image pre-fetch finished.");
+
+    // Grab the Firebase base URL
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
+    var encPath = folderPath.split('/').map(encodeURIComponent).join('%2F');
+
+    // Build an array of image URLs to put in the PDF (Cover + 2 designs for testing)
+    var testImages = [
+        fbBase + encPath + "%2F01.webp?alt=media",
+        fbBase + encPath + "%2F02.webp?alt=media",
+        fbBase + encPath + "%2F03.webp?alt=media"
+    ];
+
+    // Calls the engine in the new file!
+    generateNativePDF(curProduct.name, curProduct.price, testImages);
 }
 
+window.openCartFs = function (productId, designId, cartImgSrc) {
+    // 1. Initialize detail view silently (renders the swipe deck in DOM)
+    openDetail(productId, true);
+
+    // Resolve current product ID to support cart items with stale IDs
+    var actualProductId = curProduct ? curProduct.id : productId;
+
+    var index = 0;
+    var deck = document.getElementById('dtDesigns');
+    if (deck) {
+        var cards = Array.from(deck.querySelectorAll('.swipe-card'));
+
+        // Match by input ID (direct check)
+        var inputEl = document.getElementById('qty_' + actualProductId + '_' + designId);
+        if (inputEl) {
+            var cardEl = inputEl.closest('.swipe-card');
+            var foundIdx = cards.indexOf(cardEl);
+            if (foundIdx !== -1) {
+                index = foundIdx;
+            }
+        } else {
+            // Fallback: match card text label or input ID suffix case-insensitively
+            var targetLabel = String(designId).trim().toLowerCase();
+            for (var i = 0; i < cards.length; i++) {
+                var card = cards[i];
+
+                // 1. Check if input element ID ends with _designId (e.g. _D2 or _02)
+                var inp = card.querySelector('input[type="number"]');
+                if (inp && (inp.id.toLowerCase().endsWith('_' + targetLabel) || inp.id.toLowerCase() === 'qty_' + actualProductId.toLowerCase() + '_' + targetLabel)) {
+                    index = i;
+                    break;
+                }
+
+                // 2. Check if text label in swipe-card-bot matches
+                var botDiv = card.querySelector('.swipe-card-bot');
+                if (botDiv) {
+                    var firstChild = botDiv.firstElementChild;
+                    if (firstChild) {
+                        var cardLabel = firstChild.innerText.trim().toLowerCase();
+                        // Handle "Cover" vs "DIRECT"
+                        if ((cardLabel === 'cover' && targetLabel === 'direct') || cardLabel === targetLabel) {
+                            index = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Open full screen viewer
+    openFs(actualProductId, index, designId, cartImgSrc);
+};
+
+// ====================================
+// UTILS & HELPERS
+// ====================================
+window.goToHome = function () {
+    cameFromDetail = false;
+    var detail = document.getElementById('detailPanel');
+    var cart = document.getElementById('cartPanel');
+    if (detail && detail.classList.contains('open')) closeDetail();
+    if (cart && cart.classList.contains('open')) { cart.classList.remove('open'); history.back(); }
+    document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
+};
 async function syncImages() {
     var bootScreen = document.getElementById('boot');
     var bootMsg = document.getElementById('bootMsg');
@@ -1181,57 +1478,127 @@ async function syncImages() {
         const data = await res.json();
         var docs = data.documents || [];
 
-        var productsToDownload = docs.map(d => d.fields).filter(f => f.name && f.name.stringValue && f.gridUrl && f.gridUrl.stringValue);
+        var productsToDownload = [];
+        docs.forEach(d => {
+            var f = d.fields || {};
+            var name = f.name ? f.name.stringValue : "";
+            var gridUrl = f.gridUrl ? f.gridUrl.stringValue : "";
+            var ready = f.ready ? f.ready.stringValue : "";
+            if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
+                productsToDownload.push({
+                    name: name,
+                    gridUrl: gridUrl,
+                    ready: ready
+                });
+            }
+        });
 
         if (productsToDownload.length === 0) {
             if (bootScreen) bootScreen.style.display = 'none';
             alert("No images found to sync.");
-            return initApp();
+            initApp();
+            return;
         }
 
-        let total = 0, count = 0, failed = 0;
-        const urlsToSync = new Map();
-        productsToDownload.forEach(f => {
-            const gridUrl = f.gridUrl.stringValue;
-            urlsToSync.set(gridUrl, getFirebaseImageUrl(gridUrl, "01.webp"));
-            if (f.ready && f.ready.stringValue) {
-                 String(f.ready.stringValue).split(',').map(d => d.trim()).filter(Boolean).forEach(d => {
-                    const cleanNum = d.replace(/\D/g, '');
-                    if (cleanNum !== "" && parseInt(cleanNum) >= 2 && parseInt(cleanNum) <= 99) {
-                        const numStr = cleanNum.length === 1 ? "0" + cleanNum : cleanNum;
-                        const designUrl = getFirebaseImageUrl(gridUrl, numStr + ".webp");
-                        urlsToSync.set(designUrl, designUrl);
-                    }
-                });
-            }
-        });
-        
-        total = urlsToSync.size;
-        if (bootMsg) bootMsg.innerText = `Syncing 0 / ${total} images...`;
+        var total = productsToDownload.length;
+        if (bootMsg) bootMsg.innerText = "Syncing 0 / " + total + " images...";
 
-        const urlArray = Array.from(urlsToSync.entries());
-        const batchSize = 5;
-        for (let i = 0; i < urlArray.length; i += batchSize) {
-            const batch = urlArray.slice(i, i + batchSize);
-            await Promise.all(batch.map(async ([key, url]) => {
-                let downloaded = false;
-                try {
-                    const response = await fetch(url);
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        if (await saveImageToDB(key, blob)) {
-                            downloaded = true;
+        var count = 0;
+        var failed = 0;
+        var bucket = "durga-sarees.firebasestorage.app";
+        var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+
+        // Download in batches of 5
+        var batchSize = 5;
+        for (var i = 0; i < productsToDownload.length; i += batchSize) {
+            var batch = productsToDownload.slice(i, i + batchSize);
+            await Promise.all(batch.map(async (p) => {
+                var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
+                var urlsToTry = [
+                    fbBase + encGridPath + "%2F01.webp?alt=media",
+                    fbBase + encGridPath + "%2Fcover.webp?alt=media",
+                    fbBase + encGridPath + "%2F1.webp?alt=media"
+                ];
+
+                var downloaded = false;
+                for (var u = 0; u < urlsToTry.length; u++) {
+                    try {
+                        const response = await fetch(urlsToTry[u]);
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            var saved = await saveImageToDB(p.gridUrl, blob);
+                            if (saved) {
+                                downloaded = true;
+                                break;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("Attempt " + u + " failed for url: " + urlsToTry[u], err);
+                    }
+                }
+                if (!downloaded) {
+                    failed++;
+                }
+
+                // Download ready design grid images
+                if (p.ready && p.ready.trim() !== "") {
+                    var rawDesigns = String(p.ready).split(',').map(d => d.trim()).filter(Boolean);
+                    var validDesigns = [];
+                    rawDesigns.forEach(d => {
+                        var cleanNum = d.replace(/\D/g, '');
+                        if (d.length <= 10 && cleanNum !== "") {
+                            var numVal = parseInt(cleanNum);
+                            if (numVal >= 2 && numVal <= 99) {
+                                validDesigns.push({
+                                    name: d,
+                                    numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum,
+                                    cleanNum: cleanNum
+                                });
+                            }
+                        }
+                    });
+
+                    for (var d = 0; d < validDesigns.length; d++) {
+                        var dObj = validDesigns[d];
+                        var designKey = fbBase + encGridPath + "%2F" + dObj.numStr + ".webp?alt=media";
+                        var designUrlsToTry = [
+                            designKey,
+                            fbBase + encGridPath + "%2F" + dObj.cleanNum + ".webp?alt=media"
+                        ];
+
+                        for (var u = 0; u < designUrlsToTry.length; u++) {
+                            try {
+                                const response = await fetch(designUrlsToTry[u]);
+                                if (response.ok) {
+                                    const blob = await response.blob();
+                                    var saved = await saveImageToDB(designKey, blob);
+                                    if (saved) {
+                                        break;
+                                    }
+                                }
+                            } catch (err) {
+                                console.warn("Attempt " + u + " failed for design url: " + designUrlsToTry[u], err);
+                            }
                         }
                     }
-                } catch (err) { /* fail */ }
-                if(!downloaded) failed++;
+                }
+
+                count++;
             }));
-            count += batch.length;
-            if (bootMsg) bootMsg.innerText = `Syncing ${Math.min(count, total)} / ${total} images...`;
+
+            if (bootMsg) {
+                bootMsg.innerText = "Syncing " + count + " / " + total + " images...";
+            }
         }
 
         if (bootScreen) bootScreen.style.display = 'none';
-        alert(failed > 0 ? `Sync completed. Saved ${total - failed} images. (${failed} failed)` : `Success! All ${total} catalog images saved.`);
+
+        if (failed > 0) {
+            alert("Sync completed. Successfully saved " + (total - failed) + " images to local storage. (" + failed + " failed)");
+        } else {
+            alert("Success! All " + total + " catalog images saved to local storage.");
+        }
+
         initApp();
 
     } catch (err) {
@@ -1257,7 +1624,10 @@ function pushHistoryState(modal) {
 function saveProductEdit(p) {
     try {
         var edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {};
-        edited[p.name] = { price: p.price, packing: p.packing };
+        edited[p.name] = {
+            price: p.price,
+            packing: p.packing
+        };
         localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
     } catch (e) { console.error("Error saving product edit:", e); }
 }
@@ -1267,7 +1637,13 @@ function setupEditableFields() {
     var packBot = document.getElementById('dtPackBot');
 
     if (priceBot) {
-        priceBot.addEventListener('blur', () => {
+        priceBot.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                priceBot.blur();
+            }
+        });
+        priceBot.addEventListener('blur', function () {
             if (!curProduct) return;
             var val = parseFloat(priceBot.innerText.replace(/[^0-9.]/g, '').trim());
             if (!isNaN(val) && val >= 0) {
@@ -1282,7 +1658,13 @@ function setupEditableFields() {
     }
 
     if (packBot) {
-        packBot.addEventListener('blur', () => {
+        packBot.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                packBot.blur();
+            }
+        });
+        packBot.addEventListener('blur', function () {
             if (!curProduct) return;
             var val = packBot.innerText.trim();
             if (val !== "") {
@@ -1299,18 +1681,55 @@ function setupEditableFields() {
 
 function updateBottomQtyFromActiveDesign() {
     if (!curProduct) return;
+
     var dKey = curProduct.id + '_DIRECT';
     var qty = cart[dKey] ? cart[dKey].qty : 0;
+
     var dtQtyInput = document.getElementById('dtQtyDirect');
-    if (dtQtyInput) dtQtyInput.value = qty;
+    if (dtQtyInput) {
+        dtQtyInput.value = qty;
+    }
+
     var btnMinus = document.getElementById('dtQtyBotMinus');
     var btnPlus = document.getElementById('dtQtyBotPlus');
-    if (btnMinus) btnMinus.onclick = () => changeQty(curProduct.id, 'DIRECT', -1);
-    if (btnPlus) btnPlus.onclick = () => changeQty(curProduct.id, 'DIRECT', 1);
+
+    if (btnMinus) {
+        btnMinus.onclick = function () {
+            changeQty(curProduct.id, 'DIRECT', -1);
+        };
+    }
+    if (btnPlus) {
+        btnPlus.onclick = function () {
+            changeQty(curProduct.id, 'DIRECT', 1);
+        };
+    }
 }
 
+// 📱 Listen to hybrid app native backbutton event to prevent app minimization and handle stack back transition
 document.addEventListener("backbutton", function (e) {
-    if (document.querySelector('#fsModal[style*="display: flex"], .panel.open, .action-modal[style*="display: flex"]')) {
+    var hasActiveModal = false;
+
+    var detailPanel = document.getElementById('detailPanel');
+    var cartPanel = document.getElementById('cartPanel');
+    var fsModal = document.getElementById('fsModal');
+
+    if (fsModal && fsModal.style.display === 'flex') {
+        hasActiveModal = true;
+    } else if (cartPanel && cartPanel.classList.contains('open')) {
+        hasActiveModal = true;
+    } else if (detailPanel && detailPanel.classList.contains('open')) {
+        hasActiveModal = true;
+    } else {
+        var actionModals = document.querySelectorAll('.action-modal');
+        for (var i = 0; i < actionModals.length; i++) {
+            if (actionModals[i].style.display === 'flex') {
+                hasActiveModal = true;
+                break;
+            }
+        }
+    }
+
+    if (hasActiveModal) {
         e.preventDefault();
         history.back();
     }
@@ -1326,49 +1745,63 @@ window.doSearch = function (val) {
     if (srch) srch.value = val;
     applyFilter();
 
-    if (val.trim() !== "" && document.getElementById('detailPanel')?.classList.contains('open')) {
-        cameFromDetail = true;
-        searchingTransition = true;
-        closeDetail();
-    } else if (cameFromDetail && curProduct) {
-        openDetail(curProduct.id, false, true);
-        cameFromDetail = false;
+    var trimmedVal = val.trim();
+    if (trimmedVal !== "") {
+        var detailPanel = document.getElementById('detailPanel');
+        if (detailPanel && detailPanel.classList.contains('open')) {
+            cameFromDetail = true;
+            searchingTransition = true;
+            closeDetail();
+        }
+    } else {
+        if (cameFromDetail && curProduct) {
+            openDetail(curProduct.id, false, true);
+            cameFromDetail = false;
+        }
     }
 };
 
 window.populateCategories = function () {
     var catListEl = document.getElementById('categoryList');
     if (!catListEl) return;
-    var cats = [...new Set(allProducts.map(p => p.cat || "Uncategorized"))].sort();
-    catListEl.innerHTML = cats.map(cat => {
+
+    var cats = {};
+    allProducts.forEach(p => {
+        if (p.cat) cats[p.cat] = true;
+    });
+    var sortedCats = Object.keys(cats).sort();
+
+    var html = '';
+    sortedCats.forEach(cat => {
         var activeClass = activeCategories.includes(cat) ? 'active' : '';
-        return `<div class="filter-row ${activeClass}" onclick="toggleCategoryFilter(this, '${esc(cat)}')">${esc(cat)}</div>`;
-    }).join('');
+        html += `<div class="filter-row ${activeClass}" onclick="toggleCategoryFilter(this, '${esc(cat)}')">${esc(cat)}</div>`;
+    });
+    catListEl.innerHTML = html;
 };
 
 window.toggleCategoryFilter = function (element, cat) {
     cameFromDetail = false;
-    const idx = activeCategories.indexOf(cat);
+    var idx = activeCategories.indexOf(cat);
     if (idx === -1) {
         activeCategories.push(cat);
-        element?.classList.add('active');
+        if (element) element.classList.add('active');
     } else {
         activeCategories.splice(idx, 1);
-        element?.classList.remove('active');
+        if (element) element.classList.remove('active');
     }
     applyFilter();
 };
 
 window.togglePriceFilter = function (element, min, max) {
     cameFromDetail = false;
-    var filterStr = `${min}-${max}`;
-    const idx = activePriceFilters.indexOf(filterStr);
+    var filterStr = min + '-' + max;
+    var idx = activePriceFilters.indexOf(filterStr);
     if (idx === -1) {
         activePriceFilters.push(filterStr);
-        element?.classList.add('active');
+        if (element) element.classList.add('active');
     } else {
         activePriceFilters.splice(idx, 1);
-        element?.classList.remove('active');
+        if (element) element.classList.remove('active');
     }
     applyFilter();
 };
@@ -1376,18 +1809,29 @@ window.togglePriceFilter = function (element, min, max) {
 window.clearPriceFilters = function () {
     cameFromDetail = false;
     activePriceFilters = [];
-    document.querySelectorAll('#filterModal .filter-row').forEach(r => r.classList.remove('active'));
+    var modal = document.getElementById('filterModal');
+    if (modal) {
+        var rows = modal.querySelectorAll('.filter-row');
+        rows.forEach(r => r.classList.remove('active'));
+    }
     applyFilter();
 };
 
 window.toggleSearch = function () {
     var container = document.getElementById('searchContainerMain');
     if (container) {
-        const isHidden = container.style.display === 'none' || container.style.display === '';
-        container.style.display = isHidden ? 'block' : 'none';
-        var input = container.querySelector('input');
-        if (isHidden) input.focus();
-        else if (input.value) { input.value = ''; doSearch(''); }
+        if (container.style.display === 'none' || container.style.display === '') {
+            container.style.display = 'block';
+            var input = container.querySelector('input');
+            if (input) input.focus();
+        } else {
+            container.style.display = 'none';
+            var input = container.querySelector('input');
+            if (input) {
+                input.value = '';
+                doSearch('');
+            }
+        }
     }
 };
 
@@ -1396,9 +1840,15 @@ window.toggleFavView = function () {
     showOnlyFavs = !showOnlyFavs;
     var favIcon = document.getElementById('favTopIcon');
     if (favIcon) {
-        favIcon.classList.toggle('far', !showOnlyFavs);
-        favIcon.classList.toggle('fas', showOnlyFavs);
-        favIcon.style.color = showOnlyFavs ? 'var(--myntra-pink)' : '';
+        if (showOnlyFavs) {
+            favIcon.classList.remove('far');
+            favIcon.classList.add('fas');
+            favIcon.style.color = 'var(--myntra-pink)';
+        } else {
+            favIcon.classList.remove('fas');
+            favIcon.classList.add('far');
+            favIcon.style.color = '';
+        }
     }
     applyFilter();
 };
@@ -1406,38 +1856,126 @@ window.toggleFavView = function () {
 window.setSort = function (type, element) {
     cameFromDetail = false;
     currentSort = type;
-    document.querySelectorAll('#sortModal .filter-row').forEach(r => r.classList.remove('active'));
-    element?.classList.add('active');
+
+    var modal = document.getElementById('sortModal');
+    if (modal) {
+        var rows = modal.querySelectorAll('.filter-row');
+        rows.forEach(r => r.classList.remove('active'));
+    }
+    if (element) {
+        element.classList.add('active');
+    }
+
     applyFilter();
     closeModals();
 };
 
 window.applyFilter = function () {
-    var query = document.getElementById('srch')?.value.trim().toLowerCase() || '';
-    
-    displayList = allProducts.filter(p => {
-        if (query && !(p.name?.toLowerCase().includes(query) || p.sku?.toLowerCase().includes(query) || p.fabric?.toLowerCase().includes(query))) return false;
-        if (activeCategories.length > 0 && !activeCategories.includes(p.cat)) return false;
-        if (showOnlyFavs && !favorites[p.id]) return false;
-        if (activePriceFilters.length > 0 && !activePriceFilters.some(f => {
-            const [min, max] = f.split('-').map(parseFloat);
-            return p.price >= min && p.price <= max;
-        })) return false;
+    var srch = document.getElementById('srch');
+    var query = srch ? srch.value.trim().toLowerCase() : '';
+
+    var filtered = allProducts.filter(p => {
+        // 1. Search Query
+        if (query !== "") {
+            var nameMatch = p.name && p.name.toLowerCase().includes(query);
+            var skuMatch = p.sku && p.sku.toLowerCase().includes(query);
+            var fabricMatch = p.fabric && p.fabric.toLowerCase().includes(query);
+            if (!nameMatch && !skuMatch && !fabricMatch) return false;
+        }
+
+        // 2. Category
+        if (activeCategories.length > 0) {
+            if (!activeCategories.includes(p.cat)) return false;
+        }
+
+        // 3. Price
+        if (activePriceFilters.length > 0) {
+            var matchPrice = false;
+            activePriceFilters.forEach(f => {
+                var parts = f.split('-');
+                var min = parseFloat(parts[0]);
+                var max = parseFloat(parts[1]);
+                if (p.price >= min && p.price <= max) {
+                    matchPrice = true;
+                }
+            });
+            if (!matchPrice) return false;
+        }
+
+        // 4. Favorites
+        if (showOnlyFavs) {
+            if (!favorites[p.id]) return false;
+        }
+
         return true;
     });
 
+    // 5. Sorting
+    if (currentSort === 'priceAsc') {
+        filtered.sort((a, b) => a.price - b.price);
+    } else if (currentSort === 'priceDesc') {
+        filtered.sort((a, b) => b.price - a.price);
+    } else if (currentSort === 'new') {
+        // Default loading order
+    }
+
+    displayList = filtered;
     renderProductGrid(displayList);
 };
 
+// 📱 Listen to popstate to handle history back/forward navigation and close/open modals accordingly
 function applyModalState(modal) {
-    document.getElementById('fsModal').style.display = (modal === 'fs') ? 'flex' : 'none';
-    document.getElementById('detailPanel').classList.toggle('open', modal === 'detail' || modal === 'fs');
-    document.getElementById('cartPanel').classList.toggle('open', modal === 'cart');
-    document.querySelectorAll('.action-modal').forEach(m => m.style.display = (m.id === modal) ? 'flex' : 'none');
+    var detailPanel = document.getElementById('detailPanel');
+    var cartPanel = document.getElementById('cartPanel');
+    var fsModal = document.getElementById('fsModal');
+    var actionModals = document.querySelectorAll('.action-modal');
+
+    // 1. Sync Full Screen Modal
+    if (modal === 'fs') {
+        if (fsModal) fsModal.style.display = 'flex';
+    } else {
+        if (fsModal) fsModal.style.display = 'none';
+    }
+
+    // 2. Sync Detail Panel
+    if (modal === 'detail' || modal === 'fs') {
+        if (detailPanel && !detailPanel.classList.contains('open')) {
+            detailPanel.classList.add('open');
+        }
+    } else {
+        if (detailPanel) {
+            detailPanel.classList.remove('open');
+        }
+    }
+
+    // 3. Sync Cart Panel
+    if (modal === 'cart') {
+        if (cartPanel && !cartPanel.classList.contains('open')) {
+            cartPanel.classList.add('open');
+        }
+    } else {
+        if (cartPanel) {
+            cartPanel.classList.remove('open');
+        }
+    }
+
+    // 4. Sync Action Modals (categoryModal, sortModal, filterModal, shareModal, waModal)
+    actionModals.forEach(function (m) {
+        if (m.id === modal) {
+            m.style.display = 'flex';
+        } else {
+            m.style.display = 'none';
+        }
+    });
 }
 
 window.addEventListener('popstate', function (e) {
-    applyModalState(e.state?.modal);
-    if (!searchingTransition) cameFromDetail = false;
-    searchingTransition = false;
+    var state = e.state || {};
+    applyModalState(state.modal);
+
+    if (searchingTransition) {
+        searchingTransition = false;
+    } else {
+        cameFromDetail = false;
+    }
 });
