@@ -347,7 +347,7 @@ function buildCardDetails(p) {
     var packLen = String(p.packing || "1").length;
     var displayLen = Math.min(packLen, 8);
     h.push('<input type="text" class="pack-input-inline" value="' + esc(p.packing) + '" readonly onclick="event.stopPropagation()" style="flex-shrink:0; text-align:right; width:' + (displayLen + 0.5) + 'ch !important; min-width:1ch !important; max-width:7.5ch !important; font-size:11px !important; padding:0; margin:0;">');
-    h.push('<div class="fav-btn-inline" style="flex-shrink:0; padding-left:0;" onclick="toggleFav(\'' + p.id + '\', event)"><i class="' + favClass + '"></i></div>');
+    h.push('<div class="fav-btn-inline" style="flex-shrink:0; padding-left:0;" onclick="toggleFav('' + p.id + '', event)"><i class="' + favClass + '"></i></div>');
     h.push('</div>');
 
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
@@ -360,12 +360,12 @@ function buildCardDetails(p) {
 
     h.push('<div style="flex-shrink:0;">');
     if (coverQty === 0 || isNaN(coverQty)) {
-        h.push('<div class="add-btn-clean" onclick="chgMainRow(\'' + p.id + '\', 1); event.stopPropagation();">ADD</div>');
+        h.push('<div class="add-btn-clean" onclick="chgMainRow('' + p.id + '', 1); event.stopPropagation();">ADD</div>');
     } else {
         h.push('<div class="qty-clean" onclick="event.stopPropagation()">');
-        h.push('<button onclick="chgMainRow(\'' + p.id + '\', -1)">−</button>');
+        h.push('<button onclick="chgMainRow('' + p.id + '', -1)">−</button>');
         h.push('<input type="number" id="mqty-' + p.id + '" value="' + coverQty + '" readonly>');
-        h.push('<button onclick="chgMainRow(\'' + p.id + '\', 1)">+</button>');
+        h.push('<button onclick="chgMainRow('' + p.id + '', 1)">+</button>');
         h.push('</div>');
     }
     h.push('</div></div>');
@@ -548,29 +548,18 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
                     }
                 })
                 .catch(err => {
-                    console.error("Network fetch failed for design image, trying fallback", err);
-                    if (url.includes('%2F0')) {
-                        var fallbackUrl = url.replace('%2F0', '%2F');
-                        imgEl.dataset.retrying = "true";
-                        loadAndCacheDesignImage(imgEl, fallbackUrl, designGridUrl, productId, fileName);
-                    } else {
-                        imgEl.dataset.retrying = "";
-                        imgEl.onerror = null;
-                        imgEl.src = missingDesignSvg;
-                    }
+                    console.error("Network fetch failed for design image", err);
+                    imgEl.dataset.retrying = "";
+                    imgEl.onerror = null;
+                    imgEl.src = missingDesignSvg;
                 });
         }
     }).catch(err => {
         console.error("Cache read failed, loading directly", err);
         // Fallback: load directly from url
         imgEl.onerror = function () {
-            if (url.includes('%2F0')) {
-                var fallbackUrl = url.replace('%2F0', '%2F');
-                loadAndCacheDesignImage(imgEl, fallbackUrl, designGridUrl, productId, fileName);
-            } else {
-                imgEl.onerror = null;
-                imgEl.src = missingDesignSvg;
-            }
+            imgEl.onerror = null;
+            imgEl.src = missingDesignSvg;
         };
         imgEl.src = url;
     });
@@ -1204,7 +1193,7 @@ function openCart() {
             g.items.forEach(function (i) { pTot += (parseInt(i.qty) || 0); });
 
             cHtml.push('<div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden;">');
-            cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="closeCart(true); setTimeout(()=>{openDetail(\'' + g.p.id + '\');},100);">');
+            cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="closeCart(true); setTimeout(()=>{openDetail('' + g.p.id + '');},100);">');
             cHtml.push('<div style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></div>');
             cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
             cHtml.push('</div><div style="display:flex; flex-wrap:wrap; gap:10px; padding:10px;">');
@@ -1979,4 +1968,3 @@ window.addEventListener('popstate', function (e) {
         cameFromDetail = false;
     }
 });
-
