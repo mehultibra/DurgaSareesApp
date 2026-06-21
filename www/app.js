@@ -517,7 +517,7 @@ function loadAndCacheDesignImage(imgEl, url, productId, fileName) {
                         loadAndCacheDesignImage(imgEl, fallbackUrl, productId, fileName);
                     } else {
                         imgEl.dataset.retrying = "";
-                        imgEl.parentElement.style.display = 'none';
+                        // Keep grid placeholder visible, do not hide card
                     }
                 });
         }
@@ -529,7 +529,7 @@ function loadAndCacheDesignImage(imgEl, url, productId, fileName) {
                 var fallbackUrl = url.replace('%2F0', '%2F');
                 loadAndCacheDesignImage(imgEl, fallbackUrl, productId, fileName);
             } else {
-                imgEl.parentElement.style.display = 'none';
+                // Keep grid placeholder visible, do not hide card
             }
         };
         imgEl.src = url;
@@ -586,54 +586,57 @@ function openDetail(productId, skipShow, keepSearchShown) {
     // 1. Render fallback list instantly so the UI loads immediately
     useFallbackDesignList();
 
-    // 2. Fetch actual folder files in background to update/upgrade the swipe deck
-    fetch(listUrl)
-        .then(res => {
-            if (!res.ok) throw new Error("HTTP error " + res.status);
-            return res.json();
-        })
-        .then(data => {
-            var items = data.items || [];
-            var validFiles = [];
+    // 2. Fetch actual folder files in background to update/upgrade the swipe deck only if p.ready is empty
+    var hasReadyList = p.ready && String(p.ready).trim() !== "";
+    if (!hasReadyList) {
+        fetch(listUrl)
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP error " + res.status);
+                return res.json();
+            })
+            .then(data => {
+                var items = data.items || [];
+                var validFiles = [];
 
-            items.forEach(item => {
-                var fullPath = item.name;
-                var filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
-                var lowerName = filename.toLowerCase();
+                items.forEach(item => {
+                    var fullPath = item.name;
+                    var filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
+                    var lowerName = filename.toLowerCase();
 
-                // Filter out cover images
-                if (lowerName === "01.webp" || lowerName === "1.webp" || lowerName === "cover.webp") {
-                    return;
+                    // Filter out cover images
+                    if (lowerName === "01.webp" || lowerName === "1.webp" || lowerName === "cover.webp") {
+                        return;
+                    }
+
+                    var ext = lowerName.substring(lowerName.lastIndexOf('.'));
+                    var isVideo = [".mp4", ".mov", ".webm", ".avi", ".mkv", ".3gp", ".ogg"].includes(ext);
+                    var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
+
+                    if (isVideo || isImage) {
+                        var encName = fullPath.split('/').map(encodeURIComponent).join('%2F');
+                        var mediaUrl = fbBase + encName + "?alt=media";
+                        var designName = filename.substring(0, filename.lastIndexOf('.'));
+
+                        validFiles.push({
+                            name: designName,
+                            url: mediaUrl,
+                            isVideo: isVideo,
+                            isImage: isImage
+                        });
+                    }
+                });
+
+                if (validFiles.length > 0) {
+                    var newJson = JSON.stringify(validFiles);
+                    if (renderedFilesJson !== newJson) {
+                        renderSwipeDeck(validFiles);
+                    }
                 }
-
-                var ext = lowerName.substring(lowerName.lastIndexOf('.'));
-                var isVideo = [".mp4", ".mov", ".webm", ".avi", ".mkv", ".3gp", ".ogg"].includes(ext);
-                var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
-
-                if (isVideo || isImage) {
-                    var encName = fullPath.split('/').map(encodeURIComponent).join('%2F');
-                    var mediaUrl = fbBase + encName + "?alt=media";
-                    var designName = filename.substring(0, filename.lastIndexOf('.'));
-
-                    validFiles.push({
-                        name: designName,
-                        url: mediaUrl,
-                        isVideo: isVideo,
-                        isImage: isImage
-                    });
-                }
+            })
+            .catch(err => {
+                console.warn("Background folder list load failed", err);
             });
-
-            if (validFiles.length > 0) {
-                var newJson = JSON.stringify(validFiles);
-                if (renderedFilesJson !== newJson) {
-                    renderSwipeDeck(validFiles);
-                }
-            }
-        })
-        .catch(err => {
-            console.warn("Background folder list load failed", err);
-        });
+    }
 
     function renderSwipeDeck(files) {
         renderedFilesJson = JSON.stringify(files);
