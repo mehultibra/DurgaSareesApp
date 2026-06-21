@@ -366,7 +366,6 @@ html {
 .swipe-deck-wrapper {
     display: flex;
     overflow-x: auto;
-    scroll-snap-type: x mandatory;
     gap: 12px;
     padding: 10px 12px;
     box-sizing: border-box;
@@ -380,7 +379,6 @@ html {
 }
 
 .swipe-card {
-    scroll-snap-align: center;
     flex: 0 0 auto;
     height: 100%;
     background: #fff;
@@ -397,7 +395,7 @@ html {
 .swipe-card video {
     width: auto;
     height: calc(100% - 40px);
-    aspect-ratio: 3/4;
+    aspect-ratio: 3/5;
     object-fit: cover;
     object-position: top;
     display: block;
@@ -437,7 +435,7 @@ html {
     .swipe-card video {
         width: 100%;
         height: auto;
-        aspect-ratio: 3/4;
+        aspect-ratio: 3/5;
     }
 }
 
