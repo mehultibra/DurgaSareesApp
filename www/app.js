@@ -101,7 +101,7 @@ function initApp() {
             allProducts = [];
 
             var edited = {};
-            try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch(e) {}
+            try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
 
             docs.forEach(d => {
                 var f = d.fields || {};
@@ -110,7 +110,7 @@ function initApp() {
                 if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed") {
                     var finalPrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
                     var finalPacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
-                    
+
                     if (edited[name]) {
                         if (edited[name].price !== undefined) finalPrice = edited[name].price;
                         if (edited[name].packing !== undefined) finalPacking = edited[name].packing;
@@ -176,7 +176,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    
+
     // File target (e.g., "01.webp", "cover.webp")
     var fileToFetch = targetFile ? targetFile : "01.webp";
 
@@ -190,12 +190,12 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     imgElement.onerror = function () {
         if (fileToFetch === "01.webp") {
             imgElement.src = fbBase + encGridPath + "%2Fcover.webp?alt=media";
-            imgElement.onerror = function() {
+            imgElement.onerror = function () {
                 imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
-                if(typeof updateBottomQtyFromActiveDesign==='function') updateBottomQtyFromActiveDesign();
+                if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
             }
         } else {
-            if(typeof updateBottomQtyFromActiveDesign==='function') updateBottomQtyFromActiveDesign();
+            if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
         }
     };
 
@@ -205,7 +205,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         var highResUrl = fbBase + encZoomPath + "%2F" + fileToFetch + "?alt=media";
 
         var hdImage = new Image();
-        hdImage.onload = function() {
+        hdImage.onload = function () {
             // Swap to HD image silently once downloaded
             imgElement.src = highResUrl;
         };
@@ -219,7 +219,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 function buildCardDetails(p) {
     var totalQty = 0;
     for (var k in cart) { if (cart[k].p.id === p.id) totalQty += parseInt(cart[k].qty) || 0; }
-    
+
     var parsedPrice = parseInt(p.price) || 0;
     var displayMrp = parseInt(p.mrp) || Math.round(parsedPrice / 0.70);
     var offPercent = displayMrp > parsedPrice ? Math.round(((displayMrp - parsedPrice) / displayMrp) * 100) : 30;
@@ -228,21 +228,21 @@ function buildCardDetails(p) {
     var h = [];
     h.push('<div style="display:flex; align-items:center; width:100%; gap:4px; overflow:hidden;">');
     h.push('<div class="ci-brand" style="flex:1 1 0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0;">' + esc(p.name) + '</div>');
-    
+
     var packLen = String(p.packing || "1").length;
     var displayLen = Math.min(packLen, 8);
     h.push('<input type="text" class="pack-input-inline" value="' + esc(p.packing) + '" readonly onclick="event.stopPropagation()" style="flex-shrink:0; text-align:right; width:' + (displayLen + 0.5) + 'ch !important; min-width:1ch !important; max-width:7.5ch !important; font-size:11px !important; padding:0; margin:0;">');
     h.push('<div class="fav-btn-inline" style="flex-shrink:0; padding-left:0;" onclick="toggleFav(\'' + p.id + '\', event)"><i class="' + favClass + '"></i></div>');
     h.push('</div>');
-    
+
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
     h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; width:100%;">');
     h.push('<div style="display:flex; align-items:baseline; gap:0; overflow:hidden;">');
-    if(displayMrp > 0) h.push('<span class="mrp" style="font-size:11px; margin-right:4px;">₹' + displayMrp + '</span>');
+    if (displayMrp > 0) h.push('<span class="mrp" style="font-size:11px; margin-right:4px;">₹' + displayMrp + '</span>');
     h.push('<span style="font-weight:bold; font-size:13px; display:flex; align-items:center;">₹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
-    if(offPercent > 0) h.push('<span class="discount" style="font-size:10px; color:#ff905a; font-weight:bold; white-space:nowrap; margin-left: 2px;">' + offPercent + '% OFF</span>');
+    if (offPercent > 0) h.push('<span class="discount" style="font-size:10px; color:#ff905a; font-weight:bold; white-space:nowrap; margin-left: 2px;">' + offPercent + '% OFF</span>');
     h.push('</div>');
-    
+
     h.push('<div style="flex-shrink:0;">');
     if (totalQty === 0 || isNaN(totalQty)) {
         h.push('<div class="add-btn-clean" onclick="chgMainRow(\'' + p.id + '\', 1); event.stopPropagation();">ADD</div>');
@@ -258,16 +258,16 @@ function buildCardDetails(p) {
 }
 
 function refreshCardUI(pid) {
-    var p = allProducts.find(x => x.id === pid); 
-    if(!p) return;
+    var p = allProducts.find(x => x.id === pid);
+    if (!p) return;
     var wrap = document.getElementById('detail-wrap-' + pid);
-    if(wrap) wrap.innerHTML = buildCardDetails(p);
+    if (wrap) wrap.innerHTML = buildCardDetails(p);
 
     var totalQty = 0;
     for (var k in cart) { if (cart[k].p.id === pid) totalQty += parseInt(cart[k].qty) || 0; }
     var badge = document.getElementById('badge-' + pid);
-    if(badge) {
-        if(totalQty > 0) { badge.innerText = totalQty + ' in cart'; badge.style.display = 'block'; }
+    if (badge) {
+        if (totalQty > 0) { badge.innerText = totalQty + ' in cart'; badge.style.display = 'block'; }
         else { badge.style.display = 'none'; }
     }
     updateCartHeader();
@@ -314,28 +314,28 @@ function renderProductGrid(products) {
 // CORE FUNCTIONS
 // ====================================
 function chgMainRow(pid, dir) {
-  var p = allProducts.find(x => x.id === pid); if (!p) return;
-  var key = p.id + '_DIRECT'; 
-  var curQ = cart[key] ? cart[key].qty : 0;
-  var newQ = Math.max(0, curQ + (dir * (p.mult || 1)));
-  
-  if (newQ === 0 || isNaN(newQ)) delete cart[key]; 
-  else cart[key] = { p: p, design: 'DIRECT', qty: newQ };
-  
-  try{ localStorage.setItem("dsCart", JSON.stringify(cart)); }catch(e){}
-  refreshCardUI(pid); 
+    var p = allProducts.find(x => x.id === pid); if (!p) return;
+    var key = p.id + '_DIRECT';
+    var curQ = cart[key] ? cart[key].qty : 0;
+    var newQ = Math.max(0, curQ + (dir * (p.mult || 1)));
+
+    if (newQ === 0 || isNaN(newQ)) delete cart[key];
+    else cart[key] = { p: p, design: 'DIRECT', qty: newQ };
+
+    try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
+    refreshCardUI(pid);
 }
 
 function toggleFav(pid, event) {
-    if(event) event.stopPropagation();
-    if(favorites[pid]) delete favorites[pid]; else favorites[pid] = true;
-    try { localStorage.setItem("dsFavs", JSON.stringify(favorites)); } catch(err){}
-    refreshCardUI(pid); 
+    if (event) event.stopPropagation();
+    if (favorites[pid]) delete favorites[pid]; else favorites[pid] = true;
+    try { localStorage.setItem("dsFavs", JSON.stringify(favorites)); } catch (err) { }
+    refreshCardUI(pid);
 }
 
 function updateCartHeader() {
     var count = 0;
-    for(var k in cart) {
+    for (var k in cart) {
         if (cart[k] && cart[k].qty) {
             count += parseInt(cart[k].qty) || 0;
         }
@@ -380,79 +380,80 @@ function openDetail(productId, skipShow) {
             <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
             <div class="qty-clean">
                 <button onclick="changeQty('${p.id}', 'DIRECT', -1)">-</button>
-                <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id+'_DIRECT'] ? cart[p.id+'_DIRECT'].qty : 0}" readonly>
+                <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
                 <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
             </div>
         </div>
     </div>`;
 
-    // 🛡️ RAW NAME FIX: Strip all text, only keep digits for Firebase WebP files!
+    // 🚀 THE RAW FOLDER FIX: Parses comma-separated ready column and ignores old Google Drive image names/IDs.
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    var encPath = folderPath.split('/').map(encodeURIComponent).join('%2F');
+
     var rawDesigns = String(p.ready || "").split(',').map(d => d.trim()).filter(Boolean);
-    
-    if (rawDesigns.length > 0) {
-        rawDesigns.forEach((d, idx) => {
-            // If d = "02.jpg" or "Design 02", strip everything except numbers to make "02.webp"
-            var cleanNum = d.replace(/\D/g, ''); 
-            if(cleanNum.length === 1) cleanNum = "0" + cleanNum; 
-            if(cleanNum === "") cleanNum = "02"; // Safety fallback
-            var targetFile = cleanNum + ".webp";
-            
-            var dKey = p.id + '_' + d;
-            var imgElementId = "dtImg_" + (idx + 1);
-            
+    var validDesigns = [];
+    rawDesigns.forEach(d => {
+        var cleanNum = d.replace(/\D/g, '');
+        // A valid design name is short (e.g. not a GDrive ID) and extracts to a number >= 2
+        if (d.length <= 10 && cleanNum !== "") {
+            var numVal = parseInt(cleanNum);
+            if (numVal >= 2 && numVal <= 99) {
+                validDesigns.push({
+                    name: d,
+                    numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum
+                });
+            }
+        }
+    });
+
+    if (validDesigns.length > 0) {
+        // Fetch only valid WebP columns defined in Excel
+        validDesigns.forEach((dObj, idx) => {
+            var url = fbBase + encPath + "%2F" + dObj.numStr + ".webp?alt=media";
+            var dKey = p.id + '_' + dObj.name;
+
             html += `
-            <div class="swipe-card" data-design="${d}" onclick="openFs('${p.id}', ${idx + 1}, '${d}')">
-                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" loading="lazy" onerror="this.parentElement.style.display='none'; if(typeof updateBottomQtyFromActiveDesign==='function') updateBottomQtyFromActiveDesign();">
+            <div class="swipe-card" onclick="openFs('${p.id}', ${idx + 1}, '${dObj.name}')">
+                <img src="${url}" loading="lazy" onerror="this.parentElement.style.display='none'">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${d}</div>
+                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${dObj.name}</div>
                     <div class="qty-clean">
-                        <button onclick="changeQty('${p.id}', '${d}', -1)">-</button>
-                        <input type="number" id="qty_${p.id}_${d}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
-                        <button onclick="changeQty('${p.id}', '${d}', 1)">+</button>
+                        <button onclick="changeQty('${p.id}', '${dObj.name}', -1)">−</button>
+                        <input type="number" id="qty_${p.id}_${dObj.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
+                        <button onclick="changeQty('${p.id}', '${dObj.name}', 1)">+</button>
                     </div>
                 </div>
             </div>`;
-
-            // Trigger progressive loader for this specific design card
-            setTimeout(() => {
-                var imgEl = document.getElementById(imgElementId);
-                if (imgEl) window.renderWebpFromFolder(imgEl, folderPath, zoomPath, targetFile);
-            }, 50);
         });
     } else {
-        // Fallback for items with no 'Ready' column data
+        // Fallback: build perfect D2-D15 (excluding files that fail to load)
         for (var i = 1; i <= 14; i++) {
             var numStr = (i + 1) < 10 ? "0" + (i + 1) : (i + 1);
-            var targetFile = numStr + ".webp";
-            var dKey = p.id + '_D' + (i+1);
-            var imgElementId = "dtImg_fb_" + i;
-            
+            var url = fbBase + encPath + "%2F" + numStr + ".webp?alt=media";
+            var dKey = p.id + '_D' + (i + 1);
+
             html += `
-            <div class="swipe-card" data-design="D${i+1}" onclick="openFs('${p.id}', i, 'D${i+1}')">
-                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" loading="lazy" onerror="this.parentElement.style.display='none'; if(typeof updateBottomQtyFromActiveDesign==='function') updateBottomQtyFromActiveDesign();">
+            <div class="swipe-card" onclick="openFs('${p.id}', ${i}, 'D${i + 1}')">
+                <img src="${url}" loading="lazy" onerror="this.parentElement.style.display='none'">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">D${i+1}</div>
+                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">D${i + 1}</div>
                     <div class="qty-clean">
-                        <button onclick="changeQty('${p.id}', 'D${i+1}', -1)">-</button>
-                        <input type="number" id="qty_${p.id}_D${i+1}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
-                        <button onclick="changeQty('${p.id}', 'D${i+1}', 1)">+</button>
+                        <button onclick="changeQty('${p.id}', 'D${i + 1}', -1)">−</button>
+                        <input type="number" id="qty_${p.id}_D${i + 1}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
+                        <button onclick="changeQty('${p.id}', 'D${i + 1}', 1)">+</button>
                     </div>
                 </div>
             </div>`;
-
-            setTimeout((iVal, fName) => {
-                var imgEl = document.getElementById("dtImg_fb_" + iVal);
-                if (imgEl) window.renderWebpFromFolder(imgEl, folderPath, zoomPath, fName);
-            }, 50, i, targetFile);
         }
     }
 
     deck.innerHTML = html;
 
     // Trigger progressive loader for Cover
-    setTimeout(() => { 
-        var firstImg = document.getElementById('dtImg_0'); 
-        if (firstImg) window.renderWebpFromFolder(firstImg, folderPath, zoomPath, "01.webp"); 
+    setTimeout(() => {
+        var firstImg = document.getElementById('dtImg_0');
+        if (firstImg) window.renderWebpFromFolder(firstImg, folderPath, zoomPath, "01.webp");
     }, 10);
 
     // Initial prefill of bottom row cover quantity
@@ -484,20 +485,20 @@ window.changeQty = function (pid, designId, amount) {
         if (fsInp) fsInp.innerText = newQ;
     }
 
-    try{ localStorage.setItem("dsCart", JSON.stringify(cart)); }catch(e){}
+    try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
     refreshCardUI(pid);
     updateLiveDetailHeader(); // Updates the total Master Qty at bottom!
     updateBottomQtyFromActiveDesign(); // 🛡️ Keep bottom row selection updated
 };
 
 function updateLiveDetailHeader() {
-   if(!curProduct) return;
-   var totalQty = 0; 
-   for(var k in cart) { if(cart[k].p.id === curProduct.id) totalQty += cart[k].qty; }
-   
-   // Top Header Badge
-   var dtTotTop = document.getElementById('dtTotalQtyTop'); 
-   if(dtTotTop) dtTotTop.innerText = totalQty > 0 ? totalQty : "0";
+    if (!curProduct) return;
+    var totalQty = 0;
+    for (var k in cart) { if (cart[k].p.id === curProduct.id) totalQty += cart[k].qty; }
+
+    // Top Header Badge
+    var dtTotTop = document.getElementById('dtTotalQtyTop');
+    if (dtTotTop) dtTotTop.innerText = totalQty > 0 ? totalQty : "0";
 }
 
 function closeDetail() {
@@ -522,9 +523,23 @@ function openFs(arg1, arg2, arg3) {
     }
 
     var deck = document.getElementById('dtDesigns');
-    if(!deck) return;
-    var cards = deck.querySelectorAll('.swipe-card');
+    if (!deck) return;
 
+    // 📱 Filter to only visible cards (images that successfully loaded and aren't hidden)
+    var cards = Array.from(deck.querySelectorAll('.swipe-card')).filter(card => card.style.display !== 'none');
+
+    if (dId) {
+        var foundIdx = cards.findIndex(card => {
+            var inputField = card.querySelector('input[type="number"]');
+            var cardDId = inputField ? inputField.id.replace("qty_" + pId + "_", "") : 'DIRECT';
+            return cardDId === dId;
+        });
+        if (foundIdx !== -1) {
+            index = foundIdx;
+        }
+    }
+
+    if (cards.length === 0) return;
     if (index < 0) index = cards.length - 1;
     if (index >= cards.length) index = 0;
 
@@ -554,13 +569,13 @@ function openFs(arg1, arg2, arg3) {
     }
 }
 
-function closeFs() { 
-    document.getElementById('fsModal').style.display = 'none'; 
+function closeFs() {
+    document.getElementById('fsModal').style.display = 'none';
     history.back();
 }
 
 function fsChg(amt) {
-    if(!curProduct) return;
+    if (!curProduct) return;
     changeQty(curProduct.id, fsDesignId, amt);
 }
 
@@ -617,7 +632,7 @@ function openCart() {
             cb.innerHTML = '<div style="text-align:center; padding:40px 20px; color:var(--text-light); font-weight:bold;">Your Cart is empty.</div>';
         } else {
             cb.innerHTML = cHtml.join('');
-            
+
             // Progressive load Cart images
             setTimeout(() => {
                 for (var r in grouped) {
@@ -628,12 +643,12 @@ function openCart() {
                         if (imgEl) {
                             var gridPath = grouped[r].p.gridUrl;
                             var zoomPath = grouped[r].p.zoomUrl;
-                            
+
                             var targetFile = "01.webp";
                             if (safeDesignLabel !== 'DIRECT') {
-                                var cleanNum = safeDesignLabel.replace(/\D/g, ''); 
-                                if(cleanNum.length === 1) cleanNum = "0" + cleanNum; 
-                                if(cleanNum === "") cleanNum = "02";
+                                var cleanNum = safeDesignLabel.replace(/\D/g, '');
+                                if (cleanNum.length === 1) cleanNum = "0" + cleanNum;
+                                if (cleanNum === "") cleanNum = "02";
                                 targetFile = cleanNum + ".webp";
                             }
                             window.renderWebpFromFolder(imgEl, gridPath, zoomPath, targetFile);
@@ -673,9 +688,9 @@ function closeCart(skipHistory) {
 function clearCart() {
     if (confirm("Are you sure you want to empty your cart?")) {
         cart = {};
-        try { localStorage.removeItem("dsCart"); } catch(e){}
+        try { localStorage.removeItem("dsCart"); } catch (e) { }
         closeCart();
-        updateCartHeader(); 
+        updateCartHeader();
         renderProductGrid(displayList); // Reload main screen inputs
     }
 }
@@ -685,19 +700,19 @@ function clearCart() {
 // ====================================
 function sendWhatsapp() {
     var keys = Object.keys(cart);
-    if(keys.length === 0) return alert("Your cart is empty!");
-    
+    if (keys.length === 0) return alert("Your cart is empty!");
+
     var msg = "🛍️ *New Order from Web App*\n\n";
     var totalQty = 0;
     var groups = {};
-    
-    for(var k in cart) {
+
+    for (var k in cart) {
         var item = cart[k];
-        if(!groups[item.p.id]) groups[item.p.id] = { p: item.p, items: [] };
+        if (!groups[item.p.id]) groups[item.p.id] = { p: item.p, items: [] };
         groups[item.p.id].items.push(item);
     }
-    
-    for(var r in groups) {
+
+    for (var r in groups) {
         var g = groups[r];
         msg += "🏷️ *" + g.p.name + "* (SKU: " + g.p.sku + ")\n";
         g.items.forEach(function (item) {
@@ -877,21 +892,21 @@ function saveProductEdit(p) {
             packing: p.packing
         };
         localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
-    } catch(e) { console.error("Error saving product edit:", e); }
+    } catch (e) { console.error("Error saving product edit:", e); }
 }
 
 function setupEditableFields() {
     var priceBot = document.getElementById('dtPriceBot');
     var packBot = document.getElementById('dtPackBot');
-    
+
     if (priceBot) {
-        priceBot.addEventListener('keydown', function(e) {
+        priceBot.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 priceBot.blur();
             }
         });
-        priceBot.addEventListener('blur', function() {
+        priceBot.addEventListener('blur', function () {
             if (!curProduct) return;
             var val = parseFloat(priceBot.innerText.replace(/[^0-9.]/g, '').trim());
             if (!isNaN(val) && val >= 0) {
@@ -904,15 +919,15 @@ function setupEditableFields() {
             }
         });
     }
-    
+
     if (packBot) {
-        packBot.addEventListener('keydown', function(e) {
+        packBot.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 packBot.blur();
             }
         });
-        packBot.addEventListener('blur', function() {
+        packBot.addEventListener('blur', function () {
             if (!curProduct) return;
             var val = packBot.innerText.trim();
             if (val !== "") {
@@ -942,12 +957,12 @@ function updateBottomQtyFromActiveDesign() {
     var btnPlus = document.getElementById('dtQtyBotPlus');
 
     if (btnMinus) {
-        btnMinus.onclick = function() {
+        btnMinus.onclick = function () {
             changeQty(curProduct.id, 'DIRECT', -1);
         };
     }
     if (btnPlus) {
-        btnPlus.onclick = function() {
+        btnPlus.onclick = function () {
             changeQty(curProduct.id, 'DIRECT', 1);
         };
     }
