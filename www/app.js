@@ -170,6 +170,63 @@ function initApp() {
 // 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
 // ==========================================
 // 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
+// ==========================================
+// 📦 INDEXEDDB CACHE DATABASE FOR IMAGES
+// ==========================================
+var dbName = "DurgaSareesCache";
+var storeName = "images";
+
+function getDB() {
+    return new Promise((resolve, reject) => {
+        var request = indexedDB.open(dbName, 1);
+        request.onupgradeneeded = function (e) {
+            var db = e.target.result;
+            if (!db.objectStoreNames.contains(storeName)) {
+                db.createObjectStore(storeName);
+            }
+        };
+        request.onsuccess = function (e) {
+            resolve(e.target.result);
+        };
+        request.onerror = function (e) {
+            reject(e.target.error);
+        };
+    });
+}
+
+function saveImageToDB(key, blob) {
+    return getDB().then(db => {
+        return new Promise((resolve, reject) => {
+            var tx = db.transaction(storeName, "readwrite");
+            var store = tx.objectStore(storeName);
+            var req = store.put(blob, key);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => reject(req.error);
+        });
+    }).catch(e => {
+        console.error("IndexedDB write failed", e);
+        return false;
+    });
+}
+
+function getImageFromDB(key) {
+    return getDB().then(db => {
+        return new Promise((resolve, reject) => {
+            var tx = db.transaction(storeName, "readonly");
+            var store = tx.objectStore(storeName);
+            var req = store.get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }).catch(e => {
+        console.error("IndexedDB read failed", e);
+        return null;
+    });
+}
+
+// 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
+// ==========================================
+// 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
 window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFile) {
     if (!gridPath || gridPath.trim() === "" || gridPath.toLowerCase() === "none") {
         imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
@@ -185,37 +242,26 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
     var lowResUrl = fbBase + encGridPath + "%2F" + fileToFetch + "?alt=media";
 
-    // Check if we have a cached local image
-    var localUrl = "";
-    if (fileToFetch === "01.webp" && window.Capacitor) {
-        try {
-            var cacheMap = JSON.parse(localStorage.getItem("dsLocalImages")) || {};
-            var localPath = cacheMap[gridPath];
-            if (localPath) {
-                localUrl = window.Capacitor.convertFileSrc(localPath);
+    if (fileToFetch === "01.webp") {
+        getImageFromDB(gridPath).then(function (blob) {
+            if (blob) {
+                var objectUrl = URL.createObjectURL(blob);
+                imgElement.src = objectUrl;
+
+                imgElement.onerror = function () {
+                    loadFromNetwork();
+                };
+            } else {
+                loadFromNetwork();
             }
-        } catch (e) {}
+        }).catch(function (err) {
+            loadFromNetwork();
+        });
+    } else {
+        loadFromNetwork();
     }
 
-    // 1. Instantly show Low-Res Grid Image (local cache first, otherwise Firebase URL)
-    if (localUrl) {
-        imgElement.src = localUrl;
-        imgElement.onerror = function () {
-            // Fallback to Firebase if local fails
-            imgElement.src = lowResUrl;
-            imgElement.onerror = function () {
-                if (fileToFetch === "01.webp") {
-                    imgElement.src = fbBase + encGridPath + "%2Fcover.webp?alt=media";
-                    imgElement.onerror = function () {
-                        imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
-                        if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
-                    }
-                } else {
-                    if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
-                }
-            };
-        };
-    } else {
+    function loadFromNetwork() {
         imgElement.src = lowResUrl;
 
         // Fallback if 01.webp fails on Grid
@@ -932,12 +978,6 @@ window.goToHome = function () {
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
 };
 async function syncImages() {
-    if (!window.AndroidBridge) {
-        alert("Offline sync is only supported in the Android app.");
-        initApp();
-        return;
-    }
-
     var bootScreen = document.getElementById('boot');
     var bootMsg = document.getElementById('bootMsg');
 
@@ -972,18 +1012,6 @@ async function syncImages() {
         var total = productsToDownload.length;
         if (bootMsg) bootMsg.innerText = "Syncing 0 / " + total + " images...";
 
-        var cacheMap = {};
-        try {
-            cacheMap = JSON.parse(localStorage.getItem("dsLocalImages")) || {};
-        } catch (e) {}
-
-        var filesDir = "";
-        try {
-            filesDir = window.AndroidBridge.getFilesDir();
-        } catch (e) {
-            console.error("Error getting files dir:", e);
-        }
-
         var count = 0;
         var failed = 0;
         var bucket = "durga-sarees.firebasestorage.app";
@@ -996,24 +1024,14 @@ async function syncImages() {
             await Promise.all(batch.map(async (p) => {
                 var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
                 var url = fbBase + encGridPath + "%2F01.webp?alt=media";
-                var filename = encGridPath.replace(/[^a-zA-Z0-9]/g, '_') + "_01.webp";
 
                 try {
                     const response = await fetch(url);
                     if (!response.ok) throw new Error("HTTP error " + response.status);
                     const blob = await response.blob();
                     
-                    const base64 = await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(blob);
-                    });
-
-                    var saved = window.AndroidBridge.saveImage(filename, base64);
-                    if (saved && filesDir) {
-                        cacheMap[p.gridUrl] = filesDir + "/" + filename;
-                    } else {
+                    var saved = await saveImageToDB(p.gridUrl, blob);
+                    if (!saved) {
                         failed++;
                     }
                 } catch (err) {
@@ -1028,13 +1046,12 @@ async function syncImages() {
             }
         }
 
-        localStorage.setItem("dsLocalImages", JSON.stringify(cacheMap));
         if (bootScreen) bootScreen.style.display = 'none';
 
         if (failed > 0) {
-            alert("Sync completed. Successfully saved " + (total - failed) + " images to phone storage. (" + failed + " failed)");
+            alert("Sync completed. Successfully saved " + (total - failed) + " images to local storage. (" + failed + " failed)");
         } else {
-            alert("Success! All " + total + " catalog images saved to phone storage.");
+            alert("Success! All " + total + " catalog images saved to local storage.");
         }
 
         initApp();
