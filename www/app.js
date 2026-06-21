@@ -982,3 +982,55 @@ document.addEventListener("backbutton", function (e) {
         history.back();
     }
 }, false);
+
+// 📱 Listen to popstate to handle history back/forward navigation and close/open modals accordingly
+function applyModalState(modal) {
+    var detailPanel = document.getElementById('detailPanel');
+    var cartPanel = document.getElementById('cartPanel');
+    var fsModal = document.getElementById('fsModal');
+    var actionModals = document.querySelectorAll('.action-modal');
+
+    // 1. Sync Full Screen Modal
+    if (modal === 'fs') {
+        if (fsModal) fsModal.style.display = 'flex';
+    } else {
+        if (fsModal) fsModal.style.display = 'none';
+    }
+
+    // 2. Sync Detail Panel
+    if (modal === 'detail' || modal === 'fs') {
+        if (detailPanel && !detailPanel.classList.contains('open')) {
+            detailPanel.classList.add('open');
+        }
+    } else {
+        if (detailPanel) {
+            detailPanel.classList.remove('open');
+        }
+    }
+
+    // 3. Sync Cart Panel
+    if (modal === 'cart') {
+        if (cartPanel && !cartPanel.classList.contains('open')) {
+            cartPanel.classList.add('open');
+        }
+    } else {
+        if (cartPanel) {
+            cartPanel.classList.remove('open');
+        }
+    }
+
+    // 4. Sync Action Modals (categoryModal, sortModal, filterModal, shareModal, waModal)
+    actionModals.forEach(function (m) {
+        if (m.id === modal) {
+            m.style.display = 'flex';
+        } else {
+            m.style.display = 'none';
+        }
+    });
+}
+
+window.addEventListener('popstate', function (e) {
+    var state = e.state || {};
+    applyModalState(state.modal);
+});
+
