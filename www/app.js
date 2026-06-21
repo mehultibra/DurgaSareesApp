@@ -175,8 +175,12 @@ function initApp() {
 // ==========================================
 var dbName = "DurgaSareesCache";
 var storeName = "images";
+var cachedDB = null;
 
 function getDB() {
+    if (cachedDB) {
+        return Promise.resolve(cachedDB);
+    }
     return new Promise((resolve, reject) => {
         var request = indexedDB.open(dbName, 1);
         request.onupgradeneeded = function (e) {
@@ -186,7 +190,8 @@ function getDB() {
             }
         };
         request.onsuccess = function (e) {
-            resolve(e.target.result);
+            cachedDB = e.target.result;
+            resolve(cachedDB);
         };
         request.onerror = function (e) {
             reject(e.target.error);
@@ -519,8 +524,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var dKey = p.id + '_' + dObj.name;
 
             html += `
-            <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${dObj.name}')">
-                <img src="${url}" loading="lazy" onerror="this.parentElement.style.display='none'">
+            <div class="swipe-card" style="display:none;" onclick="openFs('${p.id}', ${idx}, '${dObj.name}')">
+                <img src="${url}" loading="lazy" onload="this.parentElement.style.display='block'" onerror="this.parentElement.style.display='none'">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${dObj.name}</div>
                     <div class="qty-clean">
@@ -539,8 +544,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var dKey = p.id + '_D' + (i + 1);
 
             html += `
-            <div class="swipe-card" onclick="openFs('${p.id}', ${i - 1}, 'D${i + 1}')">
-                <img src="${url}" loading="lazy" onerror="this.parentElement.style.display='none'">
+            <div class="swipe-card" style="display:none;" onclick="openFs('${p.id}', ${i - 1}, 'D${i + 1}')">
+                <img src="${url}" loading="lazy" onload="this.parentElement.style.display='block'" onerror="this.parentElement.style.display='none'">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">D${i + 1}</div>
                     <div class="qty-clean">
