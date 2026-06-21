@@ -67,13 +67,15 @@ window.addEventListener('DOMContentLoaded', function () {
         var loginScreen = document.getElementById('loginScreen');
         var appBody = document.getElementById('appBody');
 
-        // Bypass login for debugging
-        if (loginScreen && appBody) {
-            loginScreen.style.display = 'none';
-            appBody.style.display = 'flex';
-            activeUser = "debug_user";
-            setTimeout(initApp, 100);
+        if (activeUser) {
+            if (loginScreen) loginScreen.style.display = 'none';
+            if (appBody) appBody.style.display = 'flex';
+            initApp();
+        } else {
+            if (loginScreen) loginScreen.style.display = 'flex';
+            if (appBody) appBody.style.display = 'none';
         }
+
         setupEditableFields();
         setupFsGestures();
     } catch (err) { console.error("Init error:", err); }
