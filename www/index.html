@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+
+  <div id="loginScreen" class="login-wrapper">
+    <div class="login-box">
+      <h2 style="color:var(--myntra-pink);">Durga Sarees</h2>
+      <input type="text" id="lUser" placeholder="Username">
+      <input type="password" id="lPass" placeholder="Password">
+      <button onclick="doLogin()" id="btnLogin">LOGIN</button>
+      <p id="lErr" style="color:red; font-size:12px; margin-top:10px;"></p>
+    </div>
+  </div>
+
+  <div id="boot" style="display:none;">
+    <i class="fas fa-circle-notch spin"></i>
+    <span id="bootMsg">Syncing...</span>
+  </div>
+
+  <div id="appBody">
+    <div class="hdr">
+      <img src="https://drive.google.com/thumbnail?id=1QD1Xsp6dTBs36wkdkMlPEgjb0VYqICRL&sz=w800" id="appLogoImg"
+        onclick="goToHome()" style="cursor:pointer;">
+      <div class="hdr-icons">
+        <i class="fas fa-search" onclick="toggleSearch()" style="cursor:pointer;"></i>
+        <i class="far fa-heart" id="favTopIcon" onclick="toggleFavView()" style="cursor:pointer;"></i>
+        <div style="position:relative; cursor:pointer;" onclick="openCart()">
+          <i class="fas fa-shopping-bag"></i>
+          <div class="cart-badge-top" id="cartCountHeader">0</div>
+        </div>
+        <i class="fas fa-sync-alt" onclick="syncImages()" style="cursor:pointer; margin-left:5px;"></i>
+      </div>
+    </div>
+
+    <div class="search-container" id="searchContainerMain"
+      style="display:none; padding:10px; background:#f5f5f6; border-bottom:1px solid #ddd;">
+      <input type="text" placeholder="Search Saree Name or SKU..." onkeyup="doSearch(this.value)"
+        style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;">
+    </div>
+
+    <div class="search-container" id="searchContainer">
+      <input id="srch" type="search" placeholder="Search by name, fabric, or SKU..." oninput="applyFilter()"
+        autocomplete="off" spellcheck="false" autocorrect="off">
+    </div>
+
+    <div id="gridWrapper">
+      <div id="grid" class="cat-grid"></div>
+    </div>
+
+    <div class="ob-one-row" id="waActionBar">
+      <input type="tel" id="mainPhone" placeholder="Phone No."
+        style="width:90px; flex-shrink:0; padding:6px; border:1px solid #ccc; border-radius:4px; font-size:12px; outline:none;">
+      <button style="background:var(--whatsapp);" onclick="executeSend('NATIVE', 'CATALOG', false)"><i
+          class="fab fa-whatsapp"></i> Cat</button>
+      <button style="background:var(--whatsapp);" onclick="executeSend('NATIVE', 'COVER', false)"><i
+          class="fab fa-whatsapp"></i> Cov</button>
+      <button style="background:var(--whatsapp);" onclick="executeSend('NATIVE', 'ORDER', false)"><i
+          class="fab fa-whatsapp"></i> Ord</button>
+      <button style="background:#800000;" onclick="executeSend('11ZA', 'CATALOG', false)"><i class="fas fa-robot"></i>
+        Cat</button>
+    </div>
+
+    <div class="myntra-bottom-nav">
+      <div class="nav-item" onclick="openModal('categoryModal')"><i class="fas fa-tshirt"></i> CATEGORY</div>
+      <div class="nav-item" onclick="openModal('sortModal')"><i class="fas fa-sort-amount-down"></i> SORT</div>
+      <div class="nav-item" onclick="openModal('filterModal')"><i class="fas fa-filter"></i> FILTER</div>
+    </div>
+  </div>
+
+
+
+  <div id="sortModal" class="action-modal" onclick="closeModals()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-title">Sort By <i class="fas fa-times" style="cursor:pointer; color:var(--text-light);"
+          onclick="closeModals()"></i></div>
+
+      <!-- 🚀 ADDED CLEAR SORT OPTION -->
+      <div class="filter-row" onclick="setSort('clear', this)" style="color:var(--myntra-pink); font-weight:bold;">Clear
+        Sort</div>
+
+      <div class="filter-row" onclick="setSort('priceAsc', this)">Price: Low to High</div>
+      <div class="filter-row" onclick="setSort('priceDesc', this)">Price: High to Low</div>
+      <div class="filter-row active" onclick="setSort('new', this)">Newest First</div>
+    </div>
+  </div>
+
+  <div id="categoryModal" class="action-modal" onclick="closeModals()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-title">Select Categories <i class="fas fa-times" onclick="closeModals()"></i></div>
+      <div id="categoryList"></div>
+    </div>
+  </div>
+
+  <div id="filterModal" class="action-modal" onclick="closeModals()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-title">Filter Prices <i class="fas fa-times" onclick="closeModals()"></i></div>
+      <div class="filter-row" onclick="clearPriceFilters()" style="color:var(--myntra-pink); font-weight:bold;">Clear
+        Filters</div>
+      <div class="filter-row" onclick="togglePriceFilter(this, 0, 300)">Under ₹300</div>
+      <div class="filter-row" onclick="togglePriceFilter(this, 300, 500)">₹300 - ₹500</div>
+      <div class="filter-row" onclick="togglePriceFilter(this, 500, 99999)">Above ₹500</div>
+    </div>
+  </div>
+
+  <div id="waModal" class="action-modal" onclick="closeModals()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-title" style="color:#25D366; border-bottom:none;">
+        WhatsApp Sharing <i class="fas fa-times" onclick="closeModals()"
+          style="cursor:pointer; color:var(--text-main);"></i>
+      </div>
+
+      <div style="margin-bottom:15px;">
+        <input type="tel" id="modalPhone" placeholder="Enter Phone No."
+          style="width:100%; padding:12px; border:1px solid #ccc; border-radius:4px; font-size:16px; outline:none;">
+      </div>
+
+      <div class="wa-action-row">
+        <div class="wa-action-text">1. Order Form</div>
+        <div class="wa-btn-group">
+          <button class="wa-btn" style="background:#25D366;" onclick="executeSend('NATIVE', 'ORDER')"><i
+              class="fab fa-whatsapp"></i> App</button>
+          <button class="wa-btn" style="background:#800000;" onclick="executeSend('11ZA', 'ORDER')"><i
+              class="fas fa-robot"></i> Web</button>
+        </div>
+      </div>
+
+      <div class="wa-action-row">
+        <div class="wa-action-text">2. Favourite Items</div>
+        <div class="wa-btn-group">
+          <button class="wa-btn" style="background:#25D366;" onclick="executeSend('NATIVE', 'CATALOG')"><i
+              class="fab fa-whatsapp"></i> App</button>
+          <button class="wa-btn" style="background:#800000;" onclick="executeSend('11ZA', 'CATALOG')"><i
+              class="fas fa-robot"></i> Web</button>
+        </div>
+      </div>
+
+      <div class="wa-action-row" style="border-bottom:none;">
+        <div class="wa-action-text">3. Ready Designs</div>
+        <div class="wa-btn-group">
+          <button class="wa-btn" style="background:#25D366;" onclick="executeSend('NATIVE', 'COVER')"><i
+              class="fab fa-whatsapp"></i> App</button>
+          <button class="wa-btn" style="background:#800000;" onclick="executeSend('11ZA', 'COVER')"><i
+              class="fas fa-robot"></i> Web</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide" id="detailPanel">
+    <div class="sl-hdr"
+      style="display:flex; justify-content:space-between; align-items:center; width:100%; padding:0 16px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <i class="fas fa-arrow-left" onclick="closeDetail()" style="cursor:pointer; font-size:18px;"></i>
+        <h3 id="dtNameTop"
+          style="margin:0; font-size:16px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px;">
+          Product</h3>
+      </div>
+      <div class="hdr-icons" style="display:flex; gap:15px; align-items:center;">
+        <i class="fas fa-search" onclick="toggleSearch()" style="cursor:pointer;"></i>
+        <div style="position:relative; cursor:pointer;" onclick="openCart()">
+          <i class="fas fa-shopping-bag"></i>
+          <div class="cart-badge-top" id="dtTotalQtyTop">0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sl-body">
+      <div class="swipe-deck-wrapper" id="dtDesigns"></div>
+    </div>
+
+    <div class="ob-one-row"
+      style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-weight:bold; font-size:18px; color:var(--text-main);">₹<span id="dtPriceBot" contenteditable="true" inputmode="numeric" style="outline:none; cursor:text;">0</span></span>
+        <span id="dtPackBot" contenteditable="true" style="font-size:13px; font-weight:bold; color:var(--text-main); outline:none; cursor:text;">1</span>
+      </div>
+      <div class="qty-clean">
+        <button id="dtQtyBotMinus">−</button>
+        <input type="number" id="dtQtyDirect" value="0" readonly style="font-size:16px; font-weight:bold;">
+        <button id="dtQtyBotPlus">+</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fsModal" class="fs-modal">
+    <div class="fs-hdr">
+      <i class="fas fa-arrow-left" onclick="closeFs()" style="cursor:pointer; padding: 10px;"></i>
+      <span id="fsTitle" style="flex:1; text-align:center;">Design</span>
+    </div>
+    <div class="fs-img-container">
+      <div class="fs-nav fs-nav-left" onclick="openFs(fsIndex - 1)"><i class="fas fa-chevron-left"></i></div>
+      <div class="fs-nav fs-nav-right" onclick="openFs(fsIndex + 1)"><i class="fas fa-chevron-right"></i></div>
+      <img id="fsImg" class="fs-img" src="">
+    </div>
+    <div class="fs-controls">
+      <button onclick="fsChg(-1)">−</button>
+      <span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">0</span>
+      <button onclick="fsChg(1)">+</button>
+    </div>
+  </div>
+
+  <div class="slide" id="cartPanel">
+    <div class="sl-hdr"
+      style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 16px; background: #fff; z-index: 100;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <i class="fas fa-arrow-left" onclick="closeCart()"
+          style="cursor:pointer; font-size:20px; color:var(--text-main);"></i>
+        <h3 style="margin:0; font-size:16px; font-weight:bold;">Your Cart (<span id="cartCountHeader">0</span>)</h3>
+      </div>
+      <i class="fas fa-trash" onclick="clearCart()"
+        style="cursor:pointer; font-size:18px; color:var(--myntra-pink);"></i>
+    </div>
+
+    <div class="sl-body" id="cartBody" style="padding: 16px; padding-bottom: 100px; overflow-y: auto;"></div>
+
+    <div class="cart-total-bar">
+      <div>
+        <div style="font-size:12px; color:var(--text-light);">Total Quantity</div>
+        <div style="font-size:18px; font-weight:bold; color:var(--text-main);" id="cartTotalQty">0 pcs</div>
+      </div>
+      <button onclick="sendWhatsapp()"
+        style="background:var(--whatsapp); color:#fff; border:none; padding:12px 24px; border-radius:30px; font-weight:bold; font-size:15px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+        <i class="fab fa-whatsapp" style="font-size:20px;"></i> Send Order
+      </button>
+    </div>
+  </div>
+
+  <div class="fab-wa" onclick="openModal('shareModal')">
+    <i class="fab fa-whatsapp"></i>
+  </div>
+
+  <div class="action-modal" id="shareModal" onclick="if(event.target===this) closeModals()"
+    style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; flex-direction: column; justify-content: flex-end;">
+    <div class="modal-content"
+      style="background: #fff; border-radius: 16px 16px 0 0; padding: 20px; text-align: center;">
+      <h3 style="margin-top: 0; margin-bottom: 20px; font-size: 16px; color: var(--text-main);">Share Catalog</h3>
+
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+        <div onclick="triggerShare('wa')" style="cursor: pointer;">
+          <div
+            style="background: #25D366; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 24px;">
+            <i class="fab fa-whatsapp"></i></div>
+          <div style="font-size: 11px; color: var(--text-light);">WhatsApp</div>
+        </div>
+        <div onclick="triggerShare('print')" style="cursor: pointer;">
+          <div
+            style="background: #1a73e8; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
+            <i class="fas fa-print"></i></div>
+          <div style="font-size: 11px; color: var(--text-light);">Print</div>
+        </div>
+        <div onclick="triggerShare('pdf')" style="cursor: pointer;">
+          <div
+            style="background: #ff3f6c; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
+            <i class="fas fa-file-pdf"></i></div>
+          <div style="font-size: 11px; color: var(--text-light);">Download PDF</div>
+        </div>
+        <div onclick="triggerShare('link')" style="cursor: pointer;">
+          <div
+            style="background: #757575; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
+            <i class="fas fa-share-alt"></i></div>
+          <div style="font-size: 11px; color: var(--text-light);">Share Link</div>
+        </div>
+        <div onclick="triggerShare('copy')" style="cursor: pointer;">
+          <div
+            style="background: #757575; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
+            <i class="fas fa-copy"></i></div>
+          <div style="font-size: 11px; color: var(--text-light);">Copy Link</div>
+        </div>
+        <div onclick="closeModals()" style="cursor: pointer;">
+          <div
+            style="background: #e0e0e0; color: #333; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
+            <i class="fas fa-times"></i></div>
+          <div style="font-size: 11px; color: var(--text-light);">Cancel</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script src="./app.js"></script>
+
+  <script src="./pdf_engine.js"></script>
+</body>
+
+</html>
