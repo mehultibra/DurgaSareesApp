@@ -700,7 +700,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     }
                     deck.innerHTML = `
                     <div class="swipe-card" data-design="DIRECT">
-                        <img src="${coverSrc || ''}" style="width: 100%; height: calc(100% - 40px); object-fit: cover;">
+                        <img src="${coverSrc || ''}" style="width: 100%; object-fit: cover;">
                         <div class="swipe-card-bot" onclick="event.stopPropagation()">
                             <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
                             <div class="qty-clean">
@@ -733,7 +733,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             if (file.isVideo) {
                 html += `
                 <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
-                    <video src="${file.url}" controls playsinline style="width: 100%; height: calc(100% - 40px); object-fit: cover;" onclick="event.stopPropagation()"></video>
+                    <video src="${file.url}" controls playsinline style="width: 100%; object-fit: cover;" onclick="event.stopPropagation()"></video>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
@@ -827,7 +827,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             }
             deck.innerHTML = `
             <div class="swipe-card" data-design="DIRECT">
-                <img src="${coverSrc || ''}" style="width: 100%; height: calc(100% - 40px); object-fit: cover;">
+                <img src="${coverSrc || ''}" style="width: 100%; object-fit: cover;">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
                     <div class="qty-clean">

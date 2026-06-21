@@ -381,20 +381,20 @@ html {
 .swipe-card {
     scroll-snap-align: center;
     flex: 0 0 85%;
-    height: 100%;
+    height: auto;
     background: #fff;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     overflow: hidden;
-    display: block;
-    /* Block prevents flexbox collapse bugs */
+    display: flex;
+    flex-direction: column;
     position: relative;
 }
 
-.swipe-card img {
+.swipe-card img,
+.swipe-card video {
     width: 100%;
-    height: calc(100% - 40px);
-    /* Pure math, no flex-auto */
+    aspect-ratio: 3/4;
     object-fit: cover;
     object-position: top;
     display: block;
