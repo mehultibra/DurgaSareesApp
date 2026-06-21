@@ -16,6 +16,8 @@ var activeCategories = [];
 var activePriceFilters = [];
 var currentSort = 'new';
 var curProduct = null;
+var cameFromDetail = false;
+var searchingTransition = false;
 
 // Escapes text safely
 function esc(s) { return (!s) ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -220,6 +222,9 @@ function buildCardDetails(p) {
     var totalQty = 0;
     for (var k in cart) { if (cart[k].p.id === p.id) totalQty += parseInt(cart[k].qty) || 0; }
 
+    var coverKey = p.id + '_DIRECT';
+    var coverQty = cart[coverKey] ? parseInt(cart[coverKey].qty) || 0 : 0;
+
     var parsedPrice = parseInt(p.price) || 0;
     var displayMrp = parseInt(p.mrp) || Math.round(parsedPrice / 0.70);
     var offPercent = displayMrp > parsedPrice ? Math.round(((displayMrp - parsedPrice) / displayMrp) * 100) : 30;
@@ -244,12 +249,12 @@ function buildCardDetails(p) {
     h.push('</div>');
 
     h.push('<div style="flex-shrink:0;">');
-    if (totalQty === 0 || isNaN(totalQty)) {
+    if (coverQty === 0 || isNaN(coverQty)) {
         h.push('<div class="add-btn-clean" onclick="chgMainRow(\'' + p.id + '\', 1); event.stopPropagation();">ADD</div>');
     } else {
         h.push('<div class="qty-clean" onclick="event.stopPropagation()">');
         h.push('<button onclick="chgMainRow(\'' + p.id + '\', -1)">−</button>');
-        h.push('<input type="number" id="mqty-' + p.id + '" value="' + totalQty + '" readonly>');
+        h.push('<input type="number" id="mqty-' + p.id + '" value="' + coverQty + '" readonly>');
         h.push('<button onclick="chgMainRow(\'' + p.id + '\', 1)">+</button>');
         h.push('</div>');
     }
@@ -282,8 +287,27 @@ function renderProductGrid(products) {
         return;
     }
 
+    // Sort products primarily by category (alphabetically), and secondarily by the active sort rule
+    var sorted = [...products].sort((a, b) => {
+        var catA = (a.cat || "Uncategorized").toLowerCase();
+        var catB = (b.cat || "Uncategorized").toLowerCase();
+
+        // Primary sort: Category name alphabetically
+        if (catA < catB) return -1;
+        if (catA > catB) return 1;
+
+        // Secondary sort: Selected sorting rule
+        if (currentSort === 'priceAsc') {
+            return a.price - b.price;
+        } else if (currentSort === 'priceDesc') {
+            return b.price - a.price;
+        } else {
+            return 0;
+        }
+    });
+
     let htmlBuffer = [];
-    products.forEach((p) => {
+    sorted.forEach((p) => {
         let imgElementId = "img_" + p.id;
         var totalQty = 0;
         for (var k in cart) { if (cart[k].p.id === p.id) totalQty += parseInt(cart[k].qty) || 0; }
@@ -348,7 +372,25 @@ function updateCartHeader() {
 // ====================================
 // 4. PRODUCT DETAIL (SWIPE DECK)
 // ====================================
-function openDetail(productId, skipShow) {
+function openDetail(productId, skipShow, keepSearchShown) {
+    if (!skipShow) {
+        cameFromDetail = false;
+        if (!keepSearchShown) {
+            var container = document.getElementById('searchContainerMain');
+            if (container) {
+                container.style.display = 'none';
+                var input = container.querySelector('input');
+                if (input) {
+                    input.value = '';
+                }
+            }
+            var srch = document.getElementById('srch');
+            if (srch) {
+                srch.value = '';
+            }
+            applyFilter();
+        }
+    }
     var p = allProducts.find(x => x.id === productId);
     if (!p) return;
     curProduct = p;
@@ -371,20 +413,6 @@ function openDetail(productId, skipShow) {
     }
 
     var html = '';
-
-    // Cover Card
-    html += `
-    <div class="swipe-card" id="dtCard_0" data-design="DIRECT" onclick="openFs('${p.id}', 0, 'DIRECT')">
-        <img id="dtImg_0" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
-        <div class="swipe-card-bot" onclick="event.stopPropagation()">
-            <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
-            <div class="qty-clean">
-                <button onclick="changeQty('${p.id}', 'DIRECT', -1)">-</button>
-                <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
-                <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
-            </div>
-        </div>
-    </div>`;
 
     // 🚀 THE RAW FOLDER FIX: Parses comma-separated ready column and ignores old Google Drive image names/IDs.
     var bucket = "durga-sarees.firebasestorage.app";
@@ -414,7 +442,7 @@ function openDetail(productId, skipShow) {
             var dKey = p.id + '_' + dObj.name;
 
             html += `
-            <div class="swipe-card" onclick="openFs('${p.id}', ${idx + 1}, '${dObj.name}')">
+            <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${dObj.name}')">
                 <img src="${url}" loading="lazy" onerror="this.parentElement.style.display='none'">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${dObj.name}</div>
@@ -434,7 +462,7 @@ function openDetail(productId, skipShow) {
             var dKey = p.id + '_D' + (i + 1);
 
             html += `
-            <div class="swipe-card" onclick="openFs('${p.id}', ${i}, 'D${i + 1}')">
+            <div class="swipe-card" onclick="openFs('${p.id}', ${i - 1}, 'D${i + 1}')">
                 <img src="${url}" loading="lazy" onerror="this.parentElement.style.display='none'">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">D${i + 1}</div>
@@ -449,12 +477,6 @@ function openDetail(productId, skipShow) {
     }
 
     deck.innerHTML = html;
-
-    // Trigger progressive loader for Cover
-    setTimeout(() => {
-        var firstImg = document.getElementById('dtImg_0');
-        if (firstImg) window.renderWebpFromFolder(firstImg, folderPath, zoomPath, "01.webp");
-    }, 10);
 
     // Initial prefill of bottom row cover quantity
     setTimeout(updateBottomQtyFromActiveDesign, 50);
@@ -499,6 +521,12 @@ function updateLiveDetailHeader() {
     // Top Header Badge
     var dtTotTop = document.getElementById('dtTotalQtyTop');
     if (dtTotTop) dtTotTop.innerText = totalQty > 0 ? totalQty : "0";
+
+    // Display live total quantity next to product name
+    var dtNameTop = document.getElementById('dtNameTop');
+    if (dtNameTop) {
+        dtNameTop.innerHTML = esc(curProduct.name) + ' <span style="color: var(--myntra-pink); font-weight: bold; font-size: 14px;">(' + totalQty + ' pcs)</span>';
+    }
 }
 
 function closeDetail() {
@@ -583,6 +611,7 @@ function fsChg(amt) {
 // 🛒 CART MODAL
 // ====================================
 function openCart() {
+    cameFromDetail = false;
     try {
         var cb = document.getElementById('cartBody');
         if (!cb) return;
@@ -864,6 +893,7 @@ window.openCartFs = function (productId, designId, cartImgSrc) {
 // UTILS & HELPERS
 // ====================================
 window.goToHome = function () {
+    cameFromDetail = false;
     var detail = document.getElementById('detailPanel');
     var cart = document.getElementById('cartPanel');
     if (detail && detail.classList.contains('open')) closeDetail();
@@ -872,6 +902,7 @@ window.goToHome = function () {
 };
 function syncImages() { initApp(); }
 function openModal(id) {
+    cameFromDetail = false;
     var m = document.getElementById(id);
     if (m) { m.style.display = 'flex'; pushHistoryState(id); }
 }
@@ -998,6 +1029,194 @@ document.addEventListener("backbutton", function (e) {
     }
 }, false);
 
+// ====================================
+// 🔍 SEARCH, SORT, FILTER & FAVORITES ENGINE
+// ====================================
+var showOnlyFavs = false;
+
+window.doSearch = function (val) {
+    var srch = document.getElementById('srch');
+    if (srch) srch.value = val;
+    applyFilter();
+
+    var trimmedVal = val.trim();
+    if (trimmedVal !== "") {
+        var detailPanel = document.getElementById('detailPanel');
+        if (detailPanel && detailPanel.classList.contains('open')) {
+            cameFromDetail = true;
+            searchingTransition = true;
+            closeDetail();
+        }
+    } else {
+        if (cameFromDetail && curProduct) {
+            openDetail(curProduct.id, false, true);
+            cameFromDetail = false;
+        }
+    }
+};
+
+window.populateCategories = function () {
+    var catListEl = document.getElementById('categoryList');
+    if (!catListEl) return;
+
+    var cats = {};
+    allProducts.forEach(p => {
+        if (p.cat) cats[p.cat] = true;
+    });
+    var sortedCats = Object.keys(cats).sort();
+
+    var html = '';
+    sortedCats.forEach(cat => {
+        var activeClass = activeCategories.includes(cat) ? 'active' : '';
+        html += `<div class="filter-row ${activeClass}" onclick="toggleCategoryFilter(this, '${esc(cat)}')">${esc(cat)}</div>`;
+    });
+    catListEl.innerHTML = html;
+};
+
+window.toggleCategoryFilter = function (element, cat) {
+    cameFromDetail = false;
+    var idx = activeCategories.indexOf(cat);
+    if (idx === -1) {
+        activeCategories.push(cat);
+        if (element) element.classList.add('active');
+    } else {
+        activeCategories.splice(idx, 1);
+        if (element) element.classList.remove('active');
+    }
+    applyFilter();
+};
+
+window.togglePriceFilter = function (element, min, max) {
+    cameFromDetail = false;
+    var filterStr = min + '-' + max;
+    var idx = activePriceFilters.indexOf(filterStr);
+    if (idx === -1) {
+        activePriceFilters.push(filterStr);
+        if (element) element.classList.add('active');
+    } else {
+        activePriceFilters.splice(idx, 1);
+        if (element) element.classList.remove('active');
+    }
+    applyFilter();
+};
+
+window.clearPriceFilters = function () {
+    cameFromDetail = false;
+    activePriceFilters = [];
+    var modal = document.getElementById('filterModal');
+    if (modal) {
+        var rows = modal.querySelectorAll('.filter-row');
+        rows.forEach(r => r.classList.remove('active'));
+    }
+    applyFilter();
+};
+
+window.toggleSearch = function () {
+    var container = document.getElementById('searchContainerMain');
+    if (container) {
+        if (container.style.display === 'none' || container.style.display === '') {
+            container.style.display = 'block';
+            var input = container.querySelector('input');
+            if (input) input.focus();
+        } else {
+            container.style.display = 'none';
+            var input = container.querySelector('input');
+            if (input) {
+                input.value = '';
+                doSearch('');
+            }
+        }
+    }
+};
+
+window.toggleFavView = function () {
+    cameFromDetail = false;
+    showOnlyFavs = !showOnlyFavs;
+    var favIcon = document.getElementById('favTopIcon');
+    if (favIcon) {
+        if (showOnlyFavs) {
+            favIcon.classList.remove('far');
+            favIcon.classList.add('fas');
+            favIcon.style.color = 'var(--myntra-pink)';
+        } else {
+            favIcon.classList.remove('fas');
+            favIcon.classList.add('far');
+            favIcon.style.color = '';
+        }
+    }
+    applyFilter();
+};
+
+window.setSort = function (type, element) {
+    cameFromDetail = false;
+    currentSort = type;
+
+    var modal = document.getElementById('sortModal');
+    if (modal) {
+        var rows = modal.querySelectorAll('.filter-row');
+        rows.forEach(r => r.classList.remove('active'));
+    }
+    if (element) {
+        element.classList.add('active');
+    }
+
+    applyFilter();
+    closeModals();
+};
+
+window.applyFilter = function () {
+    var srch = document.getElementById('srch');
+    var query = srch ? srch.value.trim().toLowerCase() : '';
+
+    var filtered = allProducts.filter(p => {
+        // 1. Search Query
+        if (query !== "") {
+            var nameMatch = p.name && p.name.toLowerCase().includes(query);
+            var skuMatch = p.sku && p.sku.toLowerCase().includes(query);
+            var fabricMatch = p.fabric && p.fabric.toLowerCase().includes(query);
+            if (!nameMatch && !skuMatch && !fabricMatch) return false;
+        }
+
+        // 2. Category
+        if (activeCategories.length > 0) {
+            if (!activeCategories.includes(p.cat)) return false;
+        }
+
+        // 3. Price
+        if (activePriceFilters.length > 0) {
+            var matchPrice = false;
+            activePriceFilters.forEach(f => {
+                var parts = f.split('-');
+                var min = parseFloat(parts[0]);
+                var max = parseFloat(parts[1]);
+                if (p.price >= min && p.price <= max) {
+                    matchPrice = true;
+                }
+            });
+            if (!matchPrice) return false;
+        }
+
+        // 4. Favorites
+        if (showOnlyFavs) {
+            if (!favorites[p.id]) return false;
+        }
+
+        return true;
+    });
+
+    // 5. Sorting
+    if (currentSort === 'priceAsc') {
+        filtered.sort((a, b) => a.price - b.price);
+    } else if (currentSort === 'priceDesc') {
+        filtered.sort((a, b) => b.price - a.price);
+    } else if (currentSort === 'new') {
+        // Default loading order
+    }
+
+    displayList = filtered;
+    renderProductGrid(displayList);
+};
+
 // 📱 Listen to popstate to handle history back/forward navigation and close/open modals accordingly
 function applyModalState(modal) {
     var detailPanel = document.getElementById('detailPanel');
@@ -1047,5 +1266,11 @@ function applyModalState(modal) {
 window.addEventListener('popstate', function (e) {
     var state = e.state || {};
     applyModalState(state.modal);
+
+    if (searchingTransition) {
+        searchingTransition = false;
+    } else {
+        cameFromDetail = false;
+    }
 });
 
