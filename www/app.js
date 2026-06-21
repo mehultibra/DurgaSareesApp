@@ -185,21 +185,52 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
     var lowResUrl = fbBase + encGridPath + "%2F" + fileToFetch + "?alt=media";
 
-    // 1. Instantly show Low-Res Grid Image
-    imgElement.src = lowResUrl;
+    // Check if we have a cached local image
+    var localUrl = "";
+    if (fileToFetch === "01.webp" && window.Capacitor) {
+        try {
+            var cacheMap = JSON.parse(localStorage.getItem("dsLocalImages")) || {};
+            var localPath = cacheMap[gridPath];
+            if (localPath) {
+                localUrl = window.Capacitor.convertFileSrc(localPath);
+            }
+        } catch (e) {}
+    }
 
-    // Fallback if 01.webp fails on Grid
-    imgElement.onerror = function () {
-        if (fileToFetch === "01.webp") {
-            imgElement.src = fbBase + encGridPath + "%2Fcover.webp?alt=media";
+    // 1. Instantly show Low-Res Grid Image (local cache first, otherwise Firebase URL)
+    if (localUrl) {
+        imgElement.src = localUrl;
+        imgElement.onerror = function () {
+            // Fallback to Firebase if local fails
+            imgElement.src = lowResUrl;
             imgElement.onerror = function () {
-                imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
+                if (fileToFetch === "01.webp") {
+                    imgElement.src = fbBase + encGridPath + "%2Fcover.webp?alt=media";
+                    imgElement.onerror = function () {
+                        imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
+                        if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
+                    }
+                } else {
+                    if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
+                }
+            };
+        };
+    } else {
+        imgElement.src = lowResUrl;
+
+        // Fallback if 01.webp fails on Grid
+        imgElement.onerror = function () {
+            if (fileToFetch === "01.webp") {
+                imgElement.src = fbBase + encGridPath + "%2Fcover.webp?alt=media";
+                imgElement.onerror = function () {
+                    imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
+                    if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
+                }
+            } else {
                 if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
             }
-        } else {
-            if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
-        }
-    };
+        };
+    }
 
     // 2. Background Load High-Res Zoom Image (if applicable)
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
@@ -900,7 +931,120 @@ window.goToHome = function () {
     if (cart && cart.classList.contains('open')) { cart.classList.remove('open'); history.back(); }
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
 };
-function syncImages() { initApp(); }
+async function syncImages() {
+    if (!window.AndroidBridge) {
+        alert("Offline sync is only supported in the Android app.");
+        initApp();
+        return;
+    }
+
+    var bootScreen = document.getElementById('boot');
+    var bootMsg = document.getElementById('bootMsg');
+
+    if (bootScreen) bootScreen.style.display = 'flex';
+    if (bootMsg) bootMsg.innerText = "Fetching latest product list...";
+
+    try {
+        const res = await fetch(FIRESTORE_PRODUCTS_URL);
+        const data = await res.json();
+        var docs = data.documents || [];
+
+        var productsToDownload = [];
+        docs.forEach(d => {
+            var f = d.fields || {};
+            var name = f.name ? f.name.stringValue : "";
+            var gridUrl = f.gridUrl ? f.gridUrl.stringValue : "";
+            if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
+                productsToDownload.push({
+                    name: name,
+                    gridUrl: gridUrl
+                });
+            }
+        });
+
+        if (productsToDownload.length === 0) {
+            if (bootScreen) bootScreen.style.display = 'none';
+            alert("No images found to sync.");
+            initApp();
+            return;
+        }
+
+        var total = productsToDownload.length;
+        if (bootMsg) bootMsg.innerText = "Syncing 0 / " + total + " images...";
+
+        var cacheMap = {};
+        try {
+            cacheMap = JSON.parse(localStorage.getItem("dsLocalImages")) || {};
+        } catch (e) {}
+
+        var filesDir = "";
+        try {
+            filesDir = window.AndroidBridge.getFilesDir();
+        } catch (e) {
+            console.error("Error getting files dir:", e);
+        }
+
+        var count = 0;
+        var failed = 0;
+        var bucket = "durga-sarees.firebasestorage.app";
+        var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+
+        // Download in batches of 5
+        var batchSize = 5;
+        for (var i = 0; i < productsToDownload.length; i += batchSize) {
+            var batch = productsToDownload.slice(i, i + batchSize);
+            await Promise.all(batch.map(async (p) => {
+                var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
+                var url = fbBase + encGridPath + "%2F01.webp?alt=media";
+                var filename = encGridPath.replace(/[^a-zA-Z0-9]/g, '_') + "_01.webp";
+
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error("HTTP error " + response.status);
+                    const blob = await response.blob();
+                    
+                    const base64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+
+                    var saved = window.AndroidBridge.saveImage(filename, base64);
+                    if (saved && filesDir) {
+                        cacheMap[p.gridUrl] = filesDir + "/" + filename;
+                    } else {
+                        failed++;
+                    }
+                } catch (err) {
+                    console.error("Failed to download image for: " + p.name, err);
+                    failed++;
+                }
+                count++;
+            }));
+
+            if (bootMsg) {
+                bootMsg.innerText = "Syncing " + count + " / " + total + " images...";
+            }
+        }
+
+        localStorage.setItem("dsLocalImages", JSON.stringify(cacheMap));
+        if (bootScreen) bootScreen.style.display = 'none';
+
+        if (failed > 0) {
+            alert("Sync completed. Successfully saved " + (total - failed) + " images to phone storage. (" + failed + " failed)");
+        } else {
+            alert("Success! All " + total + " catalog images saved to phone storage.");
+        }
+
+        initApp();
+
+    } catch (err) {
+        if (bootScreen) bootScreen.style.display = 'none';
+        alert("Sync failed: " + err.message);
+        initApp();
+    }
+}
 function openModal(id) {
     cameFromDetail = false;
     var m = document.getElementById(id);
