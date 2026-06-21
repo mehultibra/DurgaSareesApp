@@ -457,40 +457,82 @@ function updateCartHeader() {
 function loadAndCacheDesignImage(imgEl, url, productId, fileName) {
     var cacheKey = url;
 
+    // Check if we are already in the process of retrying
+    var isRetry = imgEl.dataset.retrying === "true";
+
     getImageFromDB(cacheKey).then(blob => {
         if (blob) {
             // Found in cache!
             imgEl.src = URL.createObjectURL(blob);
+            imgEl.dataset.loadedZoom = "true";
+            imgEl.dataset.retrying = "";
+            
+            // Live update FS modal if open on this design
+            if (typeof fsDesignId !== 'undefined' && fsDesignId === fileName && curProduct && curProduct.id === productId) {
+                var fsImg = document.getElementById('fsImg');
+                if (fsImg && fsImg.style.display !== 'none') {
+                    fsImg.src = imgEl.src;
+                }
+            }
         } else {
-            // Not found in cache. Fetch from network, cache it, and show it!
+            // If it's not a retry, let's load grid image from IndexedDB cache if our src is empty or uses constructed firebase URL
+            if (!isRetry) {
+                var p = allProducts.find(x => x.id === productId);
+                if (p && p.gridUrl && p.gridUrl !== "None") {
+                    getImageFromDB(p.gridUrl).then(gridBlob => {
+                        if (gridBlob && imgEl && !imgEl.dataset.loadedZoom) {
+                            imgEl.src = URL.createObjectURL(gridBlob);
+                        }
+                    }).catch(e => {
+                        console.warn("Error getting grid image blob from cache", e);
+                    });
+                }
+            }
+
             fetch(url)
                 .then(res => {
                     if (!res.ok) throw new Error("HTTP error " + res.status);
                     return res.blob();
                 })
                 .then(newBlob => {
-                    saveImageToDB(cacheKey, newBlob); // Save to IndexedDB asynchronously
-                    imgEl.src = URL.createObjectURL(newBlob);
+                    saveImageToDB(cacheKey, newBlob);
+                    var zoomObjectUrl = URL.createObjectURL(newBlob);
+                    imgEl.src = zoomObjectUrl;
+                    imgEl.dataset.loadedZoom = "true";
+                    imgEl.dataset.retrying = "";
+
+                    // Live update FS modal if open on this design
+                    if (typeof fsDesignId !== 'undefined' && fsDesignId === fileName && curProduct && curProduct.id === productId) {
+                        var fsImg = document.getElementById('fsImg');
+                        if (fsImg && fsImg.style.display !== 'none') {
+                            fsImg.src = zoomObjectUrl;
+                        }
+                    }
                 })
                 .catch(err => {
                     console.error("Network fetch failed for design image, trying fallback", err);
                     if (url.includes('%2F0')) {
                         var fallbackUrl = url.replace('%2F0', '%2F');
+                        imgEl.dataset.retrying = "true";
                         loadAndCacheDesignImage(imgEl, fallbackUrl, productId, fileName);
                     } else {
-                        imgEl.src = url;
-                        imgEl.onerror = function() {
-                            imgEl.parentElement.style.display = 'none';
-                        };
+                        imgEl.dataset.retrying = "";
+                        imgEl.parentElement.style.display = 'none';
                     }
                 });
         }
     }).catch(err => {
         console.error("Cache read failed, loading directly", err);
-        imgEl.src = url;
+        // Fallback: load directly from url
         imgEl.onerror = function() {
-            imgEl.parentElement.style.display = 'none';
+            if (url.includes('%2F0')) {
+                var fallbackUrl = url.replace('%2F0', '%2F');
+                loadAndCacheDesignImage(imgEl, fallbackUrl, productId, fileName);
+            } else {
+                imgEl.parentElement.style.display = 'none';
+            }
         };
+        imgEl.src = url;
     });
 }
 
@@ -534,18 +576,17 @@ function openDetail(productId, skipShow, keepSearchShown) {
         return;
     }
 
-    // Show loading state
-    deck.innerHTML = `
-    <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; width:100%; height:200px; color:var(--text-light); gap: 10px;">
-        <i class="fas fa-circle-notch spin" style="font-size:24px; color:var(--myntra-pink);"></i>
-        <span style="font-size:13px; font-weight:bold;">Loading ready designs...</span>
-    </div>`;
-
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
     var prefix = encodeURIComponent(folderPath + "/");
     var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix;
 
+    var renderedFilesJson = "";
+
+    // 1. Render fallback list instantly so the UI loads immediately
+    useFallbackDesignList();
+
+    // 2. Fetch actual folder files in background to update/upgrade the swipe deck
     fetch(listUrl)
         .then(res => {
             if (!res.ok) throw new Error("HTTP error " + res.status);
@@ -584,18 +625,27 @@ function openDetail(productId, skipShow, keepSearchShown) {
             });
 
             if (validFiles.length > 0) {
-                renderSwipeDeck(validFiles);
-            } else {
-                // Fallback to p.ready parsing or D2-D15 fallback if no files returned
-                useFallbackDesignList();
+                var newJson = JSON.stringify(validFiles);
+                if (renderedFilesJson !== newJson) {
+                    renderSwipeDeck(validFiles);
+                }
             }
         })
         .catch(err => {
-            console.error("Firebase list error, using fallback", err);
-            useFallbackDesignList();
+            console.warn("Background folder list load failed", err);
         });
 
     function renderSwipeDeck(files) {
+        renderedFilesJson = JSON.stringify(files);
+
+        // Get the grid/cover image source synchronously for instant placeholder rendering
+        var gridImgEl = document.getElementById("img_" + p.id);
+        var initialSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
+        if (!initialSrc && p.gridUrl && p.gridUrl !== "None") {
+            var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
+            initialSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+        }
+
         var html = '';
         files.forEach((file, idx) => {
             var dKey = p.id + '_' + file.name;
@@ -615,8 +665,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
             } else {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 html += `
-                <div class="swipe-card" style="display:none;" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
-                    <img id="${imgId}" onload="this.parentElement.style.display='block'" onerror="this.src.includes('%2F0') ? this.src = this.src.replace('%2F0', '%2F') : this.parentElement.style.display='none'">
+                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
+                    <img id="${imgId}" src="${initialSrc || ''}">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
