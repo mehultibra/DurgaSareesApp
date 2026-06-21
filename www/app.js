@@ -39,6 +39,7 @@ window.addEventListener('DOMContentLoaded', function () {
             setTimeout(initApp, 100);
         }
         setupEditableFields();
+        setupFsGestures();
     } catch (err) { console.error("Init error:", err); }
 });
 
@@ -894,6 +895,156 @@ function closeDetail() {
 // ====================================
 var fsIndex = 0;
 var fsDesignId = '';
+var fsScale = 1;
+var fsTranslateX = 0;
+var fsTranslateY = 0;
+
+function setupFsGestures() {
+    var fsModal = document.getElementById('fsModal');
+    var fsImg = document.getElementById('fsImg');
+    if (!fsModal || !fsImg) return;
+
+    var startTouchX = 0;
+    var startTouchY = 0;
+    
+    // Pinch variables
+    var initialPinchDistance = 0;
+    var initialScale = 1;
+    var isPinching = false;
+    
+    // Pan variables
+    var startPanX = 0;
+    var startPanY = 0;
+    var isPanning = false;
+
+    // Double tap variable
+    var lastTapTime = 0;
+
+    // Helper: calculate distance between two fingers
+    function getDistance(t1, t2) {
+        var dx = t1.clientX - t2.clientX;
+        var dy = t1.clientY - t2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // Swipe navigation logic
+    function handleSwipe(diffX) {
+        var threshold = 50;
+        if (Math.abs(diffX) > threshold) {
+            if (diffX > 0) {
+                // Swipe Right (Go to previous image)
+                openFs(fsIndex - 1);
+            } else {
+                // Swipe Left (Go to next image)
+                openFs(fsIndex + 1);
+            }
+        }
+    }
+
+    // Touch Start
+    fsImg.addEventListener('touchstart', function (e) {
+        if (e.touches.length === 1) {
+            // Potential pan, swipe, or double-tap
+            isPanning = false;
+            isPinching = false;
+            
+            startTouchX = e.touches[0].clientX;
+            startTouchY = e.touches[0].clientY;
+
+            if (fsScale > 1) {
+                isPanning = true;
+                startPanX = e.touches[0].clientX - fsTranslateX;
+                startPanY = e.touches[0].clientY - fsTranslateY;
+            }
+        } else if (e.touches.length === 2) {
+            // Pinch to zoom
+            isPinching = true;
+            isPanning = false;
+            initialPinchDistance = getDistance(e.touches[0], e.touches[1]);
+            initialScale = fsScale;
+        }
+    }, { passive: true });
+
+    // Touch Move
+    fsImg.addEventListener('touchmove', function (e) {
+        if (isPinching && e.touches.length === 2) {
+            var newDistance = getDistance(e.touches[0], e.touches[1]);
+            if (initialPinchDistance > 0) {
+                var factor = newDistance / initialPinchDistance;
+                fsScale = Math.max(1, Math.min(4, initialScale * factor));
+                
+                // If we zoom out to 1, reset offsets
+                if (fsScale === 1) {
+                    fsTranslateX = 0;
+                    fsTranslateY = 0;
+                }
+                fsImg.style.transform = `translate3d(${fsTranslateX}px, ${fsTranslateY}px, 0) scale(${fsScale})`;
+            }
+        } else if (isPanning && e.touches.length === 1 && fsScale > 1) {
+            // Drag panning when zoomed
+            fsTranslateX = e.touches[0].clientX - startPanX;
+            fsTranslateY = e.touches[0].clientY - startPanY;
+            
+            // Constrain translation bounds based on scale
+            var maxTranslateX = (fsScale - 1) * (fsImg.clientWidth / 2);
+            var maxTranslateY = (fsScale - 1) * (fsImg.clientHeight / 2);
+            fsTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, fsTranslateX));
+            fsTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, fsTranslateY));
+
+            fsImg.style.transform = `translate3d(${fsTranslateX}px, ${fsTranslateY}px, 0) scale(${fsScale})`;
+        }
+    }, { passive: true });
+
+    // Touch End
+    fsImg.addEventListener('touchend', function (e) {
+        if (isPinching) {
+            isPinching = false;
+        }
+        if (isPanning) {
+            isPanning = false;
+        }
+
+        // If it was a single finger and scale === 1, detect horizontal swipe
+        if (e.touches.length === 0 && fsScale === 1) {
+            var endX = e.changedTouches[0].clientX;
+            var endY = e.changedTouches[0].clientY;
+            var diffX = endX - startTouchX;
+            var diffY = endY - startTouchY;
+
+            // Ensure it is mostly horizontal swipe
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                handleSwipe(diffX);
+            }
+        }
+    }, { passive: true });
+
+    // Double Tap detection
+    fsImg.addEventListener('click', function (e) {
+        var now = new Date().getTime();
+        var timespan = now - lastTapTime;
+        if (timespan < 300 && timespan > 0) {
+            // Double Tap!
+            if (fsScale > 1) {
+                // Reset zoom
+                fsScale = 1;
+                fsTranslateX = 0;
+                fsTranslateY = 0;
+            } else {
+                // Zoom in to 2.5
+                fsScale = 2.5;
+                fsTranslateX = 0;
+                fsTranslateY = 0;
+            }
+            fsImg.style.transition = 'transform 0.2s ease-out';
+            fsImg.style.transform = `translate3d(${fsTranslateX}px, ${fsTranslateY}px, 0) scale(${fsScale})`;
+            setTimeout(() => {
+                fsImg.style.transition = '';
+            }, 200);
+            e.preventDefault();
+        }
+        lastTapTime = now;
+    });
+}
 
 function openFs(arg1, arg2, arg3) {
     var pId, index, dId;
@@ -938,7 +1089,7 @@ function openFs(arg1, arg2, arg3) {
     fsDesignId = dId;
 
     var dName = dId === 'DIRECT' ? "Cover" : dId;
-    document.getElementById('fsTitle').innerText = curProduct.name + " - " + dName;
+    document.getElementById('fsTitle').innerText = curProduct.name + " - " + dName + " (" + (fsIndex + 1) + "/" + cards.length + ")";
 
     var videoEl = targetCard.querySelector('video');
     var imgEl = targetCard.querySelector('img');
@@ -969,6 +1120,11 @@ function openFs(arg1, arg2, arg3) {
         }
         if (fsImg) {
             fsImg.style.display = 'block';
+            fsImg.style.transition = '';
+            fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
+            fsScale = 1;
+            fsTranslateX = 0;
+            fsTranslateY = 0;
             fsImg.src = imgEl ? imgEl.src : '';
         }
     }
