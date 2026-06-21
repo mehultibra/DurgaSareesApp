@@ -163,7 +163,7 @@
       <div style="display:flex; align-items:center; gap:12px;">
         <i class="fas fa-arrow-left" onclick="closeDetail()" style="cursor:pointer; font-size:18px;"></i>
         <h3 id="dtNameTop"
-          style="margin:0; font-size:16px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:65vw;">
+          style="margin:0; font-size:16px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40vw;">
           Product</h3>
       </div>
       <div class="hdr-icons" style="display:flex; gap:15px; align-items:center;">
@@ -171,6 +171,12 @@
         <div style="position:relative; cursor:pointer;" onclick="openCart()">
           <i class="fas fa-shopping-bag"></i>
           <div class="cart-badge-top" id="dtTotalQtyTop">0</div>
+        </div>
+        <!-- Shifted Cover Qty Selector (Top Row) -->
+        <div class="qty-clean" style="display:flex; align-items:center;">
+          <button id="dtQtyBotMinus">−</button>
+          <input type="number" id="dtQtyDirect" value="0" readonly style="font-size:13px; font-weight:bold; width:20px;">
+          <button id="dtQtyBotPlus">+</button>
         </div>
       </div>
     </div>
@@ -180,22 +186,17 @@
     </div>
 
     <div class="ob-one-row" id="detailBottomRow"
-      style="display: flex; align-items: center; justify-content: space-between; padding: 0 16px; gap: 12px; overflow-x: auto; flex-wrap: nowrap; white-space: nowrap; scrollbar-width: none;">
+      style="display: flex; align-items: center; padding: 0 16px; gap: 12px; overflow-x: auto; flex-wrap: nowrap; white-space: nowrap; scrollbar-width: none;">
       <div style="display:flex; align-items:center; gap:8px; flex-shrink: 0;">
-        <span style="font-weight:bold; font-size:16px; color:var(--text-main);">₹<span id="dtPriceBot"
+        <span style="font-weight:bold; font-size:16px; color:var(--text-main);">₹ <span id="dtPriceBot"
             contenteditable="true" inputmode="numeric" style="outline:none; cursor:text;">0</span></span>
         <span id="dtPackBot" contenteditable="true"
           style="font-size:12px; font-weight:bold; color:var(--text-light); outline:none; cursor:text;">1</span>
       </div>
-      <div onclick="openModal('shareModal')" style="cursor:pointer; color:var(--whatsapp); font-size:20px; display:flex; align-items:center; justify-content:center; flex-shrink: 0;" title="Share Catalog">
+      <div onclick="openModal('shareModal')" style="cursor:pointer; color:var(--whatsapp); font-size:20px; display:flex; align-items:center; justify-content:center; flex-shrink: 0; margin-left: 4px;" title="Share Catalog">
         <i class="fab fa-whatsapp"></i>
       </div>
-      <div id="dtDesignsSummary" style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:bold; color:var(--myntra-pink); overflow-x:auto; scrollbar-width:none; flex-shrink: 0;"></div>
-      <div class="qty-clean" style="flex-shrink: 0; margin-left: auto;">
-        <button id="dtQtyBotMinus">−</button>
-        <input type="number" id="dtQtyDirect" value="0" readonly style="font-size:14px; font-weight:bold; width:22px;">
-        <button id="dtQtyBotPlus">+</button>
-      </div>
+      <div id="dtDesignsSummary" style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:bold; color:var(--myntra-pink); overflow-x:auto; scrollbar-width:none; flex-shrink: 0; margin-left: 8px;"></div>
     </div>
   </div>
 

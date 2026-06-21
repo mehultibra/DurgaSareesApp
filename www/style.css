@@ -723,7 +723,7 @@ html {
 #detailPanel { display: none; position: fixed; inset: 0; background: #fff; z-index: 200 !important; flex-direction: column; }
 #detailPanel.open { display: flex; }
 #detailPanel .sl-hdr { flex-shrink: 0; position: relative !important; z-index: 210 !important; background: #fff; padding-top: calc(10px + env(safe-area-inset-top)) !important; border-bottom: none; }
-#detailPanel .sl-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(60px + env(safe-area-inset-bottom)) !important; }
+#detailPanel .sl-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(40px + env(safe-area-inset-bottom)) !important; }
 .ob-one-row { position: absolute; bottom: 0; left: 0; right: 0; background: #fff; border-top: none; z-index: 220 !important; height: calc(40px + env(safe-area-inset-bottom)) !important; padding-bottom: env(safe-area-inset-bottom) !important; }
 
 #detailPanel.open ~ .fab-wa {
