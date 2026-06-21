@@ -368,7 +368,8 @@ html {
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     gap: 12px;
-    padding: 0 12px;
+    padding: 10px 12px;
+    box-sizing: border-box;
     height: 100%;
     align-items: center;
     scrollbar-width: none;
@@ -380,8 +381,8 @@ html {
 
 .swipe-card {
     scroll-snap-align: center;
-    flex: 0 0 85%;
-    height: auto;
+    flex: 0 0 auto;
+    height: 100%;
     background: #fff;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -389,11 +390,13 @@ html {
     display: flex;
     flex-direction: column;
     position: relative;
+    width: auto;
 }
 
 .swipe-card img,
 .swipe-card video {
-    width: 100%;
+    width: auto;
+    height: calc(100% - 40px);
     aspect-ratio: 3/4;
     object-fit: cover;
     object-position: top;
@@ -410,6 +413,7 @@ html {
     padding: 0 12px;
     background: #fff;
     border-top: 1px solid var(--border);
+    flex-shrink: 0;
 }
 
 /* PC Override for Swipe Deck */
@@ -420,11 +424,20 @@ html {
         overflow-x: visible;
         scroll-snap-type: none;
         height: auto;
+        padding: 10px 0;
     }
 
     .swipe-card {
         flex: auto;
-        height: 450px;
+        height: auto;
+        width: 100%;
+    }
+
+    .swipe-card img,
+    .swipe-card video {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 3/4;
     }
 }
 
@@ -711,9 +724,9 @@ html {
 /* Layer 200: Product Detail Page */
 #detailPanel { display: none; position: fixed; inset: 0; background: #fff; z-index: 200 !important; flex-direction: column; }
 #detailPanel.open { display: flex; }
-#detailPanel .sl-hdr { flex-shrink: 0; position: relative !important; z-index: 210 !important; background: #fff; padding-top: calc(10px + env(safe-area-inset-top)) !important; border-bottom: 1px solid var(--border); }
+#detailPanel .sl-hdr { flex-shrink: 0; position: relative !important; z-index: 210 !important; background: #fff; padding-top: calc(10px + env(safe-area-inset-top)) !important; border-bottom: none; }
 #detailPanel .sl-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(55px + env(safe-area-inset-bottom)) !important; }
-.ob-one-row { position: absolute; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border); z-index: 220 !important; padding-bottom: calc(10px + env(safe-area-inset-bottom)) !important; }
+.ob-one-row { position: absolute; bottom: 0; left: 0; right: 0; background: #fff; border-top: none; z-index: 220 !important; padding-bottom: calc(10px + env(safe-area-inset-bottom)) !important; }
 
 /* Layer 300: Cart & Modals */
 #cartPanel { z-index: 300 !important; }
