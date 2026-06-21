@@ -505,7 +505,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
             imgEl.src = URL.createObjectURL(blob);
             imgEl.dataset.loadedZoom = "true";
             imgEl.dataset.retrying = "";
-            
+
             // Live update FS modal if open on this design
             if (typeof fsDesignId !== 'undefined' && fsDesignId === fileName && curProduct && curProduct.id === productId) {
                 var fsImg = document.getElementById('fsImg');
@@ -563,7 +563,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
     }).catch(err => {
         console.error("Cache read failed, loading directly", err);
         // Fallback: load directly from url
-        imgEl.onerror = function() {
+        imgEl.onerror = function () {
             if (url.includes('%2F0')) {
                 var fallbackUrl = url.replace('%2F0', '%2F');
                 loadAndCacheDesignImage(imgEl, fallbackUrl, designGridUrl, productId, fileName);
@@ -605,7 +605,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
     var deck = document.getElementById('dtDesigns');
     if (deck) deck.innerHTML = '';
-    
+
     if (!skipShow) {
         document.getElementById('detailPanel').classList.add('open');
         pushHistoryState('detail');
@@ -658,7 +658,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     if (isVideo || isImage) {
                         var gridEncName = fullPath.replace(zoomPath, gridPath).split('/').map(encodeURIComponent).join('%2F');
                         var zoomEncName = fullPath.replace(gridPath, zoomPath).split('/').map(encodeURIComponent).join('%2F');
-                        
+
                         var gridUrl = fbBase + gridEncName + "?alt=media";
                         var zoomUrl = fbBase + zoomEncName + "?alt=media";
                         var designName = filename.substring(0, filename.lastIndexOf('.'));
@@ -683,7 +683,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                                     file.cachedUrl = res.src;
                                     file.isZoom = res.isZoom;
                                 }
-                            }).catch(() => {});
+                            }).catch(() => { });
                         })).then(() => {
                             if (renderedFilesJson !== newJson) {
                                 renderSwipeDeck(validFiles);
@@ -813,7 +813,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                         file.cachedUrl = res.src;
                         file.isZoom = res.isZoom;
                     }
-                }).catch(() => {});
+                }).catch(() => { });
             })).then(() => {
                 renderSwipeDeck(fallbackFiles);
             });
@@ -906,12 +906,12 @@ function setupFsGestures() {
 
     var startTouchX = 0;
     var startTouchY = 0;
-    
+
     // Pinch variables
     var initialPinchDistance = 0;
     var initialScale = 1;
     var isPinching = false;
-    
+
     // Pan variables
     var startPanX = 0;
     var startPanY = 0;
@@ -947,7 +947,7 @@ function setupFsGestures() {
             // Potential pan, swipe, or double-tap
             isPanning = false;
             isPinching = false;
-            
+
             startTouchX = e.touches[0].clientX;
             startTouchY = e.touches[0].clientY;
 
@@ -972,7 +972,7 @@ function setupFsGestures() {
             if (initialPinchDistance > 0) {
                 var factor = newDistance / initialPinchDistance;
                 fsScale = Math.max(1, Math.min(4, initialScale * factor));
-                
+
                 // If we zoom out to 1, reset offsets
                 if (fsScale === 1) {
                     fsTranslateX = 0;
@@ -984,7 +984,7 @@ function setupFsGestures() {
             // Drag panning when zoomed
             fsTranslateX = e.touches[0].clientX - startPanX;
             fsTranslateY = e.touches[0].clientY - startPanY;
-            
+
             // Constrain translation bounds based on scale
             var maxTranslateX = (fsScale - 1) * (fsImg.clientWidth / 2);
             var maxTranslateY = (fsScale - 1) * (fsImg.clientHeight / 2);
