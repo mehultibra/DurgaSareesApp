@@ -882,6 +882,25 @@ function updateLiveDetailHeader() {
     if (dtNameTop) {
         dtNameTop.innerHTML = esc(curProduct.name) + ' <span style="color: var(--myntra-pink); font-weight: bold; font-size: 14px;">(' + totalQty + ' pcs)</span>';
     }
+
+    // Update design quantities summary in bottom row
+    var summaryEl = document.getElementById('dtDesignsSummary');
+    if (summaryEl) {
+        var parts = [];
+        for (var k in cart) {
+            var c = cart[k];
+            if (c && c.p && c.p.id === curProduct.id && c.qty > 0) {
+                var dName = c.design || 'DIRECT';
+                if (dName !== 'DIRECT') {
+                    parts.push({ name: dName, qty: c.qty });
+                }
+            }
+        }
+        // Sort by design name naturally (e.g., D2, D3, D10)
+        parts.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        var displayParts = parts.map(p => p.name + '*' + p.qty);
+        summaryEl.innerText = displayParts.length > 0 ? displayParts.join(' + ') : '';
+    }
 }
 
 function closeDetail() {
