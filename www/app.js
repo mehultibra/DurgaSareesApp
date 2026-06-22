@@ -416,23 +416,20 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     var cacheKey = (fileToFetch === "01.webp") ? gridPath : lowResUrl;
 
-    if (fileToFetch === "01.webp" || dsFallbackMap[gridPath]) {
-        getImageFromDB(cacheKey).then(function (blob) {
-            if (blob) {
-                var objectUrl = URL.createObjectURL(blob);
-                imgElement.src = objectUrl;
-                imgElement.onerror = function () {
-                    loadFromNetwork();
-                };
-            } else {
+    // ALWAYS check IndexedDB cache first for ALL images (Cover, Fallback, and Specific Cart Designs)
+    getImageFromDB(cacheKey).then(function (blob) {
+        if (blob) {
+            var objectUrl = URL.createObjectURL(blob);
+            imgElement.src = objectUrl;
+            imgElement.onerror = function () {
                 loadFromNetwork();
-            }
-        }).catch(function (err) {
+            };
+        } else {
             loadFromNetwork();
-        });
-    } else {
+        }
+    }).catch(function (err) {
         loadFromNetwork();
-    }
+    });
 
     // 2. Background Load High-Res Zoom Image (if applicable)
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
