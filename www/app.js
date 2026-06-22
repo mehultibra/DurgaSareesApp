@@ -1542,6 +1542,22 @@ function sendWhatsapp() {
 
 // Utilities are defined at the bottom of the file
 
+function getExactFirebaseUrl(folderPath, dId) {
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/";
+    var encPath = folderPath.split('/').map(encodeURIComponent).join('%2F');
+    var fileName = "01.webp";
+    if (dId !== 'DIRECT' && dId !== 'Cover') {
+        var num = dId.replace(/\D/g, '');
+        if (num.length === 1) num = "0" + num;
+        if (num === "") num = dId;
+        fileName = num + ".webp";
+    }
+    return fbBase + encPath + "%2F" + fileName + "?alt=media";
+}
+
+// ====================================
+// 📦 2. MODAL & SHARE LOGIC (STRICT ZOOM FETCH)
+// ====================================
 async function triggerShare(action) {
     closeModals();
 
@@ -1555,56 +1571,52 @@ async function triggerShare(action) {
         return;
     }
 
-    // Grab all loaded images from the current Swipe Deck
+    // 1️⃣ Ask the user which PDF format they want
+    var pdfType = 'full';
+    if (confirm("Create FULL Catalog with all designs?\n\nClick 'Cancel' to create an ORDER PDF (Cover Image Only).")) {
+        pdfType = 'full';
+    } else {
+        pdfType = 'cover';
+    }
+
+    // 2️⃣ Collect only valid designs and FORCE them to use the Zoom Folder
     var deck = document.getElementById('dtDesigns');
-    var imgArray = [];
+    var highResUrls = [];
+    
     if (deck) {
-        var imgs = deck.querySelectorAll('img');
-        imgs.forEach(img => {
-            // Only grab real images, not placeholders
-            if (img.src && !img.src.includes('placehold.co') && !img.src.includes('data:image')) {
-                imgArray.push(img.src);
+        var cards = deck.querySelectorAll('.swipe-card');
+        cards.forEach(card => {
+            // Ignore cards that threw a 404 error and hid themselves
+            if (card.style.display !== 'none') {
+                var dNameEl = card.querySelector('.swipe-card-bot div');
+                if (dNameEl) {
+                    var dName = dNameEl.innerText; // e.g. "Cover" or "D2"
+                    var dId = dName === 'Cover' ? 'DIRECT' : dName;
+                    
+                    // If they only want the cover, skip D2-D15
+                    if (pdfType === 'cover' && dId !== 'DIRECT') return;
+                    
+                    // 🛡️ STRICT RULE: ALWAYS use zoomUrl, NEVER gridUrl!
+                    var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
+                    var exactHighResUrl = getExactFirebaseUrl(folderPath, dId);
+                    
+                    highResUrls.push(exactHighResUrl);
+                }
             }
         });
     }
 
-    // Deduplicate array
-    imgArray = [...new Set(imgArray)];
-
-    if (imgArray.length === 0) {
-        alert("Images are still loading, please wait a second.");
+    if (highResUrls.length === 0) {
+        alert("Images are still loading. Please wait a second.");
         return;
     }
 
-    // Calls your PDF Engine
+    // 3️⃣ Call the CPU PDF Engine with High-Res Links
     if (typeof generateNativePDF === 'function') {
-        await generateNativePDF(curProduct.name, curProduct.price, imgArray, action);
+        await generateNativePDF(curProduct.name, curProduct.price, highResUrls, action);
     } else {
         alert("PDF Engine is not loaded!");
     }
-}
-
-function testPdfEngine() {
-    if (!curProduct) {
-        alert("Open a product first!");
-        return;
-    }
-
-    // Grab the Firebase base URL
-    var bucket = "durga-sarees.firebasestorage.app";
-    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-    var encPath = folderPath.split('/').map(encodeURIComponent).join('%2F');
-
-    // Build an array of image URLs to put in the PDF (Cover + 2 designs for testing)
-    var testImages = [
-        fbBase + encPath + "%2F01.webp?alt=media",
-        fbBase + encPath + "%2F02.webp?alt=media",
-        fbBase + encPath + "%2F03.webp?alt=media"
-    ];
-
-    // Calls the engine in the new file!
-    generateNativePDF(curProduct.name, curProduct.price, testImages);
 }
 
 window.openCartFs = function (productId, designId, cartImgSrc) {
