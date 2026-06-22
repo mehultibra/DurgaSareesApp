@@ -1619,6 +1619,7 @@ function closeModals(fromHistory) {
 
 function pushHistoryState(modal) {
     history.pushState({ modal: modal }, '', '#' + modal);
+    updateAndroidBackState();
 }
 
 function saveProductEdit(p) {
@@ -1978,4 +1979,40 @@ window.addEventListener('popstate', function (e) {
     } else {
         cameFromDetail = false;
     }
+    updateAndroidBackState();
 });
+
+function updateAndroidBackState() {
+    try {
+        if (window.AndroidBridge && typeof window.AndroidBridge.setCanGoBack === 'function') {
+            var detailPanel = document.getElementById('detailPanel');
+            var cartPanel = document.getElementById('cartPanel');
+            var fsModal = document.getElementById('fsModal');
+            
+            var hasOpenModal = false;
+            
+            if (detailPanel && detailPanel.classList.contains('open')) {
+                hasOpenModal = true;
+            }
+            if (cartPanel && cartPanel.classList.contains('open')) {
+                hasOpenModal = true;
+            }
+            if (fsModal && fsModal.style.display === 'flex') {
+                hasOpenModal = true;
+            }
+            var actionModals = document.querySelectorAll('.action-modal');
+            actionModals.forEach(function (m) {
+                if (m.style.display === 'flex') {
+                    hasOpenModal = true;
+                }
+            });
+            
+            window.AndroidBridge.setCanGoBack(hasOpenModal);
+        }
+    } catch (e) {
+        console.error("Error updating Android bridge back state:", e);
+    }
+}
+
+// Sync back state on initial script load
+updateAndroidBackState();
