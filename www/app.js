@@ -303,12 +303,70 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 imgElement.src = fbBase + encGridPath + "%2Fcover.webp?alt=media";
                 imgElement.onerror = function () {
                     imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
+                    imgElement.onerror = function () {
+                        tryToLoadLatestReadyDesign();
+                    };
                     if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
                 }
             } else {
                 if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
             }
         };
+
+        function tryToLoadLatestReadyDesign() {
+            if (!window.allProducts) return showPlaceholder();
+            var p = window.allProducts.find(x => x.gridUrl === gridPath);
+            if (!p || !p.ready || p.ready.trim() === "") {
+                return showPlaceholder();
+            }
+
+            var rawDesigns = String(p.ready).split(',').map(d => d.trim()).filter(Boolean);
+            if (rawDesigns.length === 0) {
+                return showPlaceholder();
+            }
+
+            tryDesign(rawDesigns.length - 1);
+
+            function tryDesign(index) {
+                if (index < 0) {
+                    return showPlaceholder();
+                }
+                var designName = rawDesigns[index];
+                var cleanNum = designName.replace(/\D/g, '');
+                var designFile = "";
+                if (cleanNum !== "") {
+                    var numStr = cleanNum.length === 1 ? "0" + cleanNum : cleanNum;
+                    designFile = numStr + ".webp";
+                } else {
+                    designFile = designName + ".webp";
+                }
+
+                var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(designFile) + "?alt=media";
+                imgElement.src = designUrl;
+
+                imgElement.onerror = function () {
+                    if (designFile.endsWith(".webp")) {
+                        var jpgFile = designFile.replace(".webp", ".jpg");
+                        imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(jpgFile) + "?alt=media";
+                        imgElement.onerror = function () {
+                            var pngFile = designFile.replace(".webp", ".png");
+                            imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(pngFile) + "?alt=media";
+                            imgElement.onerror = function () {
+                                tryDesign(index - 1);
+                            };
+                        };
+                    } else {
+                        tryDesign(index - 1);
+                    }
+                };
+            }
+        }
+
+        // Show standard placeholder when all fallback options fail
+        function showPlaceholder() {
+            imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
+            imgElement.onerror = null;
+        }
     }
 
     // 2. Background Load High-Res Zoom Image (if applicable)
