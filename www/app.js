@@ -629,95 +629,92 @@ function openDetail(productId, skipShow, keepSearchShown) {
     // 1. Render fallback list instantly so the UI loads immediately
     useFallbackDesignList();
 
-    // 2. Fetch actual folder files in background to update/upgrade the swipe deck only if p.ready is empty
-    var hasReadyList = p.ready && String(p.ready).trim() !== "";
-    if (!hasReadyList) {
-        fetch(listUrl)
-            .then(res => {
-                if (!res.ok) throw new Error("HTTP error " + res.status);
-                return res.json();
-            })
-            .then(data => {
-                var items = data.items || [];
-                var validFiles = [];
+    // 2. Fetch actual folder files in background to update/upgrade the swipe deck
+    fetch(listUrl)
+        .then(res => {
+            if (!res.ok) throw new Error("HTTP error " + res.status);
+            return res.json();
+        })
+        .then(data => {
+            var items = data.items || [];
+            var validFiles = [];
 
-                items.forEach(item => {
-                    var fullPath = item.name;
-                    var filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
-                    var lowerName = filename.toLowerCase();
+            items.forEach(item => {
+                var fullPath = item.name;
+                var filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
+                var lowerName = filename.toLowerCase();
 
-                    // Filter out cover images
-                    if (lowerName === "01.webp" || lowerName === "1.webp" || lowerName === "cover.webp") {
-                        return;
-                    }
-
-                    var ext = lowerName.substring(lowerName.lastIndexOf('.'));
-                    var isVideo = [".mp4", ".mov", ".webm", ".avi", ".mkv", ".3gp", ".ogg"].includes(ext);
-                    var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
-
-                    if (isVideo || isImage) {
-                        var gridEncName = fullPath.replace(zoomPath, gridPath).split('/').map(encodeURIComponent).join('%2F');
-                        var zoomEncName = fullPath.replace(gridPath, zoomPath).split('/').map(encodeURIComponent).join('%2F');
-
-                        var gridUrl = fbBase + gridEncName + "?alt=media";
-                        var zoomUrl = fbBase + zoomEncName + "?alt=media";
-                        var designName = filename.substring(0, filename.lastIndexOf('.'));
-
-                        validFiles.push({
-                            name: designName,
-                            gridUrl: gridUrl,
-                            url: zoomUrl,
-                            isVideo: isVideo,
-                            isImage: isImage
-                        });
-                    }
-                });
-
-                if (validFiles.length > 0) {
-                    var newJson = JSON.stringify(validFiles);
-                    if (renderedFilesJson !== newJson) {
-                        Promise.all(validFiles.map(file => {
-                            if (file.isVideo) return Promise.resolve();
-                            return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
-                                if (res.src) {
-                                    file.cachedUrl = res.src;
-                                    file.isZoom = res.isZoom;
-                                }
-                            }).catch(() => { });
-                        })).then(() => {
-                            if (renderedFilesJson !== newJson) {
-                                renderSwipeDeck(validFiles);
-                            }
-                        });
-                    }
-                } else {
-                    // Firebase Storage folder is empty: Clear fallback cards and show only the cover image
-                    var gridImgEl = document.getElementById("img_" + p.id);
-                    var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
-                    if (!coverSrc && p.gridUrl && p.gridUrl !== "None") {
-                        var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
-                        coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
-                    }
-                    deck.innerHTML = `
-                    <div class="swipe-card" data-design="DIRECT">
-                        <img src="${coverSrc || ''}" style="width: 100%; object-fit: cover;">
-                        <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                            <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
-                            <div class="qty-clean">
-                                <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
-                                <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
-                                <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
-                            </div>
-                        </div>
-                    </div>`;
-                    setTimeout(updateBottomQtyFromActiveDesign, 50);
-                    updateLiveDetailHeader();
+                // Filter out cover images
+                if (lowerName === "01.webp" || lowerName === "1.webp" || lowerName === "cover.webp") {
+                    return;
                 }
-            })
-            .catch(err => {
-                console.warn("Background folder list load failed", err);
+
+                var ext = lowerName.substring(lowerName.lastIndexOf('.'));
+                var isVideo = [".mp4", ".mov", ".webm", ".avi", ".mkv", ".3gp", ".ogg"].includes(ext);
+                var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
+
+                if (isVideo || isImage) {
+                    var gridEncName = fullPath.replace(zoomPath, gridPath).split('/').map(encodeURIComponent).join('%2F');
+                    var zoomEncName = fullPath.replace(gridPath, zoomPath).split('/').map(encodeURIComponent).join('%2F');
+
+                    var gridUrl = fbBase + gridEncName + "?alt=media";
+                    var zoomUrl = fbBase + zoomEncName + "?alt=media";
+                    var designName = filename.substring(0, filename.lastIndexOf('.'));
+
+                    validFiles.push({
+                        name: designName,
+                        gridUrl: gridUrl,
+                        url: zoomUrl,
+                        isVideo: isVideo,
+                        isImage: isImage
+                    });
+                }
             });
-    }
+
+            if (validFiles.length > 0) {
+                var newJson = JSON.stringify(validFiles);
+                if (renderedFilesJson !== newJson) {
+                    Promise.all(validFiles.map(file => {
+                        if (file.isVideo) return Promise.resolve();
+                        return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
+                            if (res.src) {
+                                  file.cachedUrl = res.src;
+                                  file.isZoom = res.isZoom;
+                            }
+                        }).catch(() => { });
+                    })).then(() => {
+                        if (renderedFilesJson !== newJson) {
+                            renderSwipeDeck(validFiles);
+                        }
+                    });
+                }
+            } else {
+                // Firebase Storage folder is empty: Clear fallback cards and show only the cover image
+                var gridImgEl = document.getElementById("img_" + p.id);
+                var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
+                if (!coverSrc && p.gridUrl && p.gridUrl !== "None") {
+                    var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
+                    coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+                }
+                deck.innerHTML = `
+                <div class="swipe-card" data-design="DIRECT">
+                    <img src="${coverSrc || ''}" style="width: 100%; object-fit: cover;">
+                    <div class="swipe-card-bot" onclick="event.stopPropagation()">
+                        <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
+                        <div class="qty-clean">
+                            <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
+                            <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
+                            <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
+                        </div>
+                    </div>
+                </div>`;
+                setTimeout(updateBottomQtyFromActiveDesign, 50);
+                updateLiveDetailHeader();
+            }
+        })
+        .catch(err => {
+            console.warn("Background folder list load failed", err);
+        });
 
     function renderSwipeDeck(files) {
         renderedFilesJson = JSON.stringify(files);
