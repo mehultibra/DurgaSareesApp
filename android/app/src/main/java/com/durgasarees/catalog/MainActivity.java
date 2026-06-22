@@ -9,6 +9,23 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private boolean webCanGoBack = false;
 
+    public void setWebCanGoBack(boolean canGoBack) {
+        this.webCanGoBack = canGoBack;
+    }
+
+    public static class WebAppInterface {
+        private MainActivity activity;
+
+        public WebAppInterface(MainActivity activity) {
+            this.activity = activity;
+        }
+
+        @JavascriptInterface
+        public void setCanGoBack(boolean canGoBack) {
+            activity.setWebCanGoBack(canGoBack);
+        }
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -18,12 +35,7 @@ public class MainActivity extends BridgeActivity {
             webView = bridge.getWebView();
         }
         if (webView != null) {
-            webView.addJavascriptInterface(new Object() {
-                @JavascriptInterface
-                public void setCanGoBack(boolean canGoBack) {
-                    webCanGoBack = canGoBack;
-                }
-            }, "AndroidBridge");
+            webView.addJavascriptInterface(new WebAppInterface(this), "AndroidBridge");
         }
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -44,5 +56,6 @@ public class MainActivity extends BridgeActivity {
         });
     }
 }
+
 
 
