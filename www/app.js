@@ -22,6 +22,21 @@ var searchingTransition = false;
 // Escapes text safely
 function esc(s) { return (!s) ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
+var coverExistsMap = {};
+try {
+    coverExistsMap = JSON.parse(localStorage.getItem("dsCoverExists")) || {};
+} catch (e) {
+    console.error("Error reading dsCoverExists", e);
+}
+
+function saveCoverExistsMap() {
+    try {
+        localStorage.setItem("dsCoverExists", JSON.stringify(coverExistsMap));
+    } catch (e) {
+        console.error("Error saving dsCoverExists", e);
+    }
+}
+
 window.addEventListener('DOMContentLoaded', function () {
     try {
         try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
@@ -275,7 +290,67 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
     var lowResUrl = fbBase + encGridPath + "%2F" + fileToFetch + "?alt=media";
 
+    function tryToLoadLatestReadyDesign() {
+        if (!window.allProducts) return showPlaceholder();
+        var p = window.allProducts.find(x => x.gridUrl === gridPath);
+        if (!p || !p.ready || p.ready.trim() === "") {
+            return showPlaceholder();
+        }
+
+        var rawDesigns = String(p.ready).split(',').map(d => d.trim()).filter(Boolean);
+        if (rawDesigns.length === 0) {
+            return showPlaceholder();
+        }
+
+        tryDesign(rawDesigns.length - 1);
+
+        function tryDesign(index) {
+            if (index < 0) {
+                return showPlaceholder();
+            }
+            var designName = rawDesigns[index];
+            var cleanNum = designName.replace(/\D/g, '');
+            var designFile = "";
+            if (cleanNum !== "") {
+                var numStr = cleanNum.length === 1 ? "0" + cleanNum : cleanNum;
+                designFile = numStr + ".webp";
+            } else {
+                designFile = designName + ".webp";
+            }
+
+            var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(designFile) + "?alt=media";
+            imgElement.src = designUrl;
+
+            imgElement.onerror = function () {
+                if (designFile.endsWith(".webp")) {
+                    var jpgFile = designFile.replace(".webp", ".jpg");
+                    imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(jpgFile) + "?alt=media";
+                    imgElement.onerror = function () {
+                        var pngFile = designFile.replace(".webp", ".png");
+                        imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(pngFile) + "?alt=media";
+                        imgElement.onerror = function () {
+                            tryDesign(index - 1);
+                        };
+                    };
+                } else {
+                    tryDesign(index - 1);
+                }
+            };
+        }
+    }
+
+    // Show standard placeholder when all fallback options fail
+    function showPlaceholder() {
+        imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
+        imgElement.onerror = null;
+    }
+
     if (fileToFetch === "01.webp") {
+        if (coverExistsMap[gridPath] === false) {
+            tryToLoadLatestReadyDesign();
+            return;
+        }
+
         getImageFromDB(gridPath).then(function (blob) {
             if (blob) {
                 var objectUrl = URL.createObjectURL(blob);
@@ -304,6 +379,8 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 imgElement.onerror = function () {
                     imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
                     imgElement.onerror = function () {
+                        coverExistsMap[gridPath] = false;
+                        saveCoverExistsMap();
                         tryToLoadLatestReadyDesign();
                     };
                     if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
@@ -313,60 +390,15 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
             }
         };
 
-        function tryToLoadLatestReadyDesign() {
-            if (!window.allProducts) return showPlaceholder();
-            var p = window.allProducts.find(x => x.gridUrl === gridPath);
-            if (!p || !p.ready || p.ready.trim() === "") {
-                return showPlaceholder();
-            }
-
-            var rawDesigns = String(p.ready).split(',').map(d => d.trim()).filter(Boolean);
-            if (rawDesigns.length === 0) {
-                return showPlaceholder();
-            }
-
-            tryDesign(rawDesigns.length - 1);
-
-            function tryDesign(index) {
-                if (index < 0) {
-                    return showPlaceholder();
+        // Cache the result if load is successful
+        imgElement.onload = function () {
+            if (fileToFetch === "01.webp" && (imgElement.src.includes("01.webp") || imgElement.src.includes("cover.webp") || imgElement.src.includes("1.webp"))) {
+                if (coverExistsMap[gridPath] !== true) {
+                    coverExistsMap[gridPath] = true;
+                    saveCoverExistsMap();
                 }
-                var designName = rawDesigns[index];
-                var cleanNum = designName.replace(/\D/g, '');
-                var designFile = "";
-                if (cleanNum !== "") {
-                    var numStr = cleanNum.length === 1 ? "0" + cleanNum : cleanNum;
-                    designFile = numStr + ".webp";
-                } else {
-                    designFile = designName + ".webp";
-                }
-
-                var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(designFile) + "?alt=media";
-                imgElement.src = designUrl;
-
-                imgElement.onerror = function () {
-                    if (designFile.endsWith(".webp")) {
-                        var jpgFile = designFile.replace(".webp", ".jpg");
-                        imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(jpgFile) + "?alt=media";
-                        imgElement.onerror = function () {
-                            var pngFile = designFile.replace(".webp", ".png");
-                            imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(pngFile) + "?alt=media";
-                            imgElement.onerror = function () {
-                                tryDesign(index - 1);
-                            };
-                        };
-                    } else {
-                        tryDesign(index - 1);
-                    }
-                };
             }
-        }
-
-        // Show standard placeholder when all fallback options fail
-        function showPlaceholder() {
-            imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
-            imgElement.onerror = null;
-        }
+        };
     }
 
     // 2. Background Load High-Res Zoom Image (if applicable)
@@ -695,6 +727,18 @@ function openDetail(productId, skipShow, keepSearchShown) {
         })
         .then(data => {
             var items = data.items || [];
+            
+            // Sync cover exists state from the actual directory items
+            var coverFound = false;
+            items.forEach(item => {
+                var filename = item.name.substring(item.name.lastIndexOf('/') + 1).toLowerCase();
+                if (filename === "01.webp" || filename === "1.webp" || filename === "cover.webp") {
+                    coverFound = true;
+                }
+            });
+            coverExistsMap[gridPath] = coverFound;
+            saveCoverExistsMap();
+            
             var validFiles = [];
 
             items.forEach(item => {
@@ -1524,6 +1568,10 @@ window.goToHome = function () {
 async function syncImages() {
     var bootScreen = document.getElementById('boot');
     var bootMsg = document.getElementById('bootMsg');
+
+    // Clear the coverExists cache on full manual sync to re-discover new covers
+    coverExistsMap = {};
+    try { localStorage.removeItem("dsCoverExists"); } catch (e) { }
 
     if (bootScreen) bootScreen.style.display = 'flex';
     if (bootMsg) bootMsg.innerText = "Fetching latest product list...";
