@@ -30,9 +30,13 @@
 
   <div id="appBody">
     <div class="hdr">
-      <img src="logo.png" id="appLogoImg"
-        onclick="goToHome()" style="cursor:pointer;">
-      <div class="hdr-icons">
+      <div style="flex:1; display:flex; align-items:center; overflow:hidden; margin-right:12px;">
+        <img src="logo.png" id="appLogoImg"
+          onclick="goToHome()" style="cursor:pointer;">
+        <input type="text" id="srchMainInput" placeholder="Search Saree Name or SKU..." onkeyup="doSearch(this.value); if(event.key === 'Enter') this.blur();" 
+          style="display:none; width: 100%; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background:#f5f5f6; font-size: 13px; outline: none;">
+      </div>
+      <div class="hdr-icons" style="display:flex; gap:12px; align-items:center; flex-shrink:0;">
         <i class="fas fa-search" onclick="toggleSearch()" style="cursor:pointer;"></i>
         <i class="far fa-heart" id="favTopIcon" onclick="toggleFavView()" style="cursor:pointer;"></i>
         <div style="position:relative; cursor:pointer;" onclick="openCart()">
@@ -43,11 +47,7 @@
       </div>
     </div>
 
-    <div class="search-container" id="searchContainerMain"
-      style="display:none; padding:10px; background:#f5f5f6; border-bottom:1px solid #ddd;">
-      <input type="text" placeholder="Search Saree Name or SKU..." onkeyup="doSearch(this.value)"
-        style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;">
-    </div>
+
 
     <div class="search-container" id="searchContainer">
       <input id="srch" type="search" placeholder="Search by name, fabric, or SKU..." oninput="applyFilter()"
@@ -165,7 +165,7 @@
         <h3 id="dtNameTop"
           style="margin:0; font-size:16px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">
           Product</h3>
-        <input type="text" id="dtSearchInput" placeholder="Search Designs..." onkeyup="doDetailSearch(this.value)" 
+        <input type="text" id="dtSearchInput" placeholder="Search Saree Name or SKU..." onkeyup="doSearch(this.value); if(event.key === 'Enter') closeDetail();" 
           style="display:none; width: 100%; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background:#f5f5f6; font-size: 13px; outline: none;">
       </div>
       <div class="hdr-icons" style="display:flex; gap:12px; align-items:center; flex-shrink:0;">
@@ -226,24 +226,25 @@
       <div style="display:flex; align-items:center; gap:12px;">
         <i class="fas fa-arrow-left" onclick="closeCart()"
           style="cursor:pointer; font-size:20px; color:var(--text-main);"></i>
-        <i class="fab fa-whatsapp" onclick="sendWhatsapp()" style="cursor:pointer; font-size:22px; color:var(--whatsapp);"></i>
         <img src="logo.png" style="height:32px; object-fit:contain;" alt="Logo">
-        <h3 style="margin:0; font-size:16px; font-weight:bold;">Your Cart (<span id="cartCountHeader">0</span>)</h3>
       </div>
-      <i class="fas fa-trash" onclick="clearCart()"
-        style="cursor:pointer; font-size:18px; color:var(--myntra-pink);"></i>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <h3 style="margin:0; font-size:16px; font-weight:bold;">Your Cart (<span id="cartCountHeader">0</span>)</h3>
+        <i class="fas fa-trash" onclick="clearCart()"
+          style="cursor:pointer; font-size:18px; color:var(--myntra-pink);"></i>
+      </div>
     </div>
 
     <div class="sl-body" id="cartBody" style="padding: 16px; padding-bottom: 100px; overflow-y: auto;"></div>
 
-    <div class="cart-total-bar">
+    <div class="cart-total-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: calc(55px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--border); background: #fff; flex-shrink: 0; width: 100%;">
       <div>
         <div style="font-size:12px; color:var(--text-light);">Total Quantity</div>
         <div style="font-size:18px; font-weight:bold; color:var(--text-main);" id="cartTotalQty">0 pcs</div>
       </div>
       <button onclick="sendWhatsapp()"
-        style="background:var(--whatsapp); color:#fff; border:none; padding:12px 24px; border-radius:30px; font-weight:bold; font-size:15px; cursor:pointer; display:flex; align-items:center; gap:8px;">
-        <i class="fab fa-whatsapp" style="font-size:20px;"></i> Send Order
+        style="background:var(--myntra-pink); color:#fff; border:none; padding:10px 24px; border-radius:30px; font-weight:bold; font-size:15px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+        <i class="fab fa-whatsapp" style="font-size:20px;"></i> Save Order
       </button>
     </div>
   </div>

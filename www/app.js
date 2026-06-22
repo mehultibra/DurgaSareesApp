@@ -706,14 +706,34 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
 function openDetail(productId, skipShow, keepSearchShown) {
     if (!skipShow) {
         cameFromDetail = false;
+        
+        // Always reset the product page's internal search UI when a new product is opened
+        var dtInput = document.getElementById('dtSearchInput');
+        var dtTitle = document.getElementById('dtNameTop');
+        if (dtInput) {
+            dtInput.style.display = 'none';
+            dtInput.value = '';
+        }
+        if (dtTitle) dtTitle.style.display = 'block';
+        
+        var gridWrapper = document.getElementById('gridWrapper');
+        if (gridWrapper && gridWrapper.parentNode !== document.getElementById('appBody')) {
+            document.getElementById('appBody').appendChild(gridWrapper);
+            gridWrapper.style.flex = "";
+            gridWrapper.style.overflowY = "";
+            gridWrapper.style.paddingBottom = "";
+        }
+        var detailPanel = document.getElementById('detailPanel');
+        var slBody = detailPanel ? detailPanel.querySelector('.sl-body') : null;
+        if (slBody) slBody.style.display = 'block';
+
         if (!keepSearchShown) {
-            var container = document.getElementById('searchContainerMain');
-            if (container) {
-                container.style.display = 'none';
-                var input = container.querySelector('input');
-                if (input) {
-                    input.value = '';
-                }
+            var input = document.getElementById('srchMainInput');
+            var logo = document.getElementById('appLogoImg');
+            if (input && input.style.display !== 'none') {
+                input.style.display = 'none';
+                input.value = '';
+                if (logo) logo.style.display = 'block';
             }
             var srch = document.getElementById('srch');
             if (srch) {
@@ -722,6 +742,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             applyFilter();
         }
     }
+    
     var p = allProducts.find(x => x.id === productId);
     if (!p) return;
     curProduct = p;
@@ -734,8 +755,15 @@ function openDetail(productId, skipShow, keepSearchShown) {
     if (deck) deck.innerHTML = '';
 
     if (!skipShow) {
-        document.getElementById('detailPanel').classList.add('open');
-        pushHistoryState('detail');
+        var detailPanel = document.getElementById('detailPanel');
+        var wasOpen = detailPanel && detailPanel.classList.contains('open');
+        if (detailPanel) detailPanel.classList.add('open');
+        
+        if (!wasOpen) {
+            pushHistoryState('detail');
+        } else {
+            // Already open, no need to push another identical state!
+        }
     }
 
     var gridPath = p.gridUrl;
@@ -1070,10 +1098,19 @@ function closeDetail() {
     var dtInput = document.getElementById('dtSearchInput');
     if (dtInput) {
         dtInput.style.display = 'none';
-        dtInput.value = '';
+        dtInput.value = ''; // Just clear the local input box visuals, don't clear global doSearch so they can see results
     }
     if (dtTitle) dtTitle.style.display = 'block';
-    if (typeof doDetailSearch === 'function') doDetailSearch('');
+    
+    var gridWrapper = document.getElementById('gridWrapper');
+    if (gridWrapper && gridWrapper.parentNode !== document.getElementById('appBody')) {
+        document.getElementById('appBody').appendChild(gridWrapper);
+        gridWrapper.style.flex = "";
+        gridWrapper.style.overflowY = "";
+        gridWrapper.style.paddingBottom = "";
+    }
+    var slBody = panel ? panel.querySelector('.sl-body') : null;
+    if (slBody) slBody.style.display = 'block';
     
     history.back(); // Standard browser back to trigger popstate
 }
@@ -1922,18 +1959,28 @@ window.doSearch = function (val) {
     if (srch) srch.value = val;
     applyFilter();
 
-    var trimmedVal = val.trim();
-    if (trimmedVal !== "") {
-        var detailPanel = document.getElementById('detailPanel');
-        if (detailPanel && detailPanel.classList.contains('open')) {
-            cameFromDetail = true;
-            searchingTransition = true;
-            closeDetail();
-        }
-    } else {
-        if (cameFromDetail && curProduct) {
-            openDetail(curProduct.id, false, true);
-            cameFromDetail = false;
+    var detailPanel = document.getElementById('detailPanel');
+    if (detailPanel && detailPanel.classList.contains('open')) {
+        var gridWrapper = document.getElementById('gridWrapper');
+        var slBody = detailPanel.querySelector('.sl-body');
+        var dtSearchInput = document.getElementById('dtSearchInput');
+        
+        if (dtSearchInput && dtSearchInput.style.display !== 'none' && val.trim() !== '') {
+            if (slBody) slBody.style.display = 'none';
+            if (gridWrapper.parentNode !== detailPanel) {
+                detailPanel.insertBefore(gridWrapper, document.getElementById('detailBottomRow'));
+                gridWrapper.style.flex = "1";
+                gridWrapper.style.overflowY = "auto";
+                gridWrapper.style.paddingBottom = "100px";
+            }
+        } else {
+            if (slBody) slBody.style.display = 'block';
+            if (gridWrapper.parentNode !== document.getElementById('appBody')) {
+                document.getElementById('appBody').appendChild(gridWrapper);
+                gridWrapper.style.flex = "";
+                gridWrapper.style.overflowY = "";
+                gridWrapper.style.paddingBottom = "";
+            }
         }
     }
 };
@@ -1995,19 +2042,18 @@ window.clearPriceFilters = function () {
 };
 
 window.toggleSearch = function () {
-    var container = document.getElementById('searchContainerMain');
-    if (container) {
-        if (container.style.display === 'none' || container.style.display === '') {
-            container.style.display = 'block';
-            var input = container.querySelector('input');
-            if (input) input.focus();
+    var logo = document.getElementById('appLogoImg');
+    var input = document.getElementById('srchMainInput');
+    if (input) {
+        if (input.style.display === 'none' || input.style.display === '') {
+            if (logo) logo.style.display = 'none';
+            input.style.display = 'block';
+            input.focus();
         } else {
-            container.style.display = 'none';
-            var input = container.querySelector('input');
-            if (input) {
-                input.value = '';
-                doSearch('');
-            }
+            input.style.display = 'none';
+            if (logo) logo.style.display = 'block';
+            input.value = '';
+            doSearch('');
         }
     }
 };
@@ -2023,27 +2069,8 @@ window.toggleDetailSearch = function () {
         input.style.display = 'none';
         title.style.display = 'block';
         input.value = '';
-        doDetailSearch('');
+        doSearch('');
     }
-};
-
-window.doDetailSearch = function(val) {
-    var searchStr = val.toLowerCase().trim();
-    var deck = document.getElementById('dtDesigns');
-    if (!deck) return;
-    
-    var cards = deck.querySelectorAll('.swipe-card');
-    cards.forEach(card => {
-        var nameEl = card.querySelector('.swipe-card-bot > div:first-child');
-        if (nameEl) {
-            var nameStr = nameEl.innerText.toLowerCase();
-            if (nameStr.includes(searchStr)) {
-                card.style.display = 'flex';
-            } else {
-                card.style.display = 'none';
-            }
-        }
-    });
 };
 
 window.toggleFavView = function () {
