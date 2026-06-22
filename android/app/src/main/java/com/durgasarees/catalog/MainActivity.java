@@ -4,10 +4,6 @@ import android.os.Bundle;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.Plugin;
-import com.getcapacitor.PluginCall;
-import com.getcapacitor.PluginMethod;
-import com.getcapacitor.annotation.CapacitorPlugin;
 
 public class MainActivity extends BridgeActivity {
     private static MainActivity instance;
@@ -19,19 +15,6 @@ public class MainActivity extends BridgeActivity {
 
     public void setWebCanGoBack(boolean canGoBack) {
         this.webCanGoBack = canGoBack;
-    }
-
-    @CapacitorPlugin(name = "AndroidBackBridge")
-    public static class AndroidBackBridgePlugin extends Plugin {
-        @PluginMethod
-        public void setCanGoBack(PluginCall call) {
-            boolean canGoBack = call.getBoolean("canGoBack", false);
-            MainActivity activity = MainActivity.getInstance();
-            if (activity != null) {
-                activity.setWebCanGoBack(canGoBack);
-            }
-            call.resolve();
-        }
     }
 
     @Override
@@ -58,6 +41,7 @@ public class MainActivity extends BridgeActivity {
         });
     }
 }
+
 
 
 
