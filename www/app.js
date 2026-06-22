@@ -1065,6 +1065,16 @@ function updateLiveDetailHeader() {
 function closeDetail() {
     var panel = document.getElementById('detailPanel');
     if (panel) panel.classList.remove('open');
+    
+    var dtTitle = document.getElementById('dtNameTop');
+    var dtInput = document.getElementById('dtSearchInput');
+    if (dtInput) {
+        dtInput.style.display = 'none';
+        dtInput.value = '';
+    }
+    if (dtTitle) dtTitle.style.display = 'block';
+    if (typeof doDetailSearch === 'function') doDetailSearch('');
+    
     history.back(); // Standard browser back to trigger popstate
 }
 
@@ -2013,8 +2023,27 @@ window.toggleDetailSearch = function () {
         input.style.display = 'none';
         title.style.display = 'block';
         input.value = '';
-        doSearch('');
+        doDetailSearch('');
     }
+};
+
+window.doDetailSearch = function(val) {
+    var searchStr = val.toLowerCase().trim();
+    var deck = document.getElementById('dtDesigns');
+    if (!deck) return;
+    
+    var cards = deck.querySelectorAll('.swipe-card');
+    cards.forEach(card => {
+        var nameEl = card.querySelector('.swipe-card-bot > div:first-child');
+        if (nameEl) {
+            var nameStr = nameEl.innerText.toLowerCase();
+            if (nameStr.includes(searchStr)) {
+                card.style.display = 'flex';
+            } else {
+                card.style.display = 'none';
+            }
+        }
+    });
 };
 
 window.toggleFavView = function () {
