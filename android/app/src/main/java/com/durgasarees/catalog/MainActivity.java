@@ -30,7 +30,12 @@ public class MainActivity extends BridgeActivity {
                 if (bridge != null) {
                     view = bridge.getWebView();
                 }
-                if (view != null && (webCanGoBack || view.canGoBack())) {
+                
+                if (webCanGoBack) {
+                    if (view != null) {
+                        view.post(() -> view.evaluateJavascript("window.history.back();", null));
+                    }
+                } else if (view != null && view.canGoBack()) {
                     view.goBack();
                 } else {
                     setEnabled(false);

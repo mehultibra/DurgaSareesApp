@@ -37,6 +37,21 @@ function saveCoverExistsMap() {
     }
 }
 
+var dsFallbackMap = {};
+try {
+    dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap")) || {};
+} catch (e) {
+    console.error("Error reading dsFallbackMap", e);
+}
+
+function saveFallbackMap() {
+    try {
+        localStorage.setItem("dsFallbackMap", JSON.stringify(dsFallbackMap));
+    } catch (e) {
+        console.error("Error saving dsFallbackMap", e);
+    }
+}
+
 window.addEventListener('DOMContentLoaded', function () {
     try {
         try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
@@ -283,12 +298,22 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
 
-    // File target (e.g., "01.webp", "cover.webp")
     var fileToFetch = targetFile ? targetFile : "01.webp";
 
-    var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
-    var lowResUrl = fbBase + encGridPath + "%2F" + fileToFetch + "?alt=media";
+    if (fileToFetch === "01.webp" && coverExistsMap[gridPath] === false) {
+        if (dsFallbackMap[gridPath]) {
+            fileToFetch = dsFallbackMap[gridPath];
+        }
+    }
+
+    var lowResUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
+
+    function showPlaceholder() {
+        imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
+        imgElement.onerror = null;
+    }
 
     function tryToLoadLatestReadyDesign() {
         if (!window.allProducts) return showPlaceholder();
@@ -319,54 +344,40 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
             }
 
             var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(designFile) + "?alt=media";
-            imgElement.src = designUrl;
-
-            imgElement.onerror = function () {
-                if (designFile.endsWith(".webp")) {
-                    var jpgFile = designFile.replace(".webp", ".jpg");
-                    imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(jpgFile) + "?alt=media";
-                    imgElement.onerror = function () {
-                        var pngFile = designFile.replace(".webp", ".png");
-                        imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(pngFile) + "?alt=media";
-                        imgElement.onerror = function () {
-                            tryDesign(index - 1);
-                        };
-                    };
+            
+            getImageFromDB(designUrl).then(function(blob) {
+                if (blob) {
+                    imgElement.src = URL.createObjectURL(blob);
+                    dsFallbackMap[gridPath] = designFile;
+                    saveFallbackMap();
                 } else {
-                    tryDesign(index - 1);
+                    imgElement.src = designUrl;
+                    imgElement.onload = function() {
+                        dsFallbackMap[gridPath] = designFile;
+                        saveFallbackMap();
+                    };
+                    imgElement.onerror = function () {
+                        if (designFile.endsWith(".webp")) {
+                            var jpgFile = designFile.replace(".webp", ".jpg");
+                            imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(jpgFile) + "?alt=media";
+                            imgElement.onload = function() { dsFallbackMap[gridPath] = jpgFile; saveFallbackMap(); };
+                            imgElement.onerror = function () {
+                                var pngFile = designFile.replace(".webp", ".png");
+                                imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(pngFile) + "?alt=media";
+                                imgElement.onload = function() { dsFallbackMap[gridPath] = pngFile; saveFallbackMap(); };
+                                imgElement.onerror = function () {
+                                    tryDesign(index - 1);
+                                };
+                            };
+                        } else {
+                            tryDesign(index - 1);
+                        }
+                    };
                 }
-            };
+            }).catch(function() {
+                imgElement.src = designUrl;
+            });
         }
-    }
-
-    // Show standard placeholder when all fallback options fail
-    function showPlaceholder() {
-        imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
-        imgElement.onerror = null;
-    }
-
-    if (fileToFetch === "01.webp") {
-        if (coverExistsMap[gridPath] === false) {
-            tryToLoadLatestReadyDesign();
-            return;
-        }
-
-        getImageFromDB(gridPath).then(function (blob) {
-            if (blob) {
-                var objectUrl = URL.createObjectURL(blob);
-                imgElement.src = objectUrl;
-
-                imgElement.onerror = function () {
-                    loadFromNetwork();
-                };
-            } else {
-                loadFromNetwork();
-            }
-        }).catch(function (err) {
-            loadFromNetwork();
-        });
-    } else {
-        loadFromNetwork();
     }
 
     function loadFromNetwork() {
@@ -385,8 +396,10 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                     };
                     if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
                 }
-            } else {
+            } else if (fileToFetch === targetFile && targetFile !== "01.webp") {
                 if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
+            } else {
+                tryToLoadLatestReadyDesign();
             }
         };
 
@@ -401,10 +414,30 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         };
     }
 
+    var cacheKey = (fileToFetch === "01.webp") ? gridPath : lowResUrl;
+
+    if (fileToFetch === "01.webp" || dsFallbackMap[gridPath]) {
+        getImageFromDB(cacheKey).then(function (blob) {
+            if (blob) {
+                var objectUrl = URL.createObjectURL(blob);
+                imgElement.src = objectUrl;
+                imgElement.onerror = function () {
+                    loadFromNetwork();
+                };
+            } else {
+                loadFromNetwork();
+            }
+        }).catch(function (err) {
+            loadFromNetwork();
+        });
+    } else {
+        loadFromNetwork();
+    }
+
     // 2. Background Load High-Res Zoom Image (if applicable)
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
         var encZoomPath = zoomPath.split('/').map(encodeURIComponent).join('%2F');
-        var highResUrl = fbBase + encZoomPath + "%2F" + fileToFetch + "?alt=media";
+        var highResUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
 
         var hdImage = new Image();
         hdImage.onload = function () {
