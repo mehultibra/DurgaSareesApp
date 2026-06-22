@@ -159,24 +159,26 @@
 
   <div class="slide" id="detailPanel">
     <div class="sl-hdr"
-      style="display:flex; justify-content:space-between; align-items:center; width:100%; padding:0 16px;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <i class="fas fa-arrow-left" onclick="closeDetail()" style="cursor:pointer; font-size:18px;"></i>
+      style="display:flex; justify-content:space-between; align-items:center; width:100%; padding:0 12px;">
+      <div style="display:flex; align-items:center; gap:12px; flex:1; min-width:0; margin-right:10px;">
+        <i class="fas fa-arrow-left" onclick="closeDetail()" style="cursor:pointer; font-size:18px; flex-shrink:0;"></i>
         <h3 id="dtNameTop"
-          style="margin:0; font-size:16px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40vw;">
+          style="margin:0; font-size:16px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">
           Product</h3>
+        <input type="text" id="dtSearchInput" placeholder="Search..." onkeyup="doSearch(this.value)" 
+          style="display:none; width: 100%; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background:#f5f5f6; font-size: 13px; outline: none;">
       </div>
-      <div class="hdr-icons" style="display:flex; gap:6px; align-items:center;">
-        <i class="fas fa-search" onclick="toggleSearch()" style="cursor:pointer;"></i>
+      <div class="hdr-icons" style="display:flex; gap:12px; align-items:center; flex-shrink:0;">
+        <i class="fas fa-search" onclick="toggleDetailSearch()" style="cursor:pointer; font-size:16px;"></i>
         <div style="position:relative; cursor:pointer;" onclick="openCart()">
-          <i class="fas fa-shopping-bag"></i>
+          <i class="fas fa-shopping-bag" style="font-size:16px;"></i>
           <div class="cart-badge-top" id="dtTotalQtyTop">0</div>
         </div>
         <!-- Shifted Cover Qty Selector (Top Row) -->
-        <div class="qty-clean" style="display:flex; align-items:center;">
-          <button id="dtQtyBotMinus">−</button>
-          <input type="number" id="dtQtyDirect" value="0" readonly style="font-size:13px; font-weight:bold; width:20px;">
-          <button id="dtQtyBotPlus">+</button>
+        <div class="qty-clean" style="display:flex; align-items:center; gap:0;">
+          <button id="dtQtyBotMinus" style="padding: 0 6px; font-size:18px;">−</button>
+          <input type="number" id="dtQtyDirect" value="0" readonly style="font-size:13px; font-weight:bold; width:22px; text-align:center;">
+          <button id="dtQtyBotPlus" style="padding: 0 6px; font-size:18px;">+</button>
         </div>
       </div>
     </div>
@@ -224,6 +226,7 @@
       <div style="display:flex; align-items:center; gap:12px;">
         <i class="fas fa-arrow-left" onclick="closeCart()"
           style="cursor:pointer; font-size:20px; color:var(--text-main);"></i>
+        <i class="fab fa-whatsapp" onclick="sendWhatsapp()" style="cursor:pointer; font-size:22px; color:var(--whatsapp);"></i>
         <h3 style="margin:0; font-size:16px; font-weight:bold;">Your Cart (<span id="cartCountHeader">0</span>)</h3>
       </div>
       <i class="fas fa-trash" onclick="clearCart()"
