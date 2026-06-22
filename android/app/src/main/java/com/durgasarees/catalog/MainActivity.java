@@ -1,42 +1,44 @@
 package com.durgasarees.catalog;
 
 import android.os.Bundle;
-import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
 
 public class MainActivity extends BridgeActivity {
+    private static MainActivity instance;
     private boolean webCanGoBack = false;
+
+    public static MainActivity getInstance() {
+        return instance;
+    }
 
     public void setWebCanGoBack(boolean canGoBack) {
         this.webCanGoBack = canGoBack;
     }
 
-    public static class WebAppInterface {
-        private MainActivity activity;
-
-        public WebAppInterface(MainActivity activity) {
-            this.activity = activity;
-        }
-
-        @JavascriptInterface
-        public void setCanGoBack(boolean canGoBack) {
-            activity.setWebCanGoBack(canGoBack);
+    @CapacitorPlugin(name = "AndroidBackBridge")
+    public static class AndroidBackBridgePlugin extends Plugin {
+        @PluginMethod
+        public void setCanGoBack(PluginCall call) {
+            boolean canGoBack = call.getBoolean("canGoBack", false);
+            MainActivity activity = MainActivity.getInstance();
+            if (activity != null) {
+                activity.setWebCanGoBack(canGoBack);
+            }
+            call.resolve();
         }
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        instance = this;
+        registerPlugin(AndroidBackBridgePlugin.class);
         super.onCreate(savedInstanceState);
-
-        WebView webView = null;
-        if (bridge != null) {
-            webView = bridge.getWebView();
-        }
-        if (webView != null) {
-            webView.addJavascriptInterface(new WebAppInterface(this), "AndroidBridge");
-        }
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -56,6 +58,7 @@ public class MainActivity extends BridgeActivity {
         });
     }
 }
+
 
 
 
