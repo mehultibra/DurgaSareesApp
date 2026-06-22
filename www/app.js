@@ -351,15 +351,15 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
             }
 
             var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(designFile) + "?alt=media";
-            
-            getImageFromDB(designUrl).then(function(blob) {
+
+            getImageFromDB(designUrl).then(function (blob) {
                 if (blob) {
                     imgElement.src = URL.createObjectURL(blob);
                     dsFallbackMap[gridPath] = designFile;
                     saveFallbackMap();
                 } else {
                     imgElement.src = designUrl;
-                    imgElement.onload = function() {
+                    imgElement.onload = function () {
                         dsFallbackMap[gridPath] = designFile;
                         saveFallbackMap();
                     };
@@ -367,11 +367,11 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                         if (designFile.endsWith(".webp")) {
                             var jpgFile = designFile.replace(".webp", ".jpg");
                             imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(jpgFile) + "?alt=media";
-                            imgElement.onload = function() { dsFallbackMap[gridPath] = jpgFile; saveFallbackMap(); };
+                            imgElement.onload = function () { dsFallbackMap[gridPath] = jpgFile; saveFallbackMap(); };
                             imgElement.onerror = function () {
                                 var pngFile = designFile.replace(".webp", ".png");
                                 imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(pngFile) + "?alt=media";
-                                imgElement.onload = function() { dsFallbackMap[gridPath] = pngFile; saveFallbackMap(); };
+                                imgElement.onload = function () { dsFallbackMap[gridPath] = pngFile; saveFallbackMap(); };
                                 imgElement.onerror = function () {
                                     tryDesign(index - 1);
                                 };
@@ -381,7 +381,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                         }
                     };
                 }
-            }).catch(function() {
+            }).catch(function () {
                 imgElement.src = designUrl;
             });
         }
@@ -706,7 +706,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
 function openDetail(productId, skipShow, keepSearchShown) {
     if (!skipShow) {
         cameFromDetail = false;
-        
+
         // Always reset the product page's internal search UI when a new product is opened
         var dtInput = document.getElementById('dtSearchInput');
         var dtTitle = document.getElementById('dtNameTop');
@@ -715,7 +715,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             dtInput.value = '';
         }
         if (dtTitle) dtTitle.style.display = 'block';
-        
+
         var gridWrapper = document.getElementById('gridWrapper');
         if (gridWrapper && gridWrapper.parentNode !== document.getElementById('appBody')) {
             document.getElementById('appBody').appendChild(gridWrapper);
@@ -742,7 +742,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             applyFilter();
         }
     }
-    
+
     var p = allProducts.find(x => x.id === productId);
     if (!p) return;
     curProduct = p;
@@ -758,7 +758,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         var detailPanel = document.getElementById('detailPanel');
         var wasOpen = detailPanel && detailPanel.classList.contains('open');
         if (detailPanel) detailPanel.classList.add('open');
-        
+
         if (!wasOpen) {
             pushHistoryState('detail');
         } else {
@@ -796,7 +796,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         });
         coverExistsMap[gridPath] = coverFound;
         saveCoverExistsMap();
-        
+
         var validFiles = [];
 
         items.forEach(item => {
@@ -847,8 +847,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     if (file.isVideo) return Promise.resolve();
                     return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
                         if (res.src) {
-                              file.cachedUrl = res.src;
-                              file.isZoom = res.isZoom;
+                            file.cachedUrl = res.src;
+                            file.isZoom = res.isZoom;
                         }
                     }).catch(() => { });
                 })).then(() => {
@@ -894,7 +894,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var items = data.items || [];
                 if (!window.dsFolderCache) window.dsFolderCache = {};
                 window.dsFolderCache[listUrl] = items;
-                try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch(e){}
+                try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
                 processFolderItems(items);
             })
             .catch(err => {
@@ -1093,7 +1093,7 @@ function updateLiveDetailHeader() {
 function closeDetail() {
     var panel = document.getElementById('detailPanel');
     if (panel) panel.classList.remove('open');
-    
+
     var dtTitle = document.getElementById('dtNameTop');
     var dtInput = document.getElementById('dtSearchInput');
     if (dtInput) {
@@ -1101,7 +1101,7 @@ function closeDetail() {
         dtInput.value = ''; // Just clear the local input box visuals, don't clear global doSearch so they can see results
     }
     if (dtTitle) dtTitle.style.display = 'block';
-    
+
     var gridWrapper = document.getElementById('gridWrapper');
     if (gridWrapper && gridWrapper.parentNode !== document.getElementById('appBody')) {
         document.getElementById('appBody').appendChild(gridWrapper);
@@ -1111,7 +1111,7 @@ function closeDetail() {
     }
     var slBody = panel ? panel.querySelector('.sl-body') : null;
     if (slBody) slBody.style.display = 'block';
-    
+
     history.back(); // Standard browser back to trigger popstate
 }
 
@@ -1525,7 +1525,7 @@ function sendWhatsapp() {
     }
     msg += "📦 *Total Quantity:* " + totalQty + " pcs\n";
 
-    var number = "919099887766"; // <<< REPLACE THIS WITH YOUR REAL WHATSAPP NUMBER
+    var number = "919998232380"; // <<< REPLACE THIS WITH YOUR REAL WHATSAPP NUMBER
     var encodedMsg = encodeURIComponent(msg);
 
     // 🧠 Detects if you are on a PC or a Mobile phone
@@ -1964,7 +1964,7 @@ window.doSearch = function (val) {
         var gridWrapper = document.getElementById('gridWrapper');
         var slBody = detailPanel.querySelector('.sl-body');
         var dtSearchInput = document.getElementById('dtSearchInput');
-        
+
         if (dtSearchInput && dtSearchInput.style.display !== 'none' && val.trim() !== '') {
             if (slBody) slBody.style.display = 'none';
             if (gridWrapper.parentNode !== detailPanel) {
@@ -2224,9 +2224,9 @@ function updateAndroidBackState() {
         var detailPanel = document.getElementById('detailPanel');
         var cartPanel = document.getElementById('cartPanel');
         var fsModal = document.getElementById('fsModal');
-        
+
         var hasOpenModal = false;
-        
+
         if (detailPanel && detailPanel.classList.contains('open')) {
             hasOpenModal = true;
         }
@@ -2242,7 +2242,7 @@ function updateAndroidBackState() {
                 hasOpenModal = true;
             }
         });
-        
+
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AndroidBackBridge) {
             window.Capacitor.Plugins.AndroidBackBridge.setCanGoBack({ canGoBack: hasOpenModal });
         }
