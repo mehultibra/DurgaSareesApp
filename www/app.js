@@ -1727,53 +1727,49 @@ window.openCartFs = function (productId, designId, cartImgSrc) {
         attempts++;
         var cards = Array.from(deck.querySelectorAll('.swipe-card'));
         
-        if (cards.length > 0) {
-            clearInterval(waitInterval);
-            var index = 0;
+        var foundIdx = -1;
+        var targetLabel = String(designId).trim().toLowerCase();
 
-            // Match by input ID (direct check)
-            var inputEl = document.getElementById('qty_' + actualProductId + '_' + designId);
-            if (inputEl) {
-                var cardEl = inputEl.closest('.swipe-card');
-                var foundIdx = cards.indexOf(cardEl);
-                if (foundIdx !== -1) {
-                    index = foundIdx;
+        // Match by input ID (direct check)
+        var inputEl = document.getElementById('qty_' + actualProductId + '_' + designId);
+        if (inputEl) {
+            var cardEl = inputEl.closest('.swipe-card');
+            foundIdx = cards.indexOf(cardEl);
+        } else {
+            // Fallback: match card text label or input ID suffix case-insensitively
+            for (var i = 0; i < cards.length; i++) {
+                var card = cards[i];
+
+                // 1. Check if input element ID ends with _designId
+                var inp = card.querySelector('input[type="number"]');
+                if (inp && (inp.id.toLowerCase().endsWith('_' + targetLabel) || inp.id.toLowerCase() === 'qty_' + actualProductId.toLowerCase() + '_' + targetLabel)) {
+                    foundIdx = i;
+                    break;
                 }
-            } else {
-                // Fallback: match card text label or input ID suffix case-insensitively
-                var targetLabel = String(designId).trim().toLowerCase();
-                for (var i = 0; i < cards.length; i++) {
-                    var card = cards[i];
 
-                    // 1. Check if input element ID ends with _designId (e.g. _D2 or _02)
-                    var inp = card.querySelector('input[type="number"]');
-                    if (inp && (inp.id.toLowerCase().endsWith('_' + targetLabel) || inp.id.toLowerCase() === 'qty_' + actualProductId.toLowerCase() + '_' + targetLabel)) {
-                        index = i;
-                        break;
-                    }
-
-                    // 2. Check if text label in swipe-card-bot matches
-                    var botDiv = card.querySelector('.swipe-card-bot');
-                    if (botDiv) {
-                        var firstChild = botDiv.firstElementChild;
-                        if (firstChild) {
-                            var cardLabel = firstChild.innerText.trim().toLowerCase();
-                            // Handle "Cover" vs "DIRECT"
-                            if ((cardLabel === 'cover' && targetLabel === 'direct') || cardLabel === targetLabel) {
-                                index = i;
-                                break;
-                            }
+                // 2. Check if text label in swipe-card-bot matches
+                var botDiv = card.querySelector('.swipe-card-bot');
+                if (botDiv) {
+                    var firstChild = botDiv.firstElementChild;
+                    if (firstChild) {
+                        var cardLabel = firstChild.innerText.trim().toLowerCase();
+                        if ((cardLabel === 'cover' && targetLabel === 'direct') || cardLabel === targetLabel) {
+                            foundIdx = i;
+                            break;
                         }
                     }
                 }
             }
+        }
 
-            // 3. Open full screen viewer
-            openFs(actualProductId, index, designId, cartImgSrc);
-
+        if (foundIdx !== -1) {
+            clearInterval(waitInterval);
+            // Open full screen viewer at exact design index
+            openFs(actualProductId, foundIdx, designId, cartImgSrc);
         } else if (attempts > 40) { // 2 seconds timeout (40 * 50ms)
             clearInterval(waitInterval);
-            console.warn("Timeout waiting for swipe deck to render in openCartFs");
+            console.warn("Timeout waiting for exact swipe deck card in openCartFs");
+            openFs(actualProductId, 0, designId, cartImgSrc);
         }
     }, 50);
 };
