@@ -324,22 +324,23 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     }
 
     function tryToLoadLatestReadyDesign() {
-        if (!window.allProducts) return showPlaceholder();
+        if (!window.allProducts) return tryFolderListFallback();
         var p = window.allProducts.find(x => x.gridUrl === gridPath);
-        if (!p || !p.ready || p.ready.trim() === "") {
-            return showPlaceholder();
-        }
 
-        var rawDesigns = String(p.ready).split(',').map(d => d.trim()).filter(Boolean);
-        if (rawDesigns.length === 0) {
-            return showPlaceholder();
-        }
+        var rawDesigns = (p && p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(Boolean) : [];
 
-        tryDesign(rawDesigns.length - 1);
+        if (rawDesigns.length > 0) {
+            tryDesign(rawDesigns.length - 1);
+        } else {
+            // No ready designs in Excel — discover files directly from Firebase
+            tryFolderListFallback();
+        }
 
         function tryDesign(index) {
             if (index < 0) {
-                return showPlaceholder();
+                // All ready designs failed — try discovering files from Firebase
+                tryFolderListFallback();
+                return;
             }
             var designName = rawDesigns[index];
             var cleanNum = designName.replace(/\D/g, '');
@@ -377,7 +378,45 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 imgElement.src = designUrl;
             });
         }
+
+        // 🔍 LAST RESORT: Call Firebase list API to discover actual filenames
+        function tryFolderListFallback() {
+            // Check if we already cached the fallback filename
+            if (dsFallbackMap[gridPath]) {
+                var cachedFile = dsFallbackMap[gridPath];
+                imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(cachedFile) + "?alt=media";
+                imgElement.onerror = function () { showPlaceholder(); };
+                return;
+            }
+
+            var listPrefix = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+            var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
+
+            fetch(listUrl)
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    var files = (data.items || [])
+                        .map(function (item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
+                        .filter(function (f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
+
+                    if (files.length > 0) {
+                        files.sort(function (a, b) {
+                            return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                        });
+                        var firstFile = files[0];
+                        dsFallbackMap[gridPath] = firstFile;
+                        saveFallbackMap();
+                        imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(firstFile) + "?alt=media";
+                        imgElement.onload = function () { coverExistsMap[gridPath] = true; saveCoverExistsMap(); };
+                        imgElement.onerror = function () { showPlaceholder(); };
+                    } else {
+                        showPlaceholder();
+                    }
+                })
+                .catch(function () { showPlaceholder(); });
+        }
     }
+
 
     function loadFromNetwork() {
         imgElement.src = lowResUrl;
@@ -1789,7 +1828,7 @@ async function syncImages() {
                     var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
                     // delimiter=/ ensures only DIRECT files in this folder are returned, not subfolder files
                     var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
-                    
+
                     var folderItems = [];
                     try {
                         var listRes = await fetch(listUrl);
@@ -1800,15 +1839,15 @@ async function syncImages() {
                                 return fname;
                             }).filter(fname => /\.(webp|jpg|jpeg|png)$/i.test(fname));
                         }
-                    } catch(e) {
+                    } catch (e) {
                         lastFailReason = "List API failed: " + e.message;
                     }
 
                     if (folderItems.length > 0) {
                         // Sort files numerically to find cover (lowest number = 01.webp or similar)
                         folderItems.sort((a, b) => {
-                            var na = parseInt(a.replace(/\D/g,'')) || 999;
-                            var nb = parseInt(b.replace(/\D/g,'')) || 999;
+                            var na = parseInt(a.replace(/\D/g, '')) || 999;
+                            var nb = parseInt(b.replace(/\D/g, '')) || 999;
                             return na - nb;
                         });
                         // Cover = first file (01.webp, or whatever the lowest numbered file is)
@@ -1824,7 +1863,7 @@ async function syncImages() {
                             } else {
                                 lastFailReason = "HTTP " + res.status + " on cover: " + coverUrl;
                             }
-                        } catch(e) {
+                        } catch (e) {
                             lastFailReason = "Cover fetch failed: " + e.message;
                         }
                     } else {
@@ -1877,7 +1916,7 @@ async function syncImages() {
                     for (var d = 0; d < validDesigns.length; d++) {
                         var dObj = validDesigns[d];
                         var designKey = fbBase + encGridPath + "%2F" + dObj.numStr + ".webp?alt=media";
-                        
+
                         // 🚀 FAST PATH: Check Cache FIRST!
                         var existingDesign = await getImageFromDB(designKey);
                         if (existingDesign) continue; // Skip network if already in DB!
