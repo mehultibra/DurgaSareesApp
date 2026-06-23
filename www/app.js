@@ -1774,38 +1774,81 @@ async function syncImages() {
         for (var i = 0; i < productsToDownload.length; i += batchSize) {
             var batch = productsToDownload.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
-                var encGridPath = p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                var urlsToTry = [
-                    fbBase + encGridPath + "%2F01.webp?alt=media",
-                    fbBase + encGridPath + "%2Fcover.webp?alt=media",
-                    fbBase + encGridPath + "%2F1.webp?alt=media"
-                ];
+                var cleanGrid = p.gridUrl.trim().replace(/\\\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
 
                 var downloaded = false;
                 var lastFailReason = "";
-                
-                // 🚀 FAST PATH: Check Cache FIRST!
+
+                // 🚀 FAST PATH: Check Cache FIRST - skip network entirely!
                 var existingCover = await getImageFromDB(p.gridUrl);
                 if (existingCover) {
                     downloaded = true;
                 } else {
-                    for (var u = 0; u < urlsToTry.length; u++) {
+                    // 🔍 SMART SYNC: Use Firebase list API to discover ACTUAL filenames in the folder
+                    var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
+                    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix;
+                    
+                    var folderItems = [];
+                    try {
+                        var listRes = await fetch(listUrl);
+                        if (listRes.ok) {
+                            var listData = await listRes.json();
+                            folderItems = (listData.items || []).map(item => {
+                                var fname = item.name.substring(item.name.lastIndexOf('/') + 1);
+                                return fname;
+                            }).filter(fname => /\.(webp|jpg|jpeg|png)$/i.test(fname));
+                        }
+                    } catch(e) {
+                        lastFailReason = "List API failed: " + e.message;
+                    }
+
+                    if (folderItems.length > 0) {
+                        // Sort files numerically to find cover (lowest number = 01.webp or similar)
+                        folderItems.sort((a, b) => {
+                            var na = parseInt(a.replace(/\D/g,'')) || 999;
+                            var nb = parseInt(b.replace(/\D/g,'')) || 999;
+                            return na - nb;
+                        });
+                        // Cover = first file (01.webp, or whatever the lowest numbered file is)
+                        var coverFile = folderItems[0];
+                        var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
+                        console.log("✅ Found cover for", p.name, ":", coverFile, "(from", folderItems.length, "files)");
                         try {
-                            const response = await fetch(urlsToTry[u]);
-                            if (response.ok) {
-                                const blob = await response.blob();
-                                var saved = await saveImageToDB(p.gridUrl, blob);
-                                if (saved) { downloaded = true; break; }
+                            var res = await fetch(coverUrl);
+                            if (res.ok) {
+                                var blob = await res.blob();
+                                await saveImageToDB(p.gridUrl, blob);
+                                downloaded = true;
                             } else {
-                                lastFailReason = "HTTP " + response.status + " on " + urlsToTry[u];
+                                lastFailReason = "HTTP " + res.status + " on cover: " + coverUrl;
                             }
-                        } catch (err) {
-                            lastFailReason = err.message + " on " + urlsToTry[u];
-                            console.warn("Attempt " + u + " failed for url: " + urlsToTry[u], err);
+                        } catch(e) {
+                            lastFailReason = "Cover fetch failed: " + e.message;
+                        }
+                    } else {
+                        // Fallback to legacy guessing if list API returns nothing
+                        var urlsToTry = [
+                            fbBase + encGridPath + "%2F01.webp?alt=media",
+                            fbBase + encGridPath + "%2Fcover.webp?alt=media",
+                            fbBase + encGridPath + "%2F1.webp?alt=media"
+                        ];
+                        for (var u = 0; u < urlsToTry.length; u++) {
+                            try {
+                                var res = await fetch(urlsToTry[u]);
+                                if (res.ok) {
+                                    var blob = await res.blob();
+                                    if (await saveImageToDB(p.gridUrl, blob)) { downloaded = true; break; }
+                                } else {
+                                    lastFailReason = "HTTP " + res.status + " on " + urlsToTry[u];
+                                }
+                            } catch (err) {
+                                lastFailReason = err.message;
+                            }
                         }
                     }
                 }
-                
+
                 if (!downloaded) {
                     failed++;
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
