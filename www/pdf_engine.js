@@ -175,20 +175,40 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
             }
         }
 
-        // Trigger the Android Native Share Sheet with multiple files!
-        try {
-            await navigator.share({
-                title: productName,
-                text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
-                files: filesArray
-            });
-        } catch (shareErr) {
-            console.error("Share API failed:", shareErr);
-            // Some browsers fail if both text and multiple files are provided, let's try just files as fallback
+        // 1. Ensure navigator.share actually exists (Requires HTTPS or localhost)
+        if (typeof navigator.share === 'function') {
             try {
-                await navigator.share({ files: filesArray });
-            } catch (fallbackErr) {
-                alert("Your device's browser blocks native multi-image sharing. Error: " + fallbackErr.message);
+                await navigator.share({
+                    title: productName,
+                    text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
+                    files: filesArray
+                });
+            } catch (shareErr) {
+                console.error("Share API failed:", shareErr);
+                try {
+                    await navigator.share({ files: filesArray });
+                } catch (fallbackErr) {
+                    alert("Your device's browser blocks native multi-image sharing. Error: " + fallbackErr.message);
+                }
+            }
+        } else {
+            // 2. Fallback: navigator.share is completely missing (HTTP environment or unsupported WebView)
+            console.warn("navigator.share is not a function. Falling back to multi-file download.");
+            alert("Native Share API is disabled (requires HTTPS or Native App). Downloading images to your device instead.");
+            
+            for (var j = 0; j < filesArray.length; j++) {
+                var fileObj = filesArray[j];
+                var objectUrl = URL.createObjectURL(fileObj);
+                var a = document.createElement('a');
+                a.href = objectUrl;
+                a.download = fileObj.name;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                // Small delay to prevent browser from blocking rapid multi-downloads
+                await new Promise(resolve => setTimeout(resolve, 300));
+                URL.revokeObjectURL(objectUrl);
             }
         }
     } catch (error) {
