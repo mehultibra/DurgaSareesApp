@@ -1357,13 +1357,13 @@ function setupFsGestures() {
     });
 }
 
-function openFs(arg1, arg2, arg3) {
-    var pId, index, dId;
+function openFs(arg1, arg2, arg3, arg4) {
+    var pId, index, dId, cartImgSrc;
     if (arguments.length === 1 && typeof arg1 === 'number') {
         if (!curProduct) return;
         pId = curProduct.id; index = arg1;
     } else {
-        pId = arg1; index = arg2; dId = arg3;
+        pId = arg1; index = arg2; dId = arg3; cartImgSrc = arg4;
     }
 
     var deck = document.getElementById('dtDesigns');
@@ -1436,7 +1436,13 @@ function openFs(arg1, arg2, arg3) {
             fsScale = 1;
             fsTranslateX = 0;
             fsTranslateY = 0;
-            fsImg.src = imgEl ? imgEl.src : '';
+            
+            var chosenSrc = imgEl ? imgEl.src : '';
+            // If the swipe card is still showing the missing SVG placeholder, use the cart image
+            if (chosenSrc.includes("data:image/svg+xml") && cartImgSrc) {
+                chosenSrc = cartImgSrc;
+            }
+            fsImg.src = chosenSrc;
         }
     }
 
@@ -1506,7 +1512,7 @@ function openCart() {
                 var dLabel = safeDesignLabel === 'DIRECT' ? 'Cover' : safeDesignLabel;
                 var imgId = "cart_img_" + g.p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
 
-                cHtml.push('<div style="width: 80px; text-align: center;">');
+                cHtml.push('<div style="width: 80px; text-align: center;" onclick="openCartFs(\'' + g.p.id + '\', \'' + safeDesignLabel + '\', document.getElementById(\'' + imgId + '\').src)">');
                 cHtml.push('<img id="' + imgId + '" src="https://placehold.co/300x300/f0f0f0/a0a0a0?text=..." style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); cursor: pointer;">');
                 cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + dLabel + '</div>');
                 cHtml.push('<div style="font-size: 12px; font-weight: bold; color: var(--myntra-pink);">' + (item.qty || 0) + ' pcs</div>');
@@ -1706,57 +1712,70 @@ async function triggerShare(action) {
 }
 
 window.openCartFs = function (productId, designId, cartImgSrc) {
-    // 1. Initialize detail view silently (renders the swipe deck in DOM)
+    // 1. Initialize detail view silently (renders the swipe deck in DOM asynchronously)
     openDetail(productId, true);
 
     // Resolve current product ID to support cart items with stale IDs
     var actualProductId = curProduct ? curProduct.id : productId;
 
-    var index = 0;
+    // 2. Wait for swipe cards to render
     var deck = document.getElementById('dtDesigns');
-    if (deck) {
+    if (!deck) return;
+
+    var attempts = 0;
+    var waitInterval = setInterval(function () {
+        attempts++;
         var cards = Array.from(deck.querySelectorAll('.swipe-card'));
+        
+        if (cards.length > 0) {
+            clearInterval(waitInterval);
+            var index = 0;
 
-        // Match by input ID (direct check)
-        var inputEl = document.getElementById('qty_' + actualProductId + '_' + designId);
-        if (inputEl) {
-            var cardEl = inputEl.closest('.swipe-card');
-            var foundIdx = cards.indexOf(cardEl);
-            if (foundIdx !== -1) {
-                index = foundIdx;
-            }
-        } else {
-            // Fallback: match card text label or input ID suffix case-insensitively
-            var targetLabel = String(designId).trim().toLowerCase();
-            for (var i = 0; i < cards.length; i++) {
-                var card = cards[i];
-
-                // 1. Check if input element ID ends with _designId (e.g. _D2 or _02)
-                var inp = card.querySelector('input[type="number"]');
-                if (inp && (inp.id.toLowerCase().endsWith('_' + targetLabel) || inp.id.toLowerCase() === 'qty_' + actualProductId.toLowerCase() + '_' + targetLabel)) {
-                    index = i;
-                    break;
+            // Match by input ID (direct check)
+            var inputEl = document.getElementById('qty_' + actualProductId + '_' + designId);
+            if (inputEl) {
+                var cardEl = inputEl.closest('.swipe-card');
+                var foundIdx = cards.indexOf(cardEl);
+                if (foundIdx !== -1) {
+                    index = foundIdx;
                 }
+            } else {
+                // Fallback: match card text label or input ID suffix case-insensitively
+                var targetLabel = String(designId).trim().toLowerCase();
+                for (var i = 0; i < cards.length; i++) {
+                    var card = cards[i];
 
-                // 2. Check if text label in swipe-card-bot matches
-                var botDiv = card.querySelector('.swipe-card-bot');
-                if (botDiv) {
-                    var firstChild = botDiv.firstElementChild;
-                    if (firstChild) {
-                        var cardLabel = firstChild.innerText.trim().toLowerCase();
-                        // Handle "Cover" vs "DIRECT"
-                        if ((cardLabel === 'cover' && targetLabel === 'direct') || cardLabel === targetLabel) {
-                            index = i;
-                            break;
+                    // 1. Check if input element ID ends with _designId (e.g. _D2 or _02)
+                    var inp = card.querySelector('input[type="number"]');
+                    if (inp && (inp.id.toLowerCase().endsWith('_' + targetLabel) || inp.id.toLowerCase() === 'qty_' + actualProductId.toLowerCase() + '_' + targetLabel)) {
+                        index = i;
+                        break;
+                    }
+
+                    // 2. Check if text label in swipe-card-bot matches
+                    var botDiv = card.querySelector('.swipe-card-bot');
+                    if (botDiv) {
+                        var firstChild = botDiv.firstElementChild;
+                        if (firstChild) {
+                            var cardLabel = firstChild.innerText.trim().toLowerCase();
+                            // Handle "Cover" vs "DIRECT"
+                            if ((cardLabel === 'cover' && targetLabel === 'direct') || cardLabel === targetLabel) {
+                                index = i;
+                                break;
+                            }
                         }
                     }
                 }
             }
-        }
-    }
 
-    // 3. Open full screen viewer
-    openFs(actualProductId, index, designId, cartImgSrc);
+            // 3. Open full screen viewer
+            openFs(actualProductId, index, designId, cartImgSrc);
+
+        } else if (attempts > 40) { // 2 seconds timeout (40 * 50ms)
+            clearInterval(waitInterval);
+            console.warn("Timeout waiting for swipe deck to render in openCartFs");
+        }
+    }, 50);
 };
 
 // ====================================
