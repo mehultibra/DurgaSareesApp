@@ -1652,12 +1652,12 @@ function getExactFirebaseUrl(folderPath, dId) {
 }
 
 // ====================================
-// 📦 2. MODAL & SHARE LOGIC (STRICT ZOOM FETCH)
+// 📦 2. MODAL & SHARE LOGIC (MULTI-IMAGE UPGRADE)
 // ====================================
 async function triggerShare(action) {
     closeModals();
 
-    if (action === 'copy' || action === 'link') {
+    if (action === 'copy') {
         alert("Web links are coming in the next update!");
         return;
     }
@@ -1667,35 +1667,22 @@ async function triggerShare(action) {
         return;
     }
 
-    // 1️⃣ Ask the user which PDF format they want
-    var pdfType = 'full';
-    if (confirm("Create FULL Catalog with all designs?\n\nClick 'Cancel' to create an ORDER PDF (Cover Image Only).")) {
-        pdfType = 'full';
-    } else {
-        pdfType = 'cover';
-    }
-
-    // 2️⃣ Collect only valid designs and FORCE them to use the Zoom Folder
+    // 1️⃣ Collect all valid High-Res images from the Swipe Deck
     var deck = document.getElementById('dtDesigns');
     var highResUrls = [];
-
+    
     if (deck) {
         var cards = deck.querySelectorAll('.swipe-card');
         cards.forEach(card => {
-            // Ignore cards that threw a 404 error and hid themselves
             if (card.style.display !== 'none') {
                 var dNameEl = card.querySelector('.swipe-card-bot div');
                 if (dNameEl) {
-                    var dName = dNameEl.innerText; // e.g. "Cover" or "D2"
+                    var dName = dNameEl.innerText; 
                     var dId = dName === 'Cover' ? 'DIRECT' : dName;
-
-                    // If they only want the cover, skip D2-D15
-                    if (pdfType === 'cover' && dId !== 'DIRECT') return;
-
-                    // 🛡️ STRICT RULE: ALWAYS use zoomUrl, NEVER gridUrl!
+                    
                     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
                     var exactHighResUrl = getExactFirebaseUrl(folderPath, dId);
-
+                    
                     highResUrls.push(exactHighResUrl);
                 }
             }
@@ -1707,11 +1694,30 @@ async function triggerShare(action) {
         return;
     }
 
-    // 3️⃣ Call the CPU PDF Engine with High-Res Links
-    if (typeof generateNativePDF === 'function') {
-        await generateNativePDF(curProduct.name, curProduct.price, highResUrls, action);
-    } else {
-        alert("PDF Engine is not loaded!");
+    // 2️⃣ ROUTE: Multi-Image NATIVE Share
+    if (action === 'images') {
+        if (typeof shareNativeImages === 'function') {
+            // Sends ALL collected images to the WhatsApp Carousel
+            await shareNativeImages(curProduct.name, curProduct.price, highResUrls);
+        } else {
+            alert("Image Engine not loaded!");
+        }
+    } 
+    // 3️⃣ ROUTE: PDF Generation
+    else {
+        var pdfType = 'full';
+        if (confirm("Create FULL Catalog with all designs?\n\nClick 'Cancel' to create an ORDER PDF (Cover Image Only).")) {
+            pdfType = 'full';
+        } else {
+            pdfType = 'cover';
+            highResUrls = [highResUrls[0]]; // Slices the array instantly to just the cover!
+        }
+
+        if (typeof generateNativePDF === 'function') {
+            await generateNativePDF(curProduct.name, curProduct.price, highResUrls, action);
+        } else {
+            alert("PDF Engine is not loaded!");
+        }
     }
 }
 

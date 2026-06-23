@@ -139,3 +139,55 @@ async function generateNativePDF(productName, productPrice, imageUrlsArray, acti
 
     if (bootScreen) bootScreen.style.display = 'none';
 }
+// ==========================================
+// ?? MULTI-IMAGE NATIVE SHARE ENGINE
+// ==========================================
+
+// Converts Base64 RAM data into native Android File Objects
+function base64ToFile(base64Data, filename) {
+    var arr = base64Data.split(',');
+    var mime = arr[0].match(/:(.*?);/)[1];
+    var bstr = atob(arr[1]);
+    var n = bstr.length;
+    var u8arr = new Uint8Array(n);
+    while(n--) { u8arr[n] = bstr.charCodeAt(n); }
+    return new File([u8arr], filename, {type: mime});
+}
+
+// ?? MASTER FUNCTION: Shares multiple images directly to WhatsApp
+async function shareNativeImages(productName, productPrice, imageUrlsArray) {
+    var bootScreen = document.getElementById('boot');
+    if (bootScreen) {
+        bootScreen.style.display = 'flex';
+        document.getElementById('bootMsg').innerText = "Preparing Images...";
+    }
+
+    try {
+        var filesArray = [];
+        
+        // Loop through all images, fetch them, compress them, and turn them into Files
+        for (var i = 0; i < imageUrlsArray.length; i++) {
+            // Uses your existing lightning-fast memory fetcher/compressor
+            var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
+            if (base64Img) {
+                var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
+                filesArray.push(base64ToFile(base64Img, fileName));
+            }
+        }
+
+        // Trigger the Android Native Share Sheet with multiple files!
+        if (navigator.canShare && navigator.canShare({ files: filesArray })) {
+            await navigator.share({
+                title: productName,
+                text: "??? *" + productName + "*\n?? Wholesale Rate: ?" + productPrice,
+                files: filesArray
+            });
+        } else {
+            alert("Your device does not support native multi-image sharing. Use the PDF option instead.");
+        }
+    } catch (error) {
+        alert("Image Sharing Error: " + error.message);
+    }
+
+    if (bootScreen) bootScreen.style.display = 'none';
+}
