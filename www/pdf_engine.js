@@ -176,14 +176,20 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
         }
 
         // Trigger the Android Native Share Sheet with multiple files!
-        if (navigator.canShare && navigator.canShare({ files: filesArray })) {
+        try {
             await navigator.share({
                 title: productName,
-                text: "??? *" + productName + "*\n?? Wholesale Rate: ?" + productPrice,
+                text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
                 files: filesArray
             });
-        } else {
-            alert("Your device does not support native multi-image sharing. Use the PDF option instead.");
+        } catch (shareErr) {
+            console.error("Share API failed:", shareErr);
+            // Some browsers fail if both text and multiple files are provided, let's try just files as fallback
+            try {
+                await navigator.share({ files: filesArray });
+            } catch (fallbackErr) {
+                alert("Your device's browser blocks native multi-image sharing. Error: " + fallbackErr.message);
+            }
         }
     } catch (error) {
         alert("Image Sharing Error: " + error.message);
