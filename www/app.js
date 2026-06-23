@@ -779,8 +779,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
     var prefix = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-    // IMPORTANT: Do NOT double-encode the prefix - slashes stay as '/', spaces already encoded as %20
-    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix;
+    // IMPORTANT: delimiter=/ means only DIRECT children are returned, not recursive subfolders
+    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix + "&delimiter=/";
 
     var renderedFilesJson = "";
 
@@ -1787,7 +1787,8 @@ async function syncImages() {
                 } else {
                     // 🔍 SMART SYNC: Use Firebase list API to discover ACTUAL filenames in the folder
                     var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
-                    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix;
+                    // delimiter=/ ensures only DIRECT files in this folder are returned, not subfolder files
+                    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
                     
                     var folderItems = [];
                     try {
