@@ -54,7 +54,15 @@ function saveFallbackMap() {
 
 window.dsFolderCache = {};
 try {
-    window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {};
+    var _cacheVer = localStorage.getItem("dsFolderCacheVer");
+    if (_cacheVer === "v2") {
+        window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {};
+    } else {
+        // Clear old cache - URL format changed (now uses Grid path + delimiter=/)
+        localStorage.removeItem("dsFolderCache");
+        localStorage.setItem("dsFolderCacheVer", "v2");
+        console.log("Cleared stale folder cache (format upgrade to v2)");
+    }
 } catch (e) {
     console.error("Error reading dsFolderCache", e);
 }
@@ -817,8 +825,9 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var prefix = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-    // IMPORTANT: delimiter=/ means only DIRECT children are returned, not recursive subfolders
+    // List files from Grid path (always has source images), then build Zoom URLs from filenames
+    var prefix = cleanGridPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+    // delimiter=/ means only DIRECT children are returned, not recursive subfolders
     var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix + "&delimiter=/";
 
     var renderedFilesJson = "";
@@ -842,7 +851,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         var validFiles = [];
 
         items.forEach(item => {
-            var fullPath = item.name;
+            var fullPath = item.name; // item.name is from Grid bucket
             var filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
             var lowerName = filename.toLowerCase();
 
@@ -853,11 +862,14 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
             var ext = lowerName.substring(lowerName.lastIndexOf('.'));
             var isVideo = [".mp4", ".mov", ".webm", ".avi", ".mkv", ".3gp", ".ogg"].includes(ext);
-            var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
+            var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif"].includes(ext);
 
             if (isVideo || isImage) {
-                var gridEncName = fullPath.replace(cleanZoomPath, cleanGridPath).split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                var zoomEncName = fullPath.replace(cleanGridPath, cleanZoomPath).split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                // Grid path: item.name already IS the Grid path
+                var gridEncName = fullPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                // Zoom path: replace Grid folder prefix with Zoom folder prefix
+                var zoomFullPath = fullPath.replace(cleanGridPath, cleanZoomPath);
+                var zoomEncName = zoomFullPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
 
                 var gridUrl = fbBase + gridEncName + "?alt=media";
                 var zoomUrl = fbBase + zoomEncName + "?alt=media";
