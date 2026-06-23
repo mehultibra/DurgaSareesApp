@@ -778,8 +778,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var prefix = encodeURIComponent(cleanZoomPath + "/");
-    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix;
+    var prefix = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + encodeURIComponent(prefix);
 
     var renderedFilesJson = "";
 
@@ -983,7 +983,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var cleanNum = d.replace(/\D/g, '');
             if (d.length <= 10 && cleanNum !== "") {
                 var numVal = parseInt(cleanNum);
-                if (numVal >= 2 && numVal <= 99) {
+                if (numVal >= 1 && numVal <= 99) {
                     validDesigns.push({
                         name: d,
                         numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum,
@@ -1026,12 +1026,12 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var fallbackGridUrl = "";
             var fallbackZoomUrl = "";
             if (p.gridUrl && p.gridUrl !== "None") {
-                var encGridPath = cleanGridPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+                var encGridPath = cleanGridPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
                 fallbackGridUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
                 if (!coverSrc) coverSrc = fallbackGridUrl;
             }
             if (p.zoomUrl && p.zoomUrl !== "None") {
-                var encZoomPath = cleanZoomPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+                var encZoomPath = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
                 fallbackZoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomPath + "%2F01.webp?alt=media";
             } else {
                 fallbackZoomUrl = fallbackGridUrl;
@@ -1815,7 +1815,7 @@ async function syncImages() {
                         var cleanNum = d.replace(/\D/g, '');
                         if (d.length <= 10 && cleanNum !== "") {
                             var numVal = parseInt(cleanNum);
-                            if (numVal >= 2 && numVal <= 99) {
+                            if (numVal >= 1 && numVal <= 99) {
                                 validDesigns.push({
                                     name: d,
                                     numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum,
