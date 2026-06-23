@@ -1908,52 +1908,59 @@ async function syncImages() {
                 }
 
                 // Download ready design grid images
+                var designFilesToDownload = [];
+
                 if (p.ready && p.ready.trim() !== "") {
+                    // Download specific designs listed in Excel
                     var rawDesigns = String(p.ready).split(',').map(d => d.trim()).filter(Boolean);
-                    var validDesigns = [];
                     rawDesigns.forEach(d => {
                         var cleanNum = d.replace(/\D/g, '');
                         if (d.length <= 10 && cleanNum !== "") {
                             var numVal = parseInt(cleanNum);
                             if (numVal >= 1 && numVal <= 99) {
-                                validDesigns.push({
-                                    name: d,
-                                    numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum,
-                                    cleanNum: cleanNum
-                                });
+                                var numStr = cleanNum.length === 1 ? "0" + cleanNum : cleanNum;
+                                designFilesToDownload.push({ name: numStr + ".webp", altName: cleanNum + ".webp" });
                             }
+                        } else {
+                            designFilesToDownload.push({ name: d + ".webp" });
                         }
                     });
+                } else if (folderItems && folderItems.length > 0) {
+                    // No specific designs in Excel — download ALL discovered files in the folder!
+                    folderItems.forEach(file => {
+                        // Skip the cover file since it was already downloaded
+                        if (file === coverFile) return;
+                        designFilesToDownload.push({ name: file });
+                    });
+                }
 
-                    for (var d = 0; d < validDesigns.length; d++) {
-                        var dObj = validDesigns[d];
-                        var designKey = fbBase + encGridPath + "%2F" + dObj.numStr + ".webp?alt=media";
+                for (var d = 0; d < designFilesToDownload.length; d++) {
+                    var dObj = designFilesToDownload[d];
+                    var designKey = fbBase + encGridPath + "%2F" + encodeURIComponent(dObj.name) + "?alt=media";
 
-                        // 🚀 FAST PATH: Check Cache FIRST!
-                        var existingDesign = await getImageFromDB(designKey);
-                        if (existingDesign) continue; // Skip network if already in DB!
+                    // 🚀 FAST PATH: Check Cache FIRST!
+                    var existingDesign = await getImageFromDB(designKey);
+                    if (existingDesign) continue; // Skip network if already in DB!
 
-                        var designUrlsToTry = [
-                            designKey,
-                            fbBase + encGridPath + "%2F" + dObj.cleanNum + ".webp?alt=media"
-                        ];
+                    var designUrlsToTry = [designKey];
+                    if (dObj.altName) {
+                        designUrlsToTry.push(fbBase + encGridPath + "%2F" + encodeURIComponent(dObj.altName) + "?alt=media");
+                    }
 
-                        for (var u = 0; u < designUrlsToTry.length; u++) {
-                            try {
-                                const response = await fetch(designUrlsToTry[u]);
-                                if (response.ok) {
-                                    const blob = await response.blob();
-                                    var saved = await saveImageToDB(designKey, blob);
-                                    if (saved) {
-                                        break;
-                                    }
-                                }
-                            } catch (err) {
-                                console.warn("Attempt " + u + " failed for design url: " + designUrlsToTry[u], err);
+                    for (var u = 0; u < designUrlsToTry.length; u++) {
+                        try {
+                            const response = await fetch(designUrlsToTry[u]);
+                            if (response.ok) {
+                                const blob = await response.blob();
+                                var saved = await saveImageToDB(designKey, blob);
+                                if (saved) break;
                             }
+                        } catch (err) {
+                            console.warn("Attempt " + u + " failed for design url: " + designUrlsToTry[u], err);
                         }
                     }
                 }
+
 
                 count++;
             }));
