@@ -2294,12 +2294,12 @@ window.applyFilter = function () {
         }
 
         // 2. Category
-        if (activeCategories.length > 0) {
+        if (query === "" && activeCategories.length > 0) {
             if (!activeCategories.includes(p.cat)) return false;
         }
 
         // 3. Price
-        if (activePriceFilters.length > 0) {
+        if (query === "" && activePriceFilters.length > 0) {
             var matchPrice = false;
             activePriceFilters.forEach(f => {
                 var parts = f.split('-');
@@ -2313,7 +2313,7 @@ window.applyFilter = function () {
         }
 
         // 4. Favorites
-        if (showOnlyFavs) {
+        if (query === "" && showOnlyFavs) {
             if (!favorites[p.id]) return false;
         }
 
