@@ -305,7 +305,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
+    var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
 
     var fileToFetch = targetFile ? targetFile : "01.webp";
 
@@ -440,7 +440,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     // 2. Background Load High-Res Zoom Image (if applicable)
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
-        var encZoomPath = zoomPath.split('/').map(encodeURIComponent).join('%2F');
+        var encZoomPath = zoomPath.trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
         var highResUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
 
         var hdImage = new Image();
@@ -769,14 +769,17 @@ function openDetail(productId, skipShow, keepSearchShown) {
     var gridPath = p.gridUrl;
     var zoomPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
 
-    if (!gridPath || gridPath === "" || gridPath === "None") {
+    var cleanGridPath = gridPath ? String(gridPath).trim().replace(/\\/g, '/') : "";
+    var cleanZoomPath = zoomPath ? String(zoomPath).trim().replace(/\\/g, '/') : cleanGridPath;
+
+    if (!cleanGridPath || cleanGridPath === "" || cleanGridPath.toLowerCase() === "none") {
         deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="https://placehold.co/600x800/f0f0f0/a0a0a0?text=No+Image"></div>';
         return;
     }
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var prefix = encodeURIComponent(zoomPath + "/");
+    var prefix = encodeURIComponent(cleanZoomPath + "/");
     var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix;
 
     var renderedFilesJson = "";
@@ -790,7 +793,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         var coverFound = false;
         items.forEach(item => {
             var filename = item.name.substring(item.name.lastIndexOf('/') + 1).toLowerCase();
-            if (filename === "01.webp" || filename === "1.webp" || filename === "cover.webp") {
+            if (/^(01|1|cover)\.(webp|jpg|jpeg|png)$/i.test(filename)) {
                 coverFound = true;
             }
         });
@@ -805,7 +808,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var lowerName = filename.toLowerCase();
 
             // Filter out cover images
-            if (lowerName === "01.webp" || lowerName === "1.webp" || lowerName === "cover.webp") {
+            if (/^(01|1|cover)\.(webp|jpg|jpeg|png)$/i.test(lowerName)) {
                 return;
             }
 
@@ -814,8 +817,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
 
             if (isVideo || isImage) {
-                var gridEncName = fullPath.replace(zoomPath, gridPath).split('/').map(encodeURIComponent).join('%2F');
-                var zoomEncName = fullPath.replace(gridPath, zoomPath).split('/').map(encodeURIComponent).join('%2F');
+                var gridEncName = fullPath.replace(cleanZoomPath, cleanGridPath).split('/').map(encodeURIComponent).join('%2F');
+                var zoomEncName = fullPath.replace(cleanGridPath, cleanZoomPath).split('/').map(encodeURIComponent).join('%2F');
 
                 var gridUrl = fbBase + gridEncName + "?alt=media";
                 var zoomUrl = fbBase + zoomEncName + "?alt=media";
@@ -861,13 +864,22 @@ function openDetail(productId, skipShow, keepSearchShown) {
             // Firebase Storage folder is empty: Clear fallback cards and show only the cover image
             var gridImgEl = document.getElementById("img_" + p.id);
             var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
-            if (!coverSrc && p.gridUrl && p.gridUrl !== "None") {
-                var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
-                coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+            var fallbackGridUrl = "";
+            var fallbackZoomUrl = "";
+            if (p.gridUrl && p.gridUrl !== "None") {
+                var encGridPath = cleanGridPath.split('/').map(encodeURIComponent).join('%2F');
+                fallbackGridUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+                if (!coverSrc) coverSrc = fallbackGridUrl;
+            }
+            if (p.zoomUrl && p.zoomUrl !== "None") {
+                var encZoomPath = cleanZoomPath.split('/').map(encodeURIComponent).join('%2F');
+                fallbackZoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomPath + "%2F01.webp?alt=media";
+            } else {
+                fallbackZoomUrl = fallbackGridUrl;
             }
             deck.innerHTML = `
-            <div class="swipe-card" data-design="DIRECT">
-                <img src="${coverSrc || ''}" style="width: 100%; object-fit: cover;">
+            <div class="swipe-card" data-design="DIRECT" onclick="openFs('${p.id}', 0, 'Cover')">
+                <img id="design_img_${p.id}_DIRECT" src="${coverSrc || ''}" data-loaded-zoom="false" style="width: 100%; object-fit: cover;">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
                     <div class="qty-clean">
@@ -879,6 +891,10 @@ function openDetail(productId, skipShow, keepSearchShown) {
             </div>`;
             setTimeout(updateBottomQtyFromActiveDesign, 50);
             updateLiveDetailHeader();
+            var imgEl = document.getElementById("design_img_" + p.id + "_DIRECT");
+            if (imgEl && fallbackZoomUrl) {
+                loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover');
+            }
         }
     }
 
@@ -960,8 +976,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
     }
 
     function useFallbackDesignList() {
-        var encGridPath = gridPath.split('/').map(encodeURIComponent).join('%2F');
-        var encZoomPath = zoomPath.split('/').map(encodeURIComponent).join('%2F');
+        var encGridPath = cleanGridPath.split('/').map(encodeURIComponent).join('%2F');
+        var encZoomPath = cleanZoomPath.split('/').map(encodeURIComponent).join('%2F');
         var rawDesigns = String(p.ready || "").split(',').map(d => d.trim()).filter(Boolean);
         var validDesigns = [];
         rawDesigns.forEach(d => {
@@ -1008,13 +1024,22 @@ function openDetail(productId, skipShow, keepSearchShown) {
             // Render a single cover card initially
             var gridImgEl = document.getElementById("img_" + p.id);
             var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
-            if (!coverSrc && p.gridUrl && p.gridUrl !== "None") {
-                var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
-                coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+            var fallbackGridUrl = "";
+            var fallbackZoomUrl = "";
+            if (p.gridUrl && p.gridUrl !== "None") {
+                var encGridPath = cleanGridPath.split('/').map(encodeURIComponent).join('%2F');
+                fallbackGridUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+                if (!coverSrc) coverSrc = fallbackGridUrl;
+            }
+            if (p.zoomUrl && p.zoomUrl !== "None") {
+                var encZoomPath = cleanZoomPath.split('/').map(encodeURIComponent).join('%2F');
+                fallbackZoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomPath + "%2F01.webp?alt=media";
+            } else {
+                fallbackZoomUrl = fallbackGridUrl;
             }
             deck.innerHTML = `
-            <div class="swipe-card" data-design="DIRECT">
-                <img src="${coverSrc || ''}" style="width: 100%; object-fit: cover;">
+            <div class="swipe-card" data-design="DIRECT" onclick="openFs('${p.id}', 0, 'Cover')">
+                <img id="design_img_${p.id}_DIRECT" src="${coverSrc || ''}" data-loaded-zoom="false" style="width: 100%; object-fit: cover;">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
                     <div class="qty-clean">
@@ -1026,6 +1051,10 @@ function openDetail(productId, skipShow, keepSearchShown) {
             </div>`;
             setTimeout(updateBottomQtyFromActiveDesign, 50);
             updateLiveDetailHeader();
+            var imgEl = document.getElementById("design_img_" + p.id + "_DIRECT");
+            if (imgEl && fallbackZoomUrl) {
+                loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover');
+            }
         }
     }
 }
@@ -1092,7 +1121,13 @@ function updateLiveDetailHeader() {
 
 function closeDetail() {
     var panel = document.getElementById('detailPanel');
-    if (panel) panel.classList.remove('open');
+    if (panel) {
+        panel.classList.remove('open');
+        var videos = panel.querySelectorAll('video');
+        videos.forEach(function(v) {
+            v.pause();
+        });
+    }
 
     var dtTitle = document.getElementById('dtNameTop');
     var dtInput = document.getElementById('dtSearchInput');
@@ -2184,7 +2219,13 @@ function applyModalState(modal) {
     if (modal === 'fs') {
         if (fsModal) fsModal.style.display = 'flex';
     } else {
-        if (fsModal) fsModal.style.display = 'none';
+        if (fsModal) {
+            fsModal.style.display = 'none';
+            var fsVideo = document.getElementById('fsVideo');
+            if (fsVideo) {
+                fsVideo.pause();
+            }
+        }
     }
 
     // 2. Sync Detail Panel
@@ -2195,6 +2236,10 @@ function applyModalState(modal) {
     } else {
         if (detailPanel) {
             detailPanel.classList.remove('open');
+            var videos = detailPanel.querySelectorAll('video');
+            videos.forEach(function(v) {
+                v.pause();
+            });
         }
     }
 

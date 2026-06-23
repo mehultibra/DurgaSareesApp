@@ -26,11 +26,10 @@ public class MainActivity extends BridgeActivity {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                WebView view = null;
-                if (bridge != null) {
-                    view = bridge.getWebView();
-                }
-                
+
+                // 🛡️ THE FIX: 'view' is declared as final and assigned on a single line
+                final WebView view = (bridge != null) ? bridge.getWebView() : null;
+
                 if (webCanGoBack) {
                     if (view != null) {
                         view.post(() -> view.evaluateJavascript("window.history.back();", null));
@@ -46,8 +45,3 @@ public class MainActivity extends BridgeActivity {
         });
     }
 }
-
-
-
-
-
