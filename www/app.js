@@ -305,7 +305,8 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
+    var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+    var encZoomPath = (zoomPath && zoomPath !== "None") ? zoomPath.trim().replace(/\\/g, '/').split('/').map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
 
     var fileToFetch = targetFile ? targetFile : "01.webp";
 
@@ -364,21 +365,12 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                         saveFallbackMap();
                     };
                     imgElement.onerror = function () {
-                        if (designFile.endsWith(".webp")) {
-                            var jpgFile = designFile.replace(".webp", ".jpg");
-                            imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(jpgFile) + "?alt=media";
-                            imgElement.onload = function () { dsFallbackMap[gridPath] = jpgFile; saveFallbackMap(); };
-                            imgElement.onerror = function () {
-                                var pngFile = designFile.replace(".webp", ".png");
-                                imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(pngFile) + "?alt=media";
-                                imgElement.onload = function () { dsFallbackMap[gridPath] = pngFile; saveFallbackMap(); };
-                                imgElement.onerror = function () {
-                                    tryDesign(index - 1);
-                                };
-                            };
-                        } else {
+                        // Fallback to zoom bucket if grid fails
+                        imgElement.src = fbBase + encZoomPath + "%2F" + encodeURIComponent(designFile) + "?alt=media";
+                        imgElement.onload = function () { dsFallbackMap[gridPath] = designFile; saveFallbackMap(); };
+                        imgElement.onerror = function () {
                             tryDesign(index - 1);
-                        }
+                        };
                     };
                 }
             }).catch(function () {
@@ -397,9 +389,16 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 imgElement.onerror = function () {
                     imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
                     imgElement.onerror = function () {
-                        coverExistsMap[gridPath] = false;
-                        saveCoverExistsMap();
-                        tryToLoadLatestReadyDesign();
+                        // Fallback to zoom bucket for cover images
+                        imgElement.src = fbBase + encZoomPath + "%2F01.webp?alt=media";
+                        imgElement.onerror = function () {
+                            imgElement.src = fbBase + encZoomPath + "%2Fcover.webp?alt=media";
+                            imgElement.onerror = function () {
+                                coverExistsMap[gridPath] = false;
+                                saveCoverExistsMap();
+                                tryToLoadLatestReadyDesign();
+                            };
+                        };
                     };
                     if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
                 }
@@ -769,8 +768,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
     var gridPath = p.gridUrl;
     var zoomPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
 
-    var cleanGridPath = gridPath ? String(gridPath).trim().replace(/\\/g, '/') : "";
-    var cleanZoomPath = zoomPath ? String(zoomPath).trim().replace(/\\/g, '/') : cleanGridPath;
+    var cleanGridPath = gridPath ? String(gridPath).trim().replace(/\\/g, '/').split('/').map(s => s.trim()).join('/') : "";
+    var cleanZoomPath = zoomPath && zoomPath !== "None" ? String(zoomPath).trim().replace(/\\/g, '/').split('/').map(s => s.trim()).join('/') : cleanGridPath;
 
     if (!cleanGridPath || cleanGridPath === "" || cleanGridPath.toLowerCase() === "none") {
         deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="https://placehold.co/600x800/f0f0f0/a0a0a0?text=No+Image"></div>';
@@ -817,8 +816,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
 
             if (isVideo || isImage) {
-                var gridEncName = fullPath.replace(cleanZoomPath, cleanGridPath).split('/').map(encodeURIComponent).join('%2F');
-                var zoomEncName = fullPath.replace(cleanGridPath, cleanZoomPath).split('/').map(encodeURIComponent).join('%2F');
+                var gridEncName = fullPath.replace(cleanZoomPath, cleanGridPath).split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+                var zoomEncName = fullPath.replace(cleanGridPath, cleanZoomPath).split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
 
                 var gridUrl = fbBase + gridEncName + "?alt=media";
                 var zoomUrl = fbBase + zoomEncName + "?alt=media";
@@ -867,12 +866,12 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var fallbackGridUrl = "";
             var fallbackZoomUrl = "";
             if (p.gridUrl && p.gridUrl !== "None") {
-                var encGridPath = cleanGridPath.split('/').map(encodeURIComponent).join('%2F');
+                var encGridPath = cleanGridPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
                 fallbackGridUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
                 if (!coverSrc) coverSrc = fallbackGridUrl;
             }
             if (p.zoomUrl && p.zoomUrl !== "None") {
-                var encZoomPath = cleanZoomPath.split('/').map(encodeURIComponent).join('%2F');
+                var encZoomPath = cleanZoomPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
                 fallbackZoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomPath + "%2F01.webp?alt=media";
             } else {
                 fallbackZoomUrl = fallbackGridUrl;
@@ -976,8 +975,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
     }
 
     function useFallbackDesignList() {
-        var encGridPath = cleanGridPath.split('/').map(encodeURIComponent).join('%2F');
-        var encZoomPath = cleanZoomPath.split('/').map(encodeURIComponent).join('%2F');
+        var encGridPath = cleanGridPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+        var encZoomPath = cleanZoomPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
         var rawDesigns = String(p.ready || "").split(',').map(d => d.trim()).filter(Boolean);
         var validDesigns = [];
         rawDesigns.forEach(d => {
@@ -1027,12 +1026,12 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var fallbackGridUrl = "";
             var fallbackZoomUrl = "";
             if (p.gridUrl && p.gridUrl !== "None") {
-                var encGridPath = cleanGridPath.split('/').map(encodeURIComponent).join('%2F');
+                var encGridPath = cleanGridPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
                 fallbackGridUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
                 if (!coverSrc) coverSrc = fallbackGridUrl;
             }
             if (p.zoomUrl && p.zoomUrl !== "None") {
-                var encZoomPath = cleanZoomPath.split('/').map(encodeURIComponent).join('%2F');
+                var encZoomPath = cleanZoomPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
                 fallbackZoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomPath + "%2F01.webp?alt=media";
             } else {
                 fallbackZoomUrl = fallbackGridUrl;
@@ -1124,7 +1123,7 @@ function closeDetail() {
     if (panel) {
         panel.classList.remove('open');
         var videos = panel.querySelectorAll('video');
-        videos.forEach(function(v) {
+        videos.forEach(function (v) {
             v.pause();
         });
     }
@@ -1579,7 +1578,7 @@ function sendWhatsapp() {
 
 function getExactFirebaseUrl(folderPath, dId) {
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/";
-    var encPath = folderPath.split('/').map(encodeURIComponent).join('%2F');
+    var encPath = folderPath.trim().split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
     var fileName = "01.webp";
     if (dId !== 'DIRECT' && dId !== 'Cover') {
         var num = dId.replace(/\D/g, '');
@@ -1617,7 +1616,7 @@ async function triggerShare(action) {
     // 2️⃣ Collect only valid designs and FORCE them to use the Zoom Folder
     var deck = document.getElementById('dtDesigns');
     var highResUrls = [];
-    
+
     if (deck) {
         var cards = deck.querySelectorAll('.swipe-card');
         cards.forEach(card => {
@@ -1627,14 +1626,14 @@ async function triggerShare(action) {
                 if (dNameEl) {
                     var dName = dNameEl.innerText; // e.g. "Cover" or "D2"
                     var dId = dName === 'Cover' ? 'DIRECT' : dName;
-                    
+
                     // If they only want the cover, skip D2-D15
                     if (pdfType === 'cover' && dId !== 'DIRECT') return;
-                    
+
                     // 🛡️ STRICT RULE: ALWAYS use zoomUrl, NEVER gridUrl!
                     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
                     var exactHighResUrl = getExactFirebaseUrl(folderPath, dId);
-                    
+
                     highResUrls.push(exactHighResUrl);
                 }
             }
@@ -1773,7 +1772,7 @@ async function syncImages() {
         for (var i = 0; i < productsToDownload.length; i += batchSize) {
             var batch = productsToDownload.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
-                var encGridPath = p.gridUrl.split('/').map(encodeURIComponent).join('%2F');
+                var encGridPath = p.gridUrl.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
                 var urlsToTry = [
                     fbBase + encGridPath + "%2F01.webp?alt=media",
                     fbBase + encGridPath + "%2Fcover.webp?alt=media",
@@ -1781,21 +1780,29 @@ async function syncImages() {
                 ];
 
                 var downloaded = false;
-                for (var u = 0; u < urlsToTry.length; u++) {
-                    try {
-                        const response = await fetch(urlsToTry[u]);
-                        if (response.ok) {
-                            const blob = await response.blob();
-                            var saved = await saveImageToDB(p.gridUrl, blob);
-                            if (saved) {
-                                downloaded = true;
-                                break;
+                
+                // 🚀 FAST PATH: Check Cache FIRST!
+                var existingCover = await getImageFromDB(p.gridUrl);
+                if (existingCover) {
+                    downloaded = true;
+                } else {
+                    for (var u = 0; u < urlsToTry.length; u++) {
+                        try {
+                            const response = await fetch(urlsToTry[u]);
+                            if (response.ok) {
+                                const blob = await response.blob();
+                                var saved = await saveImageToDB(p.gridUrl, blob);
+                                if (saved) {
+                                    downloaded = true;
+                                    break;
+                                }
                             }
+                        } catch (err) {
+                            console.warn("Attempt " + u + " failed for url: " + urlsToTry[u], err);
                         }
-                    } catch (err) {
-                        console.warn("Attempt " + u + " failed for url: " + urlsToTry[u], err);
                     }
                 }
+                
                 if (!downloaded) {
                     failed++;
                 }
@@ -1821,6 +1828,11 @@ async function syncImages() {
                     for (var d = 0; d < validDesigns.length; d++) {
                         var dObj = validDesigns[d];
                         var designKey = fbBase + encGridPath + "%2F" + dObj.numStr + ".webp?alt=media";
+                        
+                        // 🚀 FAST PATH: Check Cache FIRST!
+                        var existingDesign = await getImageFromDB(designKey);
+                        if (existingDesign) continue; // Skip network if already in DB!
+
                         var designUrlsToTry = [
                             designKey,
                             fbBase + encGridPath + "%2F" + dObj.cleanNum + ".webp?alt=media"
@@ -2237,7 +2249,7 @@ function applyModalState(modal) {
         if (detailPanel) {
             detailPanel.classList.remove('open');
             var videos = detailPanel.querySelectorAll('video');
-            videos.forEach(function(v) {
+            videos.forEach(function (v) {
                 v.pause();
             });
         }
