@@ -1512,7 +1512,11 @@ function openCart() {
                 var dLabel = safeDesignLabel === 'DIRECT' ? 'Cover' : safeDesignLabel;
                 var imgId = "cart_img_" + g.p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
 
-                cHtml.push('<div style="width: 80px; text-align: center;" onclick="openCartFs(\'' + g.p.id + '\', \'' + safeDesignLabel + '\', document.getElementById(\'' + imgId + '\').src)">');
+                var onClickAction = safeDesignLabel === 'DIRECT' ? 
+                    "closeCart(true); setTimeout(()=>{openDetail('" + g.p.id + "');},100);" : 
+                    "openCartFs('" + g.p.id + "', '" + safeDesignLabel + "', document.getElementById('" + imgId + "').src)";
+
+                cHtml.push('<div style="width: 80px; text-align: center;" onclick="' + onClickAction + '">');
                 cHtml.push('<img id="' + imgId + '" src="https://placehold.co/300x300/f0f0f0/a0a0a0?text=..." style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); cursor: pointer;">');
                 cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + dLabel + '</div>');
                 cHtml.push('<div style="font-size: 12px; font-weight: bold; color: var(--myntra-pink);">' + (item.qty || 0) + ' pcs</div>');
