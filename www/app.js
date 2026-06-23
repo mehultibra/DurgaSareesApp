@@ -305,8 +305,8 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
-    var encZoomPath = (zoomPath && zoomPath !== "None") ? zoomPath.trim().replace(/\\/g, '/').split('/').map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
+    var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+    var encZoomPath = (zoomPath && zoomPath !== "None") ? zoomPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
 
     var fileToFetch = targetFile ? targetFile : "01.webp";
 
@@ -768,8 +768,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
     var gridPath = p.gridUrl;
     var zoomPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
 
-    var cleanGridPath = gridPath ? String(gridPath).trim().replace(/\\/g, '/').split('/').map(s => s.trim()).join('/') : "";
-    var cleanZoomPath = zoomPath && zoomPath !== "None" ? String(zoomPath).trim().replace(/\\/g, '/').split('/').map(s => s.trim()).join('/') : cleanGridPath;
+    var cleanGridPath = gridPath ? String(gridPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : "";
+    var cleanZoomPath = zoomPath && zoomPath !== "None" ? String(zoomPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : cleanGridPath;
 
     if (!cleanGridPath || cleanGridPath === "" || cleanGridPath.toLowerCase() === "none") {
         deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="https://placehold.co/600x800/f0f0f0/a0a0a0?text=No+Image"></div>';
@@ -816,8 +816,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var isImage = [".webp", ".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
 
             if (isVideo || isImage) {
-                var gridEncName = fullPath.replace(cleanZoomPath, cleanGridPath).split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
-                var zoomEncName = fullPath.replace(cleanGridPath, cleanZoomPath).split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+                var gridEncName = fullPath.replace(cleanZoomPath, cleanGridPath).split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                var zoomEncName = fullPath.replace(cleanGridPath, cleanZoomPath).split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
 
                 var gridUrl = fbBase + gridEncName + "?alt=media";
                 var zoomUrl = fbBase + zoomEncName + "?alt=media";
@@ -866,12 +866,12 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var fallbackGridUrl = "";
             var fallbackZoomUrl = "";
             if (p.gridUrl && p.gridUrl !== "None") {
-                var encGridPath = cleanGridPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+                var encGridPath = cleanGridPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
                 fallbackGridUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
                 if (!coverSrc) coverSrc = fallbackGridUrl;
             }
             if (p.zoomUrl && p.zoomUrl !== "None") {
-                var encZoomPath = cleanZoomPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+                var encZoomPath = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
                 fallbackZoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomPath + "%2F01.webp?alt=media";
             } else {
                 fallbackZoomUrl = fallbackGridUrl;
@@ -975,8 +975,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
     }
 
     function useFallbackDesignList() {
-        var encGridPath = cleanGridPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
-        var encZoomPath = cleanZoomPath.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+        var encGridPath = cleanGridPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+        var encZoomPath = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
         var rawDesigns = String(p.ready || "").split(',').map(d => d.trim()).filter(Boolean);
         var validDesigns = [];
         rawDesigns.forEach(d => {
@@ -1578,7 +1578,7 @@ function sendWhatsapp() {
 
 function getExactFirebaseUrl(folderPath, dId) {
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/";
-    var encPath = folderPath.trim().split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+    var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     var fileName = "01.webp";
     if (dId !== 'DIRECT' && dId !== 'Cover') {
         var num = dId.replace(/\D/g, '');
@@ -1772,7 +1772,7 @@ async function syncImages() {
         for (var i = 0; i < productsToDownload.length; i += batchSize) {
             var batch = productsToDownload.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
-                var encGridPath = p.gridUrl.split('/').map(s => encodeURIComponent(s.trim())).join('%2F');
+                var encGridPath = p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
                 var urlsToTry = [
                     fbBase + encGridPath + "%2F01.webp?alt=media",
                     fbBase + encGridPath + "%2Fcover.webp?alt=media",
