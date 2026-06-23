@@ -779,7 +779,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
     var prefix = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + encodeURIComponent(prefix);
+    // IMPORTANT: Do NOT double-encode the prefix - slashes stay as '/', spaces already encoded as %20
+    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix;
 
     var renderedFilesJson = "";
 
@@ -1764,6 +1765,7 @@ async function syncImages() {
 
         var count = 0;
         var failed = 0;
+        var failedList = []; // 📋 Track exactly which products fail and why
         var bucket = "durga-sarees.firebasestorage.app";
         var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
 
@@ -1780,6 +1782,7 @@ async function syncImages() {
                 ];
 
                 var downloaded = false;
+                var lastFailReason = "";
                 
                 // 🚀 FAST PATH: Check Cache FIRST!
                 var existingCover = await getImageFromDB(p.gridUrl);
@@ -1792,12 +1795,12 @@ async function syncImages() {
                             if (response.ok) {
                                 const blob = await response.blob();
                                 var saved = await saveImageToDB(p.gridUrl, blob);
-                                if (saved) {
-                                    downloaded = true;
-                                    break;
-                                }
+                                if (saved) { downloaded = true; break; }
+                            } else {
+                                lastFailReason = "HTTP " + response.status + " on " + urlsToTry[u];
                             }
                         } catch (err) {
+                            lastFailReason = err.message + " on " + urlsToTry[u];
                             console.warn("Attempt " + u + " failed for url: " + urlsToTry[u], err);
                         }
                     }
@@ -1805,6 +1808,8 @@ async function syncImages() {
                 
                 if (!downloaded) {
                     failed++;
+                    failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
+                    console.error("❌ SYNC FAILED:", p.name, "| Path:", p.gridUrl, "| Reason:", lastFailReason);
                 }
 
                 // Download ready design grid images
@@ -1866,9 +1871,15 @@ async function syncImages() {
         if (bootScreen) bootScreen.style.display = 'none';
 
         if (failed > 0) {
-            alert("Sync completed. Successfully saved " + (total - failed) + " images to local storage. (" + failed + " failed)");
+            var failMsg = "Sync completed: " + (total - failed) + " OK, " + failed + " failed.\n\nFailed products:\n";
+            failedList.slice(0, 15).forEach(f => {
+                failMsg += "\n• " + f.name + "\n  Path: " + f.path + "\n  Error: " + f.reason;
+            });
+            if (failedList.length > 15) failMsg += "\n\n...and " + (failedList.length - 15) + " more. Check browser console (F12) for full list.";
+            console.table(failedList);
+            alert(failMsg);
         } else {
-            alert("Success! All " + total + " catalog images saved to local storage.");
+            alert("✅ Success! All " + total + " catalog images saved to local storage.");
         }
 
         initApp();
