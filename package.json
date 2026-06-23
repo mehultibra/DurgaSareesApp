@@ -24,5 +24,8 @@
   "bugs": {
     "url": "https://github.com/mehultibra/DurgaSareesApp/issues"
   },
-  "homepage": "https://github.com/mehultibra/DurgaSareesApp#readme"
+  "homepage": "https://github.com/mehultibra/DurgaSareesApp#readme",
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
 }
