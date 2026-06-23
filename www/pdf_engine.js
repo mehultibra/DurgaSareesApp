@@ -118,16 +118,37 @@ async function generateNativePDF(productName, productPrice, imageUrlsArray, acti
 
         // 🧠 NATIVE SHARE ROUTER
         if (actionType === 'wa' || actionType === 'print') {
-            var pdfBlob = doc.output('blob');
-            var file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                await navigator.share({
+            var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+            
+            if (isCapacitor) {
+                // NATIVE ANDROID/IOS CAPACITOR SHARE
+                var pureBase64 = doc.output('datauristring').split(',')[1];
+                var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                    path: fileName,
+                    data: pureBase64,
+                    directory: "CACHE"
+                });
+                await window.Capacitor.Plugins.Share.share({
                     title: productName + ' Catalog',
-                    files: [file]
+                    files: [writeResult.uri]
                 });
             } else {
-                doc.save(fileName); // Fallback for PC
+                // WEB SHARE OR PC FALLBACK
+                var pdfBlob = doc.output('blob');
+                var file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+                if (typeof navigator.share === 'function') {
+                    try {
+                        await navigator.share({
+                            title: productName + ' Catalog',
+                            files: [file]
+                        });
+                    } catch (e) {
+                        doc.save(fileName);
+                    }
+                } else {
+                    doc.save(fileName); // Fallback for PC
+                }
             }
         } else {
             doc.save(fileName);
@@ -139,6 +160,7 @@ async function generateNativePDF(productName, productPrice, imageUrlsArray, acti
 
     if (bootScreen) bootScreen.style.display = 'none';
 }
+
 // ==========================================
 // ?? MULTI-IMAGE NATIVE SHARE ENGINE
 // ==========================================
@@ -163,52 +185,78 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
     }
 
     try {
-        var filesArray = [];
-        
-        // Loop through all images, fetch them, compress them, and turn them into Files
-        for (var i = 0; i < imageUrlsArray.length; i++) {
-            // Uses your existing lightning-fast memory fetcher/compressor
-            var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
-            if (base64Img) {
-                var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
-                filesArray.push(base64ToFile(base64Img, fileName));
-            }
-        }
+        var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
 
-        // 1. Ensure navigator.share actually exists (Requires HTTPS or localhost)
-        if (typeof navigator.share === 'function') {
-            try {
-                await navigator.share({
-                    title: productName,
-                    text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
-                    files: filesArray
-                });
-            } catch (shareErr) {
-                console.error("Share API failed:", shareErr);
-                try {
-                    await navigator.share({ files: filesArray });
-                } catch (fallbackErr) {
-                    alert("Your device's browser blocks native multi-image sharing. Error: " + fallbackErr.message);
+        if (isCapacitor) {
+            // ============================================
+            // 🚀 CAPACITOR NATIVE ANDROID SHARE
+            // ============================================
+            var uriArray = [];
+            for (var i = 0; i < imageUrlsArray.length; i++) {
+                var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
+                if (base64Img) {
+                    var pureBase64 = base64Img.split(',')[1];
+                    var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
+                    var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                        path: fileName,
+                        data: pureBase64,
+                        directory: "CACHE"
+                    });
+                    uriArray.push(writeResult.uri);
                 }
             }
-        } else {
-            // 2. Fallback: navigator.share is completely missing (HTTP environment or unsupported WebView)
-            console.warn("navigator.share is not a function. Falling back to multi-file download.");
-            alert("Native Share API is disabled (requires HTTPS or Native App). Downloading images to your device instead.");
             
-            for (var j = 0; j < filesArray.length; j++) {
-                var fileObj = filesArray[j];
-                var objectUrl = URL.createObjectURL(fileObj);
-                var a = document.createElement('a');
-                a.href = objectUrl;
-                a.download = fileObj.name;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+            await window.Capacitor.Plugins.Share.share({
+                title: productName,
+                text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
+                files: uriArray
+            });
+
+        } else {
+            // ============================================
+            // 🌐 STANDARD WEB BROWSER FALLBACK
+            // ============================================
+            var filesArray = [];
+            for (var i = 0; i < imageUrlsArray.length; i++) {
+                var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
+                if (base64Img) {
+                    var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
+                    filesArray.push(base64ToFile(base64Img, fileName));
+                }
+            }
+
+            if (typeof navigator.share === 'function') {
+                try {
+                    await navigator.share({
+                        title: productName,
+                        text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
+                        files: filesArray
+                    });
+                } catch (shareErr) {
+                    console.error("Share API failed:", shareErr);
+                    try {
+                        await navigator.share({ files: filesArray });
+                    } catch (fallbackErr) {
+                        alert("Your device's browser blocks native multi-image sharing. Error: " + fallbackErr.message);
+                    }
+                }
+            } else {
+                console.warn("navigator.share is not a function. Falling back to multi-file download.");
+                alert("Native Share API is disabled (requires HTTPS or Native App). Downloading images to your device instead.");
                 
-                // Small delay to prevent browser from blocking rapid multi-downloads
-                await new Promise(resolve => setTimeout(resolve, 300));
-                URL.revokeObjectURL(objectUrl);
+                for (var j = 0; j < filesArray.length; j++) {
+                    var fileObj = filesArray[j];
+                    var objectUrl = URL.createObjectURL(fileObj);
+                    var a = document.createElement('a');
+                    a.href = objectUrl;
+                    a.download = fileObj.name;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    URL.revokeObjectURL(objectUrl);
+                }
             }
         }
     } catch (error) {
