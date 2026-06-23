@@ -1,6 +1,6 @@
 {
-  "appId": "com.durgasarees.catalog",
-  "appName": "Durga Sarees",
+  "appId": "com.durgasarees.app",
+  "appName": "DurgaSarees",
   "webDir": "www",
   "server": {
     "url": "https://durga-sarees-catalog.vercel.app",
