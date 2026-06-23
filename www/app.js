@@ -176,7 +176,14 @@ function initApp() {
                         fabric: f.fabric ? f.fabric.stringValue : "",
                         packing: finalPacking,
                         mult: f.mult ? (f.mult.integerValue || 8) : 8,
-                        ready: f.ready ? f.ready.stringValue : ""
+                        ready: f.ready ? f.ready.stringValue : "",
+                        
+                        // 🆕 NEW FIREBASE FIELDS CONNECTED HERE
+                        jari: f.jari ? f.jari.stringValue : "",
+                        border: f.border ? f.border.stringValue : "",
+                        cut: f.cut ? f.cut.stringValue : "",
+                        pallu: f.pallu ? f.pallu.stringValue : "",
+                        blouse: f.blouse ? f.blouse.stringValue : ""
                     });
                     validCounter++;
                 }
@@ -1703,18 +1710,23 @@ async function triggerShare(action) {
             alert("Image Engine not loaded!");
         }
     } 
-    // 3️⃣ ROUTE: PDF Generation
+    // 3️⃣ ROUTE: PDF GENERATION & PREVIEW (Works on PC and Mobile)
     else {
         var pdfType = 'full';
-        if (confirm("Create FULL Catalog with all designs?\n\nClick 'Cancel' to create an ORDER PDF (Cover Image Only).")) {
+        
+        // Skip confirmation if just previewing visually
+        if (action === 'preview') {
+            pdfType = 'full'; 
+        } else if (confirm("Create FULL Catalog with all designs?\n\nClick 'Cancel' to create an ORDER PDF (Cover Image Only).")) {
             pdfType = 'full';
         } else {
             pdfType = 'cover';
-            highResUrls = [highResUrls[0]]; // Slices the array instantly to just the cover!
+            highResUrls = [highResUrls[0]]; // Slice to just the cover
         }
 
         if (typeof generateNativePDF === 'function') {
-            await generateNativePDF(curProduct.name, curProduct.price, highResUrls, action);
+            // Passes the ENTIRE curProduct object so the PDF engine can read all the new table data!
+            await generateNativePDF(curProduct, highResUrls, action);
         } else {
             alert("PDF Engine is not loaded!");
         }

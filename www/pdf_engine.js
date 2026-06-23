@@ -39,123 +39,165 @@ function getBase64ImageFromUrl(imageUrl) {
     });
 }
 
-// 🚀 MASTER FUNCTION: Generates the Catalog PDF
-async function generateNativePDF(productName, productPrice, imageUrlsArray, actionType) {
+// ==========================================
+// 🌸 DURGA SAREES: NATIVE PDF ENGINE (A4 CATALOG LAYOUT)
+// Lightning Fast Client-Side Generation via Phone CPU
+// ==========================================
+
+async function generateNativePDF(product, imageUrlsArray, actionType) {
     var bootScreen = document.getElementById('boot');
     if (bootScreen) {
         bootScreen.style.display = 'flex';
-        document.getElementById('bootMsg').innerText = "Creating PDF...";
+        document.getElementById('bootMsg').innerText = "Generating Formatted PDF...";
     }
 
     try {
-        // [960, 540] = EXACT Widescreen 16:9 Google Slide Dimensions in Points
-        var doc = new jsPDF('l', 'pt', [960, 540]);
+        // 📏 CREATE A4 PORTRAIT DOCUMENT (Width: 595pt, Height: 842pt)
+        var doc = new jsPDF('p', 'pt', 'a4');
+        var pageWidth = 595;
+        var pageHeight = 842;
 
         for (var i = 0; i < imageUrlsArray.length; i++) {
             if (i > 0) doc.addPage();
 
-            // Fetches instantly from RAM or downloads if missing
+            // Fetch High-Res Zoom Image to RAM
             var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
 
-            if (base64Img) {
-                // 📏 DYNAMIC IMAGE SIZING (Prevents stretching)
-                var targetHeight = 430; 
-                var targetWidth = 900;  
-                var imgProps = doc.getImageProperties(base64Img);
-                var imgRatio = imgProps.width / imgProps.height;
-                var finalW = targetHeight * imgRatio;
-                var finalH = targetHeight;
+            // ==========================================================
+            // 📑 PAGE 1: THE FORMATTED DATA COVER PAGE
+            // ==========================================================
+            if (i === 0) {
+                // 1️⃣ TOP RIGHT: Date
+                var today = new Date();
+                var dateStr = ("0" + today.getDate()).slice(-2) + "-" + ("0" + (today.getMonth() + 1)).slice(-2) + "-" + today.getFullYear();
+                doc.setFontSize(12);
+                doc.setTextColor(100, 100, 100);
+                doc.text("Date: " + dateStr, pageWidth - 40, 40, { align: "right" });
+
+                // 2️⃣ TOP CENTER: Headlines
+                doc.setFontSize(28);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(226, 27, 112); // Myntra Pink
+                doc.text("DURGA SAREES", pageWidth / 2, 70, { align: "center" });
+
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(0, 102, 204); // Blue Link
+                doc.textWithLink("(Click for all variety)", pageWidth / 2, 90, { url: 'https://durgasarees.com', align: "center" });
+
+                doc.setFontSize(22);
+                doc.setTextColor(0, 0, 0); // Black
+                doc.setFont("helvetica", "bold");
+                doc.text(product.name, pageWidth / 2, 130, { align: "center" });
+
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(0, 102, 204);
+                doc.text("(Click for Ready Designs)", pageWidth / 2, 150, { align: "center" });
+
+                // 3️⃣ LEFT COLUMN: Data Attributes Table
+                var startX = 40;   // Left margin
+                var startY = 220;  // Pixels down from top
+                var lineH = 32;    // Spacing between each row
                 
-                if (finalW > targetWidth) {
-                    finalW = targetWidth;
-                    finalH = targetWidth / imgRatio;
+                doc.setFontSize(14);
+                
+                // Helper function to draw rows perfectly aligned
+                function drawRow(label, value, yPos) {
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFont("helvetica", "bold");
+                    doc.text(label, startX, yPos);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(":   " + (value ? String(value) : "-"), startX + 80, yPos); // 80px gap for perfect column alignment
                 }
-                
-                // Centers the image mathematically
-                var xPos = (960 - finalW) / 2;
-                var yPos = 70 + ((targetHeight - finalH) / 2); 
 
-                doc.addImage(base64Img, 'JPEG', xPos, yPos, finalW, finalH);
-            } else {
-                doc.setFontSize(16); doc.setTextColor(150, 150, 150);
-                doc.text("Image loading error", 480, 270, { align: "center" });
+                drawRow("Quality", product.fabric, startY);
+                drawRow("Code", product.sku, startY + lineH);
+                drawRow("D No", "₹ " + product.price, startY + lineH * 2);
+                drawRow("Jari", product.jari, startY + lineH * 3);
+                drawRow("Border", product.border, startY + lineH * 4);
+                drawRow("Cut", product.cut, startY + lineH * 5);
+                drawRow("Pallu", product.pallu, startY + lineH * 6);
+                drawRow("Blouse", product.blouse, startY + lineH * 7);
+                drawRow("Packing", product.packing, startY + lineH * 8);
+
+                // 4️⃣ RIGHT COLUMN: Cover Image
+                if (base64Img) {
+                    var targetW = 260; // Max Image Width
+                    var targetH = 380; // Max Image Height
+                    var imgProps = doc.getImageProperties(base64Img);
+                    var imgRatio = imgProps.width / imgProps.height;
+                    
+                    var finalW = targetH * imgRatio;
+                    var finalH = targetH;
+                    if (finalW > targetW) { finalW = targetW; finalH = targetW / imgRatio; }
+                    
+                    // Coordinates: X = 290 (Right side of page), Y = 190
+                    doc.addImage(base64Img, 'JPEG', 290, 190, finalW, finalH);
+                }
+
+                // 5️⃣ BOTTOM CENTER: Footer Text
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(226, 27, 112); // Pink Warning
+                doc.text("Click On image to view all Ready Designs of this product", pageWidth / 2, 780, { align: "center" });
+            } 
+            
+            // ==========================================================
+            // 📑 PAGE 2+: FULL SCREEN READY DESIGNS
+            // ==========================================================
+            else {
+                doc.setFontSize(18);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(40, 44, 63);
+                doc.text(product.name + " - Design " + i, pageWidth / 2, 40, { align: "center" });
+
+                if (base64Img) {
+                    var targetW = 500; 
+                    var targetH = 720;  
+                    var imgProps = doc.getImageProperties(base64Img);
+                    var imgRatio = imgProps.width / imgProps.height;
+                    
+                    var finalW = targetH * imgRatio;
+                    var finalH = targetH;
+                    if (finalW > targetW) { finalW = targetW; finalH = targetW / imgRatio; }
+                    
+                    var xPos = (pageWidth - finalW) / 2;
+                    var yPos = 60 + ((targetH - finalH) / 2); 
+                    doc.addImage(base64Img, 'JPEG', xPos, yPos, finalW, finalH);
+                }
             }
-
-            // ==========================================================
-            // ✏️ TEMPLATE EDITOR (Change colors, sizes, and X/Y coords here!)
-            // ==========================================================
-            
-            // 1️⃣ TOP TITLE TEXT
-            doc.setFontSize(26);                  // Text Size
-            doc.setFont("helvetica", "bold");     // Font Style
-            doc.setTextColor(40, 44, 63);         // RGB Color (Dark Grey)
-            var titleText = productName + (i === 0 ? " (Cover)" : " - Design " + i);
-            // X: 480 (Center of 960 width), Y: 45 (Pixels down from Top)
-            doc.text(titleText, 480, 45, { align: "center" });
-
-            // 2️⃣ BOTTOM LEFT PRICE BADGE (The Pink Box)
-            doc.setFillColor(226, 27, 112);       // RGB Color (Myntra Pink: #E21B70)
-            // roundedRect(X, Y, Width, Height, CornerRadiusX, CornerRadiusY, 'F' = Fill)
-            doc.roundedRect(30, 480, 200, 40, 10, 10, 'F'); 
-
-            // 3️⃣ PRICE TEXT (Inside the Pink Box)
-            doc.setFontSize(20);                  // Text Size
-            doc.setTextColor(255, 255, 255);      // RGB Color (White Text)
-            // X: 130 (Middle of the 200px box), Y: 508 (Middle of the height)
-            doc.text("Rate: ₹" + productPrice, 130, 508, { align: "center" });
-            
-            // 4️⃣ BOTTOM RIGHT BRANDING
-            doc.setFontSize(14);
-            doc.setTextColor(150, 150, 150);      // RGB Color (Light Grey)
-            doc.setFont("helvetica", "bolditalic");
-            // X: 930 (Far Right), Y: 510 (Pixels down)
-            doc.text("DURGA SAREES", 930, 510, { align: "right" });
-            
-            // ==========================================================
         }
 
-        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Catalog.pdf";
+        var fileName = product.name.replace(/[^a-zA-Z0-9]/g, "_") + "_Catalog.pdf";
 
-        // 🧠 NATIVE SHARE ROUTER
-        if (actionType === 'wa' || actionType === 'print') {
+        // 🧠 NATIVE ROUTING ENGINE (Including Visual Preview)
+        if (actionType === 'preview') {
+            // Opens the PDF visually right in the browser for testing!
+            doc.output('dataurlnewwindow');
+        } 
+        else if (actionType === 'wa' || actionType === 'print') {
             var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
-            var nativeSuccess = false;
             
             if (isCapacitor) {
-                try {
-                    // NATIVE ANDROID/IOS CAPACITOR SHARE
-                    var pureBase64 = doc.output('datauristring').split(',')[1];
-                    var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
-                        path: fileName,
-                        data: pureBase64,
-                        directory: "CACHE"
-                    });
-                    await window.Capacitor.Plugins.Share.share({
-                        title: productName + ' Catalog',
-                        files: [writeResult.uri]
-                    });
-                    nativeSuccess = true;
-                } catch (nativeErr) {
-                    console.warn("Native plugins not compiled in this APK. Falling back to web share.", nativeErr);
-                }
-            }
-            
-            if (!nativeSuccess) {
-                // WEB SHARE OR PC FALLBACK
+                var pureBase64 = doc.output('datauristring').split(',')[1];
+                var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                    path: fileName,
+                    data: pureBase64,
+                    directory: "CACHE"
+                });
+                await window.Capacitor.Plugins.Share.share({
+                    title: product.name + ' Catalog',
+                    files: [writeResult.uri]
+                });
+            } else {
+                // WEB FALLBACK
                 var pdfBlob = doc.output('blob');
                 var file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
                 if (typeof navigator.share === 'function') {
-                    try {
-                        await navigator.share({
-                            title: productName + ' Catalog',
-                            files: [file]
-                        });
-                    } catch (e) {
-                        doc.save(fileName);
-                    }
+                    try { await navigator.share({ title: product.name + ' Catalog', files: [file] }); } catch (e) { doc.save(fileName); }
                 } else {
-                    doc.save(fileName); // Fallback for PC
+                    doc.save(fileName); 
                 }
             }
         } else {
