@@ -119,20 +119,28 @@ async function generateNativePDF(productName, productPrice, imageUrlsArray, acti
         // 🧠 NATIVE SHARE ROUTER
         if (actionType === 'wa' || actionType === 'print') {
             var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+            var nativeSuccess = false;
             
             if (isCapacitor) {
-                // NATIVE ANDROID/IOS CAPACITOR SHARE
-                var pureBase64 = doc.output('datauristring').split(',')[1];
-                var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
-                    path: fileName,
-                    data: pureBase64,
-                    directory: "CACHE"
-                });
-                await window.Capacitor.Plugins.Share.share({
-                    title: productName + ' Catalog',
-                    files: [writeResult.uri]
-                });
-            } else {
+                try {
+                    // NATIVE ANDROID/IOS CAPACITOR SHARE
+                    var pureBase64 = doc.output('datauristring').split(',')[1];
+                    var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                        path: fileName,
+                        data: pureBase64,
+                        directory: "CACHE"
+                    });
+                    await window.Capacitor.Plugins.Share.share({
+                        title: productName + ' Catalog',
+                        files: [writeResult.uri]
+                    });
+                    nativeSuccess = true;
+                } catch (nativeErr) {
+                    console.warn("Native plugins not compiled in this APK. Falling back to web share.", nativeErr);
+                }
+            }
+            
+            if (!nativeSuccess) {
                 // WEB SHARE OR PC FALLBACK
                 var pdfBlob = doc.output('blob');
                 var file = new File([pdfBlob], fileName, { type: 'application/pdf' });
@@ -186,33 +194,40 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
 
     try {
         var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+        var nativeSuccess = false;
 
         if (isCapacitor) {
-            // ============================================
-            // 🚀 CAPACITOR NATIVE ANDROID SHARE
-            // ============================================
-            var uriArray = [];
-            for (var i = 0; i < imageUrlsArray.length; i++) {
-                var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
-                if (base64Img) {
-                    var pureBase64 = base64Img.split(',')[1];
-                    var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
-                    var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
-                        path: fileName,
-                        data: pureBase64,
-                        directory: "CACHE"
-                    });
-                    uriArray.push(writeResult.uri);
+            try {
+                // ============================================
+                // 🚀 CAPACITOR NATIVE ANDROID SHARE
+                // ============================================
+                var uriArray = [];
+                for (var i = 0; i < imageUrlsArray.length; i++) {
+                    var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
+                    if (base64Img) {
+                        var pureBase64 = base64Img.split(',')[1];
+                        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
+                        var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                            path: fileName,
+                            data: pureBase64,
+                            directory: "CACHE"
+                        });
+                        uriArray.push(writeResult.uri);
+                    }
                 }
+                
+                await window.Capacitor.Plugins.Share.share({
+                    title: productName,
+                    text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
+                    files: uriArray
+                });
+                nativeSuccess = true;
+            } catch (nativeErr) {
+                console.warn("Native plugins not compiled in this APK. Falling back to web share.", nativeErr);
             }
-            
-            await window.Capacitor.Plugins.Share.share({
-                title: productName,
-                text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
-                files: uriArray
-            });
-
-        } else {
+        }
+        
+        if (!nativeSuccess) {
             // ============================================
             // 🌐 STANDARD WEB BROWSER FALLBACK
             // ============================================
