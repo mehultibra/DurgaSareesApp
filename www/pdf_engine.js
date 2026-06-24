@@ -26,11 +26,10 @@ function getBase64ImageFast(imageUrl) {
     // Try IndexedDB cache FIRST for lightning-fast generation
     return getImageFromDB(imageUrl).then(function(blob) {
         if (blob) {
-            return new Promise(function(resolve) {
-                var reader = new FileReader();
-                reader.onload = function() { resolve(reader.result); };
-                reader.onerror = function() { resolve(null); };
-                reader.readAsDataURL(blob);
+            var blobUrl = URL.createObjectURL(blob);
+            return getBase64ImageFromUrl(blobUrl).then(function(res) {
+                URL.revokeObjectURL(blobUrl);
+                return res;
             });
         }
         // Fallback: try alternate cache key (with %2F0 -> %2F fix)
@@ -38,11 +37,10 @@ function getBase64ImageFast(imageUrl) {
         var tryAlt = altUrl ? getImageFromDB(altUrl) : Promise.resolve(null);
         return tryAlt.then(function(altBlob) {
             if (altBlob) {
-                return new Promise(function(resolve) {
-                    var reader = new FileReader();
-                    reader.onload = function() { resolve(reader.result); };
-                    reader.onerror = function() { resolve(null); };
-                    reader.readAsDataURL(altBlob);
+                var altBlobUrl = URL.createObjectURL(altBlob);
+                return getBase64ImageFromUrl(altBlobUrl).then(function(res) {
+                    URL.revokeObjectURL(altBlobUrl);
+                    return res;
                 });
             }
             // Last resort: load from network (cross-origin canvas)
@@ -763,7 +761,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             var wixUrl = buildWixProductUrl(product);
             
             var folderPath = (product.zoomUrl && product.zoomUrl !== "None") ? product.zoomUrl : product.gridUrl;
-            var dArr = (shareType === 'full' && product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+            var dArr = (shareType === 'full' && product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d && !/\.(mp4|mov|avi|wmv|webm)$/i.test(d)) : [];
             
             var coverUrl;
             if (dArr.length > 0) {

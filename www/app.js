@@ -1691,30 +1691,56 @@ function askShareTypeAsync() {
         title.innerText = 'Select Share Type';
         title.style.marginTop = '0'; title.style.color = '#333';
         
+        var resolved = false;
+        var onPopState = function() {
+            if (!resolved) {
+                resolved = true;
+                if (document.body.contains(overlay)) document.body.removeChild(overlay);
+                window.removeEventListener('popstate', onPopState);
+                resolve(null);
+            }
+        };
+        window.addEventListener('popstate', onPopState);
+
+        var close = function(val) {
+            if (!resolved) {
+                resolved = true;
+                if (document.body.contains(overlay)) document.body.removeChild(overlay);
+                window.removeEventListener('popstate', onPopState);
+                history.back(); // Pop the state we pushed
+                resolve(val);
+            }
+        };
+
         var btnCover = document.createElement('button');
         btnCover.innerText = 'Product Catalouge';
         btnCover.style.width = '100%'; btnCover.style.padding = '12px'; btnCover.style.marginBottom = '10px';
         btnCover.style.backgroundColor = 'var(--myntra-pink)'; btnCover.style.color = '#fff';
         btnCover.style.border = 'none'; btnCover.style.borderRadius = '6px'; btnCover.style.fontSize = '14px';
-        btnCover.onclick = function() { document.body.removeChild(overlay); resolve('cover'); };
+        btnCover.onclick = function() { close('cover'); };
         
         var btnReady = document.createElement('button');
         btnReady.innerText = 'With Ready Designs';
         btnReady.style.width = '100%'; btnReady.style.padding = '12px'; btnReady.style.marginBottom = '10px';
         btnReady.style.backgroundColor = '#333'; btnReady.style.color = '#fff';
         btnReady.style.border = 'none'; btnReady.style.borderRadius = '6px'; btnReady.style.fontSize = '14px';
-        btnReady.onclick = function() { document.body.removeChild(overlay); resolve('full'); };
+        btnReady.onclick = function() { close('full'); };
         
         var btnCancel = document.createElement('button');
         btnCancel.innerText = 'Cancel';
         btnCancel.style.width = '100%'; btnCancel.style.padding = '12px';
         btnCancel.style.backgroundColor = '#eee'; btnCancel.style.color = '#333';
         btnCancel.style.border = 'none'; btnCancel.style.borderRadius = '6px'; btnCancel.style.fontSize = '14px';
-        btnCancel.onclick = function() { document.body.removeChild(overlay); resolve(null); };
+        btnCancel.onclick = function() { close(null); };
         
         box.appendChild(title); box.appendChild(btnCover); box.appendChild(btnReady); box.appendChild(btnCancel);
         overlay.appendChild(box);
         document.body.appendChild(overlay);
+
+        history.pushState({ modal: 'askShareType' }, '');
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AndroidBackBridge) {
+            window.Capacitor.Plugins.AndroidBackBridge.setCanGoBack({ canGoBack: true });
+        }
     });
 }
 
@@ -1743,7 +1769,7 @@ window.triggerShare = async function (action) {
             var fp = favProducts[i];
             var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
             
-            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && !/\.(mp4|mov|avi|wmv|webm)$/i.test(d)) : [];
             if (dArr.length > 0) {
                 for (var j = 0; j < dArr.length; j++) {
                     allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
@@ -1777,7 +1803,7 @@ window.triggerShare = async function (action) {
 
     var highResUrls = [];
     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && !/\.(mp4|mov|avi|wmv|webm)$/i.test(d)) : [];
     if (dArr.length > 0) {
         for (var j = 0; j < dArr.length; j++) {
             highResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
