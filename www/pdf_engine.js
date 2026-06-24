@@ -26,10 +26,11 @@ function getBase64ImageFast(imageUrl) {
     // Try IndexedDB cache FIRST for lightning-fast generation
     return getImageFromDB(imageUrl).then(function(blob) {
         if (blob) {
-            var blobUrl = URL.createObjectURL(blob);
-            return getBase64ImageFromUrl(blobUrl).then(function(res) {
-                URL.revokeObjectURL(blobUrl);
-                return res;
+            return new Promise(function(resolve) {
+                var reader = new FileReader();
+                reader.onload = function() { resolve(reader.result); };
+                reader.onerror = function() { resolve(null); };
+                reader.readAsDataURL(blob);
             });
         }
         // Fallback: try alternate cache key (with %2F0 -> %2F fix)
@@ -37,10 +38,11 @@ function getBase64ImageFast(imageUrl) {
         var tryAlt = altUrl ? getImageFromDB(altUrl) : Promise.resolve(null);
         return tryAlt.then(function(altBlob) {
             if (altBlob) {
-                var altBlobUrl = URL.createObjectURL(altBlob);
-                return getBase64ImageFromUrl(altBlobUrl).then(function(res) {
-                    URL.revokeObjectURL(altBlobUrl);
-                    return res;
+                return new Promise(function(resolve) {
+                    var reader = new FileReader();
+                    reader.onload = function() { resolve(reader.result); };
+                    reader.onerror = function() { resolve(null); };
+                    reader.readAsDataURL(altBlob);
                 });
             }
             // Last resort: load from network (cross-origin canvas)
@@ -526,6 +528,9 @@ async function generateCartOrderPDF(actionType) {
 // ==========================================
 
 async function generateNativePDF(product, imageUrlsArray, actionType) {
+    // Explicitly filter out video files so they aren't processed as blank PDF pages
+    imageUrlsArray = imageUrlsArray.filter(url => !/\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(url));
+
     var bootScreen = document.getElementById('boot');
     if (bootScreen) {
         bootScreen.style.display = 'flex';

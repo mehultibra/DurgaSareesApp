@@ -1769,7 +1769,7 @@ window.triggerShare = async function (action) {
             var fp = favProducts[i];
             var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
             
-            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && !/\.(mp4|mov|avi|wmv|webm)$/i.test(d)) : [];
+            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
             if (dArr.length > 0) {
                 for (var j = 0; j < dArr.length; j++) {
                     allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
@@ -1803,7 +1803,7 @@ window.triggerShare = async function (action) {
 
     var highResUrls = [];
     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && !/\.(mp4|mov|avi|wmv|webm)$/i.test(d)) : [];
+    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
     if (dArr.length > 0) {
         for (var j = 0; j < dArr.length; j++) {
             highResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
