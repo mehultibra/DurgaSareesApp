@@ -67,80 +67,137 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
             // 📑 PAGE 1: THE FORMATTED DATA COVER PAGE
             // ==========================================================
             if (i === 0) {
-                // 1️⃣ TOP RIGHT: Date
-                var today = new Date();
-                var dateStr = ("0" + today.getDate()).slice(-2) + "-" + ("0" + (today.getMonth() + 1)).slice(-2) + "-" + today.getFullYear();
-                doc.setFontSize(12);
-                doc.setTextColor(100, 100, 100);
-                doc.text("Date: " + dateStr, pageWidth - 40, 40, { align: "right" });
-
-                // 2️⃣ TOP CENTER: Headlines
-                doc.setFontSize(28);
-                doc.setFont("helvetica", "bold");
-                doc.setTextColor(226, 27, 112); // Myntra Pink
-                doc.text("DURGA SAREES", pageWidth / 2, 70, { align: "center" });
-
-                doc.setFontSize(12);
-                doc.setFont("helvetica", "normal");
-                doc.setTextColor(0, 102, 204); // Blue Link
-                doc.textWithLink("(Click for all variety)", pageWidth / 2, 90, { url: 'https://durgasarees.com', align: "center" });
-
-                doc.setFontSize(22);
-                doc.setTextColor(0, 0, 0); // Black
-                doc.setFont("helvetica", "bold");
-                doc.text(product.name, pageWidth / 2, 130, { align: "center" });
-
-                doc.setFontSize(12);
-                doc.setFont("helvetica", "normal");
-                doc.setTextColor(0, 102, 204);
-                doc.text("(Click for Ready Designs)", pageWidth / 2, 150, { align: "center" });
-
-                // 3️⃣ LEFT COLUMN: Data Attributes Table
-                var startX = 40;   // Left margin
-                var startY = 220;  // Pixels down from top
-                var lineH = 32;    // Spacing between each row
-                
-                doc.setFontSize(14);
-                
-                // Helper function to draw rows perfectly aligned
-                function drawRow(label, value, yPos) {
-                    doc.setTextColor(0, 0, 0);
-                    doc.setFont("helvetica", "bold");
-                    doc.text(label, startX, yPos);
-                    doc.setFont("helvetica", "normal");
-                    doc.text(":   " + (value ? String(value) : "-"), startX + 80, yPos); // 80px gap for perfect column alignment
+                // Helper to draw orange underline
+                function drawUnderline(text, x, y, size, align) {
+                    var textWidth = doc.getTextWidth(text);
+                    var startX = x;
+                    if (align === "center") {
+                        startX = x - textWidth / 2;
+                    } else if (align === "right") {
+                        startX = x - textWidth;
+                    }
+                    doc.setDrawColor(255, 140, 0); // Darker orange for better contrast
+                    doc.setLineWidth(0.75);
+                    doc.line(startX, y + 2, startX + textWidth, y + 2);
                 }
 
-                drawRow("Quality", product.fabric, startY);
-                drawRow("Code", product.sku, startY + lineH);
-                drawRow("D No", "₹ " + product.price, startY + lineH * 2);
-                drawRow("Jari", product.jari, startY + lineH * 3);
-                drawRow("Border", product.border, startY + lineH * 4);
-                drawRow("Cut", product.cut, startY + lineH * 5);
-                drawRow("Pallu", product.pallu, startY + lineH * 6);
-                drawRow("Blouse", product.blouse, startY + lineH * 7);
-                drawRow("Packing", product.packing, startY + lineH * 8);
+                // 1️⃣ TOP LEFT: Main Category
+                var catText = product.cat ? String(product.cat) : "Uncategorized";
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(18);
+                var catWidth = doc.getTextWidth(catText);
+                
+                // Draw darkred background box
+                doc.setFillColor(139, 0, 0); // darkred
+                doc.rect(40, 40, catWidth + 20, 26, 'F');
+                
+                // Draw text inside
+                doc.setTextColor(255, 255, 255); // white
+                doc.text(catText, 50, 58);
 
-                // 4️⃣ RIGHT COLUMN: Cover Image
+                // Sub-link under Category
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(10);
+                doc.setTextColor(255, 140, 0); // orange
+                doc.textWithLink("(Click for all variety)", 40, 82, { url: 'https://durgasarees.com' });
+                drawUnderline("(Click for all variety)", 40, 82, 10, "left");
+
+                // 2️⃣ TOP RIGHT: Date
+                var today = new Date();
+                var dateStr = ("0" + today.getDate()).slice(-2) + "/" + ("0" + (today.getMonth() + 1)).slice(-2) + "/" + today.getFullYear();
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(12);
+                doc.setTextColor(51, 51, 51); // #333
+                doc.text("Date: " + dateStr, pageWidth - 40, 58, { align: "right" });
+
+                // 3️⃣ CENTER: Product Title
+                var titleText = product.name ? String(product.name) : "";
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(24);
+                var titleWidth = doc.getTextWidth(titleText);
+                
+                // Draw centered darkred background box
+                var boxW = titleWidth + 30;
+                var boxX = (pageWidth - boxW) / 2;
+                doc.setFillColor(139, 0, 0); // darkred
+                doc.rect(boxX, 105, boxW, 34, 'F');
+                
+                // Draw text inside
+                doc.setTextColor(255, 255, 255); // white
+                doc.text(titleText, pageWidth / 2, 129, { align: "center" });
+
+                // Sub-link under Title
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(10);
+                doc.setTextColor(255, 140, 0); // orange
+                doc.textWithLink("(Click for Ready Designs)", pageWidth / 2, 155, { url: 'https://durgasarees.com', align: "center" });
+                drawUnderline("(Click for Ready Designs)", pageWidth / 2, 155, 10, "center");
+
+                // 4️⃣ THE 3-COLUMN SPECIFICATIONS GRID
+                var startY = 195;
+                var rowH = 22;
+                var col1X = 40;
+                var col2X = 220;
+                var col3X = 400;
+                
+                doc.setFontSize(10);
+                
+                function drawSpec(label, value, colX, rowY) {
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(51, 136, 204); // Blue: #3388cc
+                    doc.text(label, colX, rowY);
+                    
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(51, 51, 51); // #333
+                    doc.text(":  " + (value ? String(value) : "-"), colX + 55, rowY);
+                }
+
+                // Row 1
+                drawSpec("Quality", product.fabric, col1X, startY);
+                drawSpec("Code", product.sku, col2X, startY);
+                drawSpec("D No", "₹ " + product.price, col3X, startY);
+
+                // Row 2
+                drawSpec("Jari", product.jari, col1X, startY + rowH);
+                drawSpec("Border", product.border, col2X, startY + rowH);
+                drawSpec("Cut", product.cut, col3X, startY + rowH);
+
+                // Row 3
+                drawSpec("Pallu", product.pallu, col1X, startY + rowH * 2);
+                drawSpec("Blouse", product.blouse, col2X, startY + rowH * 2);
+                drawSpec("Packing", product.packing, col3X, startY + rowH * 2);
+
+                // 5️⃣ PRODUCT IMAGE CONTAINER
                 if (base64Img) {
-                    var targetW = 260; // Max Image Width
-                    var targetH = 380; // Max Image Height
+                    var targetW = 515; // Max Image Width (margins: 40 left, 40 right)
+                    var targetH = 470; // Max Image Height
                     var imgProps = doc.getImageProperties(base64Img);
                     var imgRatio = imgProps.width / imgProps.height;
                     
                     var finalW = targetH * imgRatio;
                     var finalH = targetH;
-                    if (finalW > targetW) { finalW = targetW; finalH = targetW / imgRatio; }
+                    if (finalW > targetW) { 
+                        finalW = targetW; 
+                        finalH = targetW / imgRatio; 
+                    }
                     
-                    // Coordinates: X = 290 (Right side of page), Y = 190
-                    doc.addImage(base64Img, 'JPEG', 290, 190, finalW, finalH);
+                    var imgX = (pageWidth - finalW) / 2;
+                    var imgY = 255 + ((targetH - finalH) / 2);
+                    
+                    // Draw border around image
+                    doc.setDrawColor(221, 221, 221); // #ddd
+                    doc.setLineWidth(1);
+                    doc.rect(imgX, imgY, finalW, finalH, 'D');
+
+                    // Add the image
+                    doc.addImage(base64Img, 'JPEG', imgX, imgY, finalW, finalH);
                 }
 
-                // 5️⃣ BOTTOM CENTER: Footer Text
-                doc.setFontSize(14);
-                doc.setFont("helvetica", "bold");
-                doc.setTextColor(226, 27, 112); // Pink Warning
-                doc.text("Click On image to view all Ready Designs of this product", pageWidth / 2, 780, { align: "center" });
+                // 6️⃣ FOOTER
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(11);
+                doc.setTextColor(85, 85, 85); // #555
+                doc.text("Click On image to view all Ready Designs of this product", pageWidth / 2, 785, { align: "center" });
             } 
             
             // ==========================================================
