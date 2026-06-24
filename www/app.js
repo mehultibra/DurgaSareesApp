@@ -1737,7 +1737,8 @@ function askShareTypeAsync() {
         overlay.appendChild(box);
         document.body.appendChild(overlay);
 
-        history.pushState({ modal: 'askShareType' }, '');
+        // Replace shareModal state with askShareType so back button works perfectly
+        history.replaceState({ modal: 'askShareType' }, '');
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AndroidBackBridge) {
             window.Capacitor.Plugins.AndroidBackBridge.setCanGoBack({ canGoBack: true });
         }
@@ -1750,7 +1751,8 @@ window.triggerShare = async function (action) {
         return;
     }
 
-    closeModals(); // Close the shareModal first
+    // Visually hide shareModal but DO NOT closeModals() since we will replace its history state
+    document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
 
     var isDetailOpen = document.getElementById('detailPanel') && document.getElementById('detailPanel').classList.contains('open');
 
