@@ -1730,7 +1730,7 @@ window.triggerShare = async function (action) {
 
     if (!isDetailOpen) {
         // --- MAIN PAGE SHARE (Favorites) ---
-        var favProducts = allProducts.filter(p => p.fav);
+        var favProducts = allProducts.filter(p => favorites[p.id]);
         if (favProducts.length === 0) {
             return alert("No favorite items to share. Please mark some products as favorites first.");
         }
