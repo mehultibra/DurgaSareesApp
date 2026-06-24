@@ -103,7 +103,31 @@ function getImgElementSrc(imgEl) {
 }
 
 // ==========================================
-// 🛒 CART ORDER PDF — LIGHTNING FAST FROM CACHE
+// LOGO LOADER — Loads logo.png from assets as base64 for PDF embedding
+// ==========================================
+var _cachedLogoBase64 = null;
+function getLogoBase64() {
+    if (_cachedLogoBase64) return Promise.resolve(_cachedLogoBase64);
+    return new Promise(function(resolve) {
+        var img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.onload = function() {
+            try {
+                var canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || img.width;
+                canvas.height = img.naturalHeight || img.height;
+                canvas.getContext('2d').drawImage(img, 0, 0);
+                _cachedLogoBase64 = canvas.toDataURL('image/png');
+                resolve(_cachedLogoBase64);
+            } catch(e) { resolve(null); }
+        };
+        img.onerror = function() { resolve(null); };
+        img.src = './logo.png';
+    });
+}
+
+// ==========================================
+// CART ORDER PDF — LIGHTNING FAST FROM CACHE
 // Mirrors the visual layout of the Cart panel
 // ==========================================
 async function generateCartOrderPDF(actionType) {
@@ -204,45 +228,63 @@ async function generateCartOrderPDF(actionType) {
         var margin = 24;
         var y = margin;
 
-        // ── PAGE HEADER ────────────────────────────────────
-        // Logo box with website link
-        doc.setFillColor(139, 0, 0);
-        doc.rect(margin, y, 100, 36, 'F');
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(255, 255, 255);
-        doc.textWithLink("DURGA SAREES", margin + 8, y + 23, { url: WEBSITE_BASE });
+        // ── Load logo ──────────────────────────────────────
+        var logoBase64 = await getLogoBase64();
 
-        // Date
+        // ── PAGE HEADER ────────────────────────────────────
+        var LOGO_H = 38;
+        if (logoBase64) {
+            try {
+                var logoProp = doc.getImageProperties(logoBase64);
+                var logoW = LOGO_H * (logoProp.width / logoProp.height);
+                logoW = Math.min(logoW, 140); // cap width
+                // Clickable logo image → website
+                doc.link(margin, y, logoW, LOGO_H, { url: WEBSITE_BASE });
+                doc.addImage(logoBase64, 'PNG', margin, y, logoW, LOGO_H);
+            } catch(e) {
+                // Fallback text logo
+                doc.setFillColor(139, 0, 0);
+                doc.rect(margin, y, 110, LOGO_H, 'F');
+                doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(255,255,255);
+                doc.textWithLink("DURGA SAREES", margin + 8, y + 24, { url: WEBSITE_BASE });
+            }
+        } else {
+            doc.setFillColor(139, 0, 0);
+            doc.rect(margin, y, 110, LOGO_H, 'F');
+            doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(255,255,255);
+            doc.textWithLink("DURGA SAREES", margin + 8, y + 24, { url: WEBSITE_BASE });
+        }
+
+        // Date & totals (right side)
         var today = new Date();
         var dateStr = ("0" + today.getDate()).slice(-2) + "/" + ("0" + (today.getMonth() + 1)).slice(-2) + "/" + today.getFullYear();
         var timeStr = ("0" + today.getHours()).slice(-2) + ":" + ("0" + today.getMinutes()).slice(-2);
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(80, 80, 80);
-        doc.text("Order Date: " + dateStr + "  " + timeStr, PW - margin, y + 15, { align: "right" });
-        doc.text("Total: " + totalQtyAll + " pcs", PW - margin, y + 28, { align: "right" });
+        doc.text("Order Date: " + dateStr + "  " + timeStr, PW - margin, y + 14, { align: "right" });
+        doc.text("Total: " + totalQtyAll + " pcs", PW - margin, y + 27, { align: "right" });
 
-        y += 46;
+        y += LOGO_H + 8;
 
         // Divider
         doc.setDrawColor(139, 0, 0);
         doc.setLineWidth(1.5);
         doc.line(margin, y, PW - margin, y);
-        y += 12;
+        y += 10;
 
-        // Title
-        doc.setFontSize(16);
+        // Title — plain text only (jsPDF doesn't render emoji)
+        doc.setFontSize(14);
         doc.setFont("helvetica", "bold");
         doc.setTextColor(40, 40, 40);
-        doc.text("🛒  ORDER SUMMARY", PW / 2, y + 12, { align: "center" });
-        y += 26;
+        doc.text("ORDER SUMMARY", PW / 2, y + 12, { align: "center" });
+        y += 24;
 
         // ── PRODUCT BLOCKS ─────────────────────────────────
         var THUMB_SIZE = 72;
         var DESIGN_COLS = 5;
         var THUMB_GAP = 6;
-        var CELL_W = (PW - margin * 2 - 120 - 8) / DESIGN_COLS;
+        var CELL_W = (PW - (margin * 2)) / DESIGN_COLS;
 
         for (var gi = 0; gi < groupArr.length; gi++) {
             var g = groupArr[gi];
@@ -250,32 +292,32 @@ async function generateCartOrderPDF(actionType) {
             var pTotalQty = g.items.reduce((s, i) => s + (parseInt(i.qty) || 0), 0);
 
             // ── Check if enough space for at least the header row ──
-            var blockHeaderH = 52;
+            var blockHeaderH = 44;
             if (y + blockHeaderH > PH - margin) {
                 doc.addPage();
                 y = margin;
             }
 
             // ── Product Header ─────────────────────────────
+            var wixUrl = buildWixProductUrl(p);
             doc.setFillColor(245, 245, 246);
             doc.roundedRect(margin, y, PW - margin * 2, blockHeaderH, 4, 4, 'F');
-            doc.setDrawColor(220, 220, 220);
+            doc.setDrawColor(200, 200, 200);
             doc.setLineWidth(0.5);
             doc.roundedRect(margin, y, PW - margin * 2, blockHeaderH, 4, 4, 'D');
 
-            // Product name (linked to Wix)
-            var wixUrl = buildWixProductUrl(p);
+            // Product name — clickable link to Wix product page
             doc.setFontSize(13);
             doc.setFont("helvetica", "bold");
             doc.setTextColor(139, 0, 0);
             var nameText = p.name || "Unknown";
-            doc.textWithLink(nameText, margin + 10, y + 18, { url: wixUrl });
+            doc.textWithLink(nameText, margin + 10, y + 16, { url: wixUrl });
 
             // Underline the name
             var nameW = doc.getTextWidth(nameText);
             doc.setDrawColor(139, 0, 0);
             doc.setLineWidth(0.5);
-            doc.line(margin + 10, y + 20, margin + 10 + nameW, y + 20);
+            doc.line(margin + 10, y + 18, margin + 10 + nameW, y + 18);
 
             // SKU | Rate | Packing | Total Qty
             doc.setFontSize(8.5);
@@ -283,15 +325,10 @@ async function generateCartOrderPDF(actionType) {
             doc.setTextColor(80, 80, 80);
             var infoLine = [];
             if (p.sku) infoLine.push("SKU: " + p.sku);
-            if (p.price) infoLine.push("Rate: ₹" + p.price);
+            if (p.price) infoLine.push("Rate: Rs." + p.price);
             if (p.packing) infoLine.push("Packing: " + p.packing);
             infoLine.push("Total: " + pTotalQty + " pcs");
-            doc.text(infoLine.join("   |   "), margin + 10, y + 36);
-
-            // Website link small
-            doc.setFontSize(7);
-            doc.setTextColor(0, 100, 200);
-            doc.textWithLink("View on Website ↗", margin + 10, y + 48, { url: wixUrl });
+            doc.text(infoLine.join("   |   "), margin + 10, y + 34);
 
             y += blockHeaderH + 6;
 
@@ -319,7 +356,7 @@ async function generateCartOrderPDF(actionType) {
                     doc.setLineWidth(0.5);
                     doc.roundedRect(cellX, y, CELL_W - THUMB_GAP, THUMB_SIZE + 30, 3, 3, 'FD');
 
-                    // Thumbnail image
+                    // Thumbnail image — clickable link to Wix product page
                     if (item._pdfImgSrc) {
                         try {
                             var imgProps = doc.getImageProperties(item._pdfImgSrc);
@@ -332,8 +369,9 @@ async function generateCartOrderPDF(actionType) {
                             var imgX = cellX + ((CELL_W - THUMB_GAP - drawW) / 2);
                             var imgY = y + 3;
                             doc.addImage(item._pdfImgSrc, 'JPEG', imgX, imgY, drawW, drawH);
+                            // Make the thumbnail image a clickable link
+                            doc.link(imgX, imgY, drawW, drawH, { url: wixUrl });
                         } catch(e) {
-                            // If image fails, draw placeholder
                             doc.setFillColor(230, 230, 230);
                             doc.rect(cellX + 3, y + 3, CELL_W - THUMB_GAP - 6, THUMB_SIZE, 'F');
                             doc.setFontSize(6);
@@ -386,10 +424,10 @@ async function generateCartOrderPDF(actionType) {
         doc.setFontSize(8);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(100, 100, 100);
-        doc.text("Total Items: " + totalQtyAll + " pcs  |  Products: " + groupArr.length, PW / 2, y + 8, { align: "center" });
-        doc.setFontSize(7.5);
+        doc.text("Total Items: " + totalQtyAll + " pcs  |  Products: " + groupArr.length + "  |  WhatsApp: +91 99982 32380", PW / 2, y + 8, { align: "center" });
+        doc.setFontSize(8);
         doc.setTextColor(0, 100, 200);
-        doc.textWithLink("www.durgasarees.com", PW / 2, y + 18, { url: WEBSITE_BASE, align: "center" });
+        doc.textWithLink("www.durgasarees.com", PW / 2, y + 19, { url: WEBSITE_BASE, align: "center" });
 
         // ── OUTPUT ──────────────────────────────────────────
         var fileName = "DurgaSarees_Order_" + dateStr.replace(/\//g, '-') + ".pdf";
