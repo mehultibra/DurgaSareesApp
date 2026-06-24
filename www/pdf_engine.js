@@ -21,9 +21,8 @@ function buildWixProductUrl(product) {
 
 // ==========================================
 // 🧠 IMAGE HELPER: Convert blob to JPEG via canvas for jsPDF
-// PDF format only supports JPEG/PNG natively.
-// WebP blobs passed raw to jsPDF cause huge uncompressed output.
-// Canvas conversion is instant since blob is already in RAM (IndexedDB).
+// PDF format only supports JPEG/PNG natively — WebP must be converted
+// Canvas conversion is instant since blob is already in RAM (IndexedDB)
 // ==========================================
 function blobToJpegDataUrl(blob) {
     return new Promise(function(resolve) {
@@ -31,17 +30,47 @@ function blobToJpegDataUrl(blob) {
         var img = new Image();
         img.onload = function() {
             var canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth || img.width;
-            canvas.height = img.naturalHeight || img.height;
-            canvas.getContext('2d').drawImage(img, 0, 0);
+            var maxDim = 1200;
+            var w = img.naturalWidth || img.width;
+            var h = img.naturalHeight || img.height;
+            if (w > maxDim || h > maxDim) {
+                var r = Math.min(maxDim / w, maxDim / h);
+                w = Math.round(w * r);
+                h = Math.round(h * r);
+            }
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
             URL.revokeObjectURL(blobUrl);
-            resolve(canvas.toDataURL('image/jpeg', 0.88));
+            resolve(canvas.toDataURL('image/jpeg', 0.75));
         };
         img.onerror = function() {
             URL.revokeObjectURL(blobUrl);
             resolve(null);
         };
         img.src = blobUrl;
+    });
+}
+
+// Fast network fallback (same as yesterday's original): canvas maxDim 1200, JPEG 0.75
+function getBase64ImageFromUrl(imageUrl) {
+    return new Promise(function(resolve) {
+        var img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = function() {
+            var canvas = document.createElement('canvas');
+            var maxDim = 1200;
+            var w = img.width, h = img.height;
+            if (w > maxDim || h > maxDim) {
+                var r = Math.min(maxDim / w, maxDim / h);
+                w = Math.round(w * r); h = Math.round(h * r);
+            }
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.75));
+        };
+        img.onerror = function() { resolve(null); };
+        img.src = imageUrl;
     });
 }
 
@@ -54,19 +83,15 @@ function getBase64ImageFast(imageUrl) {
         var tryAlt = altUrl ? getImageFromDB(altUrl) : Promise.resolve(null);
         return tryAlt.then(function(altBlob) {
             if (altBlob) return blobToJpegDataUrl(altBlob);
-            // Last resort: fetch from network, then convert via canvas
-            return fetch(imageUrl)
-                .then(function(res) { return res.blob(); })
-                .then(function(netBlob) { return blobToJpegDataUrl(netBlob); })
-                .catch(function() { return null; });
+            // Last resort: download from network (same fast approach as yesterday)
+            return getBase64ImageFromUrl(imageUrl);
         });
     }).catch(function() {
-        return fetch(imageUrl)
-            .then(function(res) { return res.blob(); })
-            .then(function(netBlob) { return blobToJpegDataUrl(netBlob); })
-            .catch(function() { return null; });
+        return getBase64ImageFromUrl(imageUrl);
     });
 }
+
+
 
 // ==========================================
 // Helper: Get Firebase URL for a design

@@ -491,17 +491,31 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         loadFromNetwork();
     });
 
-    // 2. Background Load High-Res Zoom Image (if applicable)
+    // 2. Background Load High-Res Zoom Image (if applicable) — saved to IndexedDB for PDF speed
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
         var encZoomPath = zoomPath.trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
         var highResUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
 
-        var hdImage = new Image();
-        hdImage.onload = function () {
-            // Swap to HD image silently once downloaded
-            imgElement.src = highResUrl;
-        };
-        hdImage.src = highResUrl;
+        // Check if already in IndexedDB before fetching
+        getImageFromDB(highResUrl).then(function(existingBlob) {
+            if (!existingBlob) {
+                fetch(highResUrl)
+                    .then(function(res) { return res.ok ? res.blob() : null; })
+                    .then(function(blob) {
+                        if (blob) {
+                            saveImageToDB(highResUrl, blob);
+                            imgElement.src = URL.createObjectURL(blob);
+                        }
+                    })
+                    .catch(function() {});
+            } else {
+                imgElement.src = URL.createObjectURL(existingBlob);
+            }
+        }).catch(function() {
+            var hdImage = new Image();
+            hdImage.onload = function () { imgElement.src = highResUrl; };
+            hdImage.src = highResUrl;
+        });
     }
 };
 
