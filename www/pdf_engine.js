@@ -1,226 +1,591 @@
 // ==========================================
-// 🌸 DURGA SAREES: NATIVE PDF ENGINE (V6 - EDITABLE SLIDE REPLICA)
-// Lightning Fast Client-Side Generation via Phone CPU
+// 🌸 DURGA SAREES: PDF ENGINE (V7 - CART PDF + WIX LINKS)
 // ==========================================
 
-const { jsPDF } = window.jspdf;
+const WEBSITE_BASE = "https://www.durgasarees.com";
+const WEBSITE_PRODUCT_BASE = "https://www.durgasarees.com/product-page/";
+
+// Build Wix product URL from SKU and product name
+function buildWixProductUrl(product) {
+    var sku = (product.sku || "").trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    var nameSlug = (product.name || "").trim().toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9\-]/g, '');
+    if (sku && nameSlug) {
+        return WEBSITE_PRODUCT_BASE + sku + '-' + nameSlug;
+    } else if (nameSlug) {
+        return WEBSITE_PRODUCT_BASE + nameSlug;
+    }
+    return WEBSITE_BASE;
+}
+
+// ==========================================
+// 🧠 IMAGE HELPER: Get image from IndexedDB cache first, then network
+// ==========================================
+function getBase64ImageFast(imageUrl) {
+    // Try IndexedDB cache FIRST for lightning-fast generation
+    return getImageFromDB(imageUrl).then(function(blob) {
+        if (blob) {
+            return new Promise(function(resolve) {
+                var reader = new FileReader();
+                reader.onload = function() { resolve(reader.result); };
+                reader.onerror = function() { resolve(null); };
+                reader.readAsDataURL(blob);
+            });
+        }
+        // Fallback: try alternate cache key (with %2F0 -> %2F fix)
+        var altUrl = imageUrl.includes('%2F0') ? imageUrl.replace('%2F0', '%2F') : null;
+        var tryAlt = altUrl ? getImageFromDB(altUrl) : Promise.resolve(null);
+        return tryAlt.then(function(altBlob) {
+            if (altBlob) {
+                return new Promise(function(resolve) {
+                    var reader = new FileReader();
+                    reader.onload = function() { resolve(reader.result); };
+                    reader.onerror = function() { resolve(null); };
+                    reader.readAsDataURL(altBlob);
+                });
+            }
+            // Last resort: load from network (cross-origin canvas)
+            return getBase64ImageFromUrl(imageUrl);
+        });
+    }).catch(function() {
+        return getBase64ImageFromUrl(imageUrl);
+    });
+}
 
 // 🧠 MEMORY HANDLER: Downloads High-Res Firebase Images to RAM
 function getBase64ImageFromUrl(imageUrl) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         var img = new Image();
-        img.crossOrigin = "Anonymous"; // Crucial for Firebase Permissions
-        
+        img.crossOrigin = "Anonymous";
         img.onload = function () {
             var canvas = document.createElement("canvas");
-            
-            // ⚡ COMPRESSION: Compresses 4K Zoom files to 1200px.
-            // This ensures the PDF generates in milliseconds and stays under WhatsApp's file limits.
-            var maxDim = 1200;
-            var w = img.width; 
-            var h = img.height;
+            var maxDim = 1000;
+            var w = img.width, h = img.height;
             if (w > maxDim || h > maxDim) {
                 var r = Math.min(maxDim / w, maxDim / h);
-                w = w * r; 
-                h = h * r;
+                w = w * r; h = h * r;
             }
-            
-            canvas.width = w;
-            canvas.height = h;
-            var ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, w, h);
-            
-            // 0.75 JPEG Quality = Crisp Saree Details but tiny file size
-            resolve(canvas.toDataURL("image/jpeg", 0.75)); 
+            canvas.width = w; canvas.height = h;
+            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL("image/jpeg", 0.75));
         };
-        
         img.onerror = function () { resolve(null); };
         img.src = imageUrl;
     });
 }
 
 // ==========================================
+// Helper: Get Firebase URL for a design
+// ==========================================
+function getDesignFirebaseUrl(folderPath, dId) {
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/";
+    var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean)
+        .map(s => encodeURIComponent(s.trim())).join('%2F');
+    var fileName = "01.webp";
+    if (dId && dId !== 'DIRECT' && dId !== 'Cover') {
+        var num = dId.replace(/\D/g, '');
+        if (num.length === 1) num = "0" + num;
+        if (num === "") num = dId;
+        fileName = num + ".webp";
+    }
+    return fbBase + encPath + "%2F" + encodeURIComponent(fileName) + "?alt=media";
+}
+
+// ==========================================
+// Helper: Get cached blob URL for an img element in DOM
+// ==========================================
+function getImgElementSrc(imgEl) {
+    if (!imgEl) return null;
+    var src = imgEl.src;
+    if (src && !src.startsWith('data:') && src !== '') return src;
+    return null;
+}
+
+// ==========================================
+// 🛒 CART ORDER PDF — LIGHTNING FAST FROM CACHE
+// Mirrors the visual layout of the Cart panel
+// ==========================================
+async function generateCartOrderPDF(actionType) {
+    var bootScreen = document.getElementById('boot');
+    var bootMsg = document.getElementById('bootMsg');
+    if (bootScreen) { bootScreen.style.display = 'flex'; }
+    if (bootMsg) bootMsg.innerText = "Generating Order PDF...";
+
+    try {
+        const { jsPDF } = window.jspdf;
+
+        // ── Collect cart data ──────────────────────────────
+        var cartKeys = Object.keys(cart);
+        if (cartKeys.length === 0) {
+            if (bootScreen) bootScreen.style.display = 'none';
+            alert("Your cart is empty!");
+            return;
+        }
+
+        // Group by product (same as cart UI)
+        var groups = {};
+        for (var k in cart) {
+            var item = cart[k];
+            if (!item || !item.p || !item.p.id) continue;
+            if (!groups[item.p.id]) groups[item.p.id] = { p: item.p, items: [] };
+            groups[item.p.id].items.push(item);
+        }
+
+        var groupArr = Object.values(groups);
+        if (groupArr.length === 0) {
+            if (bootScreen) bootScreen.style.display = 'none';
+            alert("Cart is empty!");
+            return;
+        }
+
+        // ── Fetch all needed images from cache ─────────────
+        var totalCount = 0;
+        var totalQtyAll = 0;
+        for (var g of groupArr) {
+            for (var item of g.items) totalQtyAll += parseInt(item.qty) || 0;
+        }
+
+        if (bootMsg) bootMsg.innerText = "Loading images from cache...";
+
+        // Preload images for all cart items
+        for (var g of groupArr) {
+            var gridPath = g.p.gridUrl;
+            var zoomPath = (g.p.zoomUrl && g.p.zoomUrl !== 'None') ? g.p.zoomUrl : gridPath;
+            for (var item of g.items) {
+                var dId = item.design || 'DIRECT';
+                var targetFile = "01.webp";
+                if (dId !== 'DIRECT' && dId !== 'Cover') {
+                    var num = dId.replace(/\D/g, '');
+                    if (num.length === 1) num = "0" + num;
+                    if (num === '') num = "02";
+                    targetFile = num + ".webp";
+                }
+                // Try grid URL first (faster load from cache), then zoom
+                var gridFbUrl = getDesignFirebaseUrl(gridPath, dId);
+                var zoomFbUrl = getDesignFirebaseUrl(zoomPath, dId);
+
+                // Try DOM img element first (instant!)
+                var imgId = "cart_img_" + g.p.id + "_" + dId.replace(/[^a-zA-Z0-9]/g, '');
+                var domImg = document.getElementById(imgId);
+                var domSrc = getImgElementSrc(domImg);
+
+                item._pdfImgSrc = null;
+                if (domSrc && domSrc.startsWith('blob:')) {
+                    // Already rendered as blob in DOM — convert to base64
+                    try {
+                        var fetchBlob = await fetch(domSrc);
+                        var blobData = await fetchBlob.blob();
+                        var b64 = await new Promise(function(res) {
+                            var fr = new FileReader();
+                            fr.onload = () => res(fr.result);
+                            fr.onerror = () => res(null);
+                            fr.readAsDataURL(blobData);
+                        });
+                        item._pdfImgSrc = b64;
+                    } catch(e) {}
+                }
+
+                if (!item._pdfImgSrc) {
+                    // Try IndexedDB grid cache key
+                    item._pdfImgSrc = await getBase64ImageFast(gridFbUrl);
+                }
+                if (!item._pdfImgSrc) {
+                    item._pdfImgSrc = await getBase64ImageFast(zoomFbUrl);
+                }
+            }
+        }
+
+        if (bootMsg) bootMsg.innerText = "Building PDF...";
+
+        // ── PDF Setup ──────────────────────────────────────
+        var doc = new jsPDF('p', 'pt', 'a4');
+        var PW = 595, PH = 842;
+        var margin = 24;
+        var y = margin;
+
+        // ── PAGE HEADER ────────────────────────────────────
+        // Logo box with website link
+        doc.setFillColor(139, 0, 0);
+        doc.rect(margin, y, 100, 36, 'F');
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(255, 255, 255);
+        doc.textWithLink("DURGA SAREES", margin + 8, y + 23, { url: WEBSITE_BASE });
+
+        // Date
+        var today = new Date();
+        var dateStr = ("0" + today.getDate()).slice(-2) + "/" + ("0" + (today.getMonth() + 1)).slice(-2) + "/" + today.getFullYear();
+        var timeStr = ("0" + today.getHours()).slice(-2) + ":" + ("0" + today.getMinutes()).slice(-2);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(80, 80, 80);
+        doc.text("Order Date: " + dateStr + "  " + timeStr, PW - margin, y + 15, { align: "right" });
+        doc.text("Total: " + totalQtyAll + " pcs", PW - margin, y + 28, { align: "right" });
+
+        y += 46;
+
+        // Divider
+        doc.setDrawColor(139, 0, 0);
+        doc.setLineWidth(1.5);
+        doc.line(margin, y, PW - margin, y);
+        y += 12;
+
+        // Title
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(40, 40, 40);
+        doc.text("🛒  ORDER SUMMARY", PW / 2, y + 12, { align: "center" });
+        y += 26;
+
+        // ── PRODUCT BLOCKS ─────────────────────────────────
+        var THUMB_SIZE = 72;
+        var DESIGN_COLS = 5;
+        var THUMB_GAP = 6;
+        var CELL_W = (PW - margin * 2 - 120 - 8) / DESIGN_COLS;
+
+        for (var gi = 0; gi < groupArr.length; gi++) {
+            var g = groupArr[gi];
+            var p = g.p;
+            var pTotalQty = g.items.reduce((s, i) => s + (parseInt(i.qty) || 0), 0);
+
+            // ── Check if enough space for at least the header row ──
+            var blockHeaderH = 52;
+            if (y + blockHeaderH > PH - margin) {
+                doc.addPage();
+                y = margin;
+            }
+
+            // ── Product Header ─────────────────────────────
+            doc.setFillColor(245, 245, 246);
+            doc.roundedRect(margin, y, PW - margin * 2, blockHeaderH, 4, 4, 'F');
+            doc.setDrawColor(220, 220, 220);
+            doc.setLineWidth(0.5);
+            doc.roundedRect(margin, y, PW - margin * 2, blockHeaderH, 4, 4, 'D');
+
+            // Product name (linked to Wix)
+            var wixUrl = buildWixProductUrl(p);
+            doc.setFontSize(13);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(139, 0, 0);
+            var nameText = p.name || "Unknown";
+            doc.textWithLink(nameText, margin + 10, y + 18, { url: wixUrl });
+
+            // Underline the name
+            var nameW = doc.getTextWidth(nameText);
+            doc.setDrawColor(139, 0, 0);
+            doc.setLineWidth(0.5);
+            doc.line(margin + 10, y + 20, margin + 10 + nameW, y + 20);
+
+            // SKU | Rate | Packing | Total Qty
+            doc.setFontSize(8.5);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(80, 80, 80);
+            var infoLine = [];
+            if (p.sku) infoLine.push("SKU: " + p.sku);
+            if (p.price) infoLine.push("Rate: ₹" + p.price);
+            if (p.packing) infoLine.push("Packing: " + p.packing);
+            infoLine.push("Total: " + pTotalQty + " pcs");
+            doc.text(infoLine.join("   |   "), margin + 10, y + 36);
+
+            // Website link small
+            doc.setFontSize(7);
+            doc.setTextColor(0, 100, 200);
+            doc.textWithLink("View on Website ↗", margin + 10, y + 48, { url: wixUrl });
+
+            y += blockHeaderH + 6;
+
+            // ── Design Thumbnails Row ──────────────────────
+            // Split items into rows of DESIGN_COLS
+            var items = g.items;
+            for (var row = 0; row < Math.ceil(items.length / DESIGN_COLS); row++) {
+                var rowItems = items.slice(row * DESIGN_COLS, (row + 1) * DESIGN_COLS);
+                var rowH = THUMB_SIZE + 36;
+
+                if (y + rowH > PH - margin) {
+                    doc.addPage();
+                    y = margin;
+                }
+
+                for (var ci = 0; ci < rowItems.length; ci++) {
+                    var item = rowItems[ci];
+                    var cellX = margin + ci * CELL_W;
+                    var dId = item.design || 'DIRECT';
+                    var dLabel = (dId === 'DIRECT') ? 'Cover' : dId;
+
+                    // Thumbnail box
+                    doc.setDrawColor(220, 220, 220);
+                    doc.setFillColor(248, 248, 248);
+                    doc.setLineWidth(0.5);
+                    doc.roundedRect(cellX, y, CELL_W - THUMB_GAP, THUMB_SIZE + 30, 3, 3, 'FD');
+
+                    // Thumbnail image
+                    if (item._pdfImgSrc) {
+                        try {
+                            var imgProps = doc.getImageProperties(item._pdfImgSrc);
+                            var iW = CELL_W - THUMB_GAP - 6;
+                            var iH = THUMB_SIZE;
+                            var imgRatio = imgProps.width / imgProps.height;
+                            var drawW = iH * imgRatio;
+                            var drawH = iH;
+                            if (drawW > iW) { drawW = iW; drawH = iW / imgRatio; }
+                            var imgX = cellX + ((CELL_W - THUMB_GAP - drawW) / 2);
+                            var imgY = y + 3;
+                            doc.addImage(item._pdfImgSrc, 'JPEG', imgX, imgY, drawW, drawH);
+                        } catch(e) {
+                            // If image fails, draw placeholder
+                            doc.setFillColor(230, 230, 230);
+                            doc.rect(cellX + 3, y + 3, CELL_W - THUMB_GAP - 6, THUMB_SIZE, 'F');
+                            doc.setFontSize(6);
+                            doc.setTextColor(150, 150, 150);
+                            doc.text("No Image", cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2 + 3, { align: "center" });
+                        }
+                    } else {
+                        doc.setFillColor(230, 230, 230);
+                        doc.rect(cellX + 3, y + 3, CELL_W - THUMB_GAP - 6, THUMB_SIZE, 'F');
+                        doc.setFontSize(6);
+                        doc.setTextColor(150, 150, 150);
+                        doc.text("No Image", cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2 + 3, { align: "center" });
+                    }
+
+                    // Design label
+                    doc.setFontSize(7.5);
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(40, 40, 40);
+                    var labelX = cellX + (CELL_W - THUMB_GAP) / 2;
+                    doc.text(dLabel, labelX, y + THUMB_SIZE + 13, { align: "center" });
+
+                    // Qty badge (pink background)
+                    var qtyText = (item.qty || 0) + " pcs";
+                    doc.setFillColor(255, 63, 108);
+                    var qtyW = doc.getTextWidth(qtyText) + 8;
+                    doc.roundedRect(labelX - qtyW / 2, y + THUMB_SIZE + 17, qtyW, 11, 2, 2, 'F');
+                    doc.setFontSize(7);
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(255, 255, 255);
+                    doc.text(qtyText, labelX, y + THUMB_SIZE + 25.5, { align: "center" });
+                }
+
+                y += rowH + 4;
+            }
+
+            y += 8; // Space between product blocks
+        }
+
+        // ── FOOTER ─────────────────────────────────────────
+        if (y + 40 > PH - margin) {
+            doc.addPage();
+            y = margin;
+        }
+
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, PW - margin, y);
+        y += 10;
+
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 100, 100);
+        doc.text("Total Items: " + totalQtyAll + " pcs  |  Products: " + groupArr.length, PW / 2, y + 8, { align: "center" });
+        doc.setFontSize(7.5);
+        doc.setTextColor(0, 100, 200);
+        doc.textWithLink("www.durgasarees.com", PW / 2, y + 18, { url: WEBSITE_BASE, align: "center" });
+
+        // ── OUTPUT ──────────────────────────────────────────
+        var fileName = "DurgaSarees_Order_" + dateStr.replace(/\//g, '-') + ".pdf";
+        if (bootScreen) bootScreen.style.display = 'none';
+
+        if (actionType === 'preview') {
+            doc.output('dataurlnewwindow');
+        } else {
+            var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins &&
+                window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+
+            if (isCapacitor) {
+                var pureBase64 = doc.output('datauristring').split(',')[1];
+                var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                    path: fileName,
+                    data: pureBase64,
+                    directory: "CACHE"
+                });
+                await window.Capacitor.Plugins.Share.share({
+                    title: "Durga Sarees Order — " + totalQtyAll + " pcs",
+                    files: [writeResult.uri]
+                });
+            } else {
+                var pdfBlob = doc.output('blob');
+                var file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+                if (typeof navigator.share === 'function') {
+                    try {
+                        await navigator.share({ title: "Durga Sarees Order", files: [file] });
+                    } catch(e) {
+                        doc.save(fileName);
+                    }
+                } else {
+                    doc.save(fileName);
+                }
+            }
+        }
+
+    } catch (error) {
+        if (bootScreen) bootScreen.style.display = 'none';
+        alert("Order PDF Error: " + error.message);
+    }
+}
+
+// ==========================================
 // 🌸 DURGA SAREES: NATIVE PDF ENGINE (A4 CATALOG LAYOUT)
-// Lightning Fast Client-Side Generation via Phone CPU
 // ==========================================
 
 async function generateNativePDF(product, imageUrlsArray, actionType) {
     var bootScreen = document.getElementById('boot');
     if (bootScreen) {
         bootScreen.style.display = 'flex';
-        document.getElementById('bootMsg').innerText = "Generating Formatted PDF...";
+        document.getElementById('bootMsg').innerText = "Generating Catalog PDF...";
     }
 
     try {
-        // 📏 CREATE A4 PORTRAIT DOCUMENT (Width: 595pt, Height: 842pt)
+        const { jsPDF } = window.jspdf;
         var doc = new jsPDF('p', 'pt', 'a4');
         var pageWidth = 595;
         var pageHeight = 842;
+        var wixUrl = buildWixProductUrl(product);
 
         for (var i = 0; i < imageUrlsArray.length; i++) {
             if (i > 0) doc.addPage();
 
-            // Fetch High-Res Zoom Image to RAM
-            var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
+            // Try cache first for speed, then network
+            var base64Img = await getBase64ImageFast(imageUrlsArray[i]);
 
-            // ==========================================================
-            // 📑 PAGE 1: THE FORMATTED DATA COVER PAGE
-            // ==========================================================
             if (i === 0) {
-                // Helper to draw orange underline
+                // ── COVER PAGE ─────────────────────────────
                 function drawUnderline(text, x, y, size, align) {
                     var textWidth = doc.getTextWidth(text);
                     var startX = x;
-                    if (align === "center") {
-                        startX = x - textWidth / 2;
-                    } else if (align === "right") {
-                        startX = x - textWidth;
-                    }
-                    doc.setDrawColor(255, 140, 0); // Darker orange for better contrast
+                    if (align === "center") startX = x - textWidth / 2;
+                    else if (align === "right") startX = x - textWidth;
+                    doc.setDrawColor(255, 140, 0);
                     doc.setLineWidth(0.75);
                     doc.line(startX, y + 2, startX + textWidth, y + 2);
                 }
 
-                // 1️⃣ TOP LEFT: Main Category
+                // Category
                 var catText = product.cat ? String(product.cat) : "Uncategorized";
                 doc.setFont("helvetica", "bold");
                 doc.setFontSize(18);
                 var catWidth = doc.getTextWidth(catText);
-                
-                // Draw darkred background box
-                doc.setFillColor(139, 0, 0); // darkred
+                doc.setFillColor(139, 0, 0);
                 doc.rect(40, 40, catWidth + 20, 26, 'F');
-                
-                // Draw text inside
-                doc.setTextColor(255, 255, 255); // white
+                doc.setTextColor(255, 255, 255);
                 doc.text(catText, 50, 58);
 
-                // Sub-link under Category
+                // Website link under category
                 doc.setFont("helvetica", "normal");
                 doc.setFontSize(10);
-                doc.setTextColor(255, 140, 0); // orange
-                doc.textWithLink("(Click for all variety)", 40, 82, { url: 'https://durgasarees.com' });
-                drawUnderline("(Click for all variety)", 40, 82, 10, "left");
+                doc.setTextColor(255, 140, 0);
+                doc.textWithLink("www.durgasarees.com", 40, 82, { url: WEBSITE_BASE });
+                drawUnderline("www.durgasarees.com", 40, 82, 10, "left");
 
-                // 2️⃣ TOP RIGHT: Date
+                // Date
                 var today = new Date();
                 var dateStr = ("0" + today.getDate()).slice(-2) + "/" + ("0" + (today.getMonth() + 1)).slice(-2) + "/" + today.getFullYear();
                 doc.setFont("helvetica", "bold");
                 doc.setFontSize(12);
-                doc.setTextColor(51, 51, 51); // #333
+                doc.setTextColor(51, 51, 51);
                 doc.text("Date: " + dateStr, pageWidth - 40, 58, { align: "right" });
 
-                // 3️⃣ CENTER: Product Title
+                // Product Title (linked to Wix product page)
                 var titleText = product.name ? String(product.name) : "";
                 doc.setFont("helvetica", "bold");
                 doc.setFontSize(24);
                 var titleWidth = doc.getTextWidth(titleText);
-                
-                // Draw centered darkred background box
                 var boxW = titleWidth + 30;
                 var boxX = (pageWidth - boxW) / 2;
-                doc.setFillColor(139, 0, 0); // darkred
+                doc.setFillColor(139, 0, 0);
                 doc.rect(boxX, 105, boxW, 34, 'F');
-                
-                // Draw text inside
-                doc.setTextColor(255, 255, 255); // white
-                doc.text(titleText, pageWidth / 2, 129, { align: "center" });
+                doc.setTextColor(255, 255, 255);
+                doc.textWithLink(titleText, pageWidth / 2, 129, { url: wixUrl, align: "center" });
 
-                // Sub-link under Title
+                // "Click for Ready Designs" link
                 doc.setFont("helvetica", "normal");
                 doc.setFontSize(10);
-                doc.setTextColor(255, 140, 0); // orange
-                doc.textWithLink("(Click for Ready Designs)", pageWidth / 2, 155, { url: 'https://durgasarees.com', align: "center" });
+                doc.setTextColor(255, 140, 0);
+                doc.textWithLink("(Click for Ready Designs)", pageWidth / 2, 155, { url: wixUrl, align: "center" });
                 drawUnderline("(Click for Ready Designs)", pageWidth / 2, 155, 10, "center");
 
-                // 4️⃣ THE 3-COLUMN SPECIFICATIONS GRID
+                // 3-column specifications grid
                 var startY = 195;
                 var rowH = 22;
-                var col1X = 40;
-                var col2X = 220;
-                var col3X = 400;
-                
+                var col1X = 40, col2X = 220, col3X = 400;
                 doc.setFontSize(10);
-                
+
                 function drawSpec(label, value, colX, rowY) {
                     doc.setFont("helvetica", "bold");
-                    doc.setTextColor(51, 136, 204); // Blue: #3388cc
+                    doc.setTextColor(51, 136, 204);
                     doc.text(label, colX, rowY);
-                    
                     doc.setFont("helvetica", "bold");
-                    doc.setTextColor(51, 51, 51); // #333
+                    doc.setTextColor(51, 51, 51);
                     doc.text(":  " + (value ? String(value) : "-"), colX + 55, rowY);
                 }
 
-                // Row 1
                 drawSpec("Quality", product.fabric, col1X, startY);
                 drawSpec("Code", product.sku, col2X, startY);
-                drawSpec("D No", "₹ " + product.price, col3X, startY);
+                drawSpec("Rate", "₹ " + product.price, col3X, startY);
 
-                // Row 2
                 drawSpec("Jari", product.jari, col1X, startY + rowH);
                 drawSpec("Border", product.border, col2X, startY + rowH);
                 drawSpec("Cut", product.cut, col3X, startY + rowH);
 
-                // Row 3
                 drawSpec("Pallu", product.pallu, col1X, startY + rowH * 2);
                 drawSpec("Blouse", product.blouse, col2X, startY + rowH * 2);
                 drawSpec("Packing", product.packing, col3X, startY + rowH * 2);
 
-                // 5️⃣ PRODUCT IMAGE CONTAINER
+                // Product image
                 if (base64Img) {
-                    var targetW = 515; // Max Image Width (margins: 40 left, 40 right)
-                    var targetH = 470; // Max Image Height
+                    var targetW = 515, targetH = 450;
                     var imgProps = doc.getImageProperties(base64Img);
                     var imgRatio = imgProps.width / imgProps.height;
-                    
-                    var finalW = targetH * imgRatio;
-                    var finalH = targetH;
-                    if (finalW > targetW) { 
-                        finalW = targetW; 
-                        finalH = targetW / imgRatio; 
-                    }
-                    
+                    var finalW = targetH * imgRatio, finalH = targetH;
+                    if (finalW > targetW) { finalW = targetW; finalH = targetW / imgRatio; }
                     var imgX = (pageWidth - finalW) / 2;
-                    var imgY = 255 + ((targetH - finalH) / 2);
-                    
-                    // Draw border around image
-                    doc.setDrawColor(221, 221, 221); // #ddd
+                    var imgY = 265 + ((targetH - finalH) / 2);
+                    doc.setDrawColor(221, 221, 221);
                     doc.setLineWidth(1);
                     doc.rect(imgX, imgY, finalW, finalH, 'D');
-
-                    // Add the image
+                    // Image links to product Wix page
+                    doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
                     doc.addImage(base64Img, 'JPEG', imgX, imgY, finalW, finalH);
                 }
 
-                // 6️⃣ FOOTER
+                // Footer
                 doc.setFont("helvetica", "normal");
-                doc.setFontSize(11);
-                doc.setTextColor(85, 85, 85); // #555
-                doc.text("Click On image to view all Ready Designs of this product", pageWidth / 2, 785, { align: "center" });
-            } 
-            
-            // ==========================================================
-            // 📑 PAGE 2+: FULL SCREEN READY DESIGNS
-            // ==========================================================
-            else {
-                doc.setFontSize(18);
+                doc.setFontSize(9);
+                doc.setTextColor(0, 100, 200);
+                doc.textWithLink("Click on image or product name to view all Ready Designs on www.durgasarees.com", pageWidth / 2, 790, { url: wixUrl, align: "center" });
+
+            } else {
+                // ── DESIGN PAGES ───────────────────────────
+                var designNum = i;
+                // Design page header
+                doc.setFontSize(13);
                 doc.setFont("helvetica", "bold");
-                doc.setTextColor(40, 44, 63);
-                doc.text(product.name + " - Design " + i, pageWidth / 2, 40, { align: "center" });
+                doc.setTextColor(139, 0, 0);
+                doc.textWithLink(product.name + " — Design " + designNum, pageWidth / 2, 35, { url: wixUrl, align: "center" });
+
+                doc.setFontSize(8);
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(0, 100, 200);
+                doc.textWithLink("View on durgasarees.com ↗", pageWidth / 2, 50, { url: wixUrl, align: "center" });
 
                 if (base64Img) {
-                    var targetW = 500; 
-                    var targetH = 720;  
+                    var targetW = 500, targetH = 710;
                     var imgProps = doc.getImageProperties(base64Img);
                     var imgRatio = imgProps.width / imgProps.height;
-                    
-                    var finalW = targetH * imgRatio;
-                    var finalH = targetH;
+                    var finalW = targetH * imgRatio, finalH = targetH;
                     if (finalW > targetW) { finalW = targetW; finalH = targetW / imgRatio; }
-                    
                     var xPos = (pageWidth - finalW) / 2;
-                    var yPos = 60 + ((targetH - finalH) / 2); 
+                    var yPos = 65 + ((targetH - finalH) / 2);
+                    doc.link(xPos, yPos, finalW, finalH, { url: wixUrl });
                     doc.addImage(base64Img, 'JPEG', xPos, yPos, finalW, finalH);
                 }
             }
@@ -228,14 +593,12 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
 
         var fileName = product.name.replace(/[^a-zA-Z0-9]/g, "_") + "_Catalog.pdf";
 
-        // 🧠 NATIVE ROUTING ENGINE (Including Visual Preview)
         if (actionType === 'preview') {
-            // Opens the PDF visually right in the browser for testing!
             doc.output('dataurlnewwindow');
-        } 
-        else if (actionType === 'wa' || actionType === 'print') {
-            var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
-            
+        } else if (actionType === 'wa' || actionType === 'print') {
+            var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins &&
+                window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+
             if (isCapacitor) {
                 var pureBase64 = doc.output('datauristring').split(',')[1];
                 var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
@@ -248,13 +611,13 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                     files: [writeResult.uri]
                 });
             } else {
-                // WEB FALLBACK
                 var pdfBlob = doc.output('blob');
                 var file = new File([pdfBlob], fileName, { type: 'application/pdf' });
                 if (typeof navigator.share === 'function') {
-                    try { await navigator.share({ title: product.name + ' Catalog', files: [file] }); } catch (e) { doc.save(fileName); }
+                    try { await navigator.share({ title: product.name + ' Catalog', files: [file] }); }
+                    catch (e) { doc.save(fileName); }
                 } else {
-                    doc.save(fileName); 
+                    doc.save(fileName);
                 }
             }
         } else {
@@ -269,21 +632,19 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
 }
 
 // ==========================================
-// ?? MULTI-IMAGE NATIVE SHARE ENGINE
+// 📦 MULTI-IMAGE NATIVE SHARE ENGINE
 // ==========================================
 
-// Converts Base64 RAM data into native Android File Objects
 function base64ToFile(base64Data, filename) {
     var arr = base64Data.split(',');
     var mime = arr[0].match(/:(.*?);/)[1];
     var bstr = atob(arr[1]);
     var n = bstr.length;
     var u8arr = new Uint8Array(n);
-    while(n--) { u8arr[n] = bstr.charCodeAt(n); }
-    return new File([u8arr], filename, {type: mime});
+    while (n--) { u8arr[n] = bstr.charCodeAt(n); }
+    return new File([u8arr], filename, { type: mime });
 }
 
-// ?? MASTER FUNCTION: Shares multiple images directly to WhatsApp
 async function shareNativeImages(productName, productPrice, imageUrlsArray) {
     var bootScreen = document.getElementById('boot');
     if (bootScreen) {
@@ -292,17 +653,17 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
     }
 
     try {
-        var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+        var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins &&
+            window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
         var nativeSuccess = false;
 
         if (isCapacitor) {
             try {
-                // ============================================
-                // 🚀 CAPACITOR NATIVE ANDROID SHARE
-                // ============================================
                 var uriArray = [];
                 for (var i = 0; i < imageUrlsArray.length; i++) {
-                    var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
+                    // Try cache first!
+                    var base64Img = await getBase64ImageFast(imageUrlsArray[i]);
+                    if (!base64Img) base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
                     if (base64Img) {
                         var pureBase64 = base64Img.split(',')[1];
                         var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
@@ -314,7 +675,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                         uriArray.push(writeResult.uri);
                     }
                 }
-                
+
                 // ⚠️ IMPORTANT: On Android, passing both `files` AND `text` in a single share call
                 // causes WhatsApp to receive ONLY the text and silently drop all the image files.
                 // Fix: Share files-only so images arrive correctly in WhatsApp.
@@ -327,14 +688,12 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                 console.warn("Native plugins not compiled in this APK. Falling back to web share.", nativeErr);
             }
         }
-        
+
         if (!nativeSuccess) {
-            // ============================================
-            // 🌐 STANDARD WEB BROWSER FALLBACK
-            // ============================================
             var filesArray = [];
             for (var i = 0; i < imageUrlsArray.length; i++) {
-                var base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
+                var base64Img = await getBase64ImageFast(imageUrlsArray[i]);
+                if (!base64Img) base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
                 if (base64Img) {
                     var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
                     filesArray.push(base64ToFile(base64Img, fileName));
@@ -357,9 +716,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                     }
                 }
             } else {
-                console.warn("navigator.share is not a function. Falling back to multi-file download.");
-                alert("Native Share API is disabled (requires HTTPS or Native App). Downloading images to your device instead.");
-                
+                alert("Native Share API is disabled (requires HTTPS or Native App). Downloading images instead.");
                 for (var j = 0; j < filesArray.length; j++) {
                     var fileObj = filesArray[j];
                     var objectUrl = URL.createObjectURL(fileObj);
@@ -369,7 +726,6 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
-                    
                     await new Promise(resolve => setTimeout(resolve, 300));
                     URL.revokeObjectURL(objectUrl);
                 }

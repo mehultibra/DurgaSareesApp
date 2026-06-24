@@ -1600,45 +1600,58 @@ function clearCart() {
 }
 
 // ====================================
-// 💬 SMART WHATSAPP ROUTING (PC & Mobile)
+// 📄 SAVE ORDER — GENERATES CART PDF (Lightning Fast from Cache)
 // ====================================
 function sendWhatsapp() {
     var keys = Object.keys(cart);
     if (keys.length === 0) return alert("Your cart is empty!");
 
-    var msg = "🛍️ *New Order from Web App*\n\n";
+    // Generate the cart PDF and share it natively
+    if (typeof generateCartOrderPDF === 'function') {
+        generateCartOrderPDF('share');
+    } else {
+        alert("PDF Engine not loaded!");
+    }
+}
+
+// ====================================
+// 💬 WHATSAPP TEXT ORDER (Legacy — PC & Mobile)
+// ====================================
+function sendWhatsappText() {
+    var keys = Object.keys(cart);
+    if (keys.length === 0) return alert("Your cart is empty!");
+
+    var msg = "🛍️ *New Order from Durga Sarees App*\n\n";
     var totalQty = 0;
     var groups = {};
 
     for (var k in cart) {
         var item = cart[k];
+        if (!item || !item.p) continue;
         if (!groups[item.p.id]) groups[item.p.id] = { p: item.p, items: [] };
         groups[item.p.id].items.push(item);
     }
 
     for (var r in groups) {
         var g = groups[r];
-        msg += "🏷️ *" + g.p.name + "* (SKU: " + g.p.sku + ")\n";
+        msg += "🏷️ *" + g.p.name + "* (SKU: " + (g.p.sku || "-") + ")\n";
         g.items.forEach(function (item) {
             var dName = item.design === 'DIRECT' ? 'Cover' : item.design;
             msg += "  - " + dName + ": " + item.qty + " pcs\n";
-            totalQty += item.qty;
+            totalQty += (parseInt(item.qty) || 0);
         });
         msg += "\n";
     }
     msg += "📦 *Total Quantity:* " + totalQty + " pcs\n";
+    msg += "🌐 www.durgasarees.com\n";
 
-    var number = "919998232380"; // <<< REPLACE THIS WITH YOUR REAL WHATSAPP NUMBER
+    var number = "919998232380";
     var encodedMsg = encodeURIComponent(msg);
-
-    // 🧠 Detects if you are on a PC or a Mobile phone
     var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
     if (isMobile) {
-        // Triggers the actual WhatsApp app on phones
         window.open("whatsapp://send?phone=" + number + "&text=" + encodedMsg, '_blank');
     } else {
-        // Triggers WhatsApp Web on Desktop PCs
         window.open("https://web.whatsapp.com/send?phone=" + number + "&text=" + encodedMsg, '_blank');
     }
 }
