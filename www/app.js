@@ -1743,13 +1743,13 @@ window.triggerShare = async function (action) {
             var fp = favProducts[i];
             var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
             
-            allHighResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
-
-            if (shareType === 'full' && fp.ready) {
-                var dArr = String(fp.ready).split(',').map(d => d.trim()).filter(d => d);
+            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+            if (dArr.length > 0) {
                 for (var j = 0; j < dArr.length; j++) {
                     allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
                 }
+            } else {
+                allHighResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
             }
         }
 
@@ -1777,14 +1777,13 @@ window.triggerShare = async function (action) {
 
     var highResUrls = [];
     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-    
-    highResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
-
-    if (shareType === 'full' && curProduct.ready) {
-        var dArr = String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d);
+    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+    if (dArr.length > 0) {
         for (var j = 0; j < dArr.length; j++) {
             highResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
         }
+    } else {
+        highResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
     }
 
     if (highResUrls.length === 0) {

@@ -763,7 +763,15 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             var wixUrl = buildWixProductUrl(product);
             
             var folderPath = (product.zoomUrl && product.zoomUrl !== "None") ? product.zoomUrl : product.gridUrl;
-            var coverUrl = getExactFirebaseUrl(folderPath, 'DIRECT');
+            var dArr = (shareType === 'full' && product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+            
+            var coverUrl;
+            if (dArr.length > 0) {
+                coverUrl = getExactFirebaseUrl(folderPath, dArr[0]);
+            } else {
+                coverUrl = getExactFirebaseUrl(folderPath, 'DIRECT');
+            }
+            
             var coverBase64 = await getBase64ImageFast(coverUrl);
             if (!coverBase64) coverBase64 = await getBase64ImageFromUrl(coverUrl);
             
@@ -771,15 +779,51 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             isFirstPage = false;
             
             // --- DRAW COVER PAGE FOR THIS PRODUCT ---
-            doc.setFillColor(139, 0, 0);
-            doc.rect(0, 0, pageWidth, 50, 'F');
-            doc.setFontSize(20);
+            function drawUnderline(text, x, y, size, align) {
+                var textWidth = doc.getTextWidth(text);
+                var startX = x;
+                if (align === "center") startX = x - textWidth / 2;
+                else if (align === "right") startX = x - textWidth;
+                doc.setDrawColor(255, 140, 0);
+                doc.setLineWidth(0.75);
+                doc.line(startX, y + 2, startX + textWidth, y + 2);
+            }
+
+            var catText = product.cat ? String(product.cat) : "Uncategorized";
             doc.setFont("helvetica", "bold");
+            doc.setFontSize(18);
+            var catWidth = doc.getTextWidth(catText);
+            doc.setFillColor(139, 0, 0);
+            doc.rect(40, 40, catWidth + 20, 26, 'F');
             doc.setTextColor(255, 255, 255);
-            doc.textWithLink(product.name || "Product Catalog", pageWidth / 2, 33, { url: wixUrl, align: "center" });
+            doc.text(catText, 50, 58);
+
+            var today = new Date();
+            var dateStr = ("0" + today.getDate()).slice(-2) + "/" + ("0" + (today.getMonth() + 1)).slice(-2) + "/" + today.getFullYear();
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(12);
+            doc.setTextColor(51, 51, 51);
+            doc.text("Date: " + dateStr, pageWidth - 40, 58, { align: "right" });
+
+            var titleText = product.name ? String(product.name) : "";
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(24);
+            var titleWidth = doc.getTextWidth(titleText);
+            var boxW = titleWidth + 30;
+            var boxX = (pageWidth - boxW) / 2;
+            doc.setFillColor(139, 0, 0);
+            doc.rect(boxX, 105, boxW, 34, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.textWithLink(titleText, pageWidth / 2, 129, { url: wixUrl, align: "center" });
+
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(10);
+            doc.setTextColor(255, 140, 0);
+            doc.textWithLink("(Click for Ready Designs)", pageWidth / 2, 155, { url: wixUrl, align: "center" });
+            drawUnderline("(Click for Ready Designs)", pageWidth / 2, 155, 10, "center");
 
             // Specs
-            var startY = 100;
+            var startY = 195;
             var rowH = 22;
             var col1X = 40, col2X = 220, col3X = 400;
             doc.setFontSize(10);
@@ -816,7 +860,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 if (finalH > targetH) { finalH = targetH; finalW = targetH * imgRatio; }
                 
                 var imgX = (pageWidth - finalW) / 2;
-                var imgY = 260 + ((targetH - finalH) / 2);
+                var imgY = 280 + ((targetH - finalH) / 2);
                 doc.setDrawColor(221, 221, 221);
                 doc.setLineWidth(1);
                 doc.rect(imgX, imgY, finalW, finalH, 'D');
@@ -846,9 +890,8 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             }
             
             // --- DRAW DESIGN PAGES IF REQUIRED ---
-            if (shareType === 'full' && product.ready) {
-                var dArr = String(product.ready).split(',').map(d => d.trim()).filter(d => d);
-                for (var j = 0; j < dArr.length; j++) {
+            if (dArr.length > 0) {
+                for (var j = 1; j < dArr.length; j++) {
                     var dId = dArr[j];
                     var dUrl = getExactFirebaseUrl(folderPath, dId);
                     var dBase64 = await getBase64ImageFast(dUrl);
