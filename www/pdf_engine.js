@@ -20,63 +20,50 @@ function buildWixProductUrl(product) {
 }
 
 // ==========================================
-// 🧠 IMAGE HELPER: Get image from IndexedDB cache first, then network
-// Returns { dataUrl, format } where format is 'JPEG', 'WEBP', or 'PNG'
+// 🧠 IMAGE HELPER: Convert blob to JPEG via canvas for jsPDF
+// PDF format only supports JPEG/PNG natively.
+// WebP blobs passed raw to jsPDF cause huge uncompressed output.
+// Canvas conversion is instant since blob is already in RAM (IndexedDB).
 // ==========================================
-function detectFormat(dataUrl) {
-    if (!dataUrl) return 'JPEG';
-    if (dataUrl.startsWith('data:image/webp')) return 'WEBP';
-    if (dataUrl.startsWith('data:image/png')) return 'PNG';
-    return 'JPEG';
+function blobToJpegDataUrl(blob) {
+    return new Promise(function(resolve) {
+        var blobUrl = URL.createObjectURL(blob);
+        var img = new Image();
+        img.onload = function() {
+            var canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            URL.revokeObjectURL(blobUrl);
+            resolve(canvas.toDataURL('image/jpeg', 0.88));
+        };
+        img.onerror = function() {
+            URL.revokeObjectURL(blobUrl);
+            resolve(null);
+        };
+        img.src = blobUrl;
+    });
 }
 
 function getBase64ImageFast(imageUrl) {
-    // Try IndexedDB cache FIRST for lightning-fast generation
+    // Try IndexedDB cache FIRST — blob is already in memory, canvas JPEG conversion is fast
     return getImageFromDB(imageUrl).then(function(blob) {
-        if (blob) {
-            return new Promise(function(resolve) {
-                var reader = new FileReader();
-                reader.onload = function() { resolve(reader.result); };
-                reader.onerror = function() { resolve(null); };
-                reader.readAsDataURL(blob);
-            });
-        }
+        if (blob) return blobToJpegDataUrl(blob);
         // Fallback: try alternate cache key (with %2F0 -> %2F fix)
         var altUrl = imageUrl.includes('%2F0') ? imageUrl.replace('%2F0', '%2F') : null;
         var tryAlt = altUrl ? getImageFromDB(altUrl) : Promise.resolve(null);
         return tryAlt.then(function(altBlob) {
-            if (altBlob) {
-                return new Promise(function(resolve) {
-                    var reader = new FileReader();
-                    reader.onload = function() { resolve(reader.result); };
-                    reader.onerror = function() { resolve(null); };
-                    reader.readAsDataURL(altBlob);
-                });
-            }
-            // Last resort: load from network — fetch blob directly, no canvas re-encoding
+            if (altBlob) return blobToJpegDataUrl(altBlob);
+            // Last resort: fetch from network, then convert via canvas
             return fetch(imageUrl)
                 .then(function(res) { return res.blob(); })
-                .then(function(netBlob) {
-                    return new Promise(function(resolve) {
-                        var reader = new FileReader();
-                        reader.onload = function() { resolve(reader.result); };
-                        reader.onerror = function() { resolve(null); };
-                        reader.readAsDataURL(netBlob);
-                    });
-                })
+                .then(function(netBlob) { return blobToJpegDataUrl(netBlob); })
                 .catch(function() { return null; });
         });
     }).catch(function() {
         return fetch(imageUrl)
             .then(function(res) { return res.blob(); })
-            .then(function(netBlob) {
-                return new Promise(function(resolve) {
-                    var reader = new FileReader();
-                    reader.onload = function() { resolve(reader.result); };
-                    reader.onerror = function() { resolve(null); };
-                    reader.readAsDataURL(netBlob);
-                });
-            })
+            .then(function(netBlob) { return blobToJpegDataUrl(netBlob); })
             .catch(function() { return null; });
     });
 }
@@ -653,7 +640,7 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                     doc.rect(imgX, imgY, finalW, finalH, 'D');
                     // Image links to product Wix page
                     doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
-                    doc.addImage(base64Img, detectFormat(base64Img), imgX, imgY, finalW, finalH);
+                    doc.addImage(base64Img, 'JPEG', imgX, imgY, finalW, finalH);
                 }
 
                 // Footer
@@ -686,7 +673,7 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                     var xPos = (pageWidth - finalW) / 2;
                     var yPos = 65 + ((targetH - finalH) / 2);
                     doc.link(xPos, yPos, finalW, finalH, { url: wixUrl });
-                    doc.addImage(base64Img, detectFormat(base64Img), xPos, yPos, finalW, finalH);
+                    doc.addImage(base64Img, 'JPEG', xPos, yPos, finalW, finalH);
                 }
 
                 // Footer
@@ -874,7 +861,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 doc.setLineWidth(1);
                 doc.rect(imgX, imgY, finalW, finalH, 'D');
                 doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
-                doc.addImage(coverBase64, detectFormat(coverBase64), imgX, imgY, finalW, finalH);
+                doc.addImage(coverBase64, 'JPEG', imgX, imgY, finalW, finalH);
             }
             
             // Footer
@@ -923,7 +910,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                         var xPos = (pageWidth - finalW2) / 2;
                         var yPos = 65 + ((targetH2 - finalH2) / 2);
                         doc.link(xPos, yPos, finalW2, finalH2, { url: wixUrl });
-                        doc.addImage(dBase64, detectFormat(dBase64), xPos, yPos, finalW2, finalH2);
+                        doc.addImage(dBase64, 'JPEG', xPos, yPos, finalW2, finalH2);
                     }
 
                     doc.setFont("helvetica", "normal");
