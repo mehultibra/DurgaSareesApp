@@ -453,10 +453,11 @@ async function generateCartOrderPDF(actionType) {
         var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
 
         if (isCapacitor) {
-            // 1. Save PDF to device Documents (accessible by user)
+            // 1. Save PDF to device
             var pureBase64 = doc.output('datauristring').split(',')[1];
+            var writeResult = null;
             try {
-                await window.Capacitor.Plugins.Filesystem.writeFile({
+                writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
                     path: fileName,
                     data: pureBase64,
                     directory: "DOCUMENTS"
@@ -464,7 +465,7 @@ async function generateCartOrderPDF(actionType) {
             } catch(saveErr) {
                 // Fallback to CACHE if DOCUMENTS fails (some devices need permission)
                 try {
-                    await window.Capacitor.Plugins.Filesystem.writeFile({
+                    writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
                         path: fileName,
                         data: pureBase64,
                         directory: "CACHE"
@@ -472,10 +473,13 @@ async function generateCartOrderPDF(actionType) {
                 } catch(e2) { console.warn("PDF save failed", e2); }
             }
 
-            // 2. Open WhatsApp directly — NO share picker
-            var encodedMsg = encodeURIComponent(waText);
-            var waNumber = "919998232380";
-            window.open("whatsapp://send?phone=" + waNumber + "&text=" + encodedMsg, '_system');
+            if (writeResult) {
+                // 2. Open Share picker so PDF is attached
+                await window.Capacitor.Plugins.Share.share({
+                    title: "Durga Sarees Order",
+                    files: [writeResult.uri]
+                });
+            }
 
         } else {
             // Web fallback: download the PDF
@@ -751,7 +755,11 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                 });
                 nativeSuccess = true;
             } catch (nativeErr) {
-                console.warn("Native plugins not compiled in this APK. Falling back to web share.", nativeErr);
+                if (nativeErr.message && nativeErr.message.toLowerCase().includes("cancel")) {
+                    nativeSuccess = true; // User cancelled, prevent fallback
+                } else {
+                    console.warn("Native plugins not compiled in this APK or share failed. Falling back to web share.", nativeErr);
+                }
             }
         }
 
@@ -774,26 +782,33 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                         files: filesArray
                     });
                 } catch (shareErr) {
+                    if (shareErr.name === 'AbortError' || (shareErr.message && shareErr.message.toLowerCase().includes('cancel'))) {
+                        if (bootScreen) bootScreen.style.display = 'none';
+                        return; // User cancelled
+                    }
                     console.error("Share API failed:", shareErr);
                     try {
                         await navigator.share({ files: filesArray });
                     } catch (fallbackErr) {
-                        alert("Your device's browser blocks native multi-image sharing. Error: " + fallbackErr.message);
+                        if (fallbackErr.name !== 'AbortError' && !(fallbackErr.message && fallbackErr.message.toLowerCase().includes('cancel'))) {
+                            alert("Your device's browser blocks native multi-image sharing. Error: " + fallbackErr.message);
+                        }
                     }
                 }
             } else {
-                alert("Native Share API is disabled (requires HTTPS or Native App). Downloading images instead.");
-                for (var j = 0; j < filesArray.length; j++) {
-                    var fileObj = filesArray[j];
-                    var objectUrl = URL.createObjectURL(fileObj);
-                    var a = document.createElement('a');
-                    a.href = objectUrl;
-                    a.download = fileObj.name;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                    URL.revokeObjectURL(objectUrl);
+                if (confirm("Native Share API is disabled (requires HTTPS or Native App). Do you want to download the images instead?")) {
+                    for (var j = 0; j < filesArray.length; j++) {
+                        var fileObj = filesArray[j];
+                        var objectUrl = URL.createObjectURL(fileObj);
+                        var a = document.createElement('a');
+                        a.href = objectUrl;
+                        a.download = fileObj.name;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        URL.revokeObjectURL(objectUrl);
+                    }
                 }
             }
         }
