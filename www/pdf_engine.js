@@ -315,9 +315,11 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                     }
                 }
                 
+                // ⚠️ IMPORTANT: On Android, passing both `files` AND `text` in a single share call
+                // causes WhatsApp to receive ONLY the text and silently drop all the image files.
+                // Fix: Share files-only so images arrive correctly in WhatsApp.
                 await window.Capacitor.Plugins.Share.share({
-                    title: productName,
-                    text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
+                    title: "🛍️ " + productName + " — ₹" + productPrice,
                     files: uriArray
                 });
                 nativeSuccess = true;
@@ -341,9 +343,9 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
 
             if (typeof navigator.share === 'function') {
                 try {
+                    // ⚠️ Same fix: don't mix `text` with `files` — WhatsApp drops images when both are present.
                     await navigator.share({
-                        title: productName,
-                        text: "🛍️ *" + productName + "*\n💰 Wholesale Rate: ₹" + productPrice,
+                        title: "🛍️ " + productName + " — ₹" + productPrice,
                         files: filesArray
                     });
                 } catch (shareErr) {
