@@ -1677,36 +1677,117 @@ function getExactFirebaseUrl(folderPath, dId) {
 async function triggerShare(action) {
     closeModals();
 
+function askShareTypeAsync() {
+    return new Promise((resolve) => {
+        var overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0'; overlay.style.left = '0'; overlay.style.width = '100%'; overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+        overlay.style.zIndex = '10000';
+        overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+        
+        var box = document.createElement('div');
+        box.style.backgroundColor = '#fff'; box.style.padding = '20px'; box.style.borderRadius = '12px';
+        box.style.width = '300px'; box.style.textAlign = 'center';
+        
+        var title = document.createElement('h3');
+        title.innerText = 'Select Share Type';
+        title.style.marginTop = '0'; title.style.color = '#333';
+        
+        var btnCover = document.createElement('button');
+        btnCover.innerText = 'Product Catalouge';
+        btnCover.style.width = '100%'; btnCover.style.padding = '12px'; btnCover.style.marginBottom = '10px';
+        btnCover.style.backgroundColor = 'var(--myntra-pink)'; btnCover.style.color = '#fff';
+        btnCover.style.border = 'none'; btnCover.style.borderRadius = '6px'; btnCover.style.fontSize = '14px';
+        btnCover.onclick = function() { document.body.removeChild(overlay); resolve('cover'); };
+        
+        var btnReady = document.createElement('button');
+        btnReady.innerText = 'With Ready Designs';
+        btnReady.style.width = '100%'; btnReady.style.padding = '12px'; btnReady.style.marginBottom = '10px';
+        btnReady.style.backgroundColor = '#333'; btnReady.style.color = '#fff';
+        btnReady.style.border = 'none'; btnReady.style.borderRadius = '6px'; btnReady.style.fontSize = '14px';
+        btnReady.onclick = function() { document.body.removeChild(overlay); resolve('full'); };
+        
+        var btnCancel = document.createElement('button');
+        btnCancel.innerText = 'Cancel';
+        btnCancel.style.width = '100%'; btnCancel.style.padding = '12px';
+        btnCancel.style.backgroundColor = '#eee'; btnCancel.style.color = '#333';
+        btnCancel.style.border = 'none'; btnCancel.style.borderRadius = '6px'; btnCancel.style.fontSize = '14px';
+        btnCancel.onclick = function() { document.body.removeChild(overlay); resolve(null); };
+        
+        box.appendChild(title); box.appendChild(btnCover); box.appendChild(btnReady); box.appendChild(btnCancel);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+    });
+}
+
+window.triggerShare = async function (action) {
     if (action === 'copy') {
         alert("Web links are coming in the next update!");
         return;
     }
 
-    if (!curProduct && action !== 'cart') {
-        alert("Please open a product first to share its catalog.");
+    closeModals(); // Close the shareModal first
+
+    var isDetailOpen = document.getElementById('detailPanel') && document.getElementById('detailPanel').classList.contains('open');
+
+    if (!isDetailOpen) {
+        // --- MAIN PAGE SHARE (Favorites) ---
+        var favProducts = allProducts.filter(p => p.fav);
+        if (favProducts.length === 0) {
+            return alert("No favorite items to share. Please mark some products as favorites first.");
+        }
+
+        var shareType = await askShareTypeAsync();
+        if (!shareType) return;
+
+        var allHighResUrls = [];
+        for (var i = 0; i < favProducts.length; i++) {
+            var fp = favProducts[i];
+            var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
+            
+            allHighResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
+
+            if (shareType === 'full' && fp.designs) {
+                var dArr = fp.designs.split(',').map(d => d.trim()).filter(d => d);
+                for (var j = 0; j < dArr.length; j++) {
+                    allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
+                }
+            }
+        }
+
+        if (action === 'images') {
+            if (allHighResUrls.length > 30) {
+                alert("WhatsApp limit is 30 images. You are trying to share " + allHighResUrls.length + " images.\nPlease un-favorite some products or share as a PDF instead.");
+                return;
+            }
+            if (typeof shareNativeImages === 'function') {
+                await shareNativeImages("Favorite Items", "", allHighResUrls);
+            }
+        } else if (action === 'wa') {
+            if (typeof generateFavoritesPDF === 'function') {
+                await generateFavoritesPDF(favProducts, shareType, action);
+            }
+        }
         return;
     }
 
-    // 1️⃣ Collect all valid High-Res images from the Swipe Deck
-    var deck = document.getElementById('dtDesigns');
+    // --- EXISTING SINGLE PRODUCT SHARE ---
+    if (!curProduct) return;
+
+    var shareType = await askShareTypeAsync();
+    if (!shareType) return;
+
     var highResUrls = [];
+    var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
     
-    if (deck) {
-        var cards = deck.querySelectorAll('.swipe-card');
-        cards.forEach(card => {
-            if (card.style.display !== 'none') {
-                var dNameEl = card.querySelector('.swipe-card-bot div');
-                if (dNameEl) {
-                    var dName = dNameEl.innerText; 
-                    var dId = dName === 'Cover' ? 'DIRECT' : dName;
-                    
-                    var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-                    var exactHighResUrl = getExactFirebaseUrl(folderPath, dId);
-                    
-                    highResUrls.push(exactHighResUrl);
-                }
-            }
-        });
+    highResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
+
+    if (shareType === 'full' && curProduct.designs) {
+        var dArr = curProduct.designs.split(',').map(d => d.trim()).filter(d => d);
+        for (var j = 0; j < dArr.length; j++) {
+            highResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
+        }
     }
 
     if (highResUrls.length === 0) {
@@ -1714,34 +1795,17 @@ async function triggerShare(action) {
         return;
     }
 
-    // 2️⃣ ROUTE: Multi-Image NATIVE Share
     if (action === 'images') {
+        if (highResUrls.length > 30) {
+            alert("WhatsApp limit is 30 images. You are trying to share " + highResUrls.length + " images. Please share as PDF.");
+            return;
+        }
         if (typeof shareNativeImages === 'function') {
-            // Sends ALL collected images to the WhatsApp Carousel
             await shareNativeImages(curProduct.name, curProduct.price, highResUrls);
-        } else {
-            alert("Image Engine not loaded!");
         }
-    } 
-    // 3️⃣ ROUTE: PDF GENERATION & PREVIEW (Works on PC and Mobile)
-    else {
-        var pdfType = 'full';
-        
-        // Skip confirmation if just previewing visually
-        if (action === 'preview') {
-            pdfType = 'full'; 
-        } else if (confirm("Create FULL Catalog with all designs?\n\nClick 'Cancel' to create an ORDER PDF (Cover Image Only).")) {
-            pdfType = 'full';
-        } else {
-            pdfType = 'cover';
-            highResUrls = [highResUrls[0]]; // Slice to just the cover
-        }
-
+    } else {
         if (typeof generateNativePDF === 'function') {
-            // Passes the ENTIRE curProduct object so the PDF engine can read all the new table data!
             await generateNativePDF(curProduct, highResUrls, action);
-        } else {
-            alert("PDF Engine is not loaded!");
         }
     }
 }

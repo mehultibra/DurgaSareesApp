@@ -603,17 +603,18 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                 doc.setFontSize(10);
 
                 function drawSpec(label, value, colX, rowY) {
+                    if (!value || String(value).trim() === '-' || String(value).trim() === '') return;
                     doc.setFont("helvetica", "bold");
                     doc.setTextColor(51, 136, 204);
                     doc.text(label, colX, rowY);
                     doc.setFont("helvetica", "bold");
                     doc.setTextColor(51, 51, 51);
-                    doc.text(":  " + (value ? String(value) : "-"), colX + 55, rowY);
+                    doc.text(":  " + String(value), colX + 55, rowY);
                 }
 
                 drawSpec("Quality", product.fabric, col1X, startY);
                 drawSpec("Code", product.sku, col2X, startY);
-                drawSpec("Rate", "₹ " + product.price, col3X, startY);
+                drawSpec("D No", product.price, col3X, startY);
 
                 drawSpec("Jari", product.jari, col1X, startY + rowH);
                 drawSpec("Border", product.border, col2X, startY + rowH);
@@ -625,13 +626,19 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
 
                 // Product image
                 if (base64Img) {
-                    var targetW = 515, targetH = 450;
+                    var targetW = 515, targetH = 500; // max safe height between table and footer
                     var imgProps = doc.getImageProperties(base64Img);
                     var imgRatio = imgProps.width / imgProps.height;
-                    var finalW = targetH * imgRatio, finalH = targetH;
-                    if (finalW > targetW) { finalW = targetW; finalH = targetW / imgRatio; }
+                    
+                    var finalW = targetW;
+                    var finalH = targetW / imgRatio;
+                    if (finalH > targetH) {
+                        finalH = targetH;
+                        finalW = targetH * imgRatio;
+                    }
+                    
                     var imgX = (pageWidth - finalW) / 2;
-                    var imgY = 265 + ((targetH - finalH) / 2);
+                    var imgY = 260 + ((targetH - finalH) / 2); // Center vertically in remaining space
                     doc.setDrawColor(221, 221, 221);
                     doc.setLineWidth(1);
                     doc.rect(imgX, imgY, finalW, finalH, 'D');
@@ -642,9 +649,10 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
 
                 // Footer
                 doc.setFont("helvetica", "normal");
-                doc.setFontSize(9);
+                doc.setFontSize(10);
                 doc.setTextColor(0, 100, 200);
-                doc.textWithLink(wixUrl, 40, 810, { url: wixUrl });
+                var footerText = "Click On image to view all Ready Designs of this product";
+                doc.textWithLink(footerText, pageWidth / 2, 805, { url: wixUrl, align: "center" });
             } else {
                 // ── DESIGN PAGES ───────────────────────────
                 var designNum = i;
@@ -658,8 +666,14 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                     var targetW = 500, targetH = 710;
                     var imgProps = doc.getImageProperties(base64Img);
                     var imgRatio = imgProps.width / imgProps.height;
-                    var finalW = targetH * imgRatio, finalH = targetH;
-                    if (finalW > targetW) { finalW = targetW; finalH = targetW / imgRatio; }
+                    
+                    var finalW = targetW;
+                    var finalH = targetW / imgRatio;
+                    if (finalH > targetH) {
+                        finalH = targetH;
+                        finalW = targetH * imgRatio;
+                    }
+                    
                     var xPos = (pageWidth - finalW) / 2;
                     var yPos = 65 + ((targetH - finalH) / 2);
                     doc.link(xPos, yPos, finalW, finalH, { url: wixUrl });
@@ -668,9 +682,10 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
 
                 // Footer
                 doc.setFont("helvetica", "normal");
-                doc.setFontSize(9);
+                doc.setFontSize(10);
                 doc.setTextColor(0, 100, 200);
-                doc.textWithLink(wixUrl, 40, 810, { url: wixUrl });
+                var footerText = "Click On image to view all Ready Designs of this product";
+                doc.textWithLink(footerText, pageWidth / 2, 805, { url: wixUrl, align: "center" });
             }
             
             // Add Logo to bottom right of all pages
@@ -726,6 +741,183 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
         alert("PDF Generation Error: " + error.message);
     }
 
+    if (bootScreen) bootScreen.style.display = 'none';
+}
+
+window.generateFavoritesPDF = async function (favProducts, shareType, actionType) {
+    var bootScreen = document.getElementById('boot');
+    if (bootScreen) {
+        bootScreen.style.display = 'flex';
+        document.getElementById('bootMsg').innerText = "Building Catalog...";
+    }
+    
+    try {
+        var doc = new jsPDF('p', 'pt', 'a4');
+        var pageWidth = 595, pageHeight = 842;
+        var logoBase64 = await getLogoBase64();
+        var isFirstPage = true;
+
+        for (var pIdx = 0; pIdx < favProducts.length; pIdx++) {
+            var product = favProducts[pIdx];
+            var wixUrl = buildWixProductUrl(product);
+            
+            var folderPath = (product.zoomUrl && product.zoomUrl !== "None") ? product.zoomUrl : product.gridUrl;
+            var coverUrl = getExactFirebaseUrl(folderPath, 'DIRECT');
+            var coverBase64 = await getBase64ImageFast(coverUrl);
+            if (!coverBase64) coverBase64 = await getBase64ImageFromUrl(coverUrl);
+            
+            if (!isFirstPage) doc.addPage();
+            isFirstPage = false;
+            
+            // --- DRAW COVER PAGE FOR THIS PRODUCT ---
+            doc.setFillColor(139, 0, 0);
+            doc.rect(0, 0, pageWidth, 50, 'F');
+            doc.setFontSize(20);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(255, 255, 255);
+            doc.textWithLink(product.name || "Product Catalog", pageWidth / 2, 33, { url: wixUrl, align: "center" });
+
+            // Specs
+            var startY = 100;
+            var rowH = 22;
+            var col1X = 40, col2X = 220, col3X = 400;
+            doc.setFontSize(10);
+
+            function drawSpec(label, value, colX, rowY) {
+                if (!value || String(value).trim() === '-' || String(value).trim() === '') return;
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(51, 136, 204);
+                doc.text(label, colX, rowY);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(51, 51, 51);
+                doc.text(":  " + String(value), colX + 55, rowY);
+            }
+
+            drawSpec("Quality", product.fabric, col1X, startY);
+            drawSpec("Code", product.sku, col2X, startY);
+            drawSpec("D No", product.price, col3X, startY);
+
+            drawSpec("Jari", product.jari, col1X, startY + rowH);
+            drawSpec("Border", product.border, col2X, startY + rowH);
+            drawSpec("Cut", product.cut, col3X, startY + rowH);
+
+            drawSpec("Pallu", product.pallu, col1X, startY + rowH * 2);
+            drawSpec("Blouse", product.blouse, col2X, startY + rowH * 2);
+            drawSpec("Packing", product.packing, col3X, startY + rowH * 2);
+            
+            // Image
+            if (coverBase64) {
+                var targetW = 515, targetH = 500;
+                var imgProps = doc.getImageProperties(coverBase64);
+                var imgRatio = imgProps.width / imgProps.height;
+                var finalW = targetW;
+                var finalH = targetW / imgRatio;
+                if (finalH > targetH) { finalH = targetH; finalW = targetH * imgRatio; }
+                
+                var imgX = (pageWidth - finalW) / 2;
+                var imgY = 260 + ((targetH - finalH) / 2);
+                doc.setDrawColor(221, 221, 221);
+                doc.setLineWidth(1);
+                doc.rect(imgX, imgY, finalW, finalH, 'D');
+                doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
+                doc.addImage(coverBase64, 'JPEG', imgX, imgY, finalW, finalH);
+            }
+            
+            // Footer
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(10);
+            doc.setTextColor(0, 100, 200);
+            var footerText = "Click On image to view all Ready Designs of this product";
+            doc.textWithLink(footerText, pageWidth / 2, 805, { url: wixUrl, align: "center" });
+
+            // Logo
+            if (logoBase64) {
+                try {
+                    var logoProp = doc.getImageProperties(logoBase64);
+                    var logoH = 26;
+                    var logoW = logoH * (logoProp.width / logoProp.height);
+                    logoW = Math.min(logoW, 100);
+                    var logoX = pageWidth - 40 - logoW;
+                    var logoY = 810 - logoH + 6;
+                    doc.link(logoX, logoY, logoW, logoH, { url: WEBSITE_BASE });
+                    doc.addImage(logoBase64, 'PNG', logoX, logoY, logoW, logoH);
+                } catch(e) {}
+            }
+            
+            // --- DRAW DESIGN PAGES IF REQUIRED ---
+            if (shareType === 'full' && product.designs) {
+                var dArr = product.designs.split(',').map(d => d.trim()).filter(d => d);
+                for (var j = 0; j < dArr.length; j++) {
+                    var dId = dArr[j];
+                    var dUrl = getExactFirebaseUrl(folderPath, dId);
+                    var dBase64 = await getBase64ImageFast(dUrl);
+                    if (!dBase64) dBase64 = await getBase64ImageFromUrl(dUrl);
+                    
+                    doc.addPage();
+                    
+                    doc.setFontSize(13);
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(139, 0, 0);
+                    doc.textWithLink(product.name + " — " + dId, pageWidth / 2, 35, { url: wixUrl, align: "center" });
+
+                    if (dBase64) {
+                        var targetW2 = 500, targetH2 = 710;
+                        var imgProps2 = doc.getImageProperties(dBase64);
+                        var imgRatio2 = imgProps2.width / imgProps2.height;
+                        var finalW2 = targetW2;
+                        var finalH2 = targetW2 / imgRatio2;
+                        if (finalH2 > targetH2) { finalH2 = targetH2; finalW2 = targetH2 * imgRatio2; }
+                        var xPos = (pageWidth - finalW2) / 2;
+                        var yPos = 65 + ((targetH2 - finalH2) / 2);
+                        doc.link(xPos, yPos, finalW2, finalH2, { url: wixUrl });
+                        doc.addImage(dBase64, 'JPEG', xPos, yPos, finalW2, finalH2);
+                    }
+
+                    doc.setFont("helvetica", "normal");
+                    doc.setFontSize(10);
+                    doc.setTextColor(0, 100, 200);
+                    doc.textWithLink(footerText, pageWidth / 2, 805, { url: wixUrl, align: "center" });
+
+                    if (logoBase64) {
+                        try {
+                            doc.link(logoX, logoY, logoW, logoH, { url: WEBSITE_BASE });
+                            doc.addImage(logoBase64, 'PNG', logoX, logoY, logoW, logoH);
+                        } catch(e) {}
+                    }
+                }
+            }
+        } // End loop over products
+        
+        var fileName = "Favorite_Items_Catalog.pdf";
+        if (actionType === 'preview') {
+            doc.output('dataurlnewwindow');
+        } else if (actionType === 'wa' || actionType === 'print') {
+            var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+            if (isCapacitor) {
+                var pureBase64 = doc.output('datauristring').split(',')[1];
+                var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                    path: fileName, data: pureBase64, directory: "CACHE"
+                });
+                await window.Capacitor.Plugins.Share.share({
+                    title: 'Favorite Items Catalog', files: [writeResult.uri]
+                });
+            } else {
+                var pdfBlob = doc.output('blob');
+                var file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+                if (typeof navigator.share === 'function') {
+                    try { await navigator.share({ title: 'Favorite Items Catalog', files: [file] }); }
+                    catch (e) { doc.save(fileName); }
+                } else {
+                    doc.save(fileName);
+                }
+            }
+        } else {
+            doc.save(fileName);
+        }
+        
+    } catch (err) {
+        alert("Favorites PDF Error: " + err.message);
+    }
     if (bootScreen) bootScreen.style.display = 'none';
 }
 
