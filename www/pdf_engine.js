@@ -255,29 +255,30 @@ async function generateCartOrderPDF(actionType) {
             doc.textWithLink("DURGA SAREES", margin + 8, y + 24, { url: WEBSITE_BASE });
         }
 
-        // Date & totals (right side)
+        // Title and Date/Time
         var today = new Date();
         var dateStr = ("0" + today.getDate()).slice(-2) + "/" + ("0" + (today.getMonth() + 1)).slice(-2) + "/" + today.getFullYear();
         var timeStr = ("0" + today.getHours()).slice(-2) + ":" + ("0" + today.getMinutes()).slice(-2);
+
+        // Date right aligned in bold
         doc.setFontSize(9);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(80, 80, 80);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(40, 40, 40);
         doc.text("Order Date: " + dateStr + "  " + timeStr, PW - margin, y + 14, { align: "right" });
 
-        y += LOGO_H + 8;
+        // Title centered above the line
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(40, 40, 40);
+        doc.text("ORDER SUMMARY", PW / 2, y + 24, { align: "center" });
+
+        y += LOGO_H + 4;
 
         // Divider
         doc.setDrawColor(139, 0, 0);
         doc.setLineWidth(1.5);
         doc.line(margin, y, PW - margin, y);
-        y += 10;
-
-        // Title — plain text only (jsPDF doesn't render emoji)
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(40, 40, 40);
-        doc.text("ORDER SUMMARY", PW / 2, y + 12, { align: "center" });
-        y += 24;
+        y += 14;
 
         // ── PRODUCT BLOCKS ─────────────────────────────────
         var THUMB_SIZE = 80;
@@ -290,9 +291,10 @@ async function generateCartOrderPDF(actionType) {
             var p = g.p;
             var pTotalQty = g.items.reduce((s, i) => s + (parseInt(i.qty) || 0), 0);
 
-            // ── Check if enough space for at least the header row ──
+            // ── Check if enough space for header AND first row of images ──
             var blockHeaderH = 44;
-            if (y + blockHeaderH > PH - margin) {
+            var firstRowH = THUMB_SIZE + 22;
+            if (y + blockHeaderH + firstRowH > PH - margin) {
                 doc.addPage();
                 y = margin;
             }
@@ -382,10 +384,19 @@ async function generateCartOrderPDF(actionType) {
                     // Single row Design Label + Qty
                     doc.setFontSize(8.5);
                     doc.setFont("helvetica", "bold");
-                    doc.setTextColor(40, 40, 40);
                     var labelX = cellX + (CELL_W - THUMB_GAP) / 2;
-                    var singleRowText = dLabel + " * " + (item.qty || 0) + " pcs";
-                    doc.text(singleRowText, labelX, y + THUMB_SIZE + 14, { align: "center" });
+                    var dLabelText = dLabel + " * ";
+                    var qtyText = (item.qty || 0) + " pcs";
+                    
+                    var dLabelW = doc.getTextWidth(dLabelText);
+                    var qtyW = doc.getTextWidth(qtyText);
+                    var totalW = dLabelW + qtyW;
+                    var startX = labelX - (totalW / 2);
+                    
+                    doc.setTextColor(40, 40, 40);
+                    doc.text(dLabelText, startX, y + THUMB_SIZE + 14);
+                    doc.setTextColor(255, 63, 108);
+                    doc.text(qtyText, startX + dLabelW, y + THUMB_SIZE + 14);
                 }
 
                 y += rowH + 6;
@@ -415,7 +426,17 @@ async function generateCartOrderPDF(actionType) {
         doc.setFontSize(8);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(100, 100, 100);
-        doc.text("Total Items: " + totalQtyAll + " pcs  |  Products: " + groupArr.length + "  |  WhatsApp: +91 99982 32380", PW / 2, y, { align: "center" });
+        
+        var t1 = "Total Items: " + totalQtyAll + " pcs  |  Products: " + groupArr.length + "  |  ";
+        var t2 = "WhatsApp: +91 99982 32380";
+        var w1 = doc.getTextWidth(t1);
+        var w2 = doc.getTextWidth(t2);
+        var tTotalW = w1 + w2;
+        var tStartX = (PW - tTotalW) / 2;
+
+        doc.text(t1, tStartX, y);
+        doc.setTextColor(37, 211, 102); // WhatsApp green
+        doc.textWithLink(t2, tStartX + w1, y, { url: "https://wa.me/919998232380" });
         y += 14;
 
         doc.setFontSize(8);
