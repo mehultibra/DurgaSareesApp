@@ -431,38 +431,58 @@ async function generateCartOrderPDF(actionType) {
 
         // ── OUTPUT ──────────────────────────────────────────
         var fileName = "DurgaSarees_Order_" + dateStr.replace(/\//g, '-') + ".pdf";
+
+        // Build plain-text order summary for WhatsApp message
+        var waText = "Order from Durga Sarees\n\n";
+        for (var gi2 = 0; gi2 < groupArr.length; gi2++) {
+            var gg = groupArr[gi2];
+            waText += "*" + gg.p.name + "*";
+            if (gg.p.sku) waText += " (SKU: " + gg.p.sku + ")";
+            waText += "\n";
+            gg.items.forEach(function(item) {
+                var dName = (item.design === 'DIRECT') ? 'Cover' : item.design;
+                waText += "  - " + dName + ": " + item.qty + " pcs\n";
+            });
+            waText += "\n";
+        }
+        waText += "*Total: " + totalQtyAll + " pcs*\n";
+        waText += "www.durgasarees.com";
+
         if (bootScreen) bootScreen.style.display = 'none';
 
-        if (actionType === 'preview') {
-            doc.output('dataurlnewwindow');
-        } else {
-            var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins &&
-                window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+        var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
 
-            if (isCapacitor) {
-                var pureBase64 = doc.output('datauristring').split(',')[1];
-                var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+        if (isCapacitor) {
+            // 1. Save PDF to device Documents (accessible by user)
+            var pureBase64 = doc.output('datauristring').split(',')[1];
+            try {
+                await window.Capacitor.Plugins.Filesystem.writeFile({
                     path: fileName,
                     data: pureBase64,
-                    directory: "CACHE"
+                    directory: "DOCUMENTS"
                 });
-                await window.Capacitor.Plugins.Share.share({
-                    title: "Durga Sarees Order — " + totalQtyAll + " pcs",
-                    files: [writeResult.uri]
-                });
-            } else {
-                var pdfBlob = doc.output('blob');
-                var file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-                if (typeof navigator.share === 'function') {
-                    try {
-                        await navigator.share({ title: "Durga Sarees Order", files: [file] });
-                    } catch(e) {
-                        doc.save(fileName);
-                    }
-                } else {
-                    doc.save(fileName);
-                }
+            } catch(saveErr) {
+                // Fallback to CACHE if DOCUMENTS fails (some devices need permission)
+                try {
+                    await window.Capacitor.Plugins.Filesystem.writeFile({
+                        path: fileName,
+                        data: pureBase64,
+                        directory: "CACHE"
+                    });
+                } catch(e2) { console.warn("PDF save failed", e2); }
             }
+
+            // 2. Open WhatsApp directly — NO share picker
+            var encodedMsg = encodeURIComponent(waText);
+            var waNumber = "919998232380";
+            window.open("whatsapp://send?phone=" + waNumber + "&text=" + encodedMsg, '_system');
+
+        } else {
+            // Web fallback: download the PDF
+            doc.save(fileName);
+            // Also try to open WhatsApp web
+            var encodedMsg = encodeURIComponent(waText);
+            window.open("https://web.whatsapp.com/send?phone=919998232380&text=" + encodedMsg, '_blank');
         }
 
     } catch (error) {
