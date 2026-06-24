@@ -253,54 +253,26 @@
     <i class="fab fa-whatsapp"></i>
   </div>
 
-  <div class="action-modal" id="shareModal" onclick="if(event.target===this) closeModals()"
+    <div class="action-modal" id="shareModal" onclick="if(event.target===this) closeModals()"
     style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; flex-direction: column; justify-content: flex-end;">
     <div class="modal-content"
       style="background: #fff; border-radius: 16px 16px 0 0; padding: 20px; text-align: center;">
       <h3 style="margin-top: 0; margin-bottom: 20px; font-size: 16px; color: var(--text-main);">Share Catalog</h3>
 
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
-        <div onclick="triggerShare('wa')" style="cursor: pointer;">
-          <div
-            style="background: #25D366; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 24px;">
-            <i class="fab fa-whatsapp"></i>
-          </div>
-          <div style="font-size: 11px; color: var(--text-light);">WhatsApp</div>
-        </div>
-        <div onclick="triggerShare('print')" style="cursor: pointer;">
-          <div
-            style="background: #1a73e8; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
-            <i class="fas fa-print"></i>
-          </div>
-          <div style="font-size: 11px; color: var(--text-light);">Print</div>
-        </div>
-        <div onclick="triggerShare('preview')" style="cursor: pointer;">
-          <div
-            style="background: #9c27b0; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
-            <i class="fas fa-eye"></i>
-          </div>
-          <div style="font-size: 11px; color: var(--text-light);">Preview PDF</div>
-        </div>
-        <div onclick="triggerShare('pdf')" style="cursor: pointer;">
-          <div
-            style="background: #ff3f6c; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
-            <i class="fas fa-file-pdf"></i>
-          </div>
-          <div style="font-size: 11px; color: var(--text-light);">Download PDF</div>
-        </div>
         <div onclick="triggerShare('images')" style="cursor: pointer;">
           <div
             style="background: #25D366; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
             <i class="far fa-images"></i>
           </div>
-          <div style="font-size: 11px; color: var(--text-light);">WhatsApp Images</div>
+          <div style="font-size: 11px; color: var(--text-light);">WhatsApp<br>Images</div>
         </div>
-        <div onclick="triggerShare('copy')" style="cursor: pointer;">
+        <div onclick="triggerShare('wa')" style="cursor: pointer;">
           <div
-            style="background: #757575; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
-            <i class="fas fa-copy"></i>
+            style="background: #ff3f6c; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
+            <i class="fas fa-file-pdf"></i>
           </div>
-          <div style="font-size: 11px; color: var(--text-light);">Copy Link</div>
+          <div style="font-size: 11px; color: var(--text-light);">WhatsApp<br>PDF</div>
         </div>
         <div onclick="closeModals()" style="cursor: pointer;">
           <div

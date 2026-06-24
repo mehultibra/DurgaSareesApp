@@ -537,13 +537,6 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                 doc.setTextColor(255, 255, 255);
                 doc.text(catText, 50, 58);
 
-                // Website link under category
-                doc.setFont("helvetica", "normal");
-                doc.setFontSize(10);
-                doc.setTextColor(255, 140, 0);
-                doc.textWithLink("www.durgasarees.com", 40, 82, { url: WEBSITE_BASE });
-                drawUnderline("www.durgasarees.com", 40, 82, 10, "left");
-
                 // Date
                 var today = new Date();
                 var dateStr = ("0" + today.getDate()).slice(-2) + "/" + ("0" + (today.getMonth() + 1)).slice(-2) + "/" + today.getFullYear();
@@ -619,8 +612,7 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                 doc.setFont("helvetica", "normal");
                 doc.setFontSize(9);
                 doc.setTextColor(0, 100, 200);
-                doc.textWithLink("Click on image or product name to view all Ready Designs on www.durgasarees.com", pageWidth / 2, 790, { url: wixUrl, align: "center" });
-
+                doc.textWithLink(wixUrl, 40, 810, { url: wixUrl });
             } else {
                 // ── DESIGN PAGES ───────────────────────────
                 var designNum = i;
@@ -629,11 +621,6 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                 doc.setFont("helvetica", "bold");
                 doc.setTextColor(139, 0, 0);
                 doc.textWithLink(product.name + " — Design " + designNum, pageWidth / 2, 35, { url: wixUrl, align: "center" });
-
-                doc.setFontSize(8);
-                doc.setFont("helvetica", "normal");
-                doc.setTextColor(0, 100, 200);
-                doc.textWithLink("View on durgasarees.com ↗", pageWidth / 2, 50, { url: wixUrl, align: "center" });
 
                 if (base64Img) {
                     var targetW = 500, targetH = 710;
@@ -646,6 +633,27 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                     doc.link(xPos, yPos, finalW, finalH, { url: wixUrl });
                     doc.addImage(base64Img, 'JPEG', xPos, yPos, finalW, finalH);
                 }
+
+                // Footer
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(9);
+                doc.setTextColor(0, 100, 200);
+                doc.textWithLink(wixUrl, 40, 810, { url: wixUrl });
+            }
+            
+            // Add Logo to bottom right of all pages
+            var logoBase64 = await getLogoBase64();
+            if (logoBase64) {
+                try {
+                    var logoProp = doc.getImageProperties(logoBase64);
+                    var logoH = 26;
+                    var logoW = logoH * (logoProp.width / logoProp.height);
+                    logoW = Math.min(logoW, 100);
+                    var logoX = pageWidth - 40 - logoW;
+                    var logoY = 810 - logoH + 6;
+                    doc.link(logoX, logoY, logoW, logoH, { url: WEBSITE_BASE });
+                    doc.addImage(logoBase64, 'PNG', logoX, logoY, logoW, logoH);
+                } catch(e) {}
             }
         }
 
