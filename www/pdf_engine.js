@@ -752,6 +752,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
     }
     
     try {
+        var { jsPDF } = window.jspdf;
         var doc = new jsPDF('p', 'pt', 'a4');
         var pageWidth = 595, pageHeight = 842;
         var logoBase64 = await getLogoBase64();
@@ -845,8 +846,8 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             }
             
             // --- DRAW DESIGN PAGES IF REQUIRED ---
-            if (shareType === 'full' && product.designs) {
-                var dArr = product.designs.split(',').map(d => d.trim()).filter(d => d);
+            if (shareType === 'full' && product.ready) {
+                var dArr = String(product.ready).split(',').map(d => d.trim()).filter(d => d);
                 for (var j = 0; j < dArr.length; j++) {
                     var dId = dArr[j];
                     var dUrl = getExactFirebaseUrl(folderPath, dId);

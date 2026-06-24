@@ -1745,8 +1745,8 @@ window.triggerShare = async function (action) {
             
             allHighResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
 
-            if (shareType === 'full' && fp.designs) {
-                var dArr = fp.designs.split(',').map(d => d.trim()).filter(d => d);
+            if (shareType === 'full' && fp.ready) {
+                var dArr = String(fp.ready).split(',').map(d => d.trim()).filter(d => d);
                 for (var j = 0; j < dArr.length; j++) {
                     allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
                 }
@@ -1780,8 +1780,8 @@ window.triggerShare = async function (action) {
     
     highResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
 
-    if (shareType === 'full' && curProduct.designs) {
-        var dArr = curProduct.designs.split(',').map(d => d.trim()).filter(d => d);
+    if (shareType === 'full' && curProduct.ready) {
+        var dArr = String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d);
         for (var j = 0; j < dArr.length; j++) {
             highResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
         }
