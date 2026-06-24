@@ -1674,9 +1674,6 @@ function getExactFirebaseUrl(folderPath, dId) {
 // ====================================
 // 📦 2. MODAL & SHARE LOGIC (MULTI-IMAGE UPGRADE)
 // ====================================
-async function triggerShare(action) {
-    closeModals();
-
 function askShareTypeAsync() {
     return new Promise((resolve) => {
         var overlay = document.createElement('div');
