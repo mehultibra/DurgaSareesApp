@@ -21,7 +21,15 @@ function buildWixProductUrl(product) {
 
 // ==========================================
 // 🧠 IMAGE HELPER: Get image from IndexedDB cache first, then network
+// Returns { dataUrl, format } where format is 'JPEG', 'WEBP', or 'PNG'
 // ==========================================
+function detectFormat(dataUrl) {
+    if (!dataUrl) return 'JPEG';
+    if (dataUrl.startsWith('data:image/webp')) return 'WEBP';
+    if (dataUrl.startsWith('data:image/png')) return 'PNG';
+    return 'JPEG';
+}
+
 function getBase64ImageFast(imageUrl) {
     // Try IndexedDB cache FIRST for lightning-fast generation
     return getImageFromDB(imageUrl).then(function(blob) {
@@ -45,33 +53,31 @@ function getBase64ImageFast(imageUrl) {
                     reader.readAsDataURL(altBlob);
                 });
             }
-            // Last resort: load from network (cross-origin canvas)
-            return getBase64ImageFromUrl(imageUrl);
+            // Last resort: load from network — fetch blob directly, no canvas re-encoding
+            return fetch(imageUrl)
+                .then(function(res) { return res.blob(); })
+                .then(function(netBlob) {
+                    return new Promise(function(resolve) {
+                        var reader = new FileReader();
+                        reader.onload = function() { resolve(reader.result); };
+                        reader.onerror = function() { resolve(null); };
+                        reader.readAsDataURL(netBlob);
+                    });
+                })
+                .catch(function() { return null; });
         });
     }).catch(function() {
-        return getBase64ImageFromUrl(imageUrl);
-    });
-}
-
-// 🧠 MEMORY HANDLER: Downloads High-Res Firebase Images to RAM
-function getBase64ImageFromUrl(imageUrl) {
-    return new Promise((resolve) => {
-        var img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.onload = function () {
-            var canvas = document.createElement("canvas");
-            var maxDim = 1000;
-            var w = img.width, h = img.height;
-            if (w > maxDim || h > maxDim) {
-                var r = Math.min(maxDim / w, maxDim / h);
-                w = w * r; h = h * r;
-            }
-            canvas.width = w; canvas.height = h;
-            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL("image/jpeg", 0.75));
-        };
-        img.onerror = function () { resolve(null); };
-        img.src = imageUrl;
+        return fetch(imageUrl)
+            .then(function(res) { return res.blob(); })
+            .then(function(netBlob) {
+                return new Promise(function(resolve) {
+                    var reader = new FileReader();
+                    reader.onload = function() { resolve(reader.result); };
+                    reader.onerror = function() { resolve(null); };
+                    reader.readAsDataURL(netBlob);
+                });
+            })
+            .catch(function() { return null; });
     });
 }
 
@@ -647,7 +653,7 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                     doc.rect(imgX, imgY, finalW, finalH, 'D');
                     // Image links to product Wix page
                     doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
-                    doc.addImage(base64Img, 'JPEG', imgX, imgY, finalW, finalH);
+                    doc.addImage(base64Img, detectFormat(base64Img), imgX, imgY, finalW, finalH);
                 }
 
                 // Footer
@@ -680,7 +686,7 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                     var xPos = (pageWidth - finalW) / 2;
                     var yPos = 65 + ((targetH - finalH) / 2);
                     doc.link(xPos, yPos, finalW, finalH, { url: wixUrl });
-                    doc.addImage(base64Img, 'JPEG', xPos, yPos, finalW, finalH);
+                    doc.addImage(base64Img, detectFormat(base64Img), xPos, yPos, finalW, finalH);
                 }
 
                 // Footer
@@ -868,7 +874,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 doc.setLineWidth(1);
                 doc.rect(imgX, imgY, finalW, finalH, 'D');
                 doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
-                doc.addImage(coverBase64, 'JPEG', imgX, imgY, finalW, finalH);
+                doc.addImage(coverBase64, detectFormat(coverBase64), imgX, imgY, finalW, finalH);
             }
             
             // Footer
@@ -917,7 +923,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                         var xPos = (pageWidth - finalW2) / 2;
                         var yPos = 65 + ((targetH2 - finalH2) / 2);
                         doc.link(xPos, yPos, finalW2, finalH2, { url: wixUrl });
-                        doc.addImage(dBase64, 'JPEG', xPos, yPos, finalW2, finalH2);
+                        doc.addImage(dBase64, detectFormat(dBase64), xPos, yPos, finalW2, finalH2);
                     }
 
                     doc.setFont("helvetica", "normal");
