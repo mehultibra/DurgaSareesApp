@@ -545,8 +545,8 @@ async function generateCartOrderPDF(actionType) {
 // 🌸 DURGA SAREES: NATIVE PDF ENGINE (A4 CATALOG LAYOUT)
 // ==========================================
 
-async function generateNativePDF(product, imageUrlsArray, actionType) {
-    // Explicitly filter out video files so they aren't processed as blank PDF pages
+window.generateNativePDF = async function (product, imageUrlsArray, actionType) {
+    // Filter out video files to prevent blank PDF pages
     imageUrlsArray = imageUrlsArray.filter(url => !/\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(url));
 
     var bootScreen = document.getElementById('boot');
@@ -580,8 +580,8 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                     doc.line(startX, y + 2, startX + textWidth, y + 2);
                 }
 
-                // Category
-                var catText = product.cat ? String(product.cat) : "Uncategorized";
+                // Category — trim text so highlight box fits exactly
+                var catText = (product.cat ? String(product.cat) : "Uncategorized").trim();
                 doc.setFont("helvetica", "bold");
                 doc.setFontSize(18);
                 var catWidth = doc.getTextWidth(catText);
@@ -598,27 +598,27 @@ async function generateNativePDF(product, imageUrlsArray, actionType) {
                 doc.setTextColor(51, 51, 51);
                 doc.text("Date: " + dateStr, pageWidth - 40, 58, { align: "right" });
 
-                // Product Title (linked to Wix product page)
-                var titleText = product.name ? String(product.name) : "";
+                // Product Title — trim text so highlight box fits exactly, no gap from category
+                var titleText = (product.name ? String(product.name) : "").trim();
                 doc.setFont("helvetica", "bold");
                 doc.setFontSize(24);
                 var titleWidth = doc.getTextWidth(titleText);
                 var boxW = titleWidth + 30;
                 var boxX = (pageWidth - boxW) / 2;
                 doc.setFillColor(139, 0, 0);
-                doc.rect(boxX, 105, boxW, 34, 'F');
+                doc.rect(boxX, 76, boxW, 34, 'F');
                 doc.setTextColor(255, 255, 255);
-                doc.textWithLink(titleText, pageWidth / 2, 129, { url: wixUrl, align: "center" });
+                doc.textWithLink(titleText, pageWidth / 2, 100, { url: wixUrl, align: "center" });
 
-                // "Click for Ready Designs" link
+                // "Click for Ready Designs" link — right below title, no extra gap
                 doc.setFont("helvetica", "normal");
                 doc.setFontSize(10);
                 doc.setTextColor(255, 140, 0);
-                doc.textWithLink("(Click for Ready Designs)", pageWidth / 2, 155, { url: wixUrl, align: "center" });
-                drawUnderline("(Click for Ready Designs)", pageWidth / 2, 155, 10, "center");
+                doc.textWithLink("(Click for Ready Designs)", pageWidth / 2, 122, { url: wixUrl, align: "center" });
+                drawUnderline("(Click for Ready Designs)", pageWidth / 2, 122, 10, "center");
 
-                // 3-column specifications grid
-                var startY = 195;
+                // 3-column specifications grid — tighter to the links above
+                var startY = 148;
                 var rowH = 22;
                 var col1X = 40, col2X = 220, col3X = 400;
                 doc.setFontSize(10);
@@ -810,7 +810,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 doc.line(startX, y + 2, startX + textWidth, y + 2);
             }
 
-            var catText = product.cat ? String(product.cat) : "Uncategorized";
+            var catText = (product.cat ? String(product.cat) : "Uncategorized").trim();
             doc.setFont("helvetica", "bold");
             doc.setFontSize(18);
             var catWidth = doc.getTextWidth(catText);
@@ -826,25 +826,26 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             doc.setTextColor(51, 51, 51);
             doc.text("Date: " + dateStr, pageWidth - 40, 58, { align: "right" });
 
-            var titleText = product.name ? String(product.name) : "";
+            var titleText = (product.name ? String(product.name) : "").trim();
             doc.setFont("helvetica", "bold");
             doc.setFontSize(24);
             var titleWidth = doc.getTextWidth(titleText);
             var boxW = titleWidth + 30;
             var boxX = (pageWidth - boxW) / 2;
             doc.setFillColor(139, 0, 0);
-            doc.rect(boxX, 105, boxW, 34, 'F');
+            doc.rect(boxX, 76, boxW, 34, 'F');
             doc.setTextColor(255, 255, 255);
-            doc.textWithLink(titleText, pageWidth / 2, 129, { url: wixUrl, align: "center" });
+            doc.textWithLink(titleText, pageWidth / 2, 100, { url: wixUrl, align: "center" });
 
             doc.setFont("helvetica", "normal");
             doc.setFontSize(10);
             doc.setTextColor(255, 140, 0);
-            doc.textWithLink("(Click for Ready Designs)", pageWidth / 2, 155, { url: wixUrl, align: "center" });
-            drawUnderline("(Click for Ready Designs)", pageWidth / 2, 155, 10, "center");
+            doc.textWithLink("(Click for Ready Designs)", pageWidth / 2, 122, { url: wixUrl, align: "center" });
+            drawUnderline("(Click for Ready Designs)", pageWidth / 2, 122, 10, "center");
 
             // Specs
-            var startY = 195;
+            var startY = 148;
+
             var rowH = 22;
             var col1X = 40, col2X = 220, col3X = 400;
             doc.setFontSize(10);
