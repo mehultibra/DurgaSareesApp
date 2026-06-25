@@ -1781,6 +1781,8 @@ window.triggerShare = async function (action) {
         if (!shareType) return;
 
         var allHighResUrls = [];
+        var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
+
         for (var i = 0; i < favProducts.length; i++) {
             var fp = favProducts[i];
             var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
@@ -1791,10 +1793,17 @@ window.triggerShare = async function (action) {
                     allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
                 }
             } else {
-                // Cover mode: prefer DIRECT (01.webp), but if product has ready designs
-                // use the first one as fallback so we never send a blank/missing image
+                // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
+                var fallbackFile = dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
                 var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
-                var coverDesignId = (readyDesigns.length > 0) ? readyDesigns[0] : 'DIRECT';
+                var coverDesignId = 'DIRECT';
+                
+                if (fallbackFile) {
+                    coverDesignId = fallbackFile.replace(/\.webp$/i, '');
+                } else if (readyDesigns.length > 0) {
+                    coverDesignId = readyDesigns[0];
+                }
+                
                 allHighResUrls.push(getExactFirebaseUrl(folderPath, coverDesignId));
             }
         }
@@ -1824,15 +1833,24 @@ window.triggerShare = async function (action) {
     var highResUrls = [];
     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
     var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+    
     if (dArr.length > 0) {
         for (var j = 0; j < dArr.length; j++) {
             highResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
         }
     } else {
-        // Cover mode: prefer DIRECT (01.webp), but if product has ready designs
-        // use the first one as fallback so we never send a blank/missing image
+        // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
+        var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
+        var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
         var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
-        var coverDesignId = (readyDesigns.length > 0) ? readyDesigns[0] : 'DIRECT';
+        var coverDesignId = 'DIRECT';
+        
+        if (fallbackFile) {
+            coverDesignId = fallbackFile.replace(/\.webp$/i, '');
+        } else if (readyDesigns.length > 0) {
+            coverDesignId = readyDesigns[0];
+        }
+        
         highResUrls.push(getExactFirebaseUrl(folderPath, coverDesignId));
     }
 
