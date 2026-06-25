@@ -790,7 +790,11 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             if (dArr.length > 0) {
                 coverUrl = getExactFirebaseUrl(folderPath, dArr[0]);
             } else {
-                coverUrl = getExactFirebaseUrl(folderPath, 'DIRECT');
+                // Cover mode: prefer DIRECT (01.webp), but fall back to first ready design
+                // to avoid blank/missing image when product has no standalone cover file
+                var readyFallback = (product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d && !/\.(mp4|mov|avi|wmv|webm)$/i.test(d)) : [];
+                var coverDesignId = (readyFallback.length > 0) ? readyFallback[0] : 'DIRECT';
+                coverUrl = getExactFirebaseUrl(folderPath, coverDesignId);
             }
             
             var coverBase64 = await getBase64ImageFast(coverUrl);

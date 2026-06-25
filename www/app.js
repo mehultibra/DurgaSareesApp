@@ -1791,7 +1791,11 @@ window.triggerShare = async function (action) {
                     allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
                 }
             } else {
-                allHighResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
+                // Cover mode: prefer DIRECT (01.webp), but if product has ready designs
+                // use the first one as fallback so we never send a blank/missing image
+                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+                var coverDesignId = (readyDesigns.length > 0) ? readyDesigns[0] : 'DIRECT';
+                allHighResUrls.push(getExactFirebaseUrl(folderPath, coverDesignId));
             }
         }
 
@@ -1825,7 +1829,11 @@ window.triggerShare = async function (action) {
             highResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
         }
     } else {
-        highResUrls.push(getExactFirebaseUrl(folderPath, 'DIRECT'));
+        // Cover mode: prefer DIRECT (01.webp), but if product has ready designs
+        // use the first one as fallback so we never send a blank/missing image
+        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+        var coverDesignId = (readyDesigns.length > 0) ? readyDesigns[0] : 'DIRECT';
+        highResUrls.push(getExactFirebaseUrl(folderPath, coverDesignId));
     }
 
     if (highResUrls.length === 0) {
