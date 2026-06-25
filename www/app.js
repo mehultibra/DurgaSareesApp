@@ -1677,12 +1677,16 @@ function getExactFirebaseUrl(folderPath, dId) {
     var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     var fileName = "01.webp";
     if (dId !== 'DIRECT' && dId !== 'Cover') {
-        var num = dId.replace(/\D/g, '');
-        if (num.length === 1) num = "0" + num;
-        if (num === "") num = dId;
-        fileName = num + ".webp";
+        if (/\.(webp|jpg|jpeg|png)$/i.test(dId)) {
+            fileName = dId;
+        } else {
+            var num = dId.replace(/\D/g, '');
+            if (num.length === 1) num = "0" + num;
+            if (num === "") num = dId;
+            fileName = num + ".webp";
+        }
     }
-    return fbBase + encPath + "%2F" + fileName + "?alt=media";
+    return fbBase + encPath + "%2F" + encodeURIComponent(fileName) + "?alt=media";
 }
 
 // ====================================
@@ -1799,7 +1803,7 @@ window.triggerShare = async function (action) {
                 var coverDesignId = 'DIRECT';
                 
                 if (fallbackFile) {
-                    coverDesignId = fallbackFile.replace(/\.webp$/i, '');
+                    coverDesignId = fallbackFile;
                 } else if (readyDesigns.length > 0) {
                     coverDesignId = readyDesigns[0];
                 }
@@ -1846,7 +1850,7 @@ window.triggerShare = async function (action) {
         var coverDesignId = 'DIRECT';
         
         if (fallbackFile) {
-            coverDesignId = fallbackFile.replace(/\.webp$/i, '');
+            coverDesignId = fallbackFile;
         } else if (readyDesigns.length > 0) {
             coverDesignId = readyDesigns[0];
         }

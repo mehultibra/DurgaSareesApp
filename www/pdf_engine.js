@@ -797,7 +797,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 var coverDesignId = 'DIRECT';
                 
                 if (fallbackFile) {
-                    coverDesignId = fallbackFile.replace(/\.webp$/i, '');
+                    coverDesignId = fallbackFile;
                 } else if (readyFallback.length > 0) {
                     coverDesignId = readyFallback[0];
                 }
