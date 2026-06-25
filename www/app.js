@@ -1952,9 +1952,20 @@ window.goToHome = function () {
     if (cart && cart.classList.contains('open')) { cart.classList.remove('open'); history.back(); }
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
 };
+window.isSyncing = false;
 async function syncImages() {
     var bootScreen = document.getElementById('boot');
     var bootMsg = document.getElementById('bootMsg');
+    var syncIcon = document.querySelector('.fa-sync-alt');
+
+    if (window.isSyncing) {
+        // If already syncing, just show the details modal
+        if (bootScreen) bootScreen.style.display = 'flex';
+        return;
+    }
+
+    window.isSyncing = true;
+    if (syncIcon) syncIcon.classList.add('fa-spin');
 
     // Clear the coverExists cache on full manual sync to re-discover new covers
     coverExistsMap = {};
@@ -1963,7 +1974,6 @@ async function syncImages() {
     window.dsFolderCache = {};
     try { localStorage.removeItem("dsFolderCache"); } catch (e) { }
 
-    if (bootScreen) bootScreen.style.display = 'flex';
     if (bootMsg) bootMsg.innerText = "Fetching latest product list...";
 
     try {
@@ -1987,6 +1997,8 @@ async function syncImages() {
         });
 
         if (productsToDownload.length === 0) {
+            window.isSyncing = false;
+            if (syncIcon) syncIcon.classList.remove('fa-spin');
             if (bootScreen) bootScreen.style.display = 'none';
             alert("No images found to sync.");
             initApp();
@@ -2153,6 +2165,8 @@ async function syncImages() {
         }
 
         if (bootScreen) bootScreen.style.display = 'none';
+        window.isSyncing = false;
+        if (syncIcon) syncIcon.classList.remove('fa-spin');
 
         if (failed > 0) {
             var failMsg = "Sync completed: " + (total - failed) + " OK, " + failed + " failed.\n\nFailed products:\n";
@@ -2169,6 +2183,8 @@ async function syncImages() {
         initApp();
 
     } catch (err) {
+        window.isSyncing = false;
+        if (syncIcon) syncIcon.classList.remove('fa-spin');
         if (bootScreen) bootScreen.style.display = 'none';
         alert("Sync failed: " + err.message);
         initApp();
