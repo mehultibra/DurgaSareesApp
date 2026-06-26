@@ -2697,7 +2697,7 @@ async function logout() {
         document.getElementById("loginScreen").style.display = "flex";
         document.getElementById("loginBoxPhone").style.display = "block";
         document.getElementById("loginBoxOtp").style.display = "none";
-        document.getElementById("lPhone").value = "";
+        document.getElementById("lPhone").value = "+91";
     } catch (err) {
         console.error("Logout failed", err);
         alert("Logout failed: " + err.message);
