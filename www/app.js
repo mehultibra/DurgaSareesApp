@@ -89,47 +89,58 @@ window.addEventListener('DOMContentLoaded', function () {
             }
         }
         
-        if (window.CapacitorFirebaseAuthentication) {
-            window.CapacitorFirebaseAuthentication.addListener('authStateChange', (user) => {
-                if (user && user.phoneNumber) {
-                    try { localStorage.setItem("dsUserToken", user.phoneNumber); } catch (e) { }
-                    activeUser = user.phoneNumber;
-                    if (loginScreen && appBody && loginScreen.style.display !== 'none') {
-                        loginScreen.style.display = 'none';
-                        appBody.style.display = 'flex';
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+            if (window.CapacitorFirebaseAuthentication) {
+                window.CapacitorFirebaseAuthentication.addListener('authStateChange', (user) => {
+                    if (user && user.phoneNumber) {
+                        try { localStorage.setItem("dsUserToken", user.phoneNumber); } catch (e) { }
+                        activeUser = user.phoneNumber;
+                        if (loginScreen && appBody && loginScreen.style.display !== 'none') {
+                            loginScreen.style.display = 'none';
+                            appBody.style.display = 'flex';
+                            initApp();
+                        }
+                    }
+                });
+
+                window.CapacitorFirebaseAuthentication.addListener('phoneCodeSent', (event) => {
+                    dsVerificationId = event.verificationId;
+                    document.getElementById('loginBoxPhone').style.display = 'none';
+                    document.getElementById('loginBoxOtp').style.display = 'block';
+                    var btn = document.getElementById('btnSendOtp');
+                    if (btn) btn.innerText = "SEND OTP";
+                });
+
+                window.CapacitorFirebaseAuthentication.addListener('phoneVerificationCompleted', (result) => {
+                    const user = result.user;
+                    if (user) {
+                        var phoneStr = user.phoneNumber || document.getElementById('lPhone').value.trim();
+                        try { localStorage.setItem("dsUserToken", phoneStr); } catch (e) { }
+                        activeUser = phoneStr;
+                        document.getElementById('loginScreen').style.display = 'none';
+                        document.getElementById('appBody').style.display = 'flex';
                         initApp();
                     }
-                }
-            });
+                });
 
-            window.CapacitorFirebaseAuthentication.addListener('phoneCodeSent', (event) => {
-                dsVerificationId = event.verificationId;
-                document.getElementById('loginBoxPhone').style.display = 'none';
-                document.getElementById('loginBoxOtp').style.display = 'block';
-                var btn = document.getElementById('btnSendOtp');
-                if (btn) btn.innerText = "SEND OTP";
-            });
-
-            window.CapacitorFirebaseAuthentication.addListener('phoneVerificationCompleted', (result) => {
-                const user = result.user;
-                if (user) {
-                    var phoneStr = user.phoneNumber || document.getElementById('lPhone').value.trim();
-                    try { localStorage.setItem("dsUserToken", phoneStr); } catch (e) { }
-                    activeUser = phoneStr;
-                    document.getElementById('loginScreen').style.display = 'none';
-                    document.getElementById('appBody').style.display = 'flex';
-                    initApp();
-                }
-            });
-
-            window.CapacitorFirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
-                var errEl = document.getElementById('lErr');
-                if (errEl) errEl.innerText = "❌ Verification Failed: " + event.message;
-                var errElOtp = document.getElementById('lErrOtp');
-                if (errElOtp) errElOtp.innerText = "❌ " + event.message;
-                var btn = document.getElementById('btnSendOtp');
-                if (btn) btn.innerText = "SEND OTP";
-            });
+                window.CapacitorFirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
+                    var errEl = document.getElementById('lErr');
+                    if (errEl) errEl.innerText = "❌ Verification Failed: " + event.message;
+                    var errElOtp = document.getElementById('lErrOtp');
+                    if (errElOtp) errElOtp.innerText = "❌ " + event.message;
+                    var btn = document.getElementById('btnSendOtp');
+                    if (btn) btn.innerText = "SEND OTP";
+                });
+            }
+        } else {
+            // Setup Invisible reCAPTCHA for Web
+            if (typeof firebase !== 'undefined') {
+                try {
+                    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+                        'size': 'invisible'
+                    });
+                } catch(e) { console.error("Recaptcha Init Error:", e); }
+            }
         }
 
         setupEditableFields();
@@ -152,12 +163,20 @@ async function sendOtp() {
     if (errEl) errEl.innerText = "";
 
     try {
-        if (!window.CapacitorFirebaseAuthentication) throw new Error("Firebase Auth Plugin missing");
-        await window.CapacitorFirebaseAuthentication.signInWithPhoneNumber({
-            phoneNumber: phone
-        });
-        // Note: The UI will transition to the OTP screen when the 'phoneCodeSent' event fires,
-        // or login directly if 'phoneVerificationCompleted' fires natively.
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+            if (!window.CapacitorFirebaseAuthentication) throw new Error("Firebase Auth Plugin missing");
+            await window.CapacitorFirebaseAuthentication.signInWithPhoneNumber({
+                phoneNumber: phone
+            });
+            // Note: The UI will transition to the OTP screen when the 'phoneCodeSent' event fires
+        } else {
+            // Web fallback
+            if (typeof firebase === 'undefined') throw new Error("Firebase Web SDK missing");
+            webConfirmationResult = await firebase.auth().signInWithPhoneNumber(phone, window.recaptchaVerifier);
+            document.getElementById('loginBoxPhone').style.display = 'none';
+            document.getElementById('loginBoxOtp').style.display = 'block';
+            if (btn) btn.innerText = "SEND OTP";
+        }
     } catch (err) {
         if (errEl) errEl.innerText = "❌ " + (err.message || "Failed to send OTP");
         if (btn) btn.innerText = "SEND OTP";
@@ -177,12 +196,20 @@ async function verifyOtp() {
     if (errEl) errEl.innerText = "";
 
     try {
-        const result = await window.CapacitorFirebaseAuthentication.confirmVerificationCode({
-            verificationId: dsVerificationId,
-            verificationCode: code
-        });
+        let user = null;
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+            const result = await window.CapacitorFirebaseAuthentication.confirmVerificationCode({
+                verificationId: dsVerificationId,
+                verificationCode: code
+            });
+            user = result.user;
+        } else {
+            // Web fallback
+            if (!webConfirmationResult) throw new Error("No OTP requested");
+            const result = await webConfirmationResult.confirm(code);
+            user = result.user;
+        }
         
-        const user = result.user;
         if (user) {
             var phoneStr = user.phoneNumber || document.getElementById('lPhone').value.trim();
             try { localStorage.setItem("dsUserToken", phoneStr); } catch (e) { }
@@ -2689,10 +2716,16 @@ updateAndroidBackState();
 
 async function logout() {
     try {
-        if (window.CapacitorFirebaseAuthentication) {
-            await window.CapacitorFirebaseAuthentication.signOut();
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+            if (window.CapacitorFirebaseAuthentication) {
+                await window.CapacitorFirebaseAuthentication.signOut();
+            }
+        } else {
+            if (typeof firebase !== 'undefined') {
+                await firebase.auth().signOut();
+            }
         }
-        localStorage.removeItem('userPhone');
+        localStorage.removeItem('dsUserToken');
         document.getElementById("appBody").style.display = "none";
         document.getElementById("loginScreen").style.display = "flex";
         document.getElementById("loginBoxPhone").style.display = "block";

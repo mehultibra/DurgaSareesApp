@@ -8,6 +8,17 @@
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="./style.css">
+
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Durga Sarees">
+  <link rel="apple-touch-icon" href="logo.png">
+
+  <!-- Firebase Web SDK (v10 compat) for Web/iPhone fallback -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 </head>
 
 
@@ -28,6 +39,9 @@
       <button onclick="backToPhone()" id="btnBackPhone" style="background:#aaa; margin-top:10px;">BACK</button>
       <p id="lErrOtp" style="color:red; font-size:12px; margin-top:10px;"></p>
     </div>
+    
+    <!-- Invisible reCAPTCHA container for Web Auth -->
+    <div id="recaptcha-container"></div>
   </div>
 
   <div id="boot" style="display:none;">
