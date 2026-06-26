@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "324119177694",
+    "project_id": "durga-sarees",
+    "storage_bucket": "durga-sarees.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:324119177694:android:578e8d70420dd5f0f5954f",
+        "android_client_info": {
+          "package_name": "com.durgasarees.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3Za-dZ8OWWF7ZJdneKGd7A2t8xm_7IZQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

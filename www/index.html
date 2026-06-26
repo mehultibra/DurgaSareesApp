@@ -14,12 +14,19 @@
 <body>
 
   <div id="loginScreen" class="login-wrapper">
-    <div class="login-box">
+    <div class="login-box" id="loginBoxPhone">
       <h2 style="color:var(--myntra-pink);">Durga Sarees</h2>
-      <input type="text" id="lUser" placeholder="Username">
-      <input type="password" id="lPass" placeholder="Password">
-      <button onclick="doLogin()" id="btnLogin">LOGIN</button>
+      <input type="tel" id="lPhone" placeholder="Phone Number (e.g. +91...)">
+      <button onclick="sendOtp()" id="btnSendOtp">SEND OTP</button>
       <p id="lErr" style="color:red; font-size:12px; margin-top:10px;"></p>
+    </div>
+    
+    <div class="login-box" id="loginBoxOtp" style="display:none;">
+      <h2 style="color:var(--myntra-pink);">Enter OTP</h2>
+      <input type="number" id="lOtp" placeholder="OTP Code">
+      <button onclick="verifyOtp()" id="btnVerifyOtp">VERIFY</button>
+      <button onclick="backToPhone()" id="btnBackPhone" style="background:#aaa; margin-top:10px;">BACK</button>
+      <p id="lErrOtp" style="color:red; font-size:12px; margin-top:10px;"></p>
     </div>
   </div>
 

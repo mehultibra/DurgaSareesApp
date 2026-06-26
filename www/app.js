@@ -76,61 +76,133 @@ window.addEventListener('DOMContentLoaded', function () {
         var loginScreen = document.getElementById('loginScreen');
         var appBody = document.getElementById('appBody');
 
-        // Bypass login for debugging
-        if (loginScreen && appBody) {
-            loginScreen.style.display = 'none';
-            appBody.style.display = 'flex';
-            activeUser = "debug_user";
-            setTimeout(initApp, 100);
+        if (activeUser && activeUser !== "null" && activeUser !== "undefined") {
+            if (loginScreen && appBody) {
+                loginScreen.style.display = 'none';
+                appBody.style.display = 'flex';
+                setTimeout(initApp, 100);
+            }
+        } else {
+            if (loginScreen && appBody) {
+                loginScreen.style.display = 'flex';
+                appBody.style.display = 'none';
+            }
         }
+        
+        if (window.CapacitorFirebaseAuthentication) {
+            window.CapacitorFirebaseAuthentication.addListener('authStateChange', (user) => {
+                if (user && user.phoneNumber) {
+                    try { localStorage.setItem("dsUserToken", user.phoneNumber); } catch (e) { }
+                    activeUser = user.phoneNumber;
+                    if (loginScreen && appBody && loginScreen.style.display !== 'none') {
+                        loginScreen.style.display = 'none';
+                        appBody.style.display = 'flex';
+                        initApp();
+                    }
+                }
+            });
+
+            window.CapacitorFirebaseAuthentication.addListener('phoneCodeSent', (event) => {
+                dsVerificationId = event.verificationId;
+                document.getElementById('loginBoxPhone').style.display = 'none';
+                document.getElementById('loginBoxOtp').style.display = 'block';
+                var btn = document.getElementById('btnSendOtp');
+                if (btn) btn.innerText = "SEND OTP";
+            });
+
+            window.CapacitorFirebaseAuthentication.addListener('phoneVerificationCompleted', (result) => {
+                const user = result.user;
+                if (user) {
+                    var phoneStr = user.phoneNumber || document.getElementById('lPhone').value.trim();
+                    try { localStorage.setItem("dsUserToken", phoneStr); } catch (e) { }
+                    activeUser = phoneStr;
+                    document.getElementById('loginScreen').style.display = 'none';
+                    document.getElementById('appBody').style.display = 'flex';
+                    initApp();
+                }
+            });
+
+            window.CapacitorFirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
+                var errEl = document.getElementById('lErr');
+                if (errEl) errEl.innerText = "❌ Verification Failed: " + event.message;
+                var errElOtp = document.getElementById('lErrOtp');
+                if (errElOtp) errElOtp.innerText = "❌ " + event.message;
+                var btn = document.getElementById('btnSendOtp');
+                if (btn) btn.innerText = "SEND OTP";
+            });
+        }
+
         setupEditableFields();
         setupFsGestures();
     } catch (err) { console.error("Init error:", err); }
 });
 
-function doLogin() {
-    var userEl = document.getElementById('lUser');
-    var passEl = document.getElementById('lPass');
+var dsVerificationId = null;
+
+async function sendOtp() {
+    var phoneEl = document.getElementById('lPhone');
     var errEl = document.getElementById('lErr');
-    if (!userEl || !passEl) return;
+    if (!phoneEl) return;
 
-    var user = userEl.value.trim().toLowerCase();
-    var pass = passEl.value.trim();
-    if (!user || !pass) { if (errEl) errEl.innerText = "Enter username and password"; return; }
+    var phone = phoneEl.value.trim();
+    if (!phone) { if (errEl) errEl.innerText = "Enter phone number (+91...)"; return; }
 
-    var btn = document.getElementById('btnLogin');
-    if (btn) btn.innerText = "Checking...";
-    if (errEl) errEl.innerText = "Connecting...";
+    var btn = document.getElementById('btnSendOtp');
+    if (btn) btn.innerText = "Sending...";
+    if (errEl) errEl.innerText = "";
 
-    fetch(FIRESTORE_USERS_URL)
-        .then(res => res.json())
-        .then(data => {
-            var docs = data.documents || [];
-            var isValid = false;
-
-            for (var i = 0; i < docs.length; i++) {
-                var f = docs[i].fields;
-                if (f && f.username && f.password && f.status) {
-                    if (f.username.stringValue.trim().toLowerCase() === user && f.password.stringValue.trim() === pass && f.status.stringValue.trim().toLowerCase() === 'active') {
-                        isValid = true; break;
-                    }
-                }
-            }
-
-            if (isValid) {
-                try { localStorage.setItem("dsUserToken", user); } catch (e) { }
-                activeUser = user;
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('appBody').style.display = 'flex';
-                initApp();
-            } else {
-                if (errEl) errEl.innerText = "❌ Invalid credentials.";
-                if (btn) btn.innerText = "LOGIN";
-            }
-        }).catch(err => {
-            if (errEl) errEl.innerText = "❌ Network error.";
-            if (btn) btn.innerText = "LOGIN";
+    try {
+        if (!window.CapacitorFirebaseAuthentication) throw new Error("Firebase Auth Plugin missing");
+        await window.CapacitorFirebaseAuthentication.signInWithPhoneNumber({
+            phoneNumber: phone
         });
+        // Note: The UI will transition to the OTP screen when the 'phoneCodeSent' event fires,
+        // or login directly if 'phoneVerificationCompleted' fires natively.
+    } catch (err) {
+        if (errEl) errEl.innerText = "❌ " + (err.message || "Failed to send OTP");
+        if (btn) btn.innerText = "SEND OTP";
+    }
+}
+
+async function verifyOtp() {
+    var otpEl = document.getElementById('lOtp');
+    var errEl = document.getElementById('lErrOtp');
+    if (!otpEl) return;
+
+    var code = otpEl.value.trim();
+    if (!code) { if (errEl) errEl.innerText = "Enter OTP code"; return; }
+
+    var btn = document.getElementById('btnVerifyOtp');
+    if (btn) btn.innerText = "Verifying...";
+    if (errEl) errEl.innerText = "";
+
+    try {
+        const result = await window.CapacitorFirebaseAuthentication.confirmVerificationCode({
+            verificationId: dsVerificationId,
+            verificationCode: code
+        });
+        
+        const user = result.user;
+        if (user) {
+            var phoneStr = user.phoneNumber || document.getElementById('lPhone').value.trim();
+            try { localStorage.setItem("dsUserToken", phoneStr); } catch (e) { }
+            activeUser = phoneStr;
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('appBody').style.display = 'flex';
+            initApp();
+        }
+    } catch (err) {
+        if (errEl) errEl.innerText = "❌ Invalid OTP or Error: " + (err.message || "");
+        if (btn) btn.innerText = "VERIFY";
+    }
+}
+
+function backToPhone() {
+    document.getElementById('loginBoxOtp').style.display = 'none';
+    document.getElementById('loginBoxPhone').style.display = 'block';
+    document.getElementById('lErr').innerText = "";
+    document.getElementById('lErrOtp').innerText = "";
+    document.getElementById('lOtp').value = "";
 }
 
 function initApp() {
@@ -2025,46 +2097,43 @@ async function syncImages() {
                 var downloaded = false;
                 var lastFailReason = "";
 
-                // 🚀 FAST PATH: Check Cache FIRST - skip network entirely!
-                var existingCover = await getImageFromDB(p.gridUrl);
-                if (existingCover) {
-                    downloaded = true;
-                } else {
-                    // 🔍 SMART SYNC: Use Firebase list API to discover ACTUAL filenames in the folder
-                    var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
-                    // delimiter=/ ensures only DIRECT files in this folder are returned, not subfolder files
-                    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
+                // 🔍 SMART SYNC: ALWAYS fetch list API to discover ACTUAL filenames in the folder
+                var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
+                var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
 
-                    var folderItems = [];
-                    try {
-                        var listRes = await fetch(listUrl);
-                        if (listRes.ok) {
-                            var listData = await listRes.json();
-                            folderItems = (listData.items || []).map(item => {
-                                var fname = item.name.substring(item.name.lastIndexOf('/') + 1);
-                                return fname;
-                            }).filter(fname => /\.(webp|jpg|jpeg|png)$/i.test(fname));
-                        }
-                    } catch (e) {
-                        lastFailReason = "List API failed: " + e.message;
+                var folderItems = [];
+                var listSuccess = false;
+                try {
+                    var listRes = await fetch(listUrl);
+                    if (listRes.ok) {
+                        var listData = await listRes.json();
+                        folderItems = (listData.items || []).map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
+                                                        .filter(fname => /\.(webp|jpg|jpeg|png)$/i.test(fname));
+                        listSuccess = true;
+                    } else {
+                        lastFailReason = "List API HTTP " + listRes.status;
                     }
+                } catch (e) {
+                    lastFailReason = "List API failed: " + e.message;
+                }
 
-                    if (folderItems.length > 0) {
-                        // Sort files numerically to find cover (lowest number = 01.webp or similar)
-                        folderItems.sort((a, b) => {
-                            var na = parseInt(a.replace(/\D/g, '')) || 999;
-                            var nb = parseInt(b.replace(/\D/g, '')) || 999;
-                            return na - nb;
-                        });
-                        // Cover = first file (01.webp, or whatever the lowest numbered file is)
+                if (listSuccess) {
+                    if (folderItems.length === 0) {
+                        // 🛑 THE FIX: All images got deleted from Firebase folder.
+                        // Keep the existing cache in memory so the thumbnail doesn't become grey!
+                        downloaded = true; 
+                        console.log("Folder empty for", p.name, "- keeping cached image.");
+                    } else {
+                        // Folder has images! Let's download/replace the cover.
+                        folderItems.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
                         var coverFile = folderItems[0];
                         var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-                        console.log("✅ Found cover for", p.name, ":", coverFile, "(from", folderItems.length, "files)");
+                        
                         try {
                             var res = await fetch(coverUrl);
                             if (res.ok) {
                                 var blob = await res.blob();
-                                await saveImageToDB(p.gridUrl, blob);
+                                await saveImageToDB(p.gridUrl, blob); // Overwrite cache to replace/remove old images
                                 downloaded = true;
                             } else {
                                 lastFailReason = "HTTP " + res.status + " on cover: " + coverUrl;
@@ -2072,27 +2141,11 @@ async function syncImages() {
                         } catch (e) {
                             lastFailReason = "Cover fetch failed: " + e.message;
                         }
-                    } else {
-                        // Fallback to legacy guessing if list API returns nothing
-                        var urlsToTry = [
-                            fbBase + encGridPath + "%2F01.webp?alt=media",
-                            fbBase + encGridPath + "%2Fcover.webp?alt=media",
-                            fbBase + encGridPath + "%2F1.webp?alt=media"
-                        ];
-                        for (var u = 0; u < urlsToTry.length; u++) {
-                            try {
-                                var res = await fetch(urlsToTry[u]);
-                                if (res.ok) {
-                                    var blob = await res.blob();
-                                    if (await saveImageToDB(p.gridUrl, blob)) { downloaded = true; break; }
-                                } else {
-                                    lastFailReason = "HTTP " + res.status + " on " + urlsToTry[u];
-                                }
-                            } catch (err) {
-                                lastFailReason = err.message;
-                            }
-                        }
                     }
+                } else {
+                    // List API failed (maybe offline), fallback to fast path cache
+                    var existingCover = await getImageFromDB(p.gridUrl);
+                    if (existingCover) { downloaded = true; }
                 }
 
                 if (!downloaded) {
