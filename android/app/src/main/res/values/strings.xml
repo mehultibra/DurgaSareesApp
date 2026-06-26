@@ -4,4 +4,5 @@
     <string name="title_activity_main">Durga Sarees</string>
     <string name="package_name">com.durgasarees.catalog</string>
     <string name="custom_url_scheme">com.durgasarees.catalog</string>
+    <string name="default_web_client_id">dummy_web_client_id</string>
 </resources>
