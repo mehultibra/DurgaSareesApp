@@ -2686,5 +2686,20 @@ function updateAndroidBackState() {
 
 // Sync back state on initial script load
 updateAndroidBackState();
-a s y n c   f u n c t i o n   l o g o u t ( )   {   t r y   {   i f   ( w i n d o w . C a p a c i t o r F i r e b a s e A u t h e n t i c a t i o n )   {   a w a i t   w i n d o w . C a p a c i t o r F i r e b a s e A u t h e n t i c a t i o n . s i g n O u t ( ) ;   }   l o c a l S t o r a g e . r e m o v e I t e m ( ' u s e r P h o n e ' ) ;   d o c u m e n t . g e t E l e m e n t B y I d ( ' a p p B o d y ' ) . s t y l e . d i s p l a y   =   ' n o n e ' ;   d o c u m e n t . g e t E l e m e n t B y I d ( ' l o g i n S c r e e n ' ) . s t y l e . d i s p l a y   =   ' f l e x ' ;   d o c u m e n t . g e t E l e m e n t B y I d ( ' l o g i n B o x P h o n e ' ) . s t y l e . d i s p l a y   =   ' b l o c k ' ;   d o c u m e n t . g e t E l e m e n t B y I d ( ' l o g i n B o x O t p ' ) . s t y l e . d i s p l a y   =   ' n o n e ' ;   d o c u m e n t . g e t E l e m e n t B y I d ( ' l P h o n e ' ) . v a l u e   =   ' ' ;   }   c a t c h   ( e r r )   {   c o n s o l e . e r r o r ( ' L o g o u t   f a i l e d ' ,   e r r ) ;   a l e r t ( ' L o g o u t   f a i l e d :   '   +   e r r . m e s s a g e ) ;   }   }  
- 
+
+async function logout() {
+    try {
+        if (window.CapacitorFirebaseAuthentication) {
+            await window.CapacitorFirebaseAuthentication.signOut();
+        }
+        localStorage.removeItem('userPhone');
+        document.getElementById("appBody").style.display = "none";
+        document.getElementById("loginScreen").style.display = "flex";
+        document.getElementById("loginBoxPhone").style.display = "block";
+        document.getElementById("loginBoxOtp").style.display = "none";
+        document.getElementById("lPhone").value = "";
+    } catch (err) {
+        console.error("Logout failed", err);
+        alert("Logout failed: " + err.message);
+    }
+}
