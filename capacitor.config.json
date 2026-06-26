@@ -3,7 +3,7 @@
   "appName": "DurgaSarees",
   "webDir": "www",
   "server": {
-    "url": "https://durga-sarees-catalog.vercel.app",
+    "url": "https://durga-sarees.web.app",
     "cleartext": true
   },
   "plugins": {
