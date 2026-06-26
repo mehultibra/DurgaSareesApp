@@ -7,6 +7,17 @@ const FIRESTORE_USERS_URL = "https://firestore.googleapis.com/v1/projects/durga-
 
 history.replaceState({ modal: 'main' }, '');
 
+// Initialize Web Firebase Fallback
+const firebaseConfig = {
+  apiKey: "AIzaSyA3Za-dZ8OWWF7ZJdneKGd7A2t8xm_7IZQ",
+  authDomain: "durga-sarees.firebaseapp.com",
+  projectId: "durga-sarees"
+};
+if (typeof firebase !== 'undefined') {
+    firebase.initializeApp(firebaseConfig);
+}
+var webConfirmationResult = null;
+
 var allProducts = [];
 var displayList = [];
 var cart = {};
