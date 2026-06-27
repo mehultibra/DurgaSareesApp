@@ -1,7 +1,10 @@
 node_modules/
+node_modules*/
+package/
 build/
 .gradle/
 app/build/
 android/build/
-android/app/google-services.json  
- 
+android/.gradle/
+android/capacitor-*-local/
+android/app/google-services.json

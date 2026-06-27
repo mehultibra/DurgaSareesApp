@@ -715,16 +715,64 @@ html {
    🛡️ STRICT LAYERING & NOTCH FIX (V4)
 ========================================== */
 /* Layer 100: Main Page */
-.hdr { position: relative !important; z-index: 100 !important; background: #fff !important; padding-top: env(safe-area-inset-top) !important; height: calc(45px + env(safe-area-inset-top)) !important; }
+.hdr { 
+    position: relative !important; 
+    z-index: 100 !important; 
+    background: #fff !important; 
+    padding-top: max(12px, env(safe-area-inset-top)) !important; 
+    padding-bottom: 8px !important;
+    min-height: calc(55px + env(safe-area-inset-top)) !important; 
+    height: auto !important;
+    display: flex !important;
+    align-items: flex-end !important; /* Anchors items to the bottom, leaving safe area blank */
+}
+.hdr img {
+    height: 40px !important;
+    object-fit: contain !important;
+    width: auto !important;
+}
+
 #gridWrapper { padding-bottom: calc(70px + env(safe-area-inset-bottom)) !important; }
-.myntra-bottom-nav { z-index: 100 !important; padding-bottom: env(safe-area-inset-bottom) !important; height: calc(50px + env(safe-area-inset-bottom)) !important; }
+
+.myntra-bottom-nav { 
+    z-index: 100 !important; 
+    padding-bottom: max(10px, env(safe-area-inset-bottom)) !important; 
+    min-height: calc(55px + env(safe-area-inset-bottom)) !important;
+    height: auto !important;
+    display: flex !important;
+    align-items: center !important; /* Anchors items safely */
+    background: #fff !important;
+}
 
 /* Layer 200: Product Detail Page */
 #detailPanel { display: none; position: fixed; inset: 0; background: #fff; z-index: 200 !important; flex-direction: column; }
 #detailPanel.open { display: flex; }
-#detailPanel .sl-hdr { flex-shrink: 0; position: relative !important; z-index: 210 !important; background: #fff; padding-top: calc(10px + env(safe-area-inset-top)) !important; border-bottom: none; }
-#detailPanel .sl-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(40px + env(safe-area-inset-bottom)) !important; }
-.ob-one-row { position: absolute; bottom: 0; left: 0; right: 0; background: #fff; border-top: none; z-index: 220 !important; height: calc(40px + env(safe-area-inset-bottom)) !important; padding-bottom: env(safe-area-inset-bottom) !important; }
+#detailPanel .sl-hdr { 
+    flex-shrink: 0; 
+    position: relative !important; 
+    z-index: 210 !important; 
+    background: #fff; 
+    padding-top: max(12px, env(safe-area-inset-top)) !important; 
+    padding-bottom: 8px !important;
+    min-height: calc(55px + env(safe-area-inset-top)) !important;
+    height: auto !important;
+    border-bottom: none; 
+    display: flex !important;
+    align-items: flex-end !important;
+}
+#detailPanel .sl-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(60px + env(safe-area-inset-bottom)) !important; }
+.ob-one-row { 
+    position: absolute; 
+    bottom: 0; 
+    left: 0; 
+    right: 0; 
+    background: #fff; 
+    border-top: none; 
+    z-index: 220 !important; 
+    padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
+    min-height: calc(50px + env(safe-area-inset-bottom)) !important;
+    height: auto !important;
+}
 
 #detailPanel.open ~ .fab-wa {
     display: none !important;

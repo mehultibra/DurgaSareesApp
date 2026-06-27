@@ -10,7 +10,7 @@ history.replaceState({ modal: 'main' }, '');
 // Initialize Web Firebase Fallback
 const firebaseConfig = {
   apiKey: "AIzaSyA3Za-dZ8OWWF7ZJdneKGd7A2t8xm_7IZQ",
-  authDomain: "durga-sarees.firebaseapp.com",
+  authDomain: window.location.hostname.includes("durga-sarees") ? window.location.hostname : "durga-sarees.firebaseapp.com",
   projectId: "durga-sarees"
 };
 if (typeof firebase !== 'undefined') {
@@ -125,12 +125,19 @@ window.addEventListener('DOMContentLoaded', function () {
                 window.CapacitorFirebaseAuthentication.addListener('phoneVerificationCompleted', (result) => {
                     const user = result.user;
                     if (user) {
-                        var phoneStr = user.phoneNumber || document.getElementById('lPhone').value.trim();
-                        try { localStorage.setItem("dsUserToken", phoneStr); } catch (e) { }
-                        activeUser = phoneStr;
-                        document.getElementById('loginScreen').style.display = 'none';
-                        document.getElementById('appBody').style.display = 'flex';
-                        initApp();
+                        var inputPhone = document.getElementById('lPhone').value.trim();
+                        var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
+                        var phoneStr = user.phoneNumber || (inputPhone.startsWith('+') ? inputPhone : countryCode + inputPhone);
+                        
+                        checkUserInFirestore(phoneStr).then(function(exists) {
+                            if (exists) {
+                                completeLogin(phoneStr);
+                            } else {
+                                document.getElementById('loginBoxOtp').style.display = 'none';
+                                document.getElementById('loginBoxRegister').style.display = 'block';
+                                window.pendingUserPhone = phoneStr;
+                            }
+                        });
                     }
                 });
 
@@ -167,7 +174,12 @@ async function sendOtp() {
     if (!phoneEl) return;
 
     var phone = phoneEl.value.trim();
-    if (!phone) { if (errEl) errEl.innerText = "Enter phone number (+91...)"; return; }
+    var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
+    if (!phone) { if (errEl) errEl.innerText = "Enter phone number"; return; }
+    
+    if (!phone.startsWith('+')) {
+        phone = countryCode + phone;
+    }
 
     var btn = document.getElementById('btnSendOtp');
     if (btn) btn.innerText = "Sending...";
@@ -222,17 +234,120 @@ async function verifyOtp() {
         }
         
         if (user) {
-            var phoneStr = user.phoneNumber || document.getElementById('lPhone').value.trim();
-            try { localStorage.setItem("dsUserToken", phoneStr); } catch (e) { }
-            activeUser = phoneStr;
-            document.getElementById('loginScreen').style.display = 'none';
-            document.getElementById('appBody').style.display = 'flex';
-            initApp();
+            var inputPhone = document.getElementById('lPhone').value.trim();
+            var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
+            var phoneStr = user.phoneNumber || (inputPhone.startsWith('+') ? inputPhone : countryCode + inputPhone);
+            
+            checkUserInFirestore(phoneStr).then(function(exists) {
+                if (exists) {
+                    completeLogin(phoneStr);
+                } else {
+                    document.getElementById('loginBoxOtp').style.display = 'none';
+                    document.getElementById('loginBoxRegister').style.display = 'block';
+                    window.pendingUserPhone = phoneStr;
+                }
+            });
         }
     } catch (err) {
         if (errEl) errEl.innerText = "❌ Invalid OTP or Error: " + (err.message || "");
         if (btn) btn.innerText = "VERIFY";
     }
+}
+
+async function checkUserInFirestore(phone) {
+    try {
+        var token = "";
+        if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+            token = await firebase.auth().currentUser.getIdToken();
+        }
+        var headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        
+        var query = {
+            structuredQuery: {
+                from: [{ collectionId: "Users" }],
+                where: {
+                    fieldFilter: {
+                        field: { fieldPath: "phone" },
+                        op: "EQUAL",
+                        value: { stringValue: phone }
+                    }
+                },
+                limit: 1
+            }
+        };
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(query)
+        });
+        var data = await res.json();
+        if (data && data.length > 0 && data[0].document) {
+            return true;
+        }
+        return false;
+    } catch(e) {
+        console.error(e);
+        return false;
+    }
+}
+
+async function saveProfile() {
+    var name = document.getElementById('rName').value.trim();
+    var firm = document.getElementById('rFirm').value.trim();
+    var station = document.getElementById('rStation').value.trim();
+    var state = document.getElementById('rState').value.trim();
+    var err = document.getElementById('rErr');
+    
+    if (!name || !station || !state) {
+        err.innerText = "Please fill all compulsory fields (Name, Station, State).";
+        return;
+    }
+    
+    var phone = window.pendingUserPhone;
+    var doc = {
+        fields: {
+            name: { stringValue: name },
+            firm: { stringValue: firm },
+            station: { stringValue: station },
+            state: { stringValue: state },
+            phone: { stringValue: phone },
+            createdAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+    
+    document.getElementById('btnSaveProfile').innerText = "Saving...";
+    try {
+        var token = "";
+        if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+            token = await firebase.auth().currentUser.getIdToken();
+        }
+        var headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(doc)
+        });
+        if (res.ok) {
+            completeLogin(phone);
+        } else {
+            err.innerText = "Error saving profile.";
+            document.getElementById('btnSaveProfile').innerText = "SAVE & CONTINUE";
+        }
+    } catch(e) {
+        err.innerText = "Network error.";
+        document.getElementById('btnSaveProfile').innerText = "SAVE & CONTINUE";
+    }
+}
+
+function completeLogin(phoneStr) {
+    try { localStorage.setItem("dsUserToken", phoneStr); } catch (e) { }
+    activeUser = phoneStr;
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appBody').style.display = 'flex';
+    initApp();
 }
 
 function backToPhone() {
