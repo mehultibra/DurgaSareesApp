@@ -18,5 +18,14 @@ jobs:
           date > www/build-time.txt
           echo "$SA_JSON" > sa.json
           export GOOGLE_APPLICATION_CREDENTIALS=sa.json
-          npx firebase-tools deploy --only hosting --project durga-sarees --non-interactive -m "Auto-deployed via GitHub Actions"
+          OUTPUT=$(npx firebase-tools deploy --only hosting --project durga-sarees --non-interactive -m "Auto-deployed via GitHub Actions" 2>&1) || EXIT_CODE=$?
+          echo "$OUTPUT"
+          if [ "${EXIT_CODE:-0}" -ne 0 ]; then
+            if echo "$OUTPUT" | grep -q "is the current active version"; then
+              echo "✅ Caught known Firebase identical version API bug. The deployment was actually successful!"
+            else
+              echo "❌ Deployment failed with error code $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          fi
           rm sa.json
