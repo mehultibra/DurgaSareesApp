@@ -611,6 +611,11 @@ html {
     align-items: center;
 }
 
+.login-box button:hover { background: #e02f5c; }
+
+.reg-input.error { border: 1px solid #ff3f6c !important; }
+.reg-input.error::placeholder { color: #ff3f6c !important; font-weight: bold; }
+
 .login-box {
     background: #fff;
     padding: 30px;

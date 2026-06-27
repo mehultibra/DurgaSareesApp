@@ -293,14 +293,47 @@ async function checkUserInFirestore(phone) {
 }
 
 async function saveProfile() {
-    var name = document.getElementById('rName').value.trim();
+    var nameEl = document.getElementById('rName');
+    var stationEl = document.getElementById('rStation');
+    var stateEl = document.getElementById('rState');
     var firm = document.getElementById('rFirm').value.trim();
-    var station = document.getElementById('rStation').value.trim();
-    var state = document.getElementById('rState').value.trim();
     var err = document.getElementById('rErr');
     
-    if (!name || !station || !state) {
-        err.innerText = "Please fill all compulsory fields (Name, Station, State).";
+    var name = nameEl.value.trim();
+    var station = stationEl.value.trim();
+    var state = stateEl.value.trim();
+
+    var hasErr = false;
+
+    if (!name) {
+        nameEl.classList.add("error");
+        nameEl.placeholder = "Name is Required *";
+        hasErr = true;
+    } else {
+        nameEl.classList.remove("error");
+        nameEl.placeholder = "Name *";
+    }
+
+    if (!station) {
+        stationEl.classList.add("error");
+        stationEl.placeholder = "Station is Required *";
+        hasErr = true;
+    } else {
+        stationEl.classList.remove("error");
+        stationEl.placeholder = "Station *";
+    }
+
+    if (!state) {
+        stateEl.classList.add("error");
+        stateEl.placeholder = "State is Required *";
+        hasErr = true;
+    } else {
+        stateEl.classList.remove("error");
+        stateEl.placeholder = "State *";
+    }
+    
+    if (hasErr) {
+        if(err) err.innerText = "";
         return;
     }
     
