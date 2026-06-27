@@ -15,6 +15,7 @@ jobs:
         env:
           SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DURGA_SAREES }}
         run: |
+          date > www/build-time.txt
           echo "$SA_JSON" > sa.json
           export GOOGLE_APPLICATION_CREDENTIALS=sa.json
           npx firebase-tools deploy --only hosting --project durga-sarees --non-interactive -m "Auto-deployed via GitHub Actions"
