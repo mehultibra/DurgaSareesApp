@@ -16,6 +16,14 @@ jobs:
           SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DURGA_SAREES }}
         run: |
           date > www/build-time.txt
+          VERSION=$(git rev-parse --short HEAD)
+          echo "{\"version\": \"$VERSION\", \"url\": \"https://durga-sarees.web.app/update.zip\"}" > www/version.json
+          
+          cd www
+          zip -r ../update.zip .
+          mv ../update.zip .
+          cd ..
+          
           echo "$SA_JSON" > sa.json
           export GOOGLE_APPLICATION_CREDENTIALS=sa.json
           OUTPUT=$(npx firebase-tools deploy --only hosting --project durga-sarees --non-interactive -m "Auto-deployed via GitHub Actions" 2>&1) || EXIT_CODE=$?

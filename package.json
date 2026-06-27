@@ -18,7 +18,8 @@
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
     "@capacitor/filesystem": "^8.1.2",
-    "@capacitor/share": "^8.0.1"
+    "@capacitor/share": "^8.0.1",
+    "@capgo/capacitor-updater": "^8.50.1"
   },
   "repository": {
     "type": "git",
@@ -29,6 +30,7 @@
   },
   "homepage": "https://github.com/mehultibra/DurgaSareesApp#readme",
   "devDependencies": {
+    "@capgo/cli": "^8.19.0",
     "esbuild": "^0.28.1",
     "patch-package": "^8.0.1"
   }

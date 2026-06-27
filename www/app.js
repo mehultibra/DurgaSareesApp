@@ -163,8 +163,37 @@ window.addEventListener('DOMContentLoaded', function () {
 
         setupEditableFields();
         setupFsGestures();
+        
+        // 🚀 Initialize Capgo OTA Updater
+        if (window.Capacitor && window.Capacitor.Plugins.CapacitorUpdater) {
+            window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady();
+            checkForOTAUpdates();
+        }
     } catch (err) { console.error("Init error:", err); }
 });
+
+async function checkForOTAUpdates() {
+    try {
+        var response = await fetch("https://durga-sarees.web.app/version.json?t=" + new Date().getTime());
+        var data = await response.json();
+        var latestVersion = data.version;
+        var updateUrl = data.url;
+        
+        var currentVersion = localStorage.getItem("dsOtaVersion") || "builtin";
+        
+        if (latestVersion && latestVersion !== currentVersion) {
+            console.log("Downloading new OTA update: ", latestVersion);
+            var versionData = await window.Capacitor.Plugins.CapacitorUpdater.download({
+                url: updateUrl,
+                version: latestVersion
+            });
+            localStorage.setItem("dsOtaVersion", latestVersion);
+            await window.Capacitor.Plugins.CapacitorUpdater.set(versionData);
+        }
+    } catch(e) {
+        console.log("OTA Update Check Finished", e.message);
+    }
+}
 
 var dsVerificationId = null;
 
