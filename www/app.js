@@ -1174,10 +1174,9 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
     var renderedFilesJson = "";
 
-    // 1. Render fallback list instantly so the UI loads immediately
+    // 1. Render immediately if cached, otherwise wait for network
     window.lastRenderedDesignNames = "";
-    useFallbackDesignList();
-
+    
     // 2. Fetch actual folder files in background to update/upgrade the swipe deck
     function processFolderItems(items) {
         // Sync cover exists state from the actual directory items
@@ -1199,7 +1198,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var lowerName = filename.toLowerCase();
 
             // Filter out cover images
-            if (/^(01|1|cover)\.(webp|jpg|jpeg|png)$/i.test(lowerName)) {
+            if (/^(cover)\.(webp|jpg|jpeg|png)$/i.test(lowerName)) {
                 return;
             }
 
@@ -1388,89 +1387,6 @@ function openDetail(productId, skipShow, keepSearchShown) {
         updateLiveDetailHeader();
     }
 
-    function useFallbackDesignList() {
-        var encGridPath = cleanGridPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-        var encZoomPath = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-        var rawDesigns = String(p.ready || "").split(',').map(d => d.trim()).filter(Boolean);
-        var validDesigns = [];
-        rawDesigns.forEach(d => {
-            var cleanNum = d.replace(/\D/g, '');
-            if (d.length <= 10 && cleanNum !== "") {
-                var numVal = parseInt(cleanNum);
-                if (numVal >= 1 && numVal <= 99) {
-                    validDesigns.push({
-                        name: d,
-                        numStr: cleanNum.length === 1 ? "0" + cleanNum : cleanNum,
-                        numVal: numVal
-                    });
-                }
-            }
-        });
-
-        // SORT DESCENDING
-        validDesigns.sort((a, b) => b.numVal - a.numVal);
-
-        var fallbackFiles = [];
-        if (validDesigns.length > 0) {
-            validDesigns.forEach(dObj => {
-                var gridUrl = fbBase + encGridPath + "%2F" + dObj.numStr + ".webp?alt=media";
-                var zoomUrl = fbBase + encZoomPath + "%2F" + dObj.numStr + ".webp?alt=media";
-                fallbackFiles.push({
-                    name: dObj.name,
-                    gridUrl: gridUrl,
-                    url: zoomUrl,
-                    isVideo: false,
-                    isImage: true
-                });
-            });
-            Promise.all(fallbackFiles.map(file => {
-                return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
-                    if (res.src) {
-                        file.cachedUrl = res.src;
-                        file.isZoom = res.isZoom;
-                    }
-                }).catch(() => { });
-            })).then(() => {
-                window.lastRenderedDesignNames = fallbackFiles.map(f => String(f.name).toLowerCase()).join(',');
-                renderSwipeDeck(fallbackFiles);
-            });
-        } else {
-            // Render a single cover card initially
-            var gridImgEl = document.getElementById("img_" + p.id);
-            var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
-            var fallbackGridUrl = "";
-            var fallbackZoomUrl = "";
-            if (p.gridUrl && p.gridUrl !== "None") {
-                var encGridPath = cleanGridPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                fallbackGridUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
-                if (!coverSrc) coverSrc = fallbackGridUrl;
-            }
-            if (p.zoomUrl && p.zoomUrl !== "None") {
-                var encZoomPath = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                fallbackZoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomPath + "%2F01.webp?alt=media";
-            } else {
-                fallbackZoomUrl = fallbackGridUrl;
-            }
-            deck.innerHTML = `
-            <div class="swipe-card" data-design="DIRECT" onclick="openFs('${p.id}', 0, 'Cover')">
-                <img id="design_img_${p.id}_DIRECT" src="${coverSrc || ''}" data-loaded-zoom="false" style="width: 100%; object-fit: cover;">
-                <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
-                    <div class="qty-clean">
-                        <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
-                        <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
-                        <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
-                    </div>
-                </div>
-            </div>`;
-            setTimeout(updateBottomQtyFromActiveDesign, 50);
-            updateLiveDetailHeader();
-            var imgEl = document.getElementById("design_img_" + p.id + "_DIRECT");
-            if (imgEl && fallbackZoomUrl) {
-                loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover');
-            }
-        }
-    }
 }
 
 window.changeQty = function (pid, designId, amount) {
