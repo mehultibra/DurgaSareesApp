@@ -7,16 +7,35 @@ const FIRESTORE_USERS_URL = "https://firestore.googleapis.com/v1/projects/durga-
 
 history.replaceState({ modal: 'main' }, '');
 
-// Initialize Web Firebase Fallback
+// Initialize Web Firebase Fallback Config
 const firebaseConfig = {
   apiKey: "AIzaSyA3Za-dZ8OWWF7ZJdneKGd7A2t8xm_7IZQ",
   authDomain: window.location.hostname.includes("durga-sarees") ? window.location.hostname : "durga-sarees.firebaseapp.com",
   projectId: "durga-sarees"
 };
-if (typeof firebase !== 'undefined') {
-    firebase.initializeApp(firebaseConfig);
-}
 var webConfirmationResult = null;
+
+function initFirebaseWebFallback() {
+    if (window.Capacitor && window.Capacitor.isNativePlatform()) return;
+    if (typeof firebase !== 'undefined') return;
+    
+    var s1 = document.createElement('script');
+    s1.src = "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js";
+    s1.onload = function() {
+        var s2 = document.createElement('script');
+        s2.src = "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js";
+        s2.onload = function() {
+            firebase.initializeApp(firebaseConfig);
+            try {
+                window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+                    'size': 'invisible'
+                });
+            } catch(e) { console.error(e); }
+        };
+        document.head.appendChild(s2);
+    };
+    document.head.appendChild(s1);
+}
 
 var allProducts = [];
 var displayList = [];
@@ -97,6 +116,7 @@ window.addEventListener('DOMContentLoaded', function () {
             if (loginScreen && appBody) {
                 loginScreen.style.display = 'flex';
                 appBody.style.display = 'none';
+                initFirebaseWebFallback();
             }
         }
         
@@ -151,14 +171,7 @@ window.addEventListener('DOMContentLoaded', function () {
                 });
             }
         } else {
-            // Setup Invisible reCAPTCHA for Web
-            if (typeof firebase !== 'undefined') {
-                try {
-                    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-                        'size': 'invisible'
-                    });
-                } catch(e) { console.error("Recaptcha Init Error:", e); }
-            }
+            // Handled by initFirebaseWebFallback
         }
 
         setupEditableFields();
@@ -424,6 +437,74 @@ function initApp() {
     var bootScreen = document.getElementById('boot');
     if (bootScreen) bootScreen.style.display = 'flex';
 
+function processProducts(docs) {
+    var validCounter = 0;
+    allProducts = [];
+    var edited = {};
+    try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
+
+    docs.forEach(d => {
+        var f = d.fields || {};
+        var name = f.name ? f.name.stringValue : "";
+
+        if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed") {
+            var finalPrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
+            var finalPacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
+
+            if (edited[name]) {
+                if (edited[name].price !== undefined) finalPrice = edited[name].price;
+                if (edited[name].packing !== undefined) finalPacking = edited[name].packing;
+            }
+
+            allProducts.push({
+                id: "p_" + validCounter,
+                name: name,
+                sku: f.sku ? f.sku.stringValue : "",
+                price: finalPrice,
+                cat: f.cat ? f.cat.stringValue : "Uncategorized",
+                gridUrl: f.gridUrl ? f.gridUrl.stringValue : "",
+                zoomUrl: f.zoomUrl ? f.zoomUrl.stringValue : "",
+                mrp: f.mrp ? (f.mrp.doubleValue || f.mrp.integerValue || 0) : 0,
+                fabric: f.fabric ? f.fabric.stringValue : "",
+                packing: finalPacking,
+                mult: f.mult ? (f.mult.integerValue || 8) : 8,
+                ready: f.ready ? f.ready.stringValue : "",
+                jari: f.jari ? f.jari.stringValue : "",
+                border: f.border ? f.border.stringValue : "",
+                cut: f.cut ? f.cut.stringValue : "",
+                pallu: f.pallu ? f.pallu.stringValue : "",
+                blouse: f.blouse ? f.blouse.stringValue : ""
+            });
+            validCounter++;
+        }
+    });
+
+    displayList = [...allProducts];
+
+    try {
+        var updatedCart = {};
+        for (var k in cart) {
+            var c = cart[k];
+            if (c && c.p) {
+                var match = allProducts.find(x => (c.p.sku && x.sku === c.p.sku) || (x.name === c.p.name));
+                if (match) {
+                    c.p = match;
+                    var newKey = match.id + '_' + c.design;
+                    updatedCart[newKey] = c;
+                } else {
+                    updatedCart[k] = c;
+                }
+            }
+        }
+        cart = updatedCart;
+        localStorage.setItem("dsCart", JSON.stringify(cart));
+    } catch (e) { console.error("Cart sync error:", e); }
+
+    if (typeof populateCategories === "function") populateCategories();
+    renderProductGrid(displayList);
+    updateCartHeader();
+}
+
     fetch(FIRESTORE_PRODUCTS_URL)
         .then(res => res.json())
         .then(data => {
@@ -432,78 +513,26 @@ function initApp() {
                 name: d.fields?.name?.stringValue,
                 packing: d.fields?.packing
             })));
-            var validCounter = 0;
-            allProducts = [];
-
-            var edited = {};
-            try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
-
-            docs.forEach(d => {
-                var f = d.fields || {};
-                var name = f.name ? f.name.stringValue : "";
-
-                if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed") {
-                    var finalPrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
-                    var finalPacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
-
-                    if (edited[name]) {
-                        if (edited[name].price !== undefined) finalPrice = edited[name].price;
-                        if (edited[name].packing !== undefined) finalPacking = edited[name].packing;
-                    }
-
-                    allProducts.push({
-                        id: "p_" + validCounter,
-                        name: name,
-                        sku: f.sku ? f.sku.stringValue : "",
-                        price: finalPrice,
-                        cat: f.cat ? f.cat.stringValue : "Uncategorized",
-                        gridUrl: f.gridUrl ? f.gridUrl.stringValue : "",
-                        zoomUrl: f.zoomUrl ? f.zoomUrl.stringValue : "",
-                        mrp: f.mrp ? (f.mrp.doubleValue || f.mrp.integerValue || 0) : 0,
-                        fabric: f.fabric ? f.fabric.stringValue : "",
-                        packing: finalPacking,
-                        mult: f.mult ? (f.mult.integerValue || 8) : 8,
-                        ready: f.ready ? f.ready.stringValue : "",
-                        
-                        // 🆕 NEW FIREBASE FIELDS CONNECTED HERE
-                        jari: f.jari ? f.jari.stringValue : "",
-                        border: f.border ? f.border.stringValue : "",
-                        cut: f.cut ? f.cut.stringValue : "",
-                        pallu: f.pallu ? f.pallu.stringValue : "",
-                        blouse: f.blouse ? f.blouse.stringValue : ""
-                    });
-                    validCounter++;
-                }
-            });
-
+            try { localStorage.setItem("dsOfflineProducts", JSON.stringify(docs)); } catch(e) {}
+            var bootScreen = document.getElementById('boot');
             if (bootScreen) bootScreen.style.display = 'none';
-            displayList = [...allProducts];
-
-            // Map stale cart IDs to current session IDs to prevent cross-session product mismatch bugs
-            try {
-                var updatedCart = {};
-                for (var k in cart) {
-                    var c = cart[k];
-                    if (c && c.p) {
-                        var match = allProducts.find(x => (c.p.sku && x.sku === c.p.sku) || (x.name === c.p.name));
-                        if (match) {
-                            c.p = match;
-                            var newKey = match.id + '_' + c.design;
-                            updatedCart[newKey] = c;
-                        } else {
-                            updatedCart[k] = c;
-                        }
-                    }
-                }
-                cart = updatedCart;
-                localStorage.setItem("dsCart", JSON.stringify(cart));
-            } catch (e) { console.error("Cart sync error:", e); }
-
-            if (typeof populateCategories === "function") populateCategories();
-            renderProductGrid(displayList);
-            updateCartHeader();
+            processProducts(docs);
         })
-        .catch(err => alert("Firebase Load Error: " + err.message));
+        .catch(err => {
+            console.log("Offline or fetch failed, loading from cache...", err);
+            try {
+                var cachedDocs = JSON.parse(localStorage.getItem("dsOfflineProducts"));
+                if (cachedDocs && cachedDocs.length > 0) {
+                    var bootScreen = document.getElementById('boot');
+                    if (bootScreen) bootScreen.style.display = 'none';
+                    processProducts(cachedDocs);
+                    return;
+                }
+            } catch(e) {}
+            alert("Network Error. Please check your internet connection.");
+            var bootScreen = document.getElementById('boot');
+            if (bootScreen) bootScreen.style.display = 'none';
+        });
 }
 
 // ==========================================
@@ -955,8 +984,12 @@ function updateCartHeader() {
             count += parseInt(cart[k].qty) || 0;
         }
     }
-    var els = document.querySelectorAll('.cart-badge-top, #cartCountHeader');
+    var els = document.querySelectorAll('.cart-badge-top, #cartCountHeader, #floatCartCount');
     els.forEach(e => e.innerText = count);
+    var floatBtn = document.getElementById('placeOrderFloat');
+    if (floatBtn) {
+        floatBtn.style.display = count > 0 ? 'flex' : 'none';
+    }
 }
 
 
@@ -2902,7 +2935,16 @@ function updateAndroidBackState() {
 // Sync back state on initial script load
 updateAndroidBackState();
 
+function toggleHdrMenu() {
+    var menu = document.getElementById('hdrMenu');
+    if (menu) {
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
 async function logout() {
+    if (typeof toggleHdrMenu === 'function') toggleHdrMenu();
+    if (!confirm('Are you sure you want to logout?')) return;
     try {
         if (window.Capacitor && window.Capacitor.isNativePlatform()) {
             if (window.CapacitorFirebaseAuthentication) {

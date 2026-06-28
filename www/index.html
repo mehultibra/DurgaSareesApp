@@ -16,9 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="Durga Sarees">
   <link rel="apple-touch-icon" href="icon.png">
 
-  <!-- Firebase Web SDK (v10 compat) for Web/iPhone fallback -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <!-- Firebase Web SDK loaded dynamically in app.js if needed -->
 </head>
 
 
@@ -122,7 +120,12 @@
           <div class="cart-badge-top" id="cartCountHeader">0</div>
         </div>
         <i class="fas fa-sync-alt" onclick="syncImages()" style="cursor:pointer; margin-left:5px;"></i>
-        <i class="fas fa-sign-out-alt" onclick="logout()" style="cursor:pointer; margin-left:5px; color:#555;" title="Logout"></i>
+        <div style="position:relative; margin-left:5px; display:flex; align-items:center;">
+          <i class="fas fa-ellipsis-v" onclick="toggleHdrMenu()" style="cursor:pointer; color:#555; padding: 0 5px;" title="Menu"></i>
+          <div id="hdrMenu" style="display:none; position:absolute; right:0; top:25px; background:#fff; border:1px solid var(--border); border-radius:4px; box-shadow:0 4px 10px rgba(0,0,0,0.1); z-index:1000; width:140px;">
+            <div onclick="logout()" style="padding:12px; cursor:pointer; color:var(--text-main); font-size:14px; display:flex; align-items:center; gap:8px;"><i class="fas fa-sign-out-alt" style="color:var(--myntra-pink);"></i> Logout</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -148,6 +151,10 @@
           class="fab fa-whatsapp"></i> Ord</button>
       <button style="background:#800000;" onclick="executeSend('11ZA', 'CATALOG', false)"><i class="fas fa-robot"></i>
         Cat</button>
+    </div>
+
+    <div id="placeOrderFloat" onclick="openCart()" style="display:none; position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:var(--myntra-pink); color:#fff; padding:10px 24px; border-radius:30px; font-weight:bold; font-size:15px; box-shadow:0 4px 10px rgba(255,63,108,0.4); z-index:150; cursor:pointer; align-items:center; gap:8px;">
+      <i class="fas fa-shopping-bag"></i> Place Order (<span id="floatCartCount">0</span>)
     </div>
 
     <div class="myntra-bottom-nav">
