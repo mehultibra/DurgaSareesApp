@@ -7,9 +7,13 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=3">
 
-  <!-- PWA Meta Tags -->
+  <!-- PWA Meta Tags & Cache Busting -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  
   <link rel="manifest" href="./manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -108,7 +112,7 @@
     <div class="hdr">
       <div style="flex:1; display:flex; align-items:center; overflow:hidden; margin-right:12px;">
         <img src="logo.png" id="appLogoImg"
-          onclick="goToHome()" style="cursor:pointer;">
+          onclick="goToHome()" style="cursor:pointer; max-width:100%; flex-shrink:0;">
         <input type="text" id="srchMainInput" placeholder="Search Saree Name or SKU..." onkeyup="doSearch(this.value); if(event.key === 'Enter') this.blur();" 
           style="display:none; width: 100%; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background:#f5f5f6; font-size: 13px; outline: none;">
       </div>
@@ -313,7 +317,7 @@
       <div style="display:flex; align-items:center; gap:12px;">
         <i class="fas fa-arrow-left" onclick="closeCart()"
           style="cursor:pointer; font-size:20px; color:var(--text-main);"></i>
-        <img src="logo.png" style="height:32px; object-fit:contain;" alt="Logo">
+        <img src="logo.png" style="height:32px; object-fit:contain; max-width:100%; flex-shrink:0;" alt="Logo">
       </div>
       <div style="display:flex; align-items:center; gap:12px;">
         <h3 style="margin:0; font-size:16px; font-weight:bold;">Your Cart (<span id="cartCountHeader">0</span>)</h3>
@@ -375,7 +379,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=2"></script>
-  <script src="./app.js?v=5"></script>
+  <script src="./app.js?v=3"></script>
 
   <script src="./pdf_engine.js"></script>
 </body>

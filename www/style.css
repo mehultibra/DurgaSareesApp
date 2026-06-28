@@ -589,6 +589,7 @@ html {
     background: #fff;
     border-radius: 12px 12px 0 0;
     padding: 20px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     max-height: 75vh;
     overflow-y: auto;
     animation: slideUp 0.3s ease;
@@ -764,17 +765,26 @@ html {
     position: relative !important; 
     z-index: 100 !important; 
     background: #fff !important; 
-    padding-top: max(10px, env(safe-area-inset-top)) !important; 
+    padding-top: 10px !important; 
     padding-bottom: 6px !important;
-    height: calc(50px + env(safe-area-inset-top)) !important; 
+    height: 50px !important; 
     display: flex !important;
     align-items: flex-end !important;
+}
+
+@supports (-webkit-touch-callout: none) {
+    .hdr {
+        padding-top: max(10px, env(safe-area-inset-top)) !important;
+        height: calc(50px + env(safe-area-inset-top)) !important; 
+    }
 }
 
 .hdr img {
     height: 40px !important;
     object-fit: contain !important;
     width: auto !important;
+    max-width: 100% !important;
+    flex-shrink: 0 !important;
 }
 
 #gridWrapper {
@@ -784,11 +794,18 @@ html {
 .myntra-bottom-nav { 
     box-sizing: border-box !important;
     z-index: 100 !important; 
-    padding-bottom: env(safe-area-inset-bottom) !important; 
-    height: calc(55px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: 0px !important; 
+    height: 55px !important;
     display: flex !important;
     align-items: center !important;
     background: #fff !important;
+}
+
+@supports (-webkit-touch-callout: none) {
+    .myntra-bottom-nav {
+        padding-bottom: env(safe-area-inset-bottom) !important; 
+        height: calc(55px + env(safe-area-inset-bottom)) !important;
+    }
 }
 
 /* Layer 200: Product Detail Page */
@@ -811,12 +828,19 @@ html {
     position: relative !important; 
     z-index: 210 !important; 
     background: #fff; 
-    padding-top: max(10px, env(safe-area-inset-top)) !important; 
+    padding-top: 10px !important; 
     padding-bottom: 6px !important;
-    height: calc(50px + env(safe-area-inset-top)) !important;
+    height: 50px !important;
     border-bottom: none; 
     display: flex !important;
     align-items: flex-end !important;
+}
+
+@supports (-webkit-touch-callout: none) {
+    #detailPanel .sl-hdr {
+        padding-top: max(10px, env(safe-area-inset-top)) !important; 
+        height: calc(50px + env(safe-area-inset-top)) !important;
+    }
 }
 
 #detailPanel .sl-body {
@@ -835,10 +859,17 @@ html {
     background: #fff; 
     border-top: none; 
     z-index: 220 !important; 
-    padding-bottom: env(safe-area-inset-bottom) !important;
-    height: calc(55px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: 0px !important;
+    height: 55px !important;
     display: flex;
     align-items: center;
+}
+
+@supports (-webkit-touch-callout: none) {
+    .ob-one-row {
+        padding-bottom: env(safe-area-inset-bottom) !important;
+        height: calc(55px + env(safe-area-inset-bottom)) !important;
+    }
 }
 
 #detailPanel.open~.fab-wa {

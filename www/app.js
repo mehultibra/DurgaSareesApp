@@ -446,8 +446,9 @@ function processProducts(docs) {
     docs.forEach(d => {
         var f = d.fields || {};
         var name = f.name ? f.name.stringValue : "";
+        var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
 
-        if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !name.toLowerCase().includes("wix import")) {
+        if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !isWix) {
             var finalPrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
             var finalPacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
 
@@ -2228,66 +2229,9 @@ window.triggerShare = async function (action) {
 }
 
 window.openCartFs = function (productId, designId, cartImgSrc) {
-    // 1. Initialize detail view silently (renders the swipe deck in DOM asynchronously)
-    openDetail(productId, true);
-
-    // Resolve current product ID to support cart items with stale IDs
     var actualProductId = curProduct ? curProduct.id : productId;
-
-    // 2. Wait for swipe cards to render
-    var deck = document.getElementById('dtDesigns');
-    if (!deck) return;
-
-    var attempts = 0;
-    var waitInterval = setInterval(function () {
-        attempts++;
-        var cards = Array.from(deck.querySelectorAll('.swipe-card'));
-        
-        var foundIdx = -1;
-        var targetLabel = String(designId).trim().toLowerCase();
-
-        // Match by input ID (direct check)
-        var inputEl = document.getElementById('qty_' + actualProductId + '_' + designId);
-        if (inputEl) {
-            var cardEl = inputEl.closest('.swipe-card');
-            foundIdx = cards.indexOf(cardEl);
-        } else {
-            // Fallback: match card text label or input ID suffix case-insensitively
-            for (var i = 0; i < cards.length; i++) {
-                var card = cards[i];
-
-                // 1. Check if input element ID ends with _designId
-                var inp = card.querySelector('input[type="number"]');
-                if (inp && (inp.id.toLowerCase().endsWith('_' + targetLabel) || inp.id.toLowerCase() === 'qty_' + actualProductId.toLowerCase() + '_' + targetLabel)) {
-                    foundIdx = i;
-                    break;
-                }
-
-                // 2. Check if text label in swipe-card-bot matches
-                var botDiv = card.querySelector('.swipe-card-bot');
-                if (botDiv) {
-                    var firstChild = botDiv.firstElementChild;
-                    if (firstChild) {
-                        var cardLabel = firstChild.innerText.trim().toLowerCase();
-                        if ((cardLabel === 'cover' && targetLabel === 'direct') || cardLabel === targetLabel) {
-                            foundIdx = i;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (foundIdx !== -1) {
-            clearInterval(waitInterval);
-            // Open full screen viewer at exact design index
-            openFs(actualProductId, foundIdx, designId, cartImgSrc);
-        } else if (attempts > 40) { // 2 seconds timeout (40 * 50ms)
-            clearInterval(waitInterval);
-            console.warn("Timeout waiting for exact swipe deck card in openCartFs");
-            openFs(actualProductId, 0, designId, cartImgSrc);
-        }
-    }, 50);
+    // Open full screen viewer instantly with the clicked cart image
+    openFs(actualProductId, 0, designId, cartImgSrc);
 };
 
 // ====================================
@@ -2336,7 +2280,8 @@ async function syncImages() {
             var name = f.name ? f.name.stringValue : "";
             var gridUrl = f.gridUrl ? f.gridUrl.stringValue : "";
             var ready = f.ready ? f.ready.stringValue : "";
-            if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !name.toLowerCase().includes("wix import") && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
+            var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
+            if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !isWix && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
                 productsToDownload.push({
                     name: name,
                     gridUrl: gridUrl,
