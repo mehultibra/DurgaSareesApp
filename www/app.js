@@ -447,7 +447,7 @@ function processProducts(docs) {
         var f = d.fields || {};
         var name = f.name ? f.name.stringValue : "";
 
-        if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed") {
+        if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !name.toLowerCase().includes("wix import")) {
             var finalPrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
             var finalPacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
 
@@ -1703,9 +1703,38 @@ function openFs(arg1, arg2, arg3, arg4) {
     if (arguments.length === 1 && typeof arg1 === 'number') {
         if (!curProduct) return;
         pId = curProduct.id; index = arg1;
-    } else {
+    } else if (arguments.length === 4) {
         pId = arg1; index = arg2; dId = arg3; cartImgSrc = arg4;
+    } else {
+        pId = arg1; index = arg2; dId = arg3;
     }
+
+    if (cartImgSrc) {
+        var fsModal = document.getElementById('fsModal');
+        var fsImg = document.getElementById('fsImg');
+        var fsVideo = document.getElementById('fsVideo');
+        if (fsVideo) fsVideo.style.display = 'none';
+        
+        fsImg.style.display = 'block';
+        fsImg.src = cartImgSrc;
+        fsImg.style.transition = '';
+        fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
+        fsScale = 1; fsTranslateX = 0; fsTranslateY = 0;
+        
+        var pItem = allProducts.find(x => x.id === pId);
+        document.getElementById('fsTitle').innerText = (pItem ? pItem.name : pId) + " - " + (dId === 'DIRECT' ? "Cover" : dId);
+        
+        var keyCart = pId + '_' + dId;
+        document.getElementById('fsQty').innerText = cart[keyCart] ? cart[keyCart].qty : 0;
+        
+        document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'none');
+        
+        fsModal.style.display = 'flex';
+        pushHistoryState('fs');
+        return;
+    }
+
+    document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'block');
 
     var deck = document.getElementById('dtDesigns');
     if (!deck) return;
@@ -2307,7 +2336,7 @@ async function syncImages() {
             var name = f.name ? f.name.stringValue : "";
             var gridUrl = f.gridUrl ? f.gridUrl.stringValue : "";
             var ready = f.ready ? f.ready.stringValue : "";
-            if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
+            if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !name.toLowerCase().includes("wix import") && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
                 productsToDownload.push({
                     name: name,
                     gridUrl: gridUrl,
@@ -2960,7 +2989,7 @@ async function logout() {
         document.getElementById("loginScreen").style.display = "flex";
         document.getElementById("loginBoxPhone").style.display = "block";
         document.getElementById("loginBoxOtp").style.display = "none";
-        document.getElementById("lPhone").value = "+91";
+        document.getElementById("lPhone").value = "";
     } catch (err) {
         console.error("Logout failed", err);
         alert("Logout failed: " + err.message);

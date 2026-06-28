@@ -153,8 +153,9 @@
         Cat</button>
     </div>
 
-    <div id="placeOrderFloat" onclick="openCart()" style="display:none; position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:var(--myntra-pink); color:#fff; padding:10px 24px; border-radius:30px; font-weight:bold; font-size:15px; box-shadow:0 4px 10px rgba(255,63,108,0.4); z-index:150; cursor:pointer; align-items:center; gap:8px;">
-      <i class="fas fa-shopping-bag"></i> Place Order (<span id="floatCartCount">0</span>)
+    <!-- 🛒 PLACE ORDER FLOAT BUTTON (Visible when Cart > 0) -->
+    <div id="placeOrderFloat" onclick="openCart()" style="display:none; position:fixed; bottom:calc(75px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); background:var(--myntra-pink); color:#fff; padding:8px 16px; border-radius:30px; font-weight:bold; font-size:13px; box-shadow:0 4px 10px rgba(255,63,108,0.4); z-index:150; cursor:pointer; align-items:center; gap:6px;">
+      <i class="fas fa-shopping-bag"></i> <span id="placeOrderFloatText">Place Order</span>
     </div>
 
     <div class="myntra-bottom-nav">

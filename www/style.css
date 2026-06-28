@@ -67,19 +67,21 @@ html {
 /* 🚀 HEADER & SEARCH */
 .hdr {
     background: #ffffff;
-    padding: 0 12px; /* Removed vertical padding to prevent overflow */
+    padding: 0 12px;
+    /* Removed vertical padding to prevent overflow */
     display: flex;
     align-items: center;
     justify-content: space-between;
     z-index: 200;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    height: 50px;
+    height: 45px;
     width: 100%;
     flex-shrink: 0;
 }
 
 .hdr img {
-    height: 40px !important; /* Expanded but fits safely inside 45px */
+    height: 40px !important;
+    /* Expanded but fits safely inside 45px */
     object-fit: contain;
 }
 
@@ -357,10 +359,36 @@ html {
 }
 
 /* 🚀 PRODUCT DETAIL PAGE (THE FIX) */
-#detailPanel { display: none; position: fixed; inset: 0; background: #fff; z-index: 1500; flex-direction: column; }
-#detailPanel.open { display: flex; }
-#detailPanel .sl-hdr { flex-shrink: 0; position: relative !important; z-index: 10 !important; height: auto; min-height: 55px; }
-#detailPanel .sl-body { flex: 1 !important; position: relative !important; top: 0 !important; bottom: 0 !important; overflow-y: auto; background: #fff; padding: 10px 0; }
+#detailPanel {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    z-index: 1500;
+    flex-direction: column;
+}
+
+#detailPanel.open {
+    display: flex;
+}
+
+#detailPanel .sl-hdr {
+    flex-shrink: 0;
+    position: relative !important;
+    z-index: 10 !important;
+    height: auto;
+    min-height: 55px;
+}
+
+#detailPanel .sl-body {
+    flex: 1 !important;
+    position: relative !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    overflow-y: auto;
+    background: #fff;
+    padding: 10px 0;
+}
 
 /* Mathematical Height Fix (IMMUNE to Android Webview Glitches) */
 .swipe-deck-wrapper {
@@ -611,10 +639,18 @@ html {
     align-items: center;
 }
 
-.login-box button:hover { background: #e02f5c; }
+.login-box button:hover {
+    background: #e02f5c;
+}
 
-.reg-input.error { border: 1px solid #ff3f6c !important; }
-.reg-input.error::placeholder { color: #ff3f6c !important; font-weight: bold; }
+.reg-input.error {
+    border: 1px solid #ff3f6c !important;
+}
+
+.reg-input.error::placeholder {
+    color: #ff3f6c !important;
+    font-weight: bold;
+}
 
 .login-box {
     background: #fff;
@@ -652,7 +688,7 @@ html {
 /* 🚀 FLOATING WHATSAPP BUTTON */
 .fab-wa {
     position: fixed;
-    bottom: 80px;
+    bottom: calc(75px + env(safe-area-inset-bottom));
     right: 15px;
     background: #25D366;
     color: #fff;
@@ -706,12 +742,15 @@ html {
 }
 
 /* 🛡️ THE FREEZE FIX: Forces headers to the very top layer so they are always clickable */
-.hdr, .sl-hdr { 
-    position: relative !important; 
-    z-index: 9999 !important; 
-    background: #ffffff !important; 
+.hdr,
+.sl-hdr {
+    position: relative !important;
+    z-index: 9999 !important;
+    background: #ffffff !important;
 }
-#searchContainerMain, #searchContainerDetail {
+
+#searchContainerMain,
+#searchContainerDetail {
     position: relative !important;
     z-index: 9998 !important;
 }
@@ -721,52 +760,74 @@ html {
 ========================================== */
 /* Layer 100: Main Page */
 .hdr { 
+    box-sizing: border-box !important;
     position: relative !important; 
     z-index: 100 !important; 
     background: #fff !important; 
-    padding-top: max(12px, env(safe-area-inset-top)) !important; 
-    padding-bottom: 8px !important;
-    min-height: calc(50px + env(safe-area-inset-top)) !important; 
-    height: auto !important;
+    padding-top: max(10px, env(safe-area-inset-top)) !important; 
+    padding-bottom: 6px !important;
+    height: calc(50px + env(safe-area-inset-top)) !important; 
     display: flex !important;
-    align-items: flex-end !important; /* Anchors items to the bottom, leaving safe area blank */
+    align-items: flex-end !important;
 }
+
 .hdr img {
     height: 40px !important;
     object-fit: contain !important;
     width: auto !important;
 }
 
-#gridWrapper { padding-bottom: calc(70px + env(safe-area-inset-bottom)) !important; }
+#gridWrapper {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom)) !important;
+}
 
 .myntra-bottom-nav { 
+    box-sizing: border-box !important;
     z-index: 100 !important; 
-    padding-bottom: max(10px, env(safe-area-inset-bottom)) !important; 
-    min-height: calc(55px + env(safe-area-inset-bottom)) !important;
-    height: auto !important;
+    padding-bottom: env(safe-area-inset-bottom) !important; 
+    height: calc(55px + env(safe-area-inset-bottom)) !important;
     display: flex !important;
-    align-items: center !important; /* Anchors items safely */
+    align-items: center !important;
     background: #fff !important;
 }
 
 /* Layer 200: Product Detail Page */
-#detailPanel { display: none; position: fixed; inset: 0; background: #fff; z-index: 200 !important; flex-direction: column; }
-#detailPanel.open { display: flex; }
+#detailPanel {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    z-index: 200 !important;
+    flex-direction: column;
+}
+
+#detailPanel.open {
+    display: flex;
+}
+
 #detailPanel .sl-hdr { 
+    box-sizing: border-box !important;
     flex-shrink: 0; 
     position: relative !important; 
     z-index: 210 !important; 
     background: #fff; 
-    padding-top: max(12px, env(safe-area-inset-top)) !important; 
-    padding-bottom: 8px !important;
-    min-height: calc(55px + env(safe-area-inset-top)) !important;
-    height: auto !important;
+    padding-top: max(10px, env(safe-area-inset-top)) !important; 
+    padding-bottom: 6px !important;
+    height: calc(50px + env(safe-area-inset-top)) !important;
     border-bottom: none; 
     display: flex !important;
     align-items: flex-end !important;
 }
-#detailPanel .sl-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(60px + env(safe-area-inset-bottom)) !important; }
+
+#detailPanel .sl-body {
+    flex: 1;
+    overflow-y: auto;
+    background: #fff;
+    padding-bottom: calc(60px + env(safe-area-inset-bottom)) !important;
+}
+
 .ob-one-row { 
+    box-sizing: border-box !important;
     position: absolute; 
     bottom: 0; 
     left: 0; 
@@ -774,25 +835,105 @@ html {
     background: #fff; 
     border-top: none; 
     z-index: 220 !important; 
-    padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
-    min-height: calc(50px + env(safe-area-inset-bottom)) !important;
-    height: auto !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    height: calc(55px + env(safe-area-inset-bottom)) !important;
+    display: flex;
+    align-items: center;
 }
 
-#detailPanel.open ~ .fab-wa {
+#detailPanel.open~.fab-wa {
     display: none !important;
 }
 
 /* Layer 300: Cart & Modals */
-#cartPanel { z-index: 300 !important; }
-#cartPanel .sl-hdr { padding-top: env(safe-area-inset-top) !important; height: calc(50px + env(safe-area-inset-top)) !important; }
-#shareModal { z-index: 400 !important; }
+#cartPanel {
+    z-index: 300 !important;
+}
+
+#cartPanel .sl-hdr {
+    padding-top: env(safe-area-inset-top) !important;
+    height: calc(50px + env(safe-area-inset-top)) !important;
+}
+
+#shareModal {
+    z-index: 400 !important;
+}
 
 /* Layer 500: Full Screen Image Viewer */
-.fs-modal { display: none; position: fixed; inset: 0; background: #000; z-index: 5000 !important; flex-direction: column; touch-action: none; }
-.fs-hdr { flex-shrink: 0; background: rgba(0,0,0,0.8); color: #fff; padding: 15px; display: flex; align-items: center; justify-content: space-between; gap: 15px; font-size: 16px; font-weight: bold; width: 100%; z-index: 5010 !important; padding-top: calc(15px + env(safe-area-inset-top)) !important; position: absolute; top: 0; left: 0; }
-.fs-img-container { flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; height: 100vh; }
-.fs-img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.fs-controls { position: absolute; bottom: calc(30px + env(safe-area-inset-bottom)) !important; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 30px; display: flex; align-items: center; gap: 25px; z-index: 5020 !important; }
-.fs-nav { position: absolute; top: 50%; transform: translateY(-50%); font-size: 40px; color: rgba(255,255,255,0.5); padding: 20px; z-index: 5015 !important; cursor: pointer; }
-.fs-nav-left { left: 0; } .fs-nav-right { right: 0; }
+.fs-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 5000 !important;
+    flex-direction: column;
+    touch-action: none;
+}
+
+.fs-hdr {
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    font-size: 16px;
+    font-weight: bold;
+    width: 100%;
+    z-index: 5010 !important;
+    padding-top: calc(15px + env(safe-area-inset-top)) !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.fs-img-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    position: relative;
+    height: 100vh;
+}
+
+.fs-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.fs-controls {
+    position: absolute;
+    bottom: calc(30px + env(safe-area-inset-bottom)) !important;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: 10px 20px;
+    border-radius: 30px;
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    z-index: 5020 !important;
+}
+
+.fs-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 40px;
+    color: rgba(255, 255, 255, 0.5);
+    padding: 20px;
+    z-index: 5015 !important;
+    cursor: pointer;
+}
+
+.fs-nav-left {
+    left: 0;
+}
+
+.fs-nav-right {
+    right: 0;
+}
