@@ -1238,8 +1238,10 @@ function openDetail(productId, skipShow, keepSearchShown) {
         });
 
         if (validFiles.length > 0) {
+            var hasVideo = validFiles.some(f => f.isVideo);
             var currentNames = validFiles.map(f => String(f.name).toLowerCase()).join(',');
-            if (window.lastRenderedDesignNames !== currentNames) {
+
+            if (hasVideo || window.lastRenderedDesignNames !== currentNames) {
                 Promise.all(validFiles.map(file => {
                     if (file.isVideo) return Promise.resolve();
                     return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
@@ -1249,8 +1251,24 @@ function openDetail(productId, skipShow, keepSearchShown) {
                         }
                     }).catch(() => { });
                 })).then(() => {
-                    if (renderedFilesJson !== JSON.stringify(validFiles)) {
-                        renderSwipeDeck(validFiles);
+                    renderSwipeDeck(validFiles);
+                });
+            } else {
+                // Soft update to prevent blink: update srcs only
+                validFiles.forEach((file, idx) => {
+                    var imgEl = document.getElementById("design_img_" + p.id + "_" + idx);
+                    if (imgEl && !file.isVideo) {
+                        getCachedDesignUrl(file.url, file.gridUrl).then(res => {
+                            if (res.src) {
+                                file.cachedUrl = res.src;
+                                file.isZoom = res.isZoom;
+                                imgEl.src = res.src;
+                            } else {
+                                imgEl.src = file.gridUrl;
+                            }
+                        }).catch(() => { 
+                            imgEl.src = file.gridUrl; 
+                        });
                     }
                 });
             }
@@ -2608,27 +2626,25 @@ window.doSearch = function (val) {
     applyFilter();
 
     var detailPanel = document.getElementById('detailPanel');
-    if (detailPanel && detailPanel.classList.contains('open')) {
-        var gridWrapper = document.getElementById('gridWrapper');
-        var slBody = detailPanel.querySelector('.sl-body');
-        var dtSearchInput = document.getElementById('dtSearchInput');
+    var gridWrapper = document.getElementById('gridWrapper');
+    var slBody = detailPanel ? detailPanel.querySelector('.sl-body') : null;
+    var dtSearchInput = document.getElementById('dtSearchInput');
 
-        if (dtSearchInput && dtSearchInput.style.display !== 'none' && val.trim() !== '') {
-            if (slBody) slBody.style.display = 'none';
-            if (gridWrapper.parentNode !== detailPanel) {
-                detailPanel.insertBefore(gridWrapper, document.getElementById('detailBottomRow'));
-                gridWrapper.style.flex = "1";
-                gridWrapper.style.overflowY = "auto";
-                gridWrapper.style.paddingBottom = "100px";
-            }
-        } else {
-            if (slBody) slBody.style.display = 'block';
-            if (gridWrapper.parentNode !== document.getElementById('appBody')) {
-                document.getElementById('appBody').appendChild(gridWrapper);
-                gridWrapper.style.flex = "";
-                gridWrapper.style.overflowY = "";
-                gridWrapper.style.paddingBottom = "";
-            }
+    if (detailPanel && detailPanel.classList.contains('open') && dtSearchInput && dtSearchInput.style.display !== 'none' && val.trim() !== '') {
+        if (slBody) slBody.style.display = 'none';
+        if (gridWrapper.parentNode !== detailPanel) {
+            detailPanel.insertBefore(gridWrapper, document.getElementById('detailBottomRow'));
+            gridWrapper.style.flex = "1";
+            gridWrapper.style.overflowY = "auto";
+            gridWrapper.style.paddingBottom = "100px";
+        }
+    } else {
+        if (slBody) slBody.style.display = 'block';
+        if (gridWrapper && gridWrapper.parentNode !== document.getElementById('appBody')) {
+            document.getElementById('appBody').appendChild(gridWrapper);
+            gridWrapper.style.flex = "";
+            gridWrapper.style.overflowY = "";
+            gridWrapper.style.paddingBottom = "";
         }
     }
 };

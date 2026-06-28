@@ -765,9 +765,9 @@ html {
     position: relative !important; 
     z-index: 100 !important; 
     background: #fff !important; 
-    padding-top: max(10px, env(safe-area-inset-top)) !important; 
+    padding-top: max(10px, env(safe-area-inset-top, 10px)) !important; 
     padding-bottom: 6px !important;
-    height: calc(50px + env(safe-area-inset-top)) !important; 
+    height: 50px !important; 
     display: flex !important;
     align-items: flex-end !important;
 }
@@ -787,8 +787,8 @@ html {
 .myntra-bottom-nav { 
     box-sizing: border-box !important;
     z-index: 100 !important; 
-    padding-bottom: env(safe-area-inset-bottom) !important; 
-    height: calc(55px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important; 
+    height: 45px !important;
     display: flex !important;
     align-items: center !important;
     background: #fff !important;
@@ -814,9 +814,9 @@ html {
     position: relative !important; 
     z-index: 210 !important; 
     background: #fff; 
-    padding-top: max(10px, env(safe-area-inset-top)) !important; 
+    padding-top: max(10px, env(safe-area-inset-top, 10px)) !important; 
     padding-bottom: 6px !important;
-    height: calc(50px + env(safe-area-inset-top)) !important;
+    height: 50px !important;
     border-bottom: none; 
     display: flex !important;
     align-items: flex-end !important;
@@ -838,8 +838,8 @@ html {
     background: #fff; 
     border-top: none; 
     z-index: 220 !important; 
-    padding-bottom: env(safe-area-inset-bottom) !important;
-    height: calc(55px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    height: 45px !important;
     display: flex;
     align-items: center;
 }
