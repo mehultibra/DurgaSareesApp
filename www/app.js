@@ -1175,6 +1175,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
     var renderedFilesJson = "";
 
     // 1. Render fallback list instantly so the UI loads immediately
+    window.lastRenderedDesignNames = "";
     useFallbackDesignList();
 
     // 2. Fetch actual folder files in background to update/upgrade the swipe deck
@@ -1237,8 +1238,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
         });
 
         if (validFiles.length > 0) {
-            var newJson = JSON.stringify(validFiles);
-            if (renderedFilesJson !== newJson) {
+            var currentNames = validFiles.map(f => String(f.name).toLowerCase()).join(',');
+            if (window.lastRenderedDesignNames !== currentNames) {
                 Promise.all(validFiles.map(file => {
                     if (file.isVideo) return Promise.resolve();
                     return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
@@ -1248,7 +1249,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                         }
                     }).catch(() => { });
                 })).then(() => {
-                    if (renderedFilesJson !== newJson) {
+                    if (renderedFilesJson !== JSON.stringify(validFiles)) {
                         renderSwipeDeck(validFiles);
                     }
                 });
@@ -1313,6 +1314,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
     function renderSwipeDeck(files) {
         renderedFilesJson = JSON.stringify(files);
+        window.lastRenderedDesignNames = files.map(f => String(f.name).toLowerCase()).join(',');
 
         // Get the grid/cover image source synchronously for instant placeholder rendering
         // Only use it if it's already a local Blob URL to avoid making duplicate network requests
@@ -1411,6 +1413,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     }
                 }).catch(() => { });
             })).then(() => {
+                window.lastRenderedDesignNames = fallbackFiles.map(f => String(f.name).toLowerCase()).join(',');
                 renderSwipeDeck(fallbackFiles);
             });
         } else {
@@ -2687,18 +2690,13 @@ window.clearPriceFilters = function () {
 };
 
 window.toggleSearch = function () {
-    var logo = document.getElementById('appLogoImg');
     var input = document.getElementById('srchMainInput');
     if (input) {
         if (input.style.display === 'none' || input.style.display === '') {
-            if (logo) logo.style.display = 'none';
-            input.style.display = 'block';
-            input.focus();
+            pushHistoryState('search');
+            applyModalState('search');
         } else {
-            input.style.display = 'none';
-            if (logo) logo.style.display = 'block';
-            input.value = '';
-            doSearch('');
+            history.back(); // This will trigger popstate which closes search
         }
     }
 };
@@ -2852,7 +2850,25 @@ function applyModalState(modal) {
         }
     }
 
-    // 4. Sync Action Modals (categoryModal, sortModal, filterModal, shareModal, waModal)
+    // 4. Sync Search
+    var input = document.getElementById('srchMainInput');
+    var logo = document.getElementById('appLogoImg');
+    if (modal === 'search') {
+        if (input && input.style.display !== 'block') {
+            if (logo) logo.style.display = 'none';
+            input.style.display = 'block';
+            input.focus();
+        }
+    } else {
+        if (input && input.style.display === 'block') {
+            input.style.display = 'none';
+            if (logo) logo.style.display = 'block';
+            input.value = '';
+            doSearch('');
+        }
+    }
+
+    // 5. Sync Action Modals (categoryModal, sortModal, filterModal, shareModal, waModal)
     actionModals.forEach(function (m) {
         if (m.id === modal) {
             m.style.display = 'flex';
@@ -2865,12 +2881,6 @@ function applyModalState(modal) {
 window.addEventListener('popstate', function (e) {
     var state = e.state || {};
     applyModalState(state.modal);
-
-    if (searchingTransition) {
-        searchingTransition = false;
-    } else {
-        cameFromDetail = false;
-    }
     updateAndroidBackState();
 });
 
@@ -2884,19 +2894,24 @@ function updateAndroidBackState() {
 
         if (detailPanel && detailPanel.classList.contains('open')) {
             hasOpenModal = true;
-        }
-        if (cartPanel && cartPanel.classList.contains('open')) {
+        } else if (cartPanel && cartPanel.classList.contains('open')) {
             hasOpenModal = true;
-        }
-        if (fsModal && fsModal.style.display === 'flex') {
+        } else if (fsModal && fsModal.style.display === 'flex') {
             hasOpenModal = true;
-        }
-        var actionModals = document.querySelectorAll('.action-modal');
-        actionModals.forEach(function (m) {
-            if (m.style.display === 'flex') {
-                hasOpenModal = true;
+        } else {
+            var actionModals = document.querySelectorAll('.action-modal');
+            for (var i = 0; i < actionModals.length; i++) {
+                if (actionModals[i].style.display === 'flex') {
+                    hasOpenModal = true;
+                    break;
+                }
             }
-        });
+        }
+
+        var input = document.getElementById('srchMainInput');
+        if (input && input.style.display === 'block') {
+            hasOpenModal = true;
+        }
 
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AndroidBackBridge) {
             window.Capacitor.Plugins.AndroidBackBridge.setCanGoBack({ canGoBack: hasOpenModal });

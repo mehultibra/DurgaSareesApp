@@ -765,18 +765,11 @@ html {
     position: relative !important; 
     z-index: 100 !important; 
     background: #fff !important; 
-    padding-top: 10px !important; 
+    padding-top: max(10px, env(safe-area-inset-top)) !important; 
     padding-bottom: 6px !important;
-    height: 50px !important; 
+    height: calc(50px + env(safe-area-inset-top)) !important; 
     display: flex !important;
     align-items: flex-end !important;
-}
-
-@supports (-webkit-touch-callout: none) {
-    .hdr {
-        padding-top: max(10px, env(safe-area-inset-top)) !important;
-        height: calc(50px + env(safe-area-inset-top)) !important; 
-    }
 }
 
 .hdr img {
@@ -794,18 +787,11 @@ html {
 .myntra-bottom-nav { 
     box-sizing: border-box !important;
     z-index: 100 !important; 
-    padding-bottom: 0px !important; 
-    height: 55px !important;
+    padding-bottom: env(safe-area-inset-bottom) !important; 
+    height: calc(55px + env(safe-area-inset-bottom)) !important;
     display: flex !important;
     align-items: center !important;
     background: #fff !important;
-}
-
-@supports (-webkit-touch-callout: none) {
-    .myntra-bottom-nav {
-        padding-bottom: env(safe-area-inset-bottom) !important; 
-        height: calc(55px + env(safe-area-inset-bottom)) !important;
-    }
 }
 
 /* Layer 200: Product Detail Page */
@@ -828,19 +814,12 @@ html {
     position: relative !important; 
     z-index: 210 !important; 
     background: #fff; 
-    padding-top: 10px !important; 
+    padding-top: max(10px, env(safe-area-inset-top)) !important; 
     padding-bottom: 6px !important;
-    height: 50px !important;
+    height: calc(50px + env(safe-area-inset-top)) !important;
     border-bottom: none; 
     display: flex !important;
     align-items: flex-end !important;
-}
-
-@supports (-webkit-touch-callout: none) {
-    #detailPanel .sl-hdr {
-        padding-top: max(10px, env(safe-area-inset-top)) !important; 
-        height: calc(50px + env(safe-area-inset-top)) !important;
-    }
 }
 
 #detailPanel .sl-body {
@@ -859,17 +838,10 @@ html {
     background: #fff; 
     border-top: none; 
     z-index: 220 !important; 
-    padding-bottom: 0px !important;
-    height: 55px !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    height: calc(55px + env(safe-area-inset-bottom)) !important;
     display: flex;
     align-items: center;
-}
-
-@supports (-webkit-touch-callout: none) {
-    .ob-one-row {
-        padding-bottom: env(safe-area-inset-bottom) !important;
-        height: calc(55px + env(safe-area-inset-bottom)) !important;
-    }
 }
 
 #detailPanel.open~.fab-wa {
