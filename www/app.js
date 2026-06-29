@@ -1860,7 +1860,7 @@ function openCart() {
                         var imgId = "cart_img_" + grouped[r].p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
                         var imgEl = document.getElementById(imgId);
                         if (imgEl && grouped[r].p.gridUrl) {
-                            imgEl.src = grouped[r].p.gridUrl;
+                            window.renderWebpFromFolder(imgEl, grouped[r].p.gridUrl, null, "01.webp");
                         }
                     });
                 }

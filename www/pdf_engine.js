@@ -197,9 +197,10 @@ async function generateCartOrderPDF(actionType) {
             
             // Try fetching the grid image directly
             if (gridUrl) {
-                gridBase64 = await getBase64ImageFast(gridUrl);
+                var fullGridUrl = getDesignFirebaseUrl(gridUrl, 'DIRECT');
+                gridBase64 = await getBase64ImageFast(fullGridUrl);
                 if (!gridBase64) {
-                    gridBase64 = await getBase64ImageFromUrl(gridUrl);
+                    gridBase64 = await getBase64ImageFromUrl(fullGridUrl);
                 }
             }
             
