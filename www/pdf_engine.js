@@ -193,19 +193,18 @@ async function generateCartOrderPDF(actionType) {
         // Preload images for all cart items using ONLY gridUrl
         for (var g of groupArr) {
             var gridUrl = g.p.gridUrl;
-            var gridBase64 = null;
-            
-            // Try fetching the grid image directly
-            if (gridUrl) {
-                var fullGridUrl = getDesignFirebaseUrl(gridUrl, 'DIRECT');
-                gridBase64 = await getBase64ImageFast(fullGridUrl);
-                if (!gridBase64) {
-                    gridBase64 = await getBase64ImageFromUrl(fullGridUrl);
-                }
-            }
             
             for (var item of g.items) {
-                item._pdfImgSrc = gridBase64;
+                var dId = item.design || 'DIRECT';
+                
+                // Try fetching the grid image directly
+                if (gridUrl) {
+                    var fullGridUrl = getDesignFirebaseUrl(gridUrl, dId);
+                    item._pdfImgSrc = await getBase64ImageFast(fullGridUrl);
+                    if (!item._pdfImgSrc) {
+                        item._pdfImgSrc = await getBase64ImageFromUrl(fullGridUrl);
+                    }
+                }
                 
                 // If grid image failed to fetch, try the DOM img element fallback
                 if (!item._pdfImgSrc) {

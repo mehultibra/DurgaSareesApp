@@ -1804,7 +1804,6 @@ function openCart() {
         var customerHTML = `
             <div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden; background:#fff; display:flex; justify-content:space-between; align-items:center; padding:10px;">
                 <div style="display:flex; flex-direction:column; gap:4px; max-width:85%;">
-                    <div style="font-weight:bold; font-size:12px; color:var(--text-light);"><i class="fas fa-user" style="color:var(--myntra-pink);"></i> Customer Details</div>
                     <div id="cartCustomerDetailsBody" style="font-size:14px; color:var(--text-main); font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                         Loading...
                     </div>
@@ -1814,18 +1813,30 @@ function openCart() {
         `;
         cHtml.push(customerHTML);
 
+        window.cartEditingMap = window.cartEditingMap || {};
         for (var r in grouped) {
             var g = grouped[r];
             var pTot = 0;
             g.items.forEach(function (i) { pTot += (parseInt(i.qty) || 0); });
+            var isEditing = window.cartEditingMap[g.p.id];
 
             cHtml.push('<div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden;">');
             cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">');
-            cHtml.push('<div style="cursor:pointer; flex:1;" onclick="closeCart(true); setTimeout(()=>{openDetail(\'' + g.p.id + '\');},100);">');
+            cHtml.push('<div style="' + (!isEditing ? 'cursor:pointer;' : '') + ' flex:1;" ' + (!isEditing ? 'onclick="closeCart(true); setTimeout(()=>{openDetail(\'' + g.p.id + '\');},100);"' : '') + '>');
             cHtml.push('<div style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></div>');
-            cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
-            cHtml.push('</div>');
-            cHtml.push('<i class="fas fa-edit" onclick="openCartEditModal(\'' + g.p.id + '\')" style="cursor:pointer; color:var(--myntra-pink); font-size:18px; padding: 10px;"></i>');
+            
+            if (isEditing) {
+                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + 
+                           ' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
+                           ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;"></div>');
+                cHtml.push('</div>');
+                cHtml.push('<i class="fas fa-check-circle" onclick="saveCartInlineEdit(\'' + g.p.id + '\')" style="cursor:pointer; color:green; font-size:22px; padding: 10px;" title="Save"></i>');
+            } else {
+                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
+                cHtml.push('</div>');
+                cHtml.push('<i class="fas fa-edit" onclick="toggleCartInlineEdit(\'' + g.p.id + '\')" style="cursor:pointer; color:var(--myntra-pink); font-size:18px; padding: 10px;"></i>');
+            }
+            
             cHtml.push('</div><div style="display:flex; flex-wrap:wrap; gap:10px; padding:10px;">');
 
             g.items.forEach(function (item) {
@@ -1837,10 +1848,15 @@ function openCart() {
                     "closeCart(true); setTimeout(()=>{openDetail('" + g.p.id + "');},100);" : 
                     "openCartFs('" + g.p.id + "', '" + safeDesignLabel + "', document.getElementById('" + imgId + "').src)";
 
-                cHtml.push('<div style="width: 80px; text-align: center;" onclick="' + onClickAction + '">');
-                cHtml.push('<img id="' + imgId + '" src="https://placehold.co/300x300/f0f0f0/a0a0a0?text=..." style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); cursor: pointer;">');
+                cHtml.push('<div style="width: 80px; text-align: center;" ' + (!isEditing ? 'onclick="' + onClickAction + '"' : '') + '>');
+                cHtml.push('<img id="' + imgId + '" src="https://placehold.co/300x300/f0f0f0/a0a0a0?text=..." style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); ' + (!isEditing ? 'cursor: pointer;' : '') + '">');
                 cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + dLabel + '</div>');
-                cHtml.push('<div style="font-size: 12px; font-weight: bold; color: var(--myntra-pink);">' + (item.qty || 0) + ' pcs</div>');
+                
+                if (isEditing) {
+                    cHtml.push('<input type="number" id="ie_qty_' + g.p.id + '_' + safeDesignLabel + '" value="' + (item.qty || 0) + '" style="width:60px; padding:4px; border:1px solid var(--myntra-pink); border-radius:4px; text-align:center; font-size:12px; font-weight:bold; color:var(--text-main); margin-top:2px;">');
+                } else {
+                    cHtml.push('<div style="font-size: 12px; font-weight: bold; color: var(--myntra-pink);">' + (item.qty || 0) + ' pcs</div>');
+                }
                 cHtml.push('</div>');
             });
             cHtml.push('</div></div>');
@@ -1860,7 +1876,14 @@ function openCart() {
                         var imgId = "cart_img_" + grouped[r].p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
                         var imgEl = document.getElementById(imgId);
                         if (imgEl && grouped[r].p.gridUrl) {
-                            window.renderWebpFromFolder(imgEl, grouped[r].p.gridUrl, null, "01.webp");
+                            var targetFile = "01.webp";
+                            if (safeDesignLabel !== 'DIRECT' && safeDesignLabel !== 'Cover') {
+                                var cleanNum = safeDesignLabel.replace(/\D/g, '');
+                                if (cleanNum.length === 1) cleanNum = "0" + cleanNum;
+                                if (cleanNum === "") cleanNum = "02";
+                                targetFile = cleanNum + ".webp";
+                            }
+                            window.renderWebpFromFolder(imgEl, grouped[r].p.gridUrl, grouped[r].p.gridUrl, targetFile);
                         }
                     });
                 }
@@ -3066,75 +3089,58 @@ async function saveCustomerDetails() {
     closeModals();
 }
 
-function openCartEditModal(productId) {
-    _currentEditProductId = productId;
+function toggleCartInlineEdit(productId) {
+    window.cartEditingMap = window.cartEditingMap || {};
+    window.cartEditingMap[productId] = true;
+    openCart(); // Re-render to show input fields
+}
+
+function saveCartInlineEdit(productId) {
+    var rateInput = document.getElementById('ie_rate_' + productId);
+    var packInput = document.getElementById('ie_pack_' + productId);
+    
+    var newRate = rateInput ? parseInt(rateInput.value) || 0 : 0;
+    var newPacking = packInput ? packInput.value.trim() || "1" : "1";
+    
     var items = [];
-    var sampleItem = null;
     for (var k in cart) {
         if (cart[k].p && cart[k].p.id === productId) {
             items.push(cart[k]);
-            if (!sampleItem) sampleItem = cart[k];
-        }
-    }
-    if (!sampleItem) return;
-    
-    document.getElementById('cartEditProductName').innerText = sampleItem.p.name + " (SKU: " + (sampleItem.p.sku || "-") + ")";
-    document.getElementById('ceRate').value = sampleItem.p.price;
-    document.getElementById('cePacking').value = sampleItem.p.packing || "1";
-    
-    var listHtml = "";
-    items.forEach(item => {
-        var dLabel = item.design === 'DIRECT' ? 'Cover' : item.design;
-        listHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
-                    '<span style="font-size:13px; color:var(--text-main);">' + dLabel + '</span>' +
-                    '<input type="number" id="ceQty_' + item.design + '" value="' + item.qty + '" style="width:60px; padding:4px; border:1px solid #ccc; border-radius:4px; text-align:center;">' +
-                    '</div>';
-    });
-    document.getElementById('ceDesignsList').innerHTML = listHtml;
-    
-    openModal('cartEditModal');
-}
-
-function saveCartProductEdit() {
-    if (!_currentEditProductId) return;
-    
-    var newRate = parseInt(document.getElementById('ceRate').value) || 0;
-    var newPacking = document.getElementById('cePacking').value.trim() || "1";
-    
-    var items = [];
-    for (var k in cart) {
-        if (cart[k].p && cart[k].p.id === _currentEditProductId) {
-            items.push(cart[k]);
         }
     }
     
     items.forEach(item => {
-        var qtyInput = document.getElementById('ceQty_' + item.design);
+        var safeDesignLabel = item.design || 'DIRECT';
+        var qtyInput = document.getElementById('ie_qty_' + productId + '_' + safeDesignLabel);
         if (qtyInput) {
             var newQty = parseInt(qtyInput.value) || 0;
             if (newQty <= 0) {
-                delete cart[_currentEditProductId + "_" + item.design];
+                delete cart[productId + "_" + item.design];
             } else {
                 item.qty = newQty;
                 item.p.price = newRate;
                 item.p.packing = newPacking;
-                cart[_currentEditProductId + "_" + item.design] = item;
+                cart[productId + "_" + item.design] = item;
             }
         }
     });
     
-    var edited = {};
-    try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch(e){}
-    edited[items[0].p.name] = { price: newRate, packing: newPacking };
-    localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
+    // Save to edited memory so changes persist across cart wipes?
+    if (items.length > 0) {
+        var edited = {};
+        try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch(e){}
+        edited[items[0].p.name] = { price: newRate, packing: newPacking };
+        localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
+    }
     
-    var matchP = allProducts.find(x => x.id === _currentEditProductId);
+    var matchP = allProducts.find(x => x.id === productId);
     if(matchP) {
         matchP.price = newRate;
         matchP.packing = newPacking;
     }
     
     localStorage.setItem("dsCart", JSON.stringify(cart));
-    closeModals();
-    openCart();
+    
+    window.cartEditingMap[productId] = false;
+    openCart(); // Re-render to show updated static text
 }
