@@ -271,17 +271,20 @@
 
   <!-- Customer Details Edit Modal -->
   <div id="customerDetailsModal" class="action-modal" onclick="closeModals()">
-    <div class="modal-content" onclick="event.stopPropagation()">
-      <div class="modal-title">Edit Customer Details <i class="fas fa-times" style="cursor:pointer; color:var(--text-light);" onclick="closeModals()"></i></div>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <input type="text" id="cdName" placeholder="Name *" class="reg-input">
-        <input type="text" id="cdFirm" placeholder="Firm Name (Optional)" class="reg-input">
-        <input type="text" id="cdPhone" placeholder="Phone Number *" class="reg-input" readonly style="background:#f5f5f6; color:#888;">
-        <input type="text" id="cdStation" placeholder="Station *" class="reg-input">
-        <input type="text" id="cdState" list="stateList" placeholder="State *" class="reg-input">
+    <div class="modal-content" style="border-radius: 12px; padding: 24px; max-width: 320px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);" onclick="event.stopPropagation()">
+      <div class="modal-title" style="font-size:18px; color:var(--myntra-pink); font-weight:bold; border-bottom:none; padding-bottom:0; margin-bottom:10px;">
+        Customer Details <i class="fas fa-times" style="cursor:pointer; color:var(--text-light); float:right; font-size:16px; margin-top:2px;" onclick="closeModals()"></i>
       </div>
-      <p id="cdErr" style="color:red; font-size:12px; margin-top:5px;"></p>
-      <button onclick="saveCustomerDetails()" id="btnSaveCustomerDetails" style="margin-top:15px; width:100%; background:var(--myntra-pink); color:#fff; border:none; padding:12px; border-radius:4px; font-weight:bold; cursor:pointer;">SAVE DETAILS</button>
+      <div style="font-size:12px; color:var(--text-light); margin-bottom:16px;">Please update your billing and shipping details.</div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <input type="text" id="cdName" placeholder="Name *" style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
+        <input type="text" id="cdFirm" placeholder="Firm Name (Optional)" style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
+        <input type="text" id="cdPhone" placeholder="Phone Number *" readonly style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#eaeaec; color:#888; outline:none; cursor:not-allowed;">
+        <input type="text" id="cdStation" placeholder="Station *" style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
+        <input type="text" id="cdState" list="stateList" placeholder="State *" style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
+      </div>
+      <p id="cdErr" style="color:red; font-size:12px; margin-top:8px; height:14px;"></p>
+      <button onclick="saveCustomerDetails()" id="btnSaveCustomerDetails" style="margin-top:10px; width:100%; background:var(--myntra-pink); color:#fff; border:none; padding:14px; border-radius:4px; font-size:14px; font-weight:bold; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; box-shadow: 0 4px 6px rgba(255, 63, 108, 0.2);">SAVE DETAILS</button>
     </div>
   </div>
 

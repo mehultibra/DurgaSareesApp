@@ -261,35 +261,31 @@ async function verifyOtp() {
     if (errEl) errEl.innerText = "";
 
     try {
-        let user = null;
+        let phoneStr = "";
         if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            const result = await window.CapacitorFirebaseAuthentication.confirmVerificationCode({
+            await window.CapacitorFirebaseAuthentication.confirmVerificationCode({
                 verificationId: dsVerificationId,
                 verificationCode: code
             });
-            user = result.user;
         } else {
             // Web fallback
             if (!webConfirmationResult) throw new Error("No OTP requested");
-            const result = await webConfirmationResult.confirm(code);
-            user = result.user;
+            await webConfirmationResult.confirm(code);
         }
         
-        if (user) {
-            var inputPhone = document.getElementById('lPhone').value.trim();
-            var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
-            var phoneStr = user.phoneNumber || (inputPhone.startsWith('+') ? inputPhone : countryCode + inputPhone);
-            
-            checkUserInFirestore(phoneStr).then(function(exists) {
-                if (exists) {
-                    completeLogin(phoneStr);
-                } else {
-                    document.getElementById('loginBoxOtp').style.display = 'none';
-                    document.getElementById('loginBoxRegister').style.display = 'block';
-                    window.pendingUserPhone = phoneStr;
-                }
-            });
-        }
+        var inputPhone = document.getElementById('lPhone').value.trim();
+        var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
+        phoneStr = inputPhone.startsWith('+') ? inputPhone : countryCode + inputPhone;
+        
+        checkUserInFirestore(phoneStr).then(function(exists) {
+            if (exists) {
+                completeLogin(phoneStr);
+            } else {
+                document.getElementById('loginBoxOtp').style.display = 'none';
+                document.getElementById('loginBoxRegister').style.display = 'block';
+                window.pendingUserPhone = phoneStr;
+            }
+        });
     } catch (err) {
         if (errEl) errEl.innerText = "❌ Invalid OTP or Error: " + (err.message || "");
         if (btn) btn.innerText = "VERIFY";
@@ -1806,14 +1802,14 @@ function openCart() {
         var cHtml = [];
 
         var customerHTML = `
-            <div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden; background:#fff;">
-                <div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-                    <div style="font-weight:bold; font-size:14px; color:var(--text-main);"><i class="fas fa-user" style="color:var(--myntra-pink);"></i> Customer Details</div>
-                    <i class="fas fa-edit" onclick="openCustomerDetailsModal()" style="cursor:pointer; color:var(--myntra-pink); font-size:14px;"></i>
+            <div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden; background:#fff; display:flex; justify-content:space-between; align-items:center; padding:10px;">
+                <div style="display:flex; flex-direction:column; gap:4px; max-width:85%;">
+                    <div style="font-weight:bold; font-size:12px; color:var(--text-light);"><i class="fas fa-user" style="color:var(--myntra-pink);"></i> Customer Details</div>
+                    <div id="cartCustomerDetailsBody" style="font-size:14px; color:var(--text-main); font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        Loading...
+                    </div>
                 </div>
-                <div id="cartCustomerDetailsBody" style="padding:10px; font-size:13px; color:var(--text-main); line-height:1.5;">
-                    Loading...
-                </div>
+                <i class="fas fa-edit" onclick="openCustomerDetailsModal()" style="cursor:pointer; color:var(--myntra-pink); font-size:16px; padding:10px;"></i>
             </div>
         `;
         cHtml.push(customerHTML);
@@ -1856,25 +1852,15 @@ function openCart() {
             cb.innerHTML = cHtml.join('');
             loadCartCustomerDetails();
 
-            // Progressive load Cart images
+            // Load Grid Images for Cart Items safely
             setTimeout(() => {
                 for (var r in grouped) {
                     grouped[r].items.forEach(function (item) {
                         var safeDesignLabel = item.design || 'DIRECT';
                         var imgId = "cart_img_" + grouped[r].p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
                         var imgEl = document.getElementById(imgId);
-                        if (imgEl) {
-                            var gridPath = grouped[r].p.gridUrl;
-                            var zoomPath = grouped[r].p.zoomUrl;
-
-                            var targetFile = "01.webp";
-                            if (safeDesignLabel !== 'DIRECT') {
-                                var cleanNum = safeDesignLabel.replace(/\D/g, '');
-                                if (cleanNum.length === 1) cleanNum = "0" + cleanNum;
-                                if (cleanNum === "") cleanNum = "02";
-                                targetFile = cleanNum + ".webp";
-                            }
-                            window.renderWebpFromFolder(imgEl, gridPath, zoomPath, targetFile);
+                        if (imgEl && grouped[r].p.gridUrl) {
+                            imgEl.src = grouped[r].p.gridUrl;
                         }
                     });
                 }
@@ -2982,10 +2968,8 @@ function loadCartCustomerDetails() {
 
 function renderCustomerDetails(d, container) {
     if(!container) return;
-    var html = "<b>" + esc(d.name) + "</b><br>";
-    if (d.firm) html += "Firm: " + esc(d.firm) + "<br>";
-    html += "Phone: " + esc(d.phone || activeUser) + "<br>";
-    html += "Station: " + esc(d.station) + ", State: " + esc(d.state);
+    var primaryName = d.firm ? d.firm : d.name;
+    var html = esc(primaryName) + (d.station ? ", " + esc(d.station) : "");
     container.innerHTML = html;
 }
 

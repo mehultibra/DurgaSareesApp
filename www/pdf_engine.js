@@ -190,50 +190,44 @@ async function generateCartOrderPDF(actionType) {
 
         if (bootMsg) bootMsg.innerText = "Loading images from cache...";
 
-        // Preload images for all cart items
+        // Preload images for all cart items using ONLY gridUrl
         for (var g of groupArr) {
-            var gridPath = g.p.gridUrl;
-            var zoomPath = (g.p.zoomUrl && g.p.zoomUrl !== 'None') ? g.p.zoomUrl : gridPath;
+            var gridUrl = g.p.gridUrl;
+            var gridBase64 = null;
+            
+            // Try fetching the grid image directly
+            if (gridUrl) {
+                gridBase64 = await getBase64ImageFast(gridUrl);
+                if (!gridBase64) {
+                    gridBase64 = await getBase64ImageFromUrl(gridUrl);
+                }
+            }
+            
             for (var item of g.items) {
-                var dId = item.design || 'DIRECT';
-                var targetFile = "01.webp";
-                if (dId !== 'DIRECT' && dId !== 'Cover') {
-                    var num = dId.replace(/\D/g, '');
-                    if (num.length === 1) num = "0" + num;
-                    if (num === '') num = "02";
-                    targetFile = num + ".webp";
-                }
-                // Try grid URL first (faster load from cache), then zoom
-                var gridFbUrl = getDesignFirebaseUrl(gridPath, dId);
-                var zoomFbUrl = getDesignFirebaseUrl(zoomPath, dId);
-
-                // Try DOM img element first (instant!)
-                var imgId = "cart_img_" + g.p.id + "_" + dId.replace(/[^a-zA-Z0-9]/g, '');
-                var domImg = document.getElementById(imgId);
-                var domSrc = getImgElementSrc(domImg);
-
-                item._pdfImgSrc = null;
-                if (domSrc && domSrc.startsWith('blob:')) {
-                    // Already rendered as blob in DOM — convert to base64
-                    try {
-                        var fetchBlob = await fetch(domSrc);
-                        var blobData = await fetchBlob.blob();
-                        var b64 = await new Promise(function(res) {
-                            var fr = new FileReader();
-                            fr.onload = () => res(fr.result);
-                            fr.onerror = () => res(null);
-                            fr.readAsDataURL(blobData);
-                        });
-                        item._pdfImgSrc = b64;
-                    } catch(e) {}
-                }
-
+                item._pdfImgSrc = gridBase64;
+                
+                // If grid image failed to fetch, try the DOM img element fallback
                 if (!item._pdfImgSrc) {
-                    // Try IndexedDB grid cache key
-                    item._pdfImgSrc = await getBase64ImageFast(gridFbUrl);
-                }
-                if (!item._pdfImgSrc) {
-                    item._pdfImgSrc = await getBase64ImageFast(zoomFbUrl);
+                    var dId = item.design || 'DIRECT';
+                    var imgId = "cart_img_" + g.p.id + "_" + dId.replace(/[^a-zA-Z0-9]/g, '');
+                    var domImg = document.getElementById(imgId);
+                    var domSrc = getImgElementSrc(domImg);
+                    
+                    if (domSrc && domSrc.startsWith('blob:')) {
+                        try {
+                            var fetchBlob = await fetch(domSrc);
+                            var blobData = await fetchBlob.blob();
+                            var b64 = await new Promise(function(res) {
+                                var fr = new FileReader();
+                                fr.onload = () => res(fr.result);
+                                fr.onerror = () => res(null);
+                                fr.readAsDataURL(blobData);
+                            });
+                            item._pdfImgSrc = b64;
+                        } catch(e) {}
+                    } else if (domSrc && domSrc.startsWith('http')) {
+                        item._pdfImgSrc = await getBase64ImageFromUrl(domSrc);
+                    }
                 }
             }
         }
