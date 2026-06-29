@@ -298,6 +298,49 @@ async function generateCartOrderPDF(actionType) {
         doc.line(margin, y, PW - margin, y);
         y += 14;
 
+        // ── CUSTOMER DETAILS ───────────────────────────────
+        var dsCustomer = null;
+        try {
+            var dsCustomerStr = localStorage.getItem("dsCustomerDetails");
+            if (dsCustomerStr) {
+                dsCustomer = JSON.parse(dsCustomerStr);
+                if (dsCustomer.name) {
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(139, 0, 0);
+                    doc.text("Customer Details:", margin, y);
+                    y += 14;
+                    
+                    doc.setFontSize(9);
+                    doc.setFont("helvetica", "normal");
+                    doc.setTextColor(40, 40, 40);
+                    
+                    var leftCol = [];
+                    leftCol.push("Name: " + dsCustomer.name);
+                    if (dsCustomer.firm) leftCol.push("Firm: " + dsCustomer.firm);
+                    leftCol.push("Phone: " + (dsCustomer.phone || ""));
+                    
+                    var rightCol = [];
+                    rightCol.push("Station: " + dsCustomer.station);
+                    rightCol.push("State: " + dsCustomer.state);
+                    
+                    var lineY = y;
+                    for(var i=0; i<Math.max(leftCol.length, rightCol.length); i++) {
+                        if (leftCol[i]) doc.text(leftCol[i], margin, lineY);
+                        if (rightCol[i]) doc.text(rightCol[i], PW / 2 + 30, lineY);
+                        lineY += 12;
+                    }
+                    
+                    y = lineY + 8;
+                    
+                    doc.setDrawColor(200, 200, 200);
+                    doc.setLineWidth(0.5);
+                    doc.line(margin, y, PW - margin, y);
+                    y += 14;
+                }
+            }
+        } catch(e) {}
+
         // ── PRODUCT BLOCKS ─────────────────────────────────
         var THUMB_SIZE = 80;
         var DESIGN_COLS = 5;
@@ -480,6 +523,13 @@ async function generateCartOrderPDF(actionType) {
 
         // Build plain-text order summary for WhatsApp message
         var waText = "Order from Durga Sarees\n\n";
+        if (dsCustomer && dsCustomer.name) {
+            waText += "*Customer Details:*\n";
+            waText += "Name: " + dsCustomer.name + "\n";
+            if (dsCustomer.firm) waText += "Firm: " + dsCustomer.firm + "\n";
+            waText += "Phone: " + (dsCustomer.phone || "") + "\n";
+            waText += "Station: " + dsCustomer.station + " (" + dsCustomer.state + ")\n\n";
+        }
         for (var gi2 = 0; gi2 < groupArr.length; gi2++) {
             var gg = groupArr[gi2];
             waText += "*" + gg.p.name + "*";

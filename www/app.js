@@ -530,9 +530,9 @@ function processProducts(docs) {
                     return;
                 }
             } catch(e) {}
-            alert("Network Error. Please check your internet connection.");
             var bootScreen = document.getElementById('boot');
             if (bootScreen) bootScreen.style.display = 'none';
+            processProducts([]);
         });
 }
 
@@ -1804,15 +1804,32 @@ function openCart() {
         }
 
         var cHtml = [];
+
+        var customerHTML = `
+            <div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden; background:#fff;">
+                <div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-weight:bold; font-size:14px; color:var(--text-main);"><i class="fas fa-user" style="color:var(--myntra-pink);"></i> Customer Details</div>
+                    <i class="fas fa-edit" onclick="openCustomerDetailsModal()" style="cursor:pointer; color:var(--myntra-pink); font-size:14px;"></i>
+                </div>
+                <div id="cartCustomerDetailsBody" style="padding:10px; font-size:13px; color:var(--text-main); line-height:1.5;">
+                    Loading...
+                </div>
+            </div>
+        `;
+        cHtml.push(customerHTML);
+
         for (var r in grouped) {
             var g = grouped[r];
             var pTot = 0;
             g.items.forEach(function (i) { pTot += (parseInt(i.qty) || 0); });
 
             cHtml.push('<div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden;">');
-            cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); cursor:pointer;" onclick="closeCart(true); setTimeout(()=>{openDetail(\'' + g.p.id + '\');},100);">');
+            cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">');
+            cHtml.push('<div style="cursor:pointer; flex:1;" onclick="closeCart(true); setTimeout(()=>{openDetail(\'' + g.p.id + '\');},100);">');
             cHtml.push('<div style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></div>');
             cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
+            cHtml.push('</div>');
+            cHtml.push('<i class="fas fa-edit" onclick="openCartEditModal(\'' + g.p.id + '\')" style="cursor:pointer; color:var(--myntra-pink); font-size:18px; padding: 10px;"></i>');
             cHtml.push('</div><div style="display:flex; flex-wrap:wrap; gap:10px; padding:10px;">');
 
             g.items.forEach(function (item) {
@@ -1837,6 +1854,7 @@ function openCart() {
             cb.innerHTML = '<div style="text-align:center; padding:40px 20px; color:var(--text-light); font-weight:bold;">Your Cart is empty.</div>';
         } else {
             cb.innerHTML = cHtml.join('');
+            loadCartCustomerDetails();
 
             // Progressive load Cart images
             setTimeout(() => {
@@ -2886,4 +2904,253 @@ async function logout() {
         console.error("Logout failed", err);
         alert("Logout failed: " + err.message);
     }
+}
+
+// ====================================
+// 🛒 CART CUSTOMER DETAILS & EDIT MODALS
+// ====================================
+
+var _currentEditProductId = null;
+
+async function fetchCustomerDetailsFromDB() {
+    if (!activeUser) return null;
+    try {
+        var token = "";
+        if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+            token = await firebase.auth().currentUser.getIdToken();
+        }
+        var headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        
+        var query = {
+            structuredQuery: {
+                from: [{ collectionId: "Users" }],
+                where: {
+                    fieldFilter: {
+                        field: { fieldPath: "phone" },
+                        op: "EQUAL",
+                        value: { stringValue: activeUser }
+                    }
+                },
+                limit: 1
+            }
+        };
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(query)
+        });
+        var data = await res.json();
+        if (data && data.length > 0 && data[0].document) {
+            var f = data[0].document.fields;
+            var d = {
+                name: f.name ? f.name.stringValue : "",
+                firm: f.firm ? f.firm.stringValue : "",
+                station: f.station ? f.station.stringValue : "",
+                state: f.state ? f.state.stringValue : "",
+                phone: f.phone ? f.phone.stringValue : "",
+                docId: data[0].document.name.split('/').pop()
+            };
+            localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
+            return d;
+        }
+    } catch(e) { console.error(e); }
+    return null;
+}
+
+function loadCartCustomerDetails() {
+    var detailsBody = document.getElementById('cartCustomerDetailsBody');
+    if (!detailsBody) return;
+    
+    var stored = localStorage.getItem("dsCustomerDetails");
+    if (stored) {
+        try {
+            var d = JSON.parse(stored);
+            renderCustomerDetails(d, detailsBody);
+        } catch(e) {}
+    } else {
+        detailsBody.innerText = "Fetching details...";
+        fetchCustomerDetailsFromDB().then(d => {
+            if (d) {
+                renderCustomerDetails(d, detailsBody);
+            } else {
+                detailsBody.innerHTML = "<i>No details found. Please edit.</i>";
+            }
+        });
+    }
+}
+
+function renderCustomerDetails(d, container) {
+    if(!container) return;
+    var html = "<b>" + esc(d.name) + "</b><br>";
+    if (d.firm) html += "Firm: " + esc(d.firm) + "<br>";
+    html += "Phone: " + esc(d.phone || activeUser) + "<br>";
+    html += "Station: " + esc(d.station) + ", State: " + esc(d.state);
+    container.innerHTML = html;
+}
+
+async function openCustomerDetailsModal() {
+    var d = null;
+    var stored = localStorage.getItem("dsCustomerDetails");
+    if (stored) {
+        try { d = JSON.parse(stored); } catch(e) {}
+    }
+    if (!d) {
+        d = await fetchCustomerDetailsFromDB();
+    }
+    
+    document.getElementById('cdName').value = d ? d.name : "";
+    document.getElementById('cdFirm').value = d ? d.firm : "";
+    document.getElementById('cdPhone').value = (d && d.phone) ? d.phone : (activeUser || "");
+    document.getElementById('cdStation').value = d ? d.station : "";
+    document.getElementById('cdState').value = d ? d.state : "";
+    document.getElementById('cdErr').innerText = "";
+    
+    openModal('customerDetailsModal');
+}
+
+async function saveCustomerDetails() {
+    var btn = document.getElementById('btnSaveCustomerDetails');
+    var err = document.getElementById('cdErr');
+    var name = document.getElementById('cdName').value.trim();
+    var firm = document.getElementById('cdFirm').value.trim();
+    var phone = document.getElementById('cdPhone').value.trim() || activeUser;
+    var station = document.getElementById('cdStation').value.trim();
+    var state = document.getElementById('cdState').value.trim();
+    
+    if(!name || !station || !state) {
+        err.innerText = "Please fill all required fields.";
+        return;
+    }
+    
+    btn.innerText = "Saving...";
+    var d = { name: name, firm: firm, phone: phone, station: station, state: state };
+    var stored = localStorage.getItem("dsCustomerDetails");
+    var docId = null;
+    if (stored) {
+        try { docId = JSON.parse(stored).docId; } catch(e) {}
+    }
+    if(docId) d.docId = docId;
+    
+    // Save locally immediately for fast UI
+    localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
+    loadCartCustomerDetails();
+    
+    // Save to Firestore
+    try {
+        var token = "";
+        if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+            token = await firebase.auth().currentUser.getIdToken();
+        }
+        var headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        
+        var doc = {
+            fields: {
+                name: { stringValue: name },
+                firm: { stringValue: firm },
+                station: { stringValue: station },
+                state: { stringValue: state },
+                phone: { stringValue: phone }
+            }
+        };
+        
+        if (docId) {
+            // Update existing
+            await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + docId + "?updateMask.fieldPaths=name&updateMask.fieldPaths=firm&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=phone", {
+                method: "PATCH",
+                headers: headers,
+                body: JSON.stringify(doc)
+            });
+        } else {
+            // Create new
+            doc.fields.createdAt = { timestampValue: new Date().toISOString() };
+            var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
+                method: "POST",
+                headers: headers,
+                body: JSON.stringify(doc)
+            });
+            var data = await res.json();
+            if(data.name) {
+                d.docId = data.name.split('/').pop();
+                localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
+            }
+        }
+    } catch(e) { console.error("Firestore save err", e); }
+    
+    btn.innerText = "SAVE DETAILS";
+    closeModals();
+}
+
+function openCartEditModal(productId) {
+    _currentEditProductId = productId;
+    var items = [];
+    var sampleItem = null;
+    for (var k in cart) {
+        if (cart[k].p && cart[k].p.id === productId) {
+            items.push(cart[k]);
+            if (!sampleItem) sampleItem = cart[k];
+        }
+    }
+    if (!sampleItem) return;
+    
+    document.getElementById('cartEditProductName').innerText = sampleItem.p.name + " (SKU: " + (sampleItem.p.sku || "-") + ")";
+    document.getElementById('ceRate').value = sampleItem.p.price;
+    document.getElementById('cePacking').value = sampleItem.p.packing || "1";
+    
+    var listHtml = "";
+    items.forEach(item => {
+        var dLabel = item.design === 'DIRECT' ? 'Cover' : item.design;
+        listHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
+                    '<span style="font-size:13px; color:var(--text-main);">' + dLabel + '</span>' +
+                    '<input type="number" id="ceQty_' + item.design + '" value="' + item.qty + '" style="width:60px; padding:4px; border:1px solid #ccc; border-radius:4px; text-align:center;">' +
+                    '</div>';
+    });
+    document.getElementById('ceDesignsList').innerHTML = listHtml;
+    
+    openModal('cartEditModal');
+}
+
+function saveCartProductEdit() {
+    if (!_currentEditProductId) return;
+    
+    var newRate = parseInt(document.getElementById('ceRate').value) || 0;
+    var newPacking = document.getElementById('cePacking').value.trim() || "1";
+    
+    var items = [];
+    for (var k in cart) {
+        if (cart[k].p && cart[k].p.id === _currentEditProductId) {
+            items.push(cart[k]);
+        }
+    }
+    
+    items.forEach(item => {
+        var qtyInput = document.getElementById('ceQty_' + item.design);
+        if (qtyInput) {
+            var newQty = parseInt(qtyInput.value) || 0;
+            if (newQty <= 0) {
+                delete cart[_currentEditProductId + "_" + item.design];
+            } else {
+                item.qty = newQty;
+                item.p.price = newRate;
+                item.p.packing = newPacking;
+                cart[_currentEditProductId + "_" + item.design] = item;
+            }
+        }
+    });
+    
+    var edited = {};
+    try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch(e){}
+    edited[items[0].p.name] = { price: newRate, packing: newPacking };
+    localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
+    
+    var matchP = allProducts.find(x => x.id === _currentEditProductId);
+    if(matchP) {
+        matchP.price = newRate;
+        matchP.packing = newPacking;
+    }
+    
+    localStorage.setItem("dsCart", JSON.stringify(cart));
+    closeModals();
+    openCart();
 }
