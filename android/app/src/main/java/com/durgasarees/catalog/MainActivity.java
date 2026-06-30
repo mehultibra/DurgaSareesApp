@@ -24,7 +24,13 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         // Enforce White Navigation Bar with Dark Icons
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
+            getWindow().getInsetsController().setSystemBarsAppearance(
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            );
+        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
             android.view.View decorView = getWindow().getDecorView();
             int flags = decorView.getSystemUiVisibility();

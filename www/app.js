@@ -613,27 +613,20 @@ function listDBKeysForPrefix(prefix) {
         return new Promise((resolve) => {
             var tx = db.transaction(storeName, "readonly");
             var store = tx.objectStore(storeName);
-            var boundKeyRange = IDBKeyRange.bound(prefix, prefix + '\uffff');
-            if (store.getAllKeys) {
-                var req = store.getAllKeys(boundKeyRange);
-                req.onsuccess = function(e) {
-                    resolve(e.target.result || []);
-                };
-                req.onerror = () => resolve([]);
-            } else {
-                var keys = [];
-                var req = store.openKeyCursor(boundKeyRange);
-                req.onsuccess = function(e) {
-                    var cursor = e.target.result;
-                    if (cursor) {
+            var keys = [];
+            var req = store.openKeyCursor();
+            req.onsuccess = function(e) {
+                var cursor = e.target.result;
+                if (cursor) {
+                    if (String(cursor.key).startsWith(prefix)) {
                         keys.push(cursor.key);
-                        cursor.continue();
-                    } else {
-                        resolve(keys);
                     }
-                };
-                req.onerror = () => resolve([]);
-            }
+                    cursor.continue();
+                } else {
+                    resolve(keys);
+                }
+            };
+            req.onerror = () => resolve([]);
         });
     }).catch(() => []);
 }
