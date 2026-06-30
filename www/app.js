@@ -2455,28 +2455,6 @@ async function syncImages() {
                     } catch(e) {
                         lastFailReason = "Cover fetch: " + (e.name === 'AbortError' ? 'Timeout (30s)' : e.message);
                     }
-
-                    // ── 4. Download remaining design files if not already cached ──
-                    if (downloaded) {
-                        for (var fi = 0; fi < folderFiles.length; fi++) {
-                            var fname    = folderFiles[fi];
-                            if (fname === coverFile) continue; // already downloaded above
-                            var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                            var existing  = await getImageFromDB(designUrl);
-                            if (existing) continue; // already in cache
-                            try {
-                                const ctrl3 = new AbortController();
-                                const tid3  = setTimeout(() => ctrl3.abort(), 30000);
-                                var dRes = await fetch(designUrl, { signal: ctrl3.signal });
-                                clearTimeout(tid3);
-                                if (dRes.ok) {
-                                    await saveImageToDB(designUrl, await dRes.blob());
-                                }
-                            } catch(e) {
-                                console.warn("[SYNC] Design fetch failed:", fname, e.message);
-                            }
-                        }
-                    }
                 }
 
                 // ── 5. Track errors ───────────────────────────────────────────
@@ -3532,6 +3510,7 @@ async function resyncFailedProducts() {
             if (res.ok) {
                 var blob = await res.blob();
                 await saveImageToDB(gridImgUrl, blob);
+                await saveImageToDB(p.gridUrl, blob); // 🛡️ CRITICAL: Save using folder path key!
                 
                 // Update local cache mappings
                 window.coverExistsMap = window.coverExistsMap || {};
