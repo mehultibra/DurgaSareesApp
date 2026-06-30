@@ -2345,6 +2345,10 @@ async function syncImages() {
                     clearTimeout(tid);
                     if (listRes.ok) {
                         var listData  = await listRes.json();
+                        if (!window.dsFolderCache) window.dsFolderCache = {};
+                        window.dsFolderCache[listUrl] = listData.items || [];
+                        try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
+                        
                         folderFiles   = (listData.items || [])
                             .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
                             .filter(f  => /\.(webp|jpg|jpeg|png)$/i.test(f));
