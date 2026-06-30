@@ -2,10 +2,6 @@
   "appId": "com.durgasarees.app",
   "appName": "DurgaSarees",
   "webDir": "www",
-  "server": {
-    "url": "https://durga-sarees.web.app",
-    "cleartext": true
-  },
   "plugins": {
     "FirebaseAuthentication": {
       "providers": ["phone"]
