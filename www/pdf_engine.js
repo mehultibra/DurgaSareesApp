@@ -229,6 +229,15 @@ async function generateCartOrderPDF(actionType) {
                         item._pdfImgSrc = await getBase64ImageFromUrl(domSrc);
                     }
                 }
+
+                // If still no image (e.g. design missing), fallback to cover image
+                if (!item._pdfImgSrc && dId !== 'DIRECT' && gridUrl) {
+                    var fallbackCoverUrl = getDesignFirebaseUrl(gridUrl, 'DIRECT');
+                    item._pdfImgSrc = await getBase64ImageFast(fallbackCoverUrl);
+                    if (!item._pdfImgSrc) {
+                        item._pdfImgSrc = await getBase64ImageFromUrl(fallbackCoverUrl);
+                    }
+                }
             }
         }
 

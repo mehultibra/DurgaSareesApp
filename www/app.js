@@ -771,6 +771,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 }
             } else if (fileToFetch === targetFile && targetFile !== "01.webp") {
                 if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
+                showPlaceholder();
             } else {
                 tryToLoadLatestReadyDesign();
             }
@@ -1332,7 +1333,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         // Get the grid/cover image source synchronously for instant placeholder rendering
         // Only use it if it's already a local Blob URL to avoid making duplicate network requests
         var gridImgEl = document.getElementById("img_" + p.id);
-        var initialSrc = (gridImgEl && gridImgEl.src && gridImgEl.src.startsWith("blob:")) ? gridImgEl.src : "";
+        var initialSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.includes("placehold.co") && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
 
         var html = '';
         files.forEach((file, idx) => {
@@ -1354,7 +1355,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 html += `
                 <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
-                    <img id="${imgId}" src="${file.cachedUrl || file.gridUrl || ''}" data-loaded-zoom="${file.isZoom ? 'true' : 'false'}">
+                    <img id="${imgId}" src="${file.cachedUrl || initialSrc || file.gridUrl || ''}" data-loaded-zoom="${file.isZoom ? 'true' : 'false'}">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
@@ -2290,7 +2291,10 @@ async function syncImages() {
                 var folderItems = [];
                 var listSuccess = false;
                 try {
-                    var listRes = await fetch(listUrl);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 15000);
+                    var listRes = await fetch(listUrl, { signal: controller.signal });
+                    clearTimeout(timeoutId);
                     if (listRes.ok) {
                         var listData = await listRes.json();
                         folderItems = (listData.items || []).map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
@@ -2316,7 +2320,10 @@ async function syncImages() {
                         var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
                         
                         try {
-                            var res = await fetch(coverUrl);
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 30000);
+                            var res = await fetch(coverUrl, { signal: controller.signal });
+                            clearTimeout(timeoutId);
                             if (res.ok) {
                                 var blob = await res.blob();
                                 await saveImageToDB(p.gridUrl, blob); // Overwrite cache to replace/remove old images
@@ -2367,7 +2374,10 @@ async function syncImages() {
 
                     for (var u = 0; u < designUrlsToTry.length; u++) {
                         try {
-                            const response = await fetch(designUrlsToTry[u]);
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 30000);
+                            const response = await fetch(designUrlsToTry[u], { signal: controller.signal });
+                            clearTimeout(timeoutId);
                             if (response.ok) {
                                 const blob = await response.blob();
                                 var saved = await saveImageToDB(designKey, blob);
@@ -3137,11 +3147,15 @@ function saveCartInlineEdit(productId) {
 function openSyncReportModal() {
     closeModals();
     openModal('syncReportModal');
-    document.getElementById('syncReportBody').innerHTML = '';
-    document.getElementById('syncReportStatus').innerText = 'Ready to scan.';
-    document.getElementById('syncReportProgress').style.display = 'none';
-    document.getElementById('btnRunSyncReport').disabled = false;
-    document.getElementById('chkShowCompletedSync').checked = false;
+    if (!window.syncReportResults || window.syncReportResults.length === 0) {
+        document.getElementById('syncReportBody').innerHTML = '';
+        document.getElementById('syncReportStatus').innerText = 'Ready to scan.';
+        document.getElementById('syncReportProgress').style.display = 'none';
+        document.getElementById('btnRunSyncReport').disabled = false;
+        document.getElementById('chkShowCompletedSync').checked = false;
+    } else {
+        renderSyncReportPartial();
+    }
 }
 
 window.syncReportResults = [];
@@ -3222,9 +3236,36 @@ function renderSyncReportPartial() {
     var html = '';
     var errorCount = 0;
     
+    // Category Wise Tally
+    var catTotals = {};
     for (var i = 0; i < window.syncReportResults.length; i++) {
         var r = window.syncReportResults[i];
         if (r.status === 'error') errorCount++;
+        
+        var pMatch = window.allProducts.find(p => p.id === r.id);
+        var cat = (pMatch && pMatch.cat) ? pMatch.cat : 'Uncategorized';
+        if (!catTotals[cat]) catTotals[cat] = { total: 0, error: 0, ok: 0, images: 0 };
+        catTotals[cat].total++;
+        if (r.status === 'error') catTotals[cat].error++;
+        else {
+            catTotals[cat].ok++;
+            catTotals[cat].images += (r.imageCount || 0);
+        }
+    }
+    
+    var summaryHtml = '<div style="margin-bottom:15px; padding:10px; background:#e3f2fd; border:1px solid #bbdefb; border-radius:6px;">';
+    summaryHtml += '<div style="font-weight:bold; color:#1565c0; margin-bottom:8px; font-size:14px;">Category Wise Tally</div>';
+    for(var c in catTotals) {
+        summaryHtml += `<div style="font-size:12px; color:#0d47a1; display:flex; justify-content:space-between; margin-bottom:4px; padding-bottom:4px; border-bottom:1px dashed #bbdefb;">
+            <span><b>${c}</b></span>
+            <span>Total: ${catTotals[c].total} | OK: ${catTotals[c].ok} | Err: ${catTotals[c].error} | Imgs: ${catTotals[c].images}</span>
+        </div>`;
+    }
+    summaryHtml += '</div>';
+    html += summaryHtml;
+    
+    for (var i = 0; i < window.syncReportResults.length; i++) {
+        var r = window.syncReportResults[i];
         
         if (r.status === 'completed' && !showCompleted) continue;
         
