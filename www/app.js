@@ -1043,85 +1043,42 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
     if (imgEl.getAttribute('data-loaded-zoom') === 'true') {
         return; // Already loaded zoom image from cache!
     }
-    var cacheKey = url;
-
-    // Check if we are already in the process of retrying
-    var isRetry = imgEl.dataset.retrying === "true";
-
-    getImageFromDB(cacheKey).then(blob => {
+    
+    getImageFromDB(url).then(async blob => {
         if (blob) {
-            // Found in cache!
+            // Found ZOOM in cache!
             imgEl.src = URL.createObjectURL(blob);
             imgEl.dataset.loadedZoom = "true";
-            imgEl.dataset.retrying = "";
-
-            // Live update FS modal if open on this design
-            if (typeof fsDesignId !== 'undefined' && fsDesignId === fileName && curProduct && curProduct.id === productId) {
-                var fsImg = document.getElementById('fsImg');
-                if (fsImg && fsImg.style.display !== 'none') {
-                    fsImg.src = imgEl.src;
-                }
-            }
         } else {
-            // If it's not a retry, let's load grid image from IndexedDB cache if our src is empty or uses constructed firebase URL
-            if (!isRetry) {
-                if (designGridUrl) {
-                    getCachedImageBlob(designGridUrl).then(gridBlob => {
-                        if (gridBlob && imgEl && !imgEl.dataset.loadedZoom) {
-                            imgEl.src = URL.createObjectURL(gridBlob);
-                        }
-                    }).catch(e => {
-                        console.warn("Error getting design grid image blob from cache", e);
-                    });
+            // Try to find the GRID image in cache using robust key resolution
+            if (designGridUrl && window.findDesignKeyInCache) {
+                var gridCacheKey = await window.findDesignKeyInCache(designGridUrl, fileName);
+                if (gridCacheKey) {
+                    var gridBlob = await getImageFromDB(gridCacheKey);
+                    if (gridBlob && !imgEl.dataset.loadedZoom) {
+                        imgEl.src = URL.createObjectURL(gridBlob);
+                    }
                 }
             }
-
+            
+            // Fetch high-res Zoom from network in background
             fetch(url)
                 .then(res => {
                     if (!res.ok) throw new Error("HTTP error " + res.status);
                     return res.blob();
                 })
                 .then(newBlob => {
-                    saveImageToDB(cacheKey, newBlob);
+                    saveImageToDB(url, newBlob);
                     var zoomObjectUrl = URL.createObjectURL(newBlob);
-                    imgEl.src = zoomObjectUrl;
-                    imgEl.dataset.loadedZoom = "true";
-                    imgEl.dataset.retrying = "";
-
-                    // Live update FS modal if open on this design
-                    if (typeof fsDesignId !== 'undefined' && fsDesignId === fileName && curProduct && curProduct.id === productId) {
-                        var fsImg = document.getElementById('fsImg');
-                        if (fsImg && fsImg.style.display !== 'none') {
-                            fsImg.src = zoomObjectUrl;
-                        }
+                    if (!imgEl.dataset.loadedZoom) {
+                        imgEl.src = zoomObjectUrl;
+                        imgEl.dataset.loadedZoom = "true";
                     }
                 })
                 .catch(err => {
-                    console.error("Network fetch failed for design image, trying fallback", err);
-                    if (url.includes('%2F0')) {
-                        var fallbackUrl = url.replace('%2F0', '%2F');
-                        imgEl.dataset.retrying = "true";
-                        loadAndCacheDesignImage(imgEl, fallbackUrl, designGridUrl, productId, fileName);
-                    } else {
-                        imgEl.dataset.retrying = "";
-                        imgEl.onerror = null;
-                        imgEl.src = missingDesignSvg;
-                    }
+                    // Fail silently if offline, grid image from cache remains visible
                 });
         }
-    }).catch(err => {
-        console.error("Cache read failed, loading directly", err);
-        // Fallback: load directly from url
-        imgEl.onerror = function () {
-            if (url.includes('%2F0')) {
-                var fallbackUrl = url.replace('%2F0', '%2F');
-                loadAndCacheDesignImage(imgEl, fallbackUrl, designGridUrl, productId, fileName);
-            } else {
-                imgEl.onerror = null;
-                imgEl.src = missingDesignSvg;
-            }
-        };
-        imgEl.src = url;
     });
 }
 
@@ -1271,40 +1228,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
         });
 
         if (validFiles.length > 0) {
-            var hasVideo = validFiles.some(f => f.isVideo);
-            var currentNames = validFiles.map(f => String(f.name).toLowerCase()).join(',');
+            renderSwipeDeck(validFiles);
 
-            if (hasVideo || window.lastRenderedDesignNames !== currentNames) {
-                Promise.all(validFiles.map(file => {
-                    if (file.isVideo) return Promise.resolve();
-                    return getCachedDesignUrl(file.url, file.gridUrl).then(res => {
-                        if (res.src) {
-                            file.cachedUrl = res.src;
-                            file.isZoom = res.isZoom;
-                        }
-                    }).catch(() => { });
-                })).then(() => {
-                    renderSwipeDeck(validFiles);
-                });
-            } else {
-                // Soft update to prevent blink: update srcs only
-                validFiles.forEach((file, idx) => {
-                    var imgEl = document.getElementById("design_img_" + p.id + "_" + idx);
-                    if (imgEl && !file.isVideo) {
-                        getCachedDesignUrl(file.url, file.gridUrl).then(res => {
-                            if (res.src) {
-                                file.cachedUrl = res.src;
-                                file.isZoom = res.isZoom;
-                                imgEl.src = res.src;
-                            } else {
-                                imgEl.src = file.gridUrl;
-                            }
-                        }).catch(() => { 
-                            imgEl.src = file.gridUrl; 
-                        });
-                    }
-                });
-            }
         } else {
             // Firebase Storage folder is empty: Clear fallback cards and show only the cover image
             var gridImgEl = document.getElementById("img_" + p.id);
@@ -1367,10 +1292,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         renderedFilesJson = JSON.stringify(files);
         window.lastRenderedDesignNames = files.map(f => String(f.name).toLowerCase()).join(',');
 
-        // Get the grid/cover image source synchronously for instant placeholder rendering
-        // Only use it if it's already a local Blob URL to avoid making duplicate network requests
-        var gridImgEl = document.getElementById("img_" + p.id);
-        var initialSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.includes("placehold.co") && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
+        var placeholderSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#f9f9fa"/></svg>');
 
         var html = '';
         files.forEach((file, idx) => {
@@ -1392,7 +1314,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 html += `
                 <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
-                    <img id="${imgId}" src="${file.cachedUrl || initialSrc || file.gridUrl || ''}" data-loaded-zoom="${file.isZoom ? 'true' : 'false'}">
+                    <img id="${imgId}" src="${placeholderSVG}" data-loaded-zoom="false">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
