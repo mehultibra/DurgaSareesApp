@@ -23,19 +23,21 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidBackBridgePlugin.class);
         super.onCreate(savedInstanceState);
 
-        // Enforce White Navigation Bar with Dark Icons
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
-            getWindow().getInsetsController().setSystemBarsAppearance(
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            );
-        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
-            android.view.View decorView = getWindow().getDecorView();
-            int flags = decorView.getSystemUiVisibility();
-            flags |= android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-            decorView.setSystemUiVisibility(flags);
+        // Enforce Black Navigation Bar
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().setNavigationBarColor(android.graphics.Color.BLACK);
+            // Clear any light navigation bar flags so icons are white
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                getWindow().getInsetsController().setSystemBarsAppearance(
+                    0, 
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                );
+            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                android.view.View decorView = getWindow().getDecorView();
+                int flags = decorView.getSystemUiVisibility();
+                flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                decorView.setSystemUiVisibility(flags);
+            }
         }
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {

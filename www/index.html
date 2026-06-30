@@ -372,6 +372,20 @@
     </div>
   </div>
 
+  <!-- Powerful Sync Report Modal -->
+  <div class="action-modal" id="syncReportModal" onclick="if(event.target===this) closeModals()"
+    style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; flex-direction: column; justify-content: center; align-items: center; padding: 20px;">
+    <div class="modal-content"
+      style="background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-height: 80vh; display: flex; flex-direction: column; text-align: left;">
+      <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 18px; color: var(--myntra-pink); display: flex; justify-content: space-between;">
+        Sync Report <i class="fas fa-times" onclick="closeModals()" style="cursor: pointer; color: #888;"></i>
+      </h3>
+      <div id="syncReportSummary" style="font-weight: bold; margin-bottom: 15px; font-size: 14px;"></div>
+      <div id="syncReportDetails" style="flex: 1; overflow-y: auto; font-size: 13px; color: #444; border-top: 1px solid #eee; padding-top: 10px;">
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=2"></script>

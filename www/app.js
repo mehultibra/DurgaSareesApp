@@ -2335,8 +2335,8 @@ async function syncImages() {
 
         if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
-        // Batch of 8 in parallel
-        var batchSize = 8;
+        // Batch of 2 in parallel to prevent overwhelming the OS network stack
+        var batchSize = 2;
         for (var i = 0; i < productsToSync.length; i += batchSize) {
             var batch = productsToSync.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
@@ -2482,15 +2482,34 @@ async function syncImages() {
         if (syncIcon) syncIcon.classList.remove('fa-spin');
 
         if (failed > 0) {
-            var failMsg = "Sync done: " + (total - failed) + " OK, " + failed + " failed.\n\nFailed:\n";
-            failedList.slice(0, 15).forEach(f => {
-                failMsg += "\n• " + f.name + "  [" + f.reason + "]";
-            });
-            if (failedList.length > 15) failMsg += "\n...and " + (failedList.length - 15) + " more.";
-            console.table(failedList);
-            alert(failMsg);
+            var elSum = document.getElementById('syncReportSummary');
+            var elDet = document.getElementById('syncReportDetails');
+            if (elSum && elDet) {
+                elSum.innerText = "Sync done: " + (total - failed) + " OK, " + failed + " failed.";
+                elSum.style.color = "var(--myntra-pink)";
+                var html = "";
+                failedList.forEach(f => {
+                    html += `<div style="margin-bottom: 8px; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px;">
+                                <span style="font-weight: bold;">${f.name}</span><br>
+                                <span style="color: red;">Error: ${f.reason}</span>
+                             </div>`;
+                });
+                elDet.innerHTML = html;
+                openModal('syncReportModal');
+            } else {
+                alert("Sync done. " + failed + " failed. (UI missing)");
+            }
         } else {
-            alert("✅ Sync complete! All " + total + " products synced.");
+            var elSum = document.getElementById('syncReportSummary');
+            var elDet = document.getElementById('syncReportDetails');
+            if (elSum && elDet) {
+                elSum.innerText = "✅ Sync complete!";
+                elSum.style.color = "#25D366";
+                elDet.innerHTML = "<div style='text-align:center; padding: 20px;'>All " + total + " products synced successfully!</div>";
+                openModal('syncReportModal');
+            } else {
+                alert("✅ Sync complete! All " + total + " products synced.");
+            }
         }
 
         initApp();
