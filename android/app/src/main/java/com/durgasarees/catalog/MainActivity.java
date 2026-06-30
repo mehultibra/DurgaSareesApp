@@ -23,6 +23,15 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidBackBridgePlugin.class);
         super.onCreate(savedInstanceState);
 
+        // Enforce White Navigation Bar with Dark Icons
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
+            android.view.View decorView = getWindow().getDecorView();
+            int flags = decorView.getSystemUiVisibility();
+            flags |= android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            decorView.setSystemUiVisibility(flags);
+        }
+
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {

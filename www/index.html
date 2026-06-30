@@ -28,7 +28,7 @@
 
 <body>
 
-  <div id="loginScreen" class="login-wrapper">
+  <div id="loginScreen" class="login-wrapper" style="display:none;">
     <div class="login-box" id="loginBoxPhone">
       <h2 style="color:var(--myntra-pink);">Durga Sarees</h2>
       
@@ -243,7 +243,7 @@
 
 
   <!-- Customer Details Edit Modal -->
-  <div id="customerDetailsModal" class="action-modal" onclick="closeModals()" style="justify-content: center; align-items: center; padding: 20px;">
+  <div id="customerDetailsModal" class="action-modal" onclick="closeModals()" style="display:none; justify-content: center; align-items: center; padding: 20px;">
     <div class="modal-content" style="border-radius: 12px; padding: 24px; width: 100%; max-width: 320px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: none;" onclick="event.stopPropagation()">
       <div class="modal-title" style="font-size:18px; color:var(--myntra-pink); font-weight:bold; border-bottom:none; padding-bottom:0; margin-bottom:10px;">
         Customer Details <i class="fas fa-times" style="cursor:pointer; color:var(--text-light); float:right; font-size:16px; margin-top:2px;" onclick="closeModals()"></i>
@@ -262,7 +262,7 @@
   </div>
 
   <!-- Sync Report Modal -->
-  <div id="syncReportModal" class="action-modal" onclick="closeModals()" style="justify-content: center; align-items: center; padding: 20px; z-index: 4000;">
+  <div id="syncReportModal" class="action-modal" onclick="closeModals()" style="display:none; justify-content: center; align-items: center; padding: 20px; z-index: 4000;">
     <div class="modal-content" style="border-radius: 12px; padding: 0; width: 100%; max-width: 400px; max-height: 85vh; display:flex; flex-direction:column; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: none;" onclick="event.stopPropagation()">
       <div class="modal-title" style="padding: 16px; border-bottom: 1px solid var(--border); font-size:18px; color:var(--myntra-pink); font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
         Sync Report 
