@@ -2448,6 +2448,7 @@ async function syncImages() {
                         if (coverRes.ok) {
                             var coverBlob = await coverRes.blob();
                             await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
+                            await saveImageToDB(coverUrl, coverBlob);  // 🛡️ CRITICAL: Also save under its full URL!
                             downloaded = true;
                         } else {
                             lastFailReason = "Cover HTTP " + coverRes.status;
