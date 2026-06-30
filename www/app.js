@@ -2455,6 +2455,31 @@ async function syncImages() {
                     } catch(e) {
                         lastFailReason = "Cover fetch: " + (e.name === 'AbortError' ? 'Timeout (30s)' : e.message);
                     }
+
+                    // ── 4. Download remaining design files (FAST PARALLEL BATCHING) ──
+                    if (downloaded) {
+                        var innerBatchSize = 10; // Download 10 inner images concurrently!
+                        var remainingFiles = folderFiles.filter(f => f !== coverFile);
+                        for (var fIdx = 0; fIdx < remainingFiles.length; fIdx += innerBatchSize) {
+                            var fBatch = remainingFiles.slice(fIdx, fIdx + innerBatchSize);
+                            await Promise.all(fBatch.map(async (fname) => {
+                                var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                                var existing  = await getImageFromDB(designUrl);
+                                if (existing) return; // already in cache
+                                try {
+                                    const ctrl3 = new AbortController();
+                                    const tid3  = setTimeout(() => ctrl3.abort(), 15000);
+                                    var dRes = await fetch(designUrl, { signal: ctrl3.signal });
+                                    clearTimeout(tid3);
+                                    if (dRes.ok) {
+                                        await saveImageToDB(designUrl, await dRes.blob());
+                                    }
+                                } catch(e) {
+                                    console.warn("[SYNC] Fast design fetch failed:", fname, e.message);
+                                }
+                            }));
+                        }
+                    }
                 }
 
                 // ── 5. Track errors ───────────────────────────────────────────
