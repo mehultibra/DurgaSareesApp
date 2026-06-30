@@ -2326,8 +2326,12 @@ window.fetchWithRetry = async function(url, options = {}, retries = 3) {
             var res = await fetch(url, options);
             if (res.ok) return res;
             if (res.status === 404) return res; // Don't retry true 404s
+            throw new Error("HTTP " + res.status);
         } catch (err) {
-            if (i === retries - 1) throw err;
+            if (i === retries - 1) {
+                if (err.message.includes("HTTP")) return res; // Return the failed response on last try
+                throw err; // Throw network errors
+            }
             await new Promise(r => setTimeout(r, 1000 + (i * 1000))); // Backoff
         }
     }
@@ -2392,8 +2396,9 @@ async function syncImages() {
 
         if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
-        // Batch of 2 in parallel to prevent overwhelming the OS network stack
-        var batchSize = 2;
+        // 🛡️ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
+        // This guarantees we never hit Samsung/Android OS TCP socket connection limits (ERR_INSUFFICIENT_RESOURCES).
+        var batchSize = 1;
         for (var i = 0; i < productsToSync.length; i += batchSize) {
             var batch = productsToSync.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
@@ -2497,7 +2502,7 @@ async function syncImages() {
 
                     // ── 4. Download remaining design files (FAST PARALLEL BATCHING) ──
                     if (downloaded) {
-                        var innerBatchSize = 10; // Download 10 inner images concurrently!
+                        var innerBatchSize = 5; // Download 5 inner images concurrently!
                         var remainingFiles = folderFiles.filter(f => f !== coverFile);
                         for (var fIdx = 0; fIdx < remainingFiles.length; fIdx += innerBatchSize) {
                             var fBatch = remainingFiles.slice(fIdx, fIdx + innerBatchSize);
@@ -3392,7 +3397,8 @@ async function runSyncReport() {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000);
-            var res = await fetch(listUrl, { signal: controller.signal });
+            // 🛡️ Bulletproof Retry applied to Sync Report
+            var res = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
             clearTimeout(timeoutId);
             
             if (!res.ok) {
@@ -3545,7 +3551,8 @@ async function resyncFailedProducts() {
             // 1. Fetch directory listing first
             var prefix = cleanGridPath + "/";
             var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix + "&delimiter=/";
-            var listRes = await fetch(listUrl, { signal: controller.signal });
+            // 🛡️ Bulletproof Retry applied to Resync
+            var listRes = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
             
             if (!listRes.ok) {
                 clearTimeout(timeoutId);
@@ -3569,7 +3576,7 @@ async function resyncFailedProducts() {
             var gridImgUrl = fbBase + cleanGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
             
             // 2. Fetch the actual cover image
-            var res = await fetch(gridImgUrl, { signal: controller.signal });
+            var res = await window.fetchWithRetry(gridImgUrl, { signal: controller.signal }, 3);
             clearTimeout(timeoutId);
             
             if (res.ok) {
