@@ -613,20 +613,27 @@ function listDBKeysForPrefix(prefix) {
         return new Promise((resolve) => {
             var tx = db.transaction(storeName, "readonly");
             var store = tx.objectStore(storeName);
-            var keys = [];
-            var req = store.openKeyCursor();
-            req.onsuccess = function(e) {
-                var cursor = e.target.result;
-                if (cursor) {
-                    if (String(cursor.key).startsWith(prefix)) {
+            var boundKeyRange = IDBKeyRange.bound(prefix, prefix + '\uffff');
+            if (store.getAllKeys) {
+                var req = store.getAllKeys(boundKeyRange);
+                req.onsuccess = function(e) {
+                    resolve(e.target.result || []);
+                };
+                req.onerror = () => resolve([]);
+            } else {
+                var keys = [];
+                var req = store.openKeyCursor(boundKeyRange);
+                req.onsuccess = function(e) {
+                    var cursor = e.target.result;
+                    if (cursor) {
                         keys.push(cursor.key);
+                        cursor.continue();
+                    } else {
+                        resolve(keys);
                     }
-                    cursor.continue();
-                } else {
-                    resolve(keys);
-                }
-            };
-            req.onerror = () => resolve([]);
+                };
+                req.onerror = () => resolve([]);
+            }
         });
     }).catch(() => []);
 }
@@ -643,7 +650,11 @@ window.findDesignKeyInCache = async function(gridUrl, designLabel) {
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
     var prefix = fbBase + encGridPath + "%2F";
     
-    var keys = await listDBKeysForPrefix(prefix);
+    if (!window.designKeyPrefixCache) window.designKeyPrefixCache = {};
+    if (!window.designKeyPrefixCache[prefix]) {
+        window.designKeyPrefixCache[prefix] = await listDBKeysForPrefix(prefix);
+    }
+    var keys = window.designKeyPrefixCache[prefix];
     if (!keys || keys.length === 0) return null;
     
     var targetNum = parseInt(String(designLabel).replace(/\D/g, ''));
@@ -1285,6 +1296,14 @@ function openDetail(productId, skipShow, keepSearchShown) {
             })
             .catch(err => {
                 console.warn("Background folder list load failed", err);
+                // 🛡️ OFFLINE FALLBACK: Generate dummy array from p.designs
+                var fallbackItems = [];
+                for (var i = 1; i <= totalCards; i++) {
+                    var n = String(i);
+                    if (n.length === 1) n = "0" + n;
+                    fallbackItems.push({ name: listPrefix + n + ".webp" });
+                }
+                processFolderItems(fallbackItems);
             });
     }
 
