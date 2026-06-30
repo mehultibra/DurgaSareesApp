@@ -166,6 +166,20 @@ async function generateCartOrderPDF(actionType) {
                 
                 var cacheKey = await window.findDesignKeyInCache(gridUrl, dId);
                 var blob = cacheKey ? await getImageFromDB(cacheKey) : null;
+                
+                // Fallback to network if completely missing from cache
+                if (!blob && dId !== 'DIRECT' && dId !== 'Cover') {
+                    var cleanNum2 = dId.replace(/\D/g, '');
+                    if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
+                    if (!cleanNum2) cleanNum2 = dId;
+                    var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
+                    
+                    try {
+                        var res = await fetch(fallbackUrl);
+                        if (res.ok) blob = await res.blob();
+                    } catch(e) {}
+                }
+
                 if (blob) {
                     item._pdfImgSrc = await blobToBase64Direct(blob);
                     if (!item._pdfImgSrc) {

@@ -99,6 +99,13 @@ try {
 
 window.addEventListener('DOMContentLoaded', function () {
     try {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
+            try {
+                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
+                window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#ffffff' });
+            } catch(e) {}
+        }
+        
         try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
         try { cart = JSON.parse(localStorage.getItem("dsCart")) || {}; } catch (e) { }
         try { favorites = JSON.parse(localStorage.getItem("dsFavs")) || {}; } catch (e) { }
