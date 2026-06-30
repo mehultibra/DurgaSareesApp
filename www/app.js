@@ -1054,36 +1054,61 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
             imgEl.src = URL.createObjectURL(blob);
             imgEl.dataset.loadedZoom = "true";
         } else {
-            // Try to find the GRID image in cache using robust key resolution
-            if (designGridUrl && window.findDesignKeyInCache) {
-                var gridCacheKey = await window.findDesignKeyInCache(designGridUrl, fileName);
-                if (gridCacheKey) {
-                    var gridBlob = await getImageFromDB(gridCacheKey);
-                    if (gridBlob && !imgEl.dataset.loadedZoom) {
-                        imgEl.src = URL.createObjectURL(gridBlob);
-                    }
+            // Check if GRID image is in cache
+            var gridBlob = null;
+            if (designGridUrl) {
+                gridBlob = await getImageFromDB(designGridUrl);
+                // Also check alternative key if needed
+                if (!gridBlob && window.findDesignKeyInCache) {
+                    var altKey = await window.findDesignKeyInCache(designGridUrl, fileName);
+                    if (altKey) gridBlob = await getImageFromDB(altKey);
                 }
             }
             
-            // Fetch high-res Zoom from network in background
-            fetch(url)
-                .then(res => {
-                    if (!res.ok) throw new Error("HTTP error " + res.status);
-                    return res.blob();
-                })
-                .then(newBlob => {
-                    saveImageToDB(url, newBlob);
-                    var zoomObjectUrl = URL.createObjectURL(newBlob);
-                    if (!imgEl.dataset.loadedZoom) {
-                        imgEl.src = zoomObjectUrl;
-                        imgEl.dataset.loadedZoom = "true";
-                    }
-                })
-                .catch(err => {
-                    // Fail silently if offline, grid image from cache remains visible
-                });
+            if (gridBlob && !imgEl.dataset.loadedZoom) {
+                imgEl.src = URL.createObjectURL(gridBlob);
+                fetchZoomInBackground(url, imgEl);
+            } else if (designGridUrl) {
+                // Not in cache at all! Fetch GRID image FIRST so customer sees it instantly!
+                fetch(designGridUrl)
+                    .then(res => {
+                        if (!res.ok) throw new Error("HTTP error " + res.status);
+                        return res.blob();
+                    })
+                    .then(newGridBlob => {
+                        saveImageToDB(designGridUrl, newGridBlob);
+                        if (!imgEl.dataset.loadedZoom) {
+                            imgEl.src = URL.createObjectURL(newGridBlob);
+                        }
+                        // Now fetch zoom in background
+                        fetchZoomInBackground(url, imgEl);
+                    })
+                    .catch(err => {
+                        // Fallback directly to zoom if grid fails
+                        fetchZoomInBackground(url, imgEl);
+                    });
+            } else {
+                fetchZoomInBackground(url, imgEl);
+            }
         }
     });
+}
+
+function fetchZoomInBackground(zoomUrl, imgEl) {
+    if (!zoomUrl) return;
+    fetch(zoomUrl)
+        .then(res => {
+            if (!res.ok) throw new Error("HTTP error " + res.status);
+            return res.blob();
+        })
+        .then(newZoomBlob => {
+            saveImageToDB(zoomUrl, newZoomBlob);
+            if (!imgEl.dataset.loadedZoom) {
+                imgEl.src = URL.createObjectURL(newZoomBlob);
+                imgEl.dataset.loadedZoom = "true";
+            }
+        })
+        .catch(err => {});
 }
 
 function openDetail(productId, skipShow, keepSearchShown) {
@@ -2495,7 +2520,7 @@ async function syncImages() {
                              </div>`;
                 });
                 elDet.innerHTML = html;
-                openModal('syncReportModal');
+                openModal('syncResultsModal');
             } else {
                 alert("Sync done. " + failed + " failed. (UI missing)");
             }
@@ -2506,7 +2531,7 @@ async function syncImages() {
                 elSum.innerText = "✅ Sync complete!";
                 elSum.style.color = "#25D366";
                 elDet.innerHTML = "<div style='text-align:center; padding: 20px;'>All " + total + " products synced successfully!</div>";
-                openModal('syncReportModal');
+                openModal('syncResultsModal');
             } else {
                 alert("✅ Sync complete! All " + total + " products synced.");
             }
@@ -3335,6 +3360,19 @@ async function runSyncReport() {
             result.error = "Failed: " + (e.name === 'AbortError' ? 'Connection Timeout (15s)' : e.message);
             result.status = 'error';
         }
+        
+        // Ensure grid image is in memory
+        try {
+            var isGridInMemory = await getImageFromDB(p.gridUrl);
+            if (!isGridInMemory) {
+                if (result.status !== 'error') {
+                    result.error = "Grid missing from memory";
+                    result.status = 'error';
+                } else {
+                    result.error += " | Grid missing";
+                }
+            }
+        } catch(e) {}
         
         window.syncReportResults.push(result);
         renderSyncReportPartial();

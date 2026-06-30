@@ -23,10 +23,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidBackBridgePlugin.class);
         super.onCreate(savedInstanceState);
 
-        // Enforce White Navigation Bar initially
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
-        }
+        enforceLightNavBar();
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -47,10 +44,7 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        // Enforce White Navigation Bar with Dark Icons continuously (Capacitor sometimes resets this)
+    private void enforceLightNavBar() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
             getWindow().getInsetsController().setSystemBarsAppearance(
@@ -63,6 +57,26 @@ public class MainActivity extends BridgeActivity {
             int flags = decorView.getSystemUiVisibility();
             flags |= android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
             decorView.setSystemUiVisibility(flags);
+        }
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        enforceLightNavBar();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        enforceLightNavBar();
+    }
+    
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            enforceLightNavBar();
         }
     }
 }
