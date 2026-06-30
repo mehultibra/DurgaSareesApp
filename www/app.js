@@ -1884,7 +1884,7 @@ function openCart() {
                                 // Design image key: full Firebase URL with filename
                                 var cleanNum = safeDesignLabel.replace(/\D/g, '');
                                 if (cleanNum.length === 1) cleanNum = "0" + cleanNum;
-                                if (cleanNum === "") cleanNum = "01";
+                                if (!cleanNum) cleanNum = safeDesignLabel;
                                 var fileName = cleanNum + ".webp";
                                 cacheKey = fbBase + encGridPath + "%2F" + encodeURIComponent(fileName) + "?alt=media";
                             }
@@ -1899,16 +1899,21 @@ function openCart() {
                                     } else {
                                         var cleanNum2 = safeDesignLabel.replace(/\D/g, '');
                                         if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
-                                        if (cleanNum2 === "") cleanNum2 = "01";
+                                        if (!cleanNum2) cleanNum2 = safeDesignLabel;
                                         var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
                                         imgEl.src = fallbackUrl;
                                         imgEl.onerror = function() {
-                                            window.renderWebpFromFolder(imgEl, group.p.gridUrl, null, "01.webp");
+                                            // NO FALLBACK TO COVER. Draw grey box.
+                                            imgEl.src = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
                                         };
                                     }
                                 }
                             }).catch(function() {
-                                window.renderWebpFromFolder(imgEl, group.p.gridUrl, null, "01.webp");
+                                if (safeDesignLabel === 'DIRECT' || safeDesignLabel === 'Cover') {
+                                    window.renderWebpFromFolder(imgEl, group.p.gridUrl, null, "01.webp");
+                                } else {
+                                    imgEl.src = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+                                }
                             });
                         });
                     })(grouped[r]);
