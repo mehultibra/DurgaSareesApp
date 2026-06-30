@@ -1048,6 +1048,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
         return; // Already loaded zoom image from cache!
     }
     
+    // 1. ALWAYS check IndexedDB offline cache first
     getImageFromDB(url).then(async blob => {
         if (blob) {
             // Found ZOOM in cache!
@@ -1069,50 +1070,48 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
             }
             
             if (gridBlob && !imgEl.dataset.loadedZoom) {
+                // Found Grid in cache! Display it instantly!
                 imgEl.src = URL.createObjectURL(gridBlob);
-                fetchZoomInBackground(url, imgEl);
+                // Background fetch zoom image natively
+                fetchZoomNatively(url, imgEl);
             } else if (designGridUrl) {
-                // Not in cache at all! Fetch GRID image FIRST so customer sees it instantly!
-                fetch(designGridUrl)
-                    .then(res => {
-                        if (!res.ok) throw new Error("HTTP error " + res.status);
-                        return res.blob();
-                    })
-                    .then(newGridBlob => {
-                        saveImageToDB(designGridUrl, newGridBlob);
-                        if (isCover && folderPath) saveImageToDB(folderPath, newGridBlob); // Save to folderPath too!
-                        if (!imgEl.dataset.loadedZoom) {
-                            imgEl.src = URL.createObjectURL(newGridBlob);
-                        }
-                        // Now fetch zoom in background
-                        fetchZoomInBackground(url, imgEl);
-                    })
-                    .catch(err => {
-                        // Fallback directly to zoom if grid fails
-                        fetchZoomInBackground(url, imgEl);
-                    });
+                // 🛡️ NOT IN CACHE! The user is ONLINE and background sync might be running.
+                // DO NOT use JS fetch() because it will get queued behind the massive background sync!
+                // Let the browser load the image natively with highest priority!
+                
+                imgEl.src = designGridUrl; // Native load
+                
+                imgEl.onload = function() {
+                    // Once low-res grid loads, silently upgrade to zoom in the background
+                    if (url && url !== designGridUrl && !imgEl.dataset.loadedZoom) {
+                        fetchZoomNatively(url, imgEl);
+                    }
+                };
+                
+                imgEl.onerror = function() {
+                    // If grid fails, try loading zoom directly
+                    if (url && url !== designGridUrl && !imgEl.dataset.loadedZoom) {
+                        imgEl.src = url;
+                        imgEl.dataset.loadedZoom = "true";
+                    }
+                };
             } else {
-                fetchZoomInBackground(url, imgEl);
+                fetchZoomNatively(url, imgEl);
             }
         }
     });
 }
 
-function fetchZoomInBackground(zoomUrl, imgEl) {
+function fetchZoomNatively(zoomUrl, imgEl) {
     if (!zoomUrl) return;
-    fetch(zoomUrl)
-        .then(res => {
-            if (!res.ok) throw new Error("HTTP error " + res.status);
-            return res.blob();
-        })
-        .then(newZoomBlob => {
-            saveImageToDB(zoomUrl, newZoomBlob);
-            if (!imgEl.dataset.loadedZoom) {
-                imgEl.src = URL.createObjectURL(newZoomBlob);
-                imgEl.dataset.loadedZoom = "true";
-            }
-        })
-        .catch(err => {});
+    var tempImg = new Image();
+    tempImg.onload = function() {
+        if (!imgEl.dataset.loadedZoom) {
+            imgEl.src = zoomUrl;
+            imgEl.dataset.loadedZoom = "true";
+        }
+    };
+    tempImg.src = zoomUrl;
 }
 
 function openDetail(productId, skipShow, keepSearchShown) {
