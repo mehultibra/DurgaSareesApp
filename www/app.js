@@ -624,6 +624,44 @@ function listDBKeysForPrefix(prefix) {
     }).catch(() => []);
 }
 
+// 🧠 CORE FIX: Resolves the exact IndexedDB cache key for a given design label
+// It ignores file extensions (.jpg vs .webp) and padding (2 vs 02) to guarantee a match
+window.findDesignKeyInCache = async function(gridUrl, designLabel) {
+    if (!gridUrl) return null;
+    if (designLabel === 'DIRECT' || designLabel === 'Cover') return gridUrl;
+    
+    var cleanGrid = gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+    var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    var prefix = fbBase + encGridPath + "%2F";
+    
+    var keys = await listDBKeysForPrefix(prefix);
+    if (!keys || keys.length === 0) return null;
+    
+    var targetNum = parseInt(String(designLabel).replace(/\D/g, ''));
+    var bestKey = null;
+    
+    for (var k of keys) {
+        var filenameEnc = k.replace(prefix, '').split('?')[0];
+        var filename = decodeURIComponent(filenameEnc).toLowerCase();
+        var nameWithoutExt = filename.substring(0, filename.lastIndexOf('.'));
+        if (!nameWithoutExt) nameWithoutExt = filename;
+        
+        // 1. Exact Name Match (e.g. "Red")
+        if (nameWithoutExt === String(designLabel).toLowerCase()) return k;
+        
+        // 2. Numeric Match (e.g. "2" == "02")
+        if (!isNaN(targetNum)) {
+            var fileNum = parseInt(nameWithoutExt.replace(/\D/g, ''));
+            if (fileNum === targetNum) {
+                bestKey = k; // Store it, but keep searching just in case there's an exact match
+            }
+        }
+    }
+    
+    return bestKey;
+};
 function getImageFromDB(key) {
     return getDB().then(db => {
         return new Promise((resolve, reject) => {
@@ -1876,44 +1914,22 @@ function openCart() {
                             var cleanGrid = group.p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                             var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
 
-                            var cacheKey;
-                            if (safeDesignLabel === 'DIRECT' || safeDesignLabel === 'Cover') {
-                                // Cover image is stored using the gridUrl as key
-                                cacheKey = group.p.gridUrl;
-                            } else {
-                                // Design image key: full Firebase URL with filename
-                                var cleanNum = safeDesignLabel.replace(/\D/g, '');
-                                if (cleanNum.length === 1) cleanNum = "0" + cleanNum;
-                                if (!cleanNum) cleanNum = safeDesignLabel;
-                                var fileName = cleanNum + ".webp";
-                                cacheKey = fbBase + encGridPath + "%2F" + encodeURIComponent(fileName) + "?alt=media";
-                            }
-
-                            getImageFromDB(cacheKey).then(function(blob) {
-                                if (blob) {
-                                    imgEl.src = URL.createObjectURL(blob);
-                                } else {
-                                    // Not in cache - try the fallback URL via network
-                                    if (safeDesignLabel === 'DIRECT' || safeDesignLabel === 'Cover') {
-                                        window.renderWebpFromFolder(imgEl, group.p.gridUrl, null, "01.webp");
-                                    } else {
-                                        var cleanNum2 = safeDesignLabel.replace(/\D/g, '');
-                                        if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
-                                        if (!cleanNum2) cleanNum2 = safeDesignLabel;
-                                        var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
-                                        imgEl.src = fallbackUrl;
-                                        imgEl.onerror = function() {
-                                            // NO FALLBACK TO COVER. Draw grey box.
-                                            imgEl.src = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
-                                        };
-                                    }
-                                }
-                            }).catch(function() {
-                                if (safeDesignLabel === 'DIRECT' || safeDesignLabel === 'Cover') {
-                                    window.renderWebpFromFolder(imgEl, group.p.gridUrl, null, "01.webp");
-                                } else {
+                            window.findDesignKeyInCache(group.p.gridUrl, safeDesignLabel).then(function(cacheKey) {
+                                if (!cacheKey) {
+                                    // Not found in cache at all. Show grey placeholder.
                                     imgEl.src = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+                                    return;
                                 }
+
+                                getImageFromDB(cacheKey).then(function(blob) {
+                                    if (blob) {
+                                        imgEl.src = URL.createObjectURL(blob);
+                                    } else {
+                                        imgEl.src = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+                                    }
+                                }).catch(function() {
+                                    imgEl.src = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+                                });
                             });
                         });
                     })(grouped[r]);

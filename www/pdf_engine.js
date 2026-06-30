@@ -163,20 +163,9 @@ async function generateCartOrderPDF(actionType) {
 
             for (var item of g.items) {
                 var dId = item.design || 'DIRECT';
-                var cacheKey;
-
-                if (dId === 'DIRECT' || dId === 'Cover') {
-                    // Cover image stored under the bare gridUrl folder-path as key
-                    cacheKey = gridUrl;
-                } else {
-                    // Design stored under full Firebase URL key (same as sync writes)
-                    var cleanNum = dId.replace(/\D/g, '');
-                    if (cleanNum.length === 1) cleanNum = '0' + cleanNum;
-                    if (!cleanNum) cleanNum = dId;
-                    cacheKey = fbBase + encGridPath + '%2F' + encodeURIComponent(cleanNum + '.webp') + '?alt=media';
-                }
-
-                var blob = await getImageFromDB(cacheKey);
+                
+                var cacheKey = await window.findDesignKeyInCache(gridUrl, dId);
+                var blob = cacheKey ? await getImageFromDB(cacheKey) : null;
                 if (blob) {
                     item._pdfImgSrc = await blobToBase64Direct(blob);
                     if (!item._pdfImgSrc) {
