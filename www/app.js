@@ -1329,11 +1329,25 @@ function openDetail(productId, skipShow, keepSearchShown) {
             });
     }
 
-    function renderSwipeDeck(files) {
+    async function renderSwipeDeck(files) {
         renderedFilesJson = JSON.stringify(files);
         window.lastRenderedDesignNames = files.map(f => String(f.name).toLowerCase()).join(',');
 
         var placeholderSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#f9f9fa"/></svg>');
+
+        // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
+        await Promise.all(files.map(async (file, idx) => {
+            if (!file.isVideo) {
+                var isCover = (idx === 0);
+                var gridBlob = null;
+                if (isCover && p.gridUrl) gridBlob = await getImageFromDB(p.gridUrl);
+                if (!gridBlob && file.gridUrl) gridBlob = await getImageFromDB(file.gridUrl);
+                
+                if (gridBlob) {
+                    file.cachedObjectUrl = URL.createObjectURL(gridBlob);
+                }
+            }
+        }));
 
         var html = '';
         files.forEach((file, idx) => {
@@ -1353,9 +1367,10 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 </div>`;
             } else {
                 var imgId = "design_img_" + p.id + "_" + idx;
+                var imgSrc = file.cachedObjectUrl ? file.cachedObjectUrl : placeholderSVG;
                 html += `
                 <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
-                    <img id="${imgId}" src="${placeholderSVG}" data-loaded-zoom="false">
+                    <img id="${imgId}" src="${imgSrc}" data-loaded-zoom="false">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
@@ -1369,7 +1384,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         });
         deck.innerHTML = html;
 
-        // Trigger load and cache for all image files in parallel
+        // Trigger loadAndCacheDesignImage to fetch the ZOOM images in the background, or fallback to network if not cached
         files.forEach((file, idx) => {
             if (!file.isVideo) {
                 var imgId = "design_img_" + p.id + "_" + idx;
