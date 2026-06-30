@@ -40,6 +40,14 @@ function blobToBase64Direct(blob) {
 function getBase64FromCache(cacheKey) {
     return getImageFromDB(cacheKey).then(function(blob) {
         if (blob) return blobToBase64Direct(blob);
+        
+        // Fallback to network if missing from cache
+        if (cacheKey && cacheKey.startsWith('http')) {
+            return fetch(cacheKey)
+                .then(function(res) { return res.ok ? res.blob() : null; })
+                .then(function(netBlob) { return netBlob ? blobToBase64Direct(netBlob) : null; })
+                .catch(function() { return null; }); // gracefully fail to null if offline
+        }
         return null;
     }).catch(function() { return null; });
 }
@@ -563,7 +571,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
             if (i > 0) doc.addPage();
 
             // Try cache first for speed, then network
-            var base64Img = await getBase64ImageFast(imageUrlsArray[i]);
+            var base64Img = await getBase64FromCache(imageUrlsArray[i]);
 
             if (i === 0) {
                 // ── COVER PAGE ─────────────────────────────
@@ -802,8 +810,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 coverUrl = getExactFirebaseUrl(folderPath, coverDesignId);
             }
             
-            var coverBase64 = await getBase64ImageFast(coverUrl);
-            if (!coverBase64) coverBase64 = await getBase64ImageFromUrl(coverUrl);
+            var coverBase64 = await getBase64FromCache(coverUrl);
             
             if (!isFirstPage) doc.addPage();
             isFirstPage = false;
@@ -925,8 +932,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 for (var j = 1; j < dArr.length; j++) {
                     var dId = dArr[j];
                     var dUrl = getExactFirebaseUrl(folderPath, dId);
-                    var dBase64 = await getBase64ImageFast(dUrl);
-                    if (!dBase64) dBase64 = await getBase64ImageFromUrl(dUrl);
+                    var dBase64 = await getBase64FromCache(dUrl);
                     
                     doc.addPage();
                     
@@ -1027,8 +1033,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                 var uriArray = [];
                 for (var i = 0; i < imageUrlsArray.length; i++) {
                     // Try cache first!
-                    var base64Img = await getBase64ImageFast(imageUrlsArray[i]);
-                    if (!base64Img) base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
+                    var base64Img = await getBase64FromCache(imageUrlsArray[i]);
                     if (base64Img) {
                         var pureBase64 = base64Img.split(',')[1];
                         var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
@@ -1061,8 +1066,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
         if (!nativeSuccess) {
             var filesArray = [];
             for (var i = 0; i < imageUrlsArray.length; i++) {
-                var base64Img = await getBase64ImageFast(imageUrlsArray[i]);
-                if (!base64Img) base64Img = await getBase64ImageFromUrl(imageUrlsArray[i]);
+                var base64Img = await getBase64FromCache(imageUrlsArray[i]);
                 if (base64Img) {
                     var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
                     filesArray.push(base64ToFile(base64Img, fileName));
