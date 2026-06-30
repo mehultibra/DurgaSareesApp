@@ -651,61 +651,10 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         imgElement.onerror = null;
     }
 
+    // Strip Excel 'ready' logic - always discover files from Firebase folder listing
     function tryToLoadLatestReadyDesign() {
-        if (!window.allProducts) return tryFolderListFallback();
-        var p = window.allProducts.find(x => x.gridUrl === gridPath);
-
-        var rawDesigns = (p && p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(Boolean) : [];
-
-        if (rawDesigns.length > 0) {
-            tryDesign(rawDesigns.length - 1);
-        } else {
-            // No ready designs in Excel — discover files directly from Firebase
-            tryFolderListFallback();
-        }
-
-        function tryDesign(index) {
-            if (index < 0) {
-                // All ready designs failed — try discovering files from Firebase
-                tryFolderListFallback();
-                return;
-            }
-            var designName = rawDesigns[index];
-            var cleanNum = designName.replace(/\D/g, '');
-            var designFile = "";
-            if (cleanNum !== "") {
-                var numStr = cleanNum.length === 1 ? "0" + cleanNum : cleanNum;
-                designFile = numStr + ".webp";
-            } else {
-                designFile = designName + ".webp";
-            }
-
-            var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(designFile) + "?alt=media";
-
-            getImageFromDB(designUrl).then(function (blob) {
-                if (blob) {
-                    imgElement.src = URL.createObjectURL(blob);
-                    dsFallbackMap[gridPath] = designFile;
-                    saveFallbackMap();
-                } else {
-                    imgElement.src = designUrl;
-                    imgElement.onload = function () {
-                        dsFallbackMap[gridPath] = designFile;
-                        saveFallbackMap();
-                    };
-                    imgElement.onerror = function () {
-                        // Fallback to zoom bucket if grid fails
-                        imgElement.src = fbBase + encZoomPath + "%2F" + encodeURIComponent(designFile) + "?alt=media";
-                        imgElement.onload = function () { dsFallbackMap[gridPath] = designFile; saveFallbackMap(); };
-                        imgElement.onerror = function () {
-                            tryDesign(index - 1);
-                        };
-                    };
-                }
-            }).catch(function () {
-                imgElement.src = designUrl;
-            });
-        }
+        tryFolderListFallback();
+    }
 
         // 🔍 LAST RESORT: Call Firebase list API to discover actual filenames
         function tryFolderListFallback() {
@@ -743,7 +692,6 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 })
                 .catch(function () { showPlaceholder(); });
         }
-    }
 
 
     function loadFromNetwork() {
@@ -1847,7 +1795,7 @@ function openCart() {
 
                 var onClickAction = safeDesignLabel === 'DIRECT' ? 
                     "closeCart(true); setTimeout(()=>{openDetail('" + g.p.id + "');},100);" : 
-                    "openCartFs('" + g.p.id + "', '" + safeDesignLabel + "', document.getElementById('" + imgId + "').src)";
+                    "openCartFsFromCache('" + g.p.id + "', '" + safeDesignLabel + "', '" + g.p.gridUrl + "')";
 
                 cHtml.push('<div style="width: 80px; text-align: center;" ' + (!isEditing ? 'onclick="' + onClickAction + '"' : '') + '>');
                 cHtml.push('<img id="' + imgId + '" src="https://placehold.co/300x300/f0f0f0/a0a0a0?text=..." style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); ' + (!isEditing ? 'cursor: pointer;' : '') + '">');
@@ -1869,24 +1817,57 @@ function openCart() {
             cb.innerHTML = cHtml.join('');
             loadCartCustomerDetails();
 
-            // Load Grid Images for Cart Items safely
+            // Load Grid Images for Cart Items from IndexedDB cache directly
             setTimeout(() => {
+                var bucket = "durga-sarees.firebasestorage.app";
+                var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
                 for (var r in grouped) {
-                    grouped[r].items.forEach(function (item) {
-                        var safeDesignLabel = item.design || 'DIRECT';
-                        var imgId = "cart_img_" + grouped[r].p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
-                        var imgEl = document.getElementById(imgId);
-                        if (imgEl && grouped[r].p.gridUrl) {
-                            var targetFile = "01.webp";
-                            if (safeDesignLabel !== 'DIRECT' && safeDesignLabel !== 'Cover') {
+                    (function(group) {
+                        group.items.forEach(function (item) {
+                            var safeDesignLabel = item.design || 'DIRECT';
+                            var imgId = "cart_img_" + group.p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
+                            var imgEl = document.getElementById(imgId);
+                            if (!imgEl || !group.p.gridUrl) return;
+
+                            var cleanGrid = group.p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                            var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
+
+                            var cacheKey;
+                            if (safeDesignLabel === 'DIRECT' || safeDesignLabel === 'Cover') {
+                                // Cover image is stored using the gridUrl as key
+                                cacheKey = group.p.gridUrl;
+                            } else {
+                                // Design image key: full Firebase URL with filename
                                 var cleanNum = safeDesignLabel.replace(/\D/g, '');
                                 if (cleanNum.length === 1) cleanNum = "0" + cleanNum;
-                                if (cleanNum === "") cleanNum = "02";
-                                targetFile = cleanNum + ".webp";
+                                if (cleanNum === "") cleanNum = "01";
+                                var fileName = cleanNum + ".webp";
+                                cacheKey = fbBase + encGridPath + "%2F" + encodeURIComponent(fileName) + "?alt=media";
                             }
-                            window.renderWebpFromFolder(imgEl, grouped[r].p.gridUrl, grouped[r].p.gridUrl, targetFile);
-                        }
-                    });
+
+                            getImageFromDB(cacheKey).then(function(blob) {
+                                if (blob) {
+                                    imgEl.src = URL.createObjectURL(blob);
+                                } else {
+                                    // Not in cache - try the fallback URL via network
+                                    if (safeDesignLabel === 'DIRECT' || safeDesignLabel === 'Cover') {
+                                        window.renderWebpFromFolder(imgEl, group.p.gridUrl, null, "01.webp");
+                                    } else {
+                                        var cleanNum2 = safeDesignLabel.replace(/\D/g, '');
+                                        if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
+                                        if (cleanNum2 === "") cleanNum2 = "01";
+                                        var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
+                                        imgEl.src = fallbackUrl;
+                                        imgEl.onerror = function() {
+                                            window.renderWebpFromFolder(imgEl, group.p.gridUrl, null, "01.webp");
+                                        };
+                                    }
+                                }
+                            }).catch(function() {
+                                window.renderWebpFromFolder(imgEl, group.p.gridUrl, null, "01.webp");
+                            });
+                        });
+                    })(grouped[r]);
                 }
             }, 50);
         }
@@ -2199,6 +2180,55 @@ window.openCartFs = function (productId, designId, cartImgSrc) {
     openFs(actualProductId, 0, designId, cartImgSrc);
 };
 
+// 🚀 Cart fullscreen: loads image from IndexedDB using exact cache key, then opens FS
+window.openCartFsFromCache = function (productId, designId, gridUrl) {
+    var pItem = allProducts.find(x => x.id === productId);
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+
+    var cleanGrid = gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+    var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
+
+    var cacheKey;
+    if (designId === 'DIRECT' || designId === 'Cover') {
+        cacheKey = gridUrl;
+    } else {
+        var cleanNum = designId.replace(/\D/g, '');
+        if (cleanNum.length === 1) cleanNum = "0" + cleanNum;
+        if (cleanNum === "") cleanNum = "01";
+        cacheKey = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum + ".webp") + "?alt=media";
+    }
+
+    function showInFullscreen(src) {
+        var fsModal = document.getElementById('fsModal');
+        var fsImg = document.getElementById('fsImg');
+        var fsVideo = document.getElementById('fsVideo');
+        if (fsVideo) fsVideo.style.display = 'none';
+        fsImg.style.display = 'block';
+        fsImg.src = src;
+        fsImg.style.transition = '';
+        fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
+        fsScale = 1; fsTranslateX = 0; fsTranslateY = 0;
+        document.getElementById('fsTitle').innerText = (pItem ? pItem.name : productId) + " - " + (designId === 'DIRECT' ? "Cover" : designId);
+        var keyCart = productId + '_' + designId;
+        document.getElementById('fsQty').innerText = cart[keyCart] ? cart[keyCart].qty : 0;
+        document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'none');
+        fsModal.style.display = 'flex';
+        pushHistoryState('fs');
+    }
+
+    getImageFromDB(cacheKey).then(function(blob) {
+        if (blob) {
+            showInFullscreen(URL.createObjectURL(blob));
+        } else {
+            // fallback: load from network
+            showInFullscreen(cacheKey.startsWith('http') ? cacheKey : (fbBase + encGridPath + "%2F01.webp?alt=media"));
+        }
+    }).catch(function() {
+        showInFullscreen(fbBase + encGridPath + "%2F01.webp?alt=media");
+    });
+};
+
 // ====================================
 // UTILS & HELPERS
 // ====================================
@@ -2346,69 +2376,28 @@ async function syncImages() {
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
                     console.error("❌ SYNC FAILED:", p.name, "| Path:", p.gridUrl, "| Reason:", lastFailReason);
                     
-                    var pMatch = window.allProducts && window.allProducts.find(x => x.gridUrl === p.gridUrl);
-                    if (pMatch) {
-                        if (!window.syncReportResults) window.syncReportResults = [];
-                        var existing = window.syncReportResults.find(r => r.id === pMatch.id);
-                        if (existing) {
-                            existing.error = "Sync Failed: " + lastFailReason;
-                            existing.status = 'error';
-                        } else {
-                            window.syncReportResults.push({
-                                id: pMatch.id,
-                                name: pMatch.name,
-                                sku: pMatch.sku || '-',
-                                error: "Sync Failed: " + lastFailReason,
-                                imageCount: 0,
-                                status: 'error'
-                            });
-                        }
+                    // Store error in syncReportResults keyed by gridUrl (allProducts may not be loaded yet)
+                    if (!window.syncReportResults) window.syncReportResults = [];
+                    var syncErrKey = p.gridUrl;
+                    var existing = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
+                    if (existing) {
+                        existing.error = "Sync Failed: " + lastFailReason;
+                        existing.status = 'error';
+                    } else {
+                        window.syncReportResults.push({
+                            id: null, // will be resolved when report is opened
+                            _gridUrl: syncErrKey,
+                            name: p.name,
+                            sku: p.sku || '-',
+                            error: "Sync Failed: " + lastFailReason,
+                            imageCount: 0,
+                            status: 'error'
+                        });
                     }
                 }
 
-                // Download ready design grid images based strictly on Firebase folder contents! (Ignores Excel 'ready' column)
-                var designFilesToDownload = [];
-
-                if (folderItems && folderItems.length > 0) {
-                    // Download ALL discovered files in the folder!
-                    folderItems.forEach(file => {
-                        // Skip the cover file since it was already downloaded earlier in the loop
-                        if (file === coverFile) return;
-                        designFilesToDownload.push({ name: file });
-                    });
-                }
-
-                for (var d = 0; d < designFilesToDownload.length; d++) {
-                    var dObj = designFilesToDownload[d];
-                    var designKey = fbBase + encGridPath + "%2F" + encodeURIComponent(dObj.name) + "?alt=media";
-
-                    // 🚀 FAST PATH: Check Cache FIRST!
-                    var existingDesign = await getImageFromDB(designKey);
-                    if (existingDesign) continue; // Skip network if already in DB!
-
-                    var designUrlsToTry = [designKey];
-                    if (dObj.altName) {
-                        designUrlsToTry.push(fbBase + encGridPath + "%2F" + encodeURIComponent(dObj.altName) + "?alt=media");
-                    }
-
-                    for (var u = 0; u < designUrlsToTry.length; u++) {
-                        try {
-                            const controller = new AbortController();
-                            const timeoutId = setTimeout(() => controller.abort(), 30000);
-                            const response = await fetch(designUrlsToTry[u], { signal: controller.signal });
-                            clearTimeout(timeoutId);
-                            if (response.ok) {
-                                const blob = await response.blob();
-                                var saved = await saveImageToDB(designKey, blob);
-                                if (saved) break;
-                            }
-                        } catch (err) {
-                            console.warn("Attempt " + u + " failed for design url: " + designUrlsToTry[u], err);
-                        }
-                    }
-                }
-
-
+                // 🚀 FAST SYNC: Only download cover image (first file in folder)
+                // Design images are loaded on-demand when user opens the product page
                 count++;
             }));
 
@@ -3173,6 +3162,19 @@ function openSyncReportModal() {
         document.getElementById('btnRunSyncReport').disabled = false;
         document.getElementById('chkShowCompletedSync').checked = false;
     } else {
+        // Resolve any entries whose id was null (sync happened before allProducts loaded)
+        if (window.allProducts && window.allProducts.length > 0) {
+            window.syncReportResults.forEach(function(r) {
+                if (!r.id && r._gridUrl) {
+                    var pMatch = window.allProducts.find(x => x.gridUrl === r._gridUrl);
+                    if (pMatch) {
+                        r.id = pMatch.id;
+                        r.sku = pMatch.sku || '-';
+                    }
+                }
+            });
+        }
+        document.getElementById('syncReportStatus').innerText = 'Showing last sync errors (' + window.syncReportResults.filter(r => r.status === 'error').length + ' errors). Run report for full scan.';
         renderSyncReportPartial();
     }
 }
