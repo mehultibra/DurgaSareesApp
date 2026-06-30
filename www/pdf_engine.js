@@ -45,7 +45,15 @@ function getBase64FromCache(cacheKey) {
         if (cacheKey && cacheKey.startsWith('http')) {
             return fetch(cacheKey)
                 .then(function(res) { return res.ok ? res.blob() : null; })
-                .then(function(netBlob) { return netBlob ? blobToBase64Direct(netBlob) : null; })
+                .then(function(netBlob) { 
+                    if (netBlob) {
+                        if (typeof window.saveImageToDB === 'function') {
+                            window.saveImageToDB(cacheKey, netBlob);
+                        }
+                        return blobToBase64Direct(netBlob);
+                    }
+                    return null;
+                })
                 .catch(function() { return null; }); // gracefully fail to null if offline
         }
         return null;
@@ -1033,10 +1041,12 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
 
         if (isCapacitor) {
             try {
+                // Fetch all base64 images concurrently for instant performance
+                var base64Results = await Promise.all(imageUrlsArray.map(url => getBase64FromCache(url)));
+                
                 var uriArray = [];
-                for (var i = 0; i < imageUrlsArray.length; i++) {
-                    // Try cache first!
-                    var base64Img = await getBase64FromCache(imageUrlsArray[i]);
+                for (var i = 0; i < base64Results.length; i++) {
+                    var base64Img = base64Results[i];
                     if (base64Img) {
                         var pureBase64 = base64Img.split(',')[1];
                         var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
@@ -1067,9 +1077,11 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
         }
 
         if (!nativeSuccess) {
+            // Fetch all base64 images concurrently for web fallback
+            var base64Results = await Promise.all(imageUrlsArray.map(url => getBase64FromCache(url)));
             var filesArray = [];
-            for (var i = 0; i < imageUrlsArray.length; i++) {
-                var base64Img = await getBase64FromCache(imageUrlsArray[i]);
+            for (var i = 0; i < base64Results.length; i++) {
+                var base64Img = base64Results[i];
                 if (base64Img) {
                     var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
                     filesArray.push(base64ToFile(base64Img, fileName));

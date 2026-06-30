@@ -2130,9 +2130,9 @@ window.triggerShare = async function (action) {
         }
 
         if (action === 'images') {
-            if (allHighResUrls.length > 30) {
-                alert("WhatsApp limit is 30 images. You are trying to share " + allHighResUrls.length + " images.\nPlease un-favorite some products or share as a PDF instead.");
-                return;
+            if (allHighResUrls.length > 100) {
+                alert("⚠️ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
+                allHighResUrls = allHighResUrls.slice(0, 100);
             }
             if (typeof shareNativeImages === 'function') {
                 await shareNativeImages("Favorite Items", "", allHighResUrls);

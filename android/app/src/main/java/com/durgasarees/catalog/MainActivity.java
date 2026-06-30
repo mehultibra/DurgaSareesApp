@@ -23,30 +23,15 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidBackBridgePlugin.class);
         super.onCreate(savedInstanceState);
 
-        // Enforce Black Navigation Bar
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setNavigationBarColor(android.graphics.Color.BLACK);
-            // Clear any light navigation bar flags so icons are white
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                getWindow().getInsetsController().setSystemBarsAppearance(
-                    0, 
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-                );
-            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                android.view.View decorView = getWindow().getDecorView();
-                int flags = decorView.getSystemUiVisibility();
-                flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-                decorView.setSystemUiVisibility(flags);
-            }
+        // Enforce White Navigation Bar initially
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
         }
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-
-                // 🛡️ THE FIX: 'view' is declared as final and assigned on a single line
                 final WebView view = (bridge != null) ? bridge.getWebView() : null;
-
                 if (webCanGoBack) {
                     if (view != null) {
                         view.post(() -> view.evaluateJavascript("window.history.back();", null));
@@ -60,5 +45,24 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Enforce White Navigation Bar with Dark Icons continuously (Capacitor sometimes resets this)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
+            getWindow().getInsetsController().setSystemBarsAppearance(
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            );
+        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            getWindow().setNavigationBarColor(android.graphics.Color.WHITE);
+            android.view.View decorView = getWindow().getDecorView();
+            int flags = decorView.getSystemUiVisibility();
+            flags |= android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            decorView.setSystemUiVisibility(flags);
+        }
     }
 }
