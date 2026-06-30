@@ -1043,7 +1043,7 @@ var missingDesignSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
 </svg>
 `);
 
-function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName) {
+function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName, folderPath, isCover) {
     if (imgEl.getAttribute('data-loaded-zoom') === 'true') {
         return; // Already loaded zoom image from cache!
     }
@@ -1056,7 +1056,10 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
         } else {
             // Check if GRID image is in cache
             var gridBlob = null;
-            if (designGridUrl) {
+            if (isCover && folderPath) {
+                gridBlob = await getImageFromDB(folderPath); // Try finding it via the folder path key
+            }
+            if (!gridBlob && designGridUrl) {
                 gridBlob = await getImageFromDB(designGridUrl);
                 // Also check alternative key if needed
                 if (!gridBlob && window.findDesignKeyInCache) {
@@ -1077,6 +1080,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName)
                     })
                     .then(newGridBlob => {
                         saveImageToDB(designGridUrl, newGridBlob);
+                        if (isCover && folderPath) saveImageToDB(folderPath, newGridBlob); // Save to folderPath too!
                         if (!imgEl.dataset.loadedZoom) {
                             imgEl.src = URL.createObjectURL(newGridBlob);
                         }
@@ -1292,7 +1296,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             updateLiveDetailHeader();
             var imgEl = document.getElementById("design_img_" + p.id + "_DIRECT");
             if (imgEl && fallbackZoomUrl) {
-                loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover');
+                loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover', p.gridUrl, true);
             }
         }
     }
@@ -1371,7 +1375,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgEl = document.getElementById(imgId);
                 if (imgEl) {
-                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name);
+                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, idx === 0);
                 }
             }
         });
@@ -3490,12 +3494,38 @@ async function resyncFailedProducts() {
         }
         
         var cleanGridPath = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-        var gridImgUrl = fbBase + cleanGridPath + "%2F01.webp?alt=media";
         
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000);
             
+            // 1. Fetch directory listing first
+            var prefix = cleanGridPath + "/";
+            var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix + "&delimiter=/";
+            var listRes = await fetch(listUrl, { signal: controller.signal });
+            
+            if (!listRes.ok) {
+                clearTimeout(timeoutId);
+                result.error = "Detailed: List HTTP " + listRes.status + " (" + listRes.statusText + ")";
+                continue;
+            }
+            
+            var listData = await listRes.json();
+            var folderFiles = (listData.items || [])
+                .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
+                .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+                
+            if (folderFiles.length === 0) {
+                clearTimeout(timeoutId);
+                result.error = "Detailed: No images found in Grid folder.";
+                continue;
+            }
+            
+            folderFiles.sort((a, b) => (parseInt(a.replace(/\D/g,'')) || 999) - (parseInt(b.replace(/\D/g,'')) || 999));
+            var coverFile = folderFiles[0];
+            var gridImgUrl = fbBase + cleanGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
+            
+            // 2. Fetch the actual cover image
             var res = await fetch(gridImgUrl, { signal: controller.signal });
             clearTimeout(timeoutId);
             
@@ -3509,13 +3539,13 @@ async function resyncFailedProducts() {
                 saveCoverExistsMap();
                 
                 result.status = 'completed';
-                result.error = "Resynced successfully.";
+                result.error = "Resynced successfully (" + coverFile + ").";
                 result.imageCount = 1;
             } else {
-                result.error = "Detailed: HTTP " + res.status + " (" + res.statusText + ") for 01.webp";
+                result.error = "Detailed: HTTP " + res.status + " (" + res.statusText + ") for " + coverFile;
             }
         } catch(e) {
-            result.error = "Detailed: " + (e.name === 'AbortError' ? 'Connection Timeout fetching 01.webp' : e.message);
+            result.error = "Detailed: " + (e.name === 'AbortError' ? 'Connection Timeout' : e.message);
         }
         
         renderSyncReportPartial();
