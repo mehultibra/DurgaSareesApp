@@ -1931,10 +1931,15 @@ function openCart() {
                                     if (!cleanNum2) cleanNum2 = safeDesignLabel;
                                     var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
                                     
-                                    imgEl.src = fallbackUrl;
-                                    imgEl.onerror = function() {
+                                    fetch(fallbackUrl).then(function(res) {
+                                        if (res.ok) return res.blob();
+                                        throw new Error('Network failed');
+                                    }).then(function(blob) {
+                                        imgEl.src = URL.createObjectURL(blob);
+                                        saveImageToDB(fallbackUrl, blob); // Cache it for future!
+                                    }).catch(function() {
                                         imgEl.src = fallbackSVG;
-                                    };
+                                    });
                                     return;
                                 }
 
@@ -2314,14 +2319,15 @@ window.openCartFsFromCache = function (productId, designId, gridUrl) {
             if (!cleanNum2) cleanNum2 = designId;
             var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
             
-            var fallbackImg = new Image();
-            fallbackImg.onload = function() {
-                showInFullscreen(fallbackUrl);
-            };
-            fallbackImg.onerror = function() {
+            fetch(fallbackUrl).then(function(res) {
+                if (res.ok) return res.blob();
+                throw new Error('Network failed');
+            }).then(function(blob) {
+                showInFullscreen(URL.createObjectURL(blob));
+                saveImageToDB(fallbackUrl, blob); // Cache it for future!
+            }).catch(function() {
                 showInFullscreen("https://placehold.co/600x800/f0f0f0/a0a0a0?text=Not+Synced");
-            };
-            fallbackImg.src = fallbackUrl;
+            });
         }
     });
 };
