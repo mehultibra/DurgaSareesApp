@@ -2321,6 +2321,20 @@ window.goToHome = function () {
     if (cart && cart.classList.contains('open')) { cart.classList.remove('open'); history.back(); }
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
 };
+window.fetchWithRetry = async function(url, options = {}, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            var res = await fetch(url, options);
+            if (res.ok) return res;
+            if (res.status === 404) return res; // Don't retry true 404s
+        } catch (err) {
+            if (i === retries - 1) throw err;
+            await new Promise(r => setTimeout(r, 1000 + (i * 1000))); // Backoff
+        }
+    }
+    return fetch(url, options); // Last ditch
+};
+
 window.isSyncing = false;
 async function syncImages() {
     var bootScreen = document.getElementById('boot');
@@ -2397,7 +2411,8 @@ async function syncImages() {
                 try {
                     const ctrl = new AbortController();
                     const tid  = setTimeout(() => ctrl.abort(), 15000);
-                    var listRes = await fetch(listUrl, { signal: ctrl.signal });
+                    // 🛡️ CRITICAL FIX: Bulletproof retry for "failed to fetch"
+                    var listRes = await window.fetchWithRetry(listUrl, { signal: ctrl.signal }, 3);
                     clearTimeout(tid);
                     if (listRes.ok) {
                         var listData  = await listRes.json();
@@ -2454,22 +2469,31 @@ async function syncImages() {
                         }
                     }
 
-                    // ── 3. Download cover → store under gridUrl key ──────────
-                    try {
-                        const ctrl2 = new AbortController();
-                        const tid2  = setTimeout(() => ctrl2.abort(), 30000);
-                        var coverRes = await fetch(coverUrl, { signal: ctrl2.signal });
-                        clearTimeout(tid2);
-                        if (coverRes.ok) {
-                            var coverBlob = await coverRes.blob();
-                            await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
-                            await saveImageToDB(coverUrl, coverBlob);  // 🛡️ CRITICAL: Also save under its full URL!
-                            downloaded = true;
-                        } else {
-                            lastFailReason = "Cover HTTP " + coverRes.status;
+                    // ── 3. Download the COVER file ─────────────────────────────
+                    var coverUrl   = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
+                    var existingCover = await getImageFromDB(p.gridUrl);
+
+                    if (existingCover) {
+                        downloaded = true;
+                    } else {
+                        try {
+                            const ctrl2 = new AbortController();
+                            const tid2  = setTimeout(() => ctrl2.abort(), 30000);
+                            // 🛡️ CRITICAL FIX: Bulletproof retry for cover image
+                            var coverRes = await window.fetchWithRetry(coverUrl, { signal: ctrl2.signal }, 3);
+                            clearTimeout(tid2);
+
+                            if (coverRes.ok) {
+                                var coverBlob = await coverRes.blob();
+                                await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
+                                await saveImageToDB(coverUrl, coverBlob);  // 🛡️ CRITICAL: Also save under its full URL!
+                                downloaded = true;
+                            } else {
+                                lastFailReason = "Cover HTTP " + coverRes.status;
+                            }
+                        } catch(e) {
+                            lastFailReason = "Cover fetch: " + (e.name === 'AbortError' ? 'Timeout (30s)' : e.message);
                         }
-                    } catch(e) {
-                        lastFailReason = "Cover fetch: " + (e.name === 'AbortError' ? 'Timeout (30s)' : e.message);
                     }
 
                     // ── 4. Download remaining design files (FAST PARALLEL BATCHING) ──
@@ -2485,7 +2509,8 @@ async function syncImages() {
                                 try {
                                     const ctrl3 = new AbortController();
                                     const tid3  = setTimeout(() => ctrl3.abort(), 15000);
-                                    var dRes = await fetch(designUrl, { signal: ctrl3.signal });
+                                    // 🛡️ CRITICAL FIX: Bulletproof retry for inner images
+                                    var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
                                     clearTimeout(tid3);
                                     if (dRes.ok) {
                                         await saveImageToDB(designUrl, await dRes.blob());
