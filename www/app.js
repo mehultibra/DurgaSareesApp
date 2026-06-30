@@ -1915,9 +1915,19 @@ function openCart() {
                             var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
 
                             window.findDesignKeyInCache(group.p.gridUrl, safeDesignLabel).then(function(cacheKey) {
+                                var fallbackSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+
                                 if (!cacheKey) {
-                                    // Not found in cache at all. Show grey placeholder.
-                                    imgEl.src = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+                                    // Not found in cache. Try network guess as a last resort!
+                                    var cleanNum2 = safeDesignLabel.replace(/\D/g, '');
+                                    if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
+                                    if (!cleanNum2) cleanNum2 = safeDesignLabel;
+                                    var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
+                                    
+                                    imgEl.src = fallbackUrl;
+                                    imgEl.onerror = function() {
+                                        imgEl.src = fallbackSVG;
+                                    };
                                     return;
                                 }
 
@@ -1925,10 +1935,10 @@ function openCart() {
                                     if (blob) {
                                         imgEl.src = URL.createObjectURL(blob);
                                     } else {
-                                        imgEl.src = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+                                        imgEl.src = fallbackSVG;
                                     }
                                 }).catch(function() {
-                                    imgEl.src = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+                                    imgEl.src = fallbackSVG;
                                 });
                             });
                         });
@@ -2254,16 +2264,6 @@ window.openCartFsFromCache = function (productId, designId, gridUrl) {
     var cleanGrid = gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
     var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
 
-    var cacheKey;
-    if (designId === 'DIRECT' || designId === 'Cover') {
-        cacheKey = gridUrl;
-    } else {
-        var cleanNum = designId.replace(/\D/g, '');
-        if (cleanNum.length === 1) cleanNum = "0" + cleanNum;
-        if (cleanNum === "") cleanNum = "01";
-        cacheKey = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum + ".webp") + "?alt=media";
-    }
-
     function showInFullscreen(src) {
         var fsModal = document.getElementById('fsModal');
         var fsImg = document.getElementById('fsImg');
@@ -2282,15 +2282,40 @@ window.openCartFsFromCache = function (productId, designId, gridUrl) {
         pushHistoryState('fs');
     }
 
-    getImageFromDB(cacheKey).then(function(blob) {
-        if (blob) {
-            showInFullscreen(URL.createObjectURL(blob));
-        } else {
-            // fallback: load from network
-            showInFullscreen(cacheKey.startsWith('http') ? cacheKey : (fbBase + encGridPath + "%2F01.webp?alt=media"));
+    window.findDesignKeyInCache(gridUrl, designId).then(async function(gridCacheKey) {
+        var blobToUse = null;
+
+        // Try Zoom cache first
+        if (gridCacheKey && pItem && pItem.zoomUrl && pItem.zoomUrl !== "None") {
+            var cleanZoom = pItem.zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+            var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+            var zoomCacheKey = gridCacheKey.replace(encGridPath, encZoomPath);
+            blobToUse = await getImageFromDB(zoomCacheKey);
         }
-    }).catch(function() {
-        showInFullscreen(fbBase + encGridPath + "%2F01.webp?alt=media");
+
+        // Try Grid cache if zoom isn't found
+        if (!blobToUse && gridCacheKey) {
+            blobToUse = await getImageFromDB(gridCacheKey);
+        }
+
+        if (blobToUse) {
+            showInFullscreen(URL.createObjectURL(blobToUse));
+        } else {
+            // Fallback to Network if completely missing from cache
+            var cleanNum2 = designId.replace(/\D/g, '');
+            if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
+            if (!cleanNum2) cleanNum2 = designId;
+            var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
+            
+            var fallbackImg = new Image();
+            fallbackImg.onload = function() {
+                showInFullscreen(fallbackUrl);
+            };
+            fallbackImg.onerror = function() {
+                showInFullscreen("https://placehold.co/600x800/f0f0f0/a0a0a0?text=Not+Synced");
+            };
+            fallbackImg.src = fallbackUrl;
+        }
     });
 };
 
