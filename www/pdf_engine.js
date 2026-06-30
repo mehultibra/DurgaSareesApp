@@ -229,15 +229,6 @@ async function generateCartOrderPDF(actionType) {
                         item._pdfImgSrc = await getBase64ImageFromUrl(domSrc);
                     }
                 }
-
-                // If still no image (e.g. design missing), fallback to cover image
-                if (!item._pdfImgSrc && dId !== 'DIRECT' && gridUrl) {
-                    var fallbackCoverUrl = getDesignFirebaseUrl(gridUrl, 'DIRECT');
-                    item._pdfImgSrc = await getBase64ImageFast(fallbackCoverUrl);
-                    if (!item._pdfImgSrc) {
-                        item._pdfImgSrc = await getBase64ImageFromUrl(fallbackCoverUrl);
-                    }
-                }
             }
         }
 
@@ -435,14 +426,14 @@ async function generateCartOrderPDF(actionType) {
                             doc.rect(cellX + 3, y, CELL_W - THUMB_GAP - 6, THUMB_SIZE, 'F');
                             doc.setFontSize(6);
                             doc.setTextColor(150, 150, 150);
-                            doc.text("No Image", cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2, { align: "center" });
+                            doc.text("Image Not Found", cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2, { align: "center" });
                         }
                     } else {
                         doc.setFillColor(240, 240, 240);
                         doc.rect(cellX + 3, y, CELL_W - THUMB_GAP - 6, THUMB_SIZE, 'F');
                         doc.setFontSize(6);
                         doc.setTextColor(150, 150, 150);
-                        doc.text("No Image", cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2, { align: "center" });
+                        doc.text("Image Not Found", cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2, { align: "center" });
                     }
 
                     // Single row Design Label + Qty

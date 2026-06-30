@@ -2304,7 +2304,7 @@ async function syncImages() {
                         lastFailReason = "List API HTTP " + listRes.status;
                     }
                 } catch (e) {
-                    lastFailReason = "List API failed: " + e.message;
+                    lastFailReason = "List API failed: " + (e.name === 'AbortError' ? 'Connection Timeout (15s)' : e.message);
                 }
 
                 if (listSuccess) {
@@ -2332,7 +2332,7 @@ async function syncImages() {
                                 lastFailReason = "HTTP " + res.status + " on cover: " + coverUrl;
                             }
                         } catch (e) {
-                            lastFailReason = "Cover fetch failed: " + e.message;
+                            lastFailReason = "Cover fetch failed: " + (e.name === 'AbortError' ? 'Connection Timeout (30s)' : e.message);
                         }
                     }
                 } else {
@@ -2345,6 +2345,25 @@ async function syncImages() {
                     failed++;
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
                     console.error("❌ SYNC FAILED:", p.name, "| Path:", p.gridUrl, "| Reason:", lastFailReason);
+                    
+                    var pMatch = window.allProducts && window.allProducts.find(x => x.gridUrl === p.gridUrl);
+                    if (pMatch) {
+                        if (!window.syncReportResults) window.syncReportResults = [];
+                        var existing = window.syncReportResults.find(r => r.id === pMatch.id);
+                        if (existing) {
+                            existing.error = "Sync Failed: " + lastFailReason;
+                            existing.status = 'error';
+                        } else {
+                            window.syncReportResults.push({
+                                id: pMatch.id,
+                                name: pMatch.name,
+                                sku: pMatch.sku || '-',
+                                error: "Sync Failed: " + lastFailReason,
+                                imageCount: 0,
+                                status: 'error'
+                            });
+                        }
+                    }
                 }
 
                 // Download ready design grid images based strictly on Firebase folder contents! (Ignores Excel 'ready' column)
@@ -3201,7 +3220,11 @@ async function runSyncReport() {
         };
         
         try {
-            var res = await fetch(listUrl);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            var res = await fetch(listUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
             if (!res.ok) {
                 result.error = "HTTP Error " + res.status;
                 result.status = 'error';
@@ -3216,7 +3239,7 @@ async function runSyncReport() {
                 }
             }
         } catch(e) {
-            result.error = "Network fetch failed";
+            result.error = "Failed: " + (e.name === 'AbortError' ? 'Connection Timeout (15s)' : e.message);
             result.status = 'error';
         }
         
