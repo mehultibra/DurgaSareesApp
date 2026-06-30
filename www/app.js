@@ -188,23 +188,31 @@ window.addEventListener('DOMContentLoaded', function () {
 async function checkForOTAUpdates() {
     try {
         var response = await fetch("https://durga-sarees.web.app/version.json?t=" + new Date().getTime());
+        if (!response.ok) return; // version.json missing = no update available
         var data = await response.json();
         var latestVersion = data.version;
         var updateUrl = data.url;
-        
+
         var currentVersion = localStorage.getItem("dsOtaVersion") || "builtin";
-        
+
         if (latestVersion && latestVersion !== currentVersion) {
-            console.log("Downloading new OTA update: ", latestVersion);
-            var versionData = await window.Capacitor.Plugins.CapacitorUpdater.download({
-                url: updateUrl,
-                version: latestVersion
-            });
-            localStorage.setItem("dsOtaVersion", latestVersion);
-            await window.Capacitor.Plugins.CapacitorUpdater.set(versionData);
+            console.log("OTA update available:", latestVersion);
+            if (window.Capacitor && window.Capacitor.Plugins.CapacitorUpdater && updateUrl) {
+                // Native APK: use CapacitorUpdater
+                var versionData = await window.Capacitor.Plugins.CapacitorUpdater.download({
+                    url: updateUrl,
+                    version: latestVersion
+                });
+                localStorage.setItem("dsOtaVersion", latestVersion);
+                await window.Capacitor.Plugins.CapacitorUpdater.set(versionData);
+            } else {
+                // Web / WebView with server.url: force a hard reload to pick up new JS/HTML
+                localStorage.setItem("dsOtaVersion", latestVersion);
+                location.reload(true);
+            }
         }
     } catch(e) {
-        console.log("OTA Update Check Finished", e.message);
+        console.log("OTA check skipped:", e.message);
     }
 }
 
@@ -578,6 +586,42 @@ function saveImageToDB(key, blob) {
         console.error("IndexedDB write failed", e);
         return false;
     });
+}
+
+function deleteImageFromDB(key) {
+    return getDB().then(db => {
+        return new Promise((resolve) => {
+            var tx = db.transaction(storeName, "readwrite");
+            var store = tx.objectStore(storeName);
+            var req = store.delete(key);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+        });
+    }).catch(() => false);
+}
+
+// List all IndexedDB keys that start with a given prefix string
+function listDBKeysForPrefix(prefix) {
+    return getDB().then(db => {
+        return new Promise((resolve) => {
+            var tx = db.transaction(storeName, "readonly");
+            var store = tx.objectStore(storeName);
+            var keys = [];
+            var req = store.openKeyCursor();
+            req.onsuccess = function(e) {
+                var cursor = e.target.result;
+                if (cursor) {
+                    if (String(cursor.key).startsWith(prefix)) {
+                        keys.push(cursor.key);
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(keys);
+                }
+            };
+            req.onerror = () => resolve([]);
+        });
+    }).catch(() => []);
 }
 
 function getImageFromDB(key) {
@@ -2247,7 +2291,6 @@ async function syncImages() {
     var syncIcon = document.querySelector('.fa-sync-alt');
 
     if (window.isSyncing) {
-        // If already syncing, just show the details modal
         if (bootScreen) bootScreen.style.display = 'flex';
         return;
     }
@@ -2255,12 +2298,12 @@ async function syncImages() {
     window.isSyncing = true;
     if (syncIcon) syncIcon.classList.add('fa-spin');
 
-    // Clear the coverExists cache on full manual sync to re-discover new covers
+    // Reset per-sync caches
     coverExistsMap = {};
     try { localStorage.removeItem("dsCoverExists"); } catch (e) { }
-
     window.dsFolderCache = {};
     try { localStorage.removeItem("dsFolderCache"); } catch (e) { }
+    window.syncReportResults = [];
 
     if (bootMsg) bootMsg.innerText = "Fetching latest product list...";
 
@@ -2269,141 +2312,172 @@ async function syncImages() {
         const data = await res.json();
         var docs = data.documents || [];
 
-        var productsToDownload = [];
+        var productsToSync = [];
         docs.forEach(d => {
             var f = d.fields || {};
-            var name = f.name ? f.name.stringValue : "";
+            var name    = f.name    ? f.name.stringValue    : "";
             var gridUrl = f.gridUrl ? f.gridUrl.stringValue : "";
-            var ready = f.ready ? f.ready.stringValue : "";
             var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
-            if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !isWix && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
-                productsToDownload.push({
-                    name: name,
-                    gridUrl: gridUrl,
-                    ready: ready
-                });
+            if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed"
+                && !isWix && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
+                productsToSync.push({ name, gridUrl });
             }
         });
 
-        if (productsToDownload.length === 0) {
+        if (productsToSync.length === 0) {
             window.isSyncing = false;
             if (syncIcon) syncIcon.classList.remove('fa-spin');
             if (bootScreen) bootScreen.style.display = 'none';
-            alert("No images found to sync.");
+            alert("No products found to sync.");
             initApp();
             return;
         }
 
-        var total = productsToDownload.length;
-        if (bootMsg) bootMsg.innerText = "Syncing 0 / " + total + " images...";
+        var total    = productsToSync.length;
+        var count    = 0;
+        var failed   = 0;
+        var failedList = [];
+        var bucket   = "durga-sarees.firebasestorage.app";
+        var fbBase   = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
 
-        var count = 0;
-        var failed = 0;
-        var failedList = []; // 📋 Track exactly which products fail and why
-        var bucket = "durga-sarees.firebasestorage.app";
-        var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+        if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
-        // Download in batches of 5
-        var batchSize = 5;
-        for (var i = 0; i < productsToDownload.length; i += batchSize) {
-            var batch = productsToDownload.slice(i, i + batchSize);
+        // Batch of 8 in parallel
+        var batchSize = 8;
+        for (var i = 0; i < productsToSync.length; i += batchSize) {
+            var batch = productsToSync.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
-                var cleanGrid = p.gridUrl.trim().replace(/\\\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                var cleanGrid  = p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                 var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
-
-                var downloaded = false;
+                var listPrefix  = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
+                var listUrl     = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
                 var lastFailReason = "";
+                var downloaded = false;
 
-                // 🔍 SMART SYNC: ALWAYS fetch list API to discover ACTUAL filenames in the folder
-                var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
-                var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
-
-                var folderItems = [];
+                // ── 1. Fetch Firebase folder listing ──────────────────────────
+                var folderFiles = []; // filenames only (e.g. "01.webp", "02.webp")
                 var listSuccess = false;
                 try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 15000);
-                    var listRes = await fetch(listUrl, { signal: controller.signal });
-                    clearTimeout(timeoutId);
+                    const ctrl = new AbortController();
+                    const tid  = setTimeout(() => ctrl.abort(), 15000);
+                    var listRes = await fetch(listUrl, { signal: ctrl.signal });
+                    clearTimeout(tid);
                     if (listRes.ok) {
-                        var listData = await listRes.json();
-                        folderItems = (listData.items || []).map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
-                                                        .filter(fname => /\.(webp|jpg|jpeg|png)$/i.test(fname));
+                        var listData  = await listRes.json();
+                        folderFiles   = (listData.items || [])
+                            .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
+                            .filter(f  => /\.(webp|jpg|jpeg|png)$/i.test(f));
                         listSuccess = true;
                     } else {
-                        lastFailReason = "List API HTTP " + listRes.status;
+                        lastFailReason = "List HTTP " + listRes.status;
                     }
-                } catch (e) {
-                    lastFailReason = "List API failed: " + (e.name === 'AbortError' ? 'Connection Timeout (15s)' : e.message);
+                } catch(e) {
+                    lastFailReason = "List failed: " + (e.name === 'AbortError' ? 'Timeout (15s)' : e.message);
                 }
 
-                if (listSuccess) {
-                    if (folderItems.length === 0) {
-                        // 🛑 THE FIX: All images got deleted from Firebase folder.
-                        // Keep the existing cache in memory so the thumbnail doesn't become grey!
-                        downloaded = true; 
-                        console.log("Folder empty for", p.name, "- keeping cached image.");
-                    } else {
-                        // Folder has images! Let's download/replace the cover.
-                        folderItems.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
-                        var coverFile = folderItems[0];
-                        var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-                        
-                        try {
-                            const controller = new AbortController();
-                            const timeoutId = setTimeout(() => controller.abort(), 30000);
-                            var res = await fetch(coverUrl, { signal: controller.signal });
-                            clearTimeout(timeoutId);
-                            if (res.ok) {
-                                var blob = await res.blob();
-                                await saveImageToDB(p.gridUrl, blob); // Overwrite cache to replace/remove old images
-                                downloaded = true;
-                            } else {
-                                lastFailReason = "HTTP " + res.status + " on cover: " + coverUrl;
-                            }
-                        } catch (e) {
-                            lastFailReason = "Cover fetch failed: " + (e.name === 'AbortError' ? 'Connection Timeout (30s)' : e.message);
+                if (!listSuccess) {
+                    // Offline / error — keep existing cache, log error
+                    var existingCover = await getImageFromDB(p.gridUrl);
+                    if (existingCover) downloaded = true;
+                    else lastFailReason = lastFailReason || "Offline & no local cache";
+
+                } else if (folderFiles.length === 0) {
+                    // Firebase folder is EMPTY — keep existing cover, do NOT delete
+                    downloaded = true;
+                    console.log("[SYNC] Folder empty for", p.name, "- keeping cached cover.");
+
+                } else {
+                    // Sort files: 01.webp first, then 02, 03...
+                    folderFiles.sort((a, b) =>
+                        (parseInt(a.replace(/\D/g,'')) || 999) - (parseInt(b.replace(/\D/g,'')) || 999));
+
+                    // Build the full Firebase URL keys that should exist in DB
+                    // Cover = first file, key stored as gridUrl (bare folder path)
+                    // Designs = each file, key stored as full Firebase URL
+                    var coverFile  = folderFiles[0];
+                    var coverUrl   = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
+                    var designKeys = {}; // key → url map for all files
+                    folderFiles.forEach(f => {
+                        var key = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
+                        designKeys[key] = key;
+                    });
+
+                    // ── 2. Cleanup: Delete from DB keys NOT in Firebase anymore ──
+                    // Scan DB for all keys that belong to this product's folder
+                    var dbKeyPrefix = fbBase + encGridPath + "%2F";
+                    var cachedKeys  = await listDBKeysForPrefix(dbKeyPrefix);
+                    for (var ck of cachedKeys) {
+                        if (!designKeys[ck]) {
+                            await deleteImageFromDB(ck);
+                            console.log("[SYNC] Deleted stale cache:", ck);
                         }
                     }
-                } else {
-                    // List API failed (maybe offline), fallback to fast path cache
-                    var existingCover = await getImageFromDB(p.gridUrl);
-                    if (existingCover) { downloaded = true; }
+
+                    // ── 3. Download cover → store under gridUrl key ──────────
+                    try {
+                        const ctrl2 = new AbortController();
+                        const tid2  = setTimeout(() => ctrl2.abort(), 30000);
+                        var coverRes = await fetch(coverUrl, { signal: ctrl2.signal });
+                        clearTimeout(tid2);
+                        if (coverRes.ok) {
+                            var coverBlob = await coverRes.blob();
+                            await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
+                            downloaded = true;
+                        } else {
+                            lastFailReason = "Cover HTTP " + coverRes.status;
+                        }
+                    } catch(e) {
+                        lastFailReason = "Cover fetch: " + (e.name === 'AbortError' ? 'Timeout (30s)' : e.message);
+                    }
+
+                    // ── 4. Download remaining design files if not already cached ──
+                    if (downloaded) {
+                        for (var fi = 0; fi < folderFiles.length; fi++) {
+                            var fname    = folderFiles[fi];
+                            if (fname === coverFile) continue; // already downloaded above
+                            var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                            var existing  = await getImageFromDB(designUrl);
+                            if (existing) continue; // already in cache
+                            try {
+                                const ctrl3 = new AbortController();
+                                const tid3  = setTimeout(() => ctrl3.abort(), 30000);
+                                var dRes = await fetch(designUrl, { signal: ctrl3.signal });
+                                clearTimeout(tid3);
+                                if (dRes.ok) {
+                                    await saveImageToDB(designUrl, await dRes.blob());
+                                }
+                            } catch(e) {
+                                console.warn("[SYNC] Design fetch failed:", fname, e.message);
+                            }
+                        }
+                    }
                 }
 
+                // ── 5. Track errors ───────────────────────────────────────────
                 if (!downloaded) {
                     failed++;
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
-                    console.error("❌ SYNC FAILED:", p.name, "| Path:", p.gridUrl, "| Reason:", lastFailReason);
-                    
-                    // Store error in syncReportResults keyed by gridUrl (allProducts may not be loaded yet)
+                    console.error("❌ SYNC FAILED:", p.name, "|", lastFailReason);
                     if (!window.syncReportResults) window.syncReportResults = [];
                     var syncErrKey = p.gridUrl;
-                    var existing = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
-                    if (existing) {
-                        existing.error = "Sync Failed: " + lastFailReason;
-                        existing.status = 'error';
+                    var existing2  = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
+                    if (existing2) {
+                        existing2.error  = "Sync Failed: " + lastFailReason;
+                        existing2.status = 'error';
                     } else {
                         window.syncReportResults.push({
-                            id: null, // will be resolved when report is opened
-                            _gridUrl: syncErrKey,
-                            name: p.name,
-                            sku: p.sku || '-',
+                            id: null, _gridUrl: syncErrKey,
+                            name: p.name, sku: p.sku || '-',
                             error: "Sync Failed: " + lastFailReason,
-                            imageCount: 0,
-                            status: 'error'
+                            imageCount: 0, status: 'error'
                         });
                     }
                 }
 
-                // 🚀 FAST SYNC: Only download cover image (first file in folder)
-                // Design images are loaded on-demand when user opens the product page
                 count++;
             }));
 
-            if (bootMsg) {
-                bootMsg.innerText = "Syncing " + count + " / " + total + " images...";
-            }
+            if (bootMsg) bootMsg.innerText = "Smart syncing " + count + " / " + total + "...";
         }
 
         if (bootScreen) bootScreen.style.display = 'none';
@@ -2411,15 +2485,15 @@ async function syncImages() {
         if (syncIcon) syncIcon.classList.remove('fa-spin');
 
         if (failed > 0) {
-            var failMsg = "Sync completed: " + (total - failed) + " OK, " + failed + " failed.\n\nFailed products:\n";
+            var failMsg = "Sync done: " + (total - failed) + " OK, " + failed + " failed.\n\nFailed:\n";
             failedList.slice(0, 15).forEach(f => {
-                failMsg += "\n• " + f.name + "\n  Path: " + f.path + "\n  Error: " + f.reason;
+                failMsg += "\n• " + f.name + "  [" + f.reason + "]";
             });
-            if (failedList.length > 15) failMsg += "\n\n...and " + (failedList.length - 15) + " more. Check browser console (F12) for full list.";
+            if (failedList.length > 15) failMsg += "\n...and " + (failedList.length - 15) + " more.";
             console.table(failedList);
             alert(failMsg);
         } else {
-            alert("✅ Success! All " + total + " catalog images saved to local storage.");
+            alert("✅ Sync complete! All " + total + " products synced.");
         }
 
         initApp();
@@ -2428,10 +2502,11 @@ async function syncImages() {
         window.isSyncing = false;
         if (syncIcon) syncIcon.classList.remove('fa-spin');
         if (bootScreen) bootScreen.style.display = 'none';
-        alert("Sync failed: " + err.message);
+        alert("Sync error: " + err.message);
         initApp();
     }
 }
+
 function openModal(id) {
     cameFromDetail = false;
     var m = document.getElementById(id);

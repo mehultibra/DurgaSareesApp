@@ -20,76 +20,30 @@ function buildWixProductUrl(product) {
 }
 
 // ==========================================
-// 🧠 IMAGE HELPER: Convert blob to JPEG via canvas for jsPDF
-// PDF format only supports JPEG/PNG natively — WebP must be converted
-// Canvas conversion is instant since blob is already in RAM (IndexedDB)
+// 🧠 IMAGE HELPER: Blob → base64 via FileReader
+// ZERO canvas, ZERO compression — images are already small (10-20kb)
+// Works with any format: WebP, JPEG, PNG
 // ==========================================
-function blobToJpegDataUrl(blob) {
+function blobToBase64Direct(blob) {
     return new Promise(function(resolve) {
-        var blobUrl = URL.createObjectURL(blob);
-        var img = new Image();
-        img.onload = function() {
-            var canvas = document.createElement('canvas');
-            var maxDim = 1200;
-            var w = img.naturalWidth || img.width;
-            var h = img.naturalHeight || img.height;
-            if (w > maxDim || h > maxDim) {
-                var r = Math.min(maxDim / w, maxDim / h);
-                w = Math.round(w * r);
-                h = Math.round(h * r);
-            }
-            canvas.width = w;
-            canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-            URL.revokeObjectURL(blobUrl);
-            resolve(canvas.toDataURL('image/jpeg', 0.75));
-        };
-        img.onerror = function() {
-            URL.revokeObjectURL(blobUrl);
-            resolve(null);
-        };
-        img.src = blobUrl;
+        if (!blob) { resolve(null); return; }
+        var fr = new FileReader();
+        fr.onload = function() { resolve(fr.result); };
+        fr.onerror = function() { resolve(null); };
+        fr.readAsDataURL(blob);
     });
 }
 
-// Fast network fallback (same as yesterday's original): canvas maxDim 1200, JPEG 0.75
-function getBase64ImageFromUrl(imageUrl) {
-    return new Promise(function(resolve) {
-        var img = new Image();
-        img.crossOrigin = 'Anonymous';
-        img.onload = function() {
-            var canvas = document.createElement('canvas');
-            var maxDim = 1200;
-            var w = img.width, h = img.height;
-            if (w > maxDim || h > maxDim) {
-                var r = Math.min(maxDim / w, maxDim / h);
-                w = Math.round(w * r); h = Math.round(h * r);
-            }
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL('image/jpeg', 0.75));
-        };
-        img.onerror = function() { resolve(null); };
-        img.src = imageUrl;
-    });
+// Get base64 image from IndexedDB cache key — no network, no canvas
+// coverKey: the gridUrl (folder path string) for DIRECT/Cover
+// designKey: full Firebase URL for named designs
+function getBase64FromCache(cacheKey) {
+    return getImageFromDB(cacheKey).then(function(blob) {
+        if (blob) return blobToBase64Direct(blob);
+        return null;
+    }).catch(function() { return null; });
 }
 
-function getBase64ImageFast(imageUrl) {
-    // Try IndexedDB cache FIRST — blob is already in memory, canvas JPEG conversion is fast
-    return getImageFromDB(imageUrl).then(function(blob) {
-        if (blob) return blobToJpegDataUrl(blob);
-        // Fallback: try alternate cache key (with %2F0 -> %2F fix)
-        var altUrl = imageUrl.includes('%2F0') ? imageUrl.replace('%2F0', '%2F') : null;
-        var tryAlt = altUrl ? getImageFromDB(altUrl) : Promise.resolve(null);
-        return tryAlt.then(function(altBlob) {
-            if (altBlob) return blobToJpegDataUrl(altBlob);
-            // Last resort: download from network (same fast approach as yesterday)
-            return getBase64ImageFromUrl(imageUrl);
-        });
-    }).catch(function() {
-        return getBase64ImageFromUrl(imageUrl);
-    });
-}
 
 
 
@@ -190,44 +144,39 @@ async function generateCartOrderPDF(actionType) {
 
         if (bootMsg) bootMsg.innerText = "Loading images from cache...";
 
-        // Preload images for all cart items using ONLY gridUrl
+        // ── Strict IndexedDB-only image lookup — ZERO network, ZERO canvas ──
+        var bucket = "durga-sarees.firebasestorage.app";
+        var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+
         for (var g of groupArr) {
             var gridUrl = g.p.gridUrl;
-            
+            var cleanGrid = gridUrl ? gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(function(s){ return s.trim(); }).join('/') : '';
+            var encGridPath = cleanGrid.split('/').map(function(s){ return encodeURIComponent(s); }).join('%2F');
+
             for (var item of g.items) {
                 var dId = item.design || 'DIRECT';
-                
-                // Try fetching the grid image directly
-                if (gridUrl) {
-                    var fullGridUrl = getDesignFirebaseUrl(gridUrl, dId);
-                    item._pdfImgSrc = await getBase64ImageFast(fullGridUrl);
-                    if (!item._pdfImgSrc) {
-                        item._pdfImgSrc = await getBase64ImageFromUrl(fullGridUrl);
-                    }
+                var cacheKey;
+
+                if (dId === 'DIRECT' || dId === 'Cover') {
+                    // Cover image stored under the bare gridUrl folder-path as key
+                    cacheKey = gridUrl;
+                } else {
+                    // Design stored under full Firebase URL key (same as sync writes)
+                    var cleanNum = dId.replace(/\D/g, '');
+                    if (cleanNum.length === 1) cleanNum = '0' + cleanNum;
+                    if (!cleanNum) cleanNum = dId;
+                    cacheKey = fbBase + encGridPath + '%2F' + encodeURIComponent(cleanNum + '.webp') + '?alt=media';
                 }
-                
-                // If grid image failed to fetch, try the DOM img element fallback
-                if (!item._pdfImgSrc) {
-                    var dId = item.design || 'DIRECT';
-                    var imgId = "cart_img_" + g.p.id + "_" + dId.replace(/[^a-zA-Z0-9]/g, '');
-                    var domImg = document.getElementById(imgId);
-                    var domSrc = getImgElementSrc(domImg);
-                    
-                    if (domSrc && domSrc.startsWith('blob:')) {
-                        try {
-                            var fetchBlob = await fetch(domSrc);
-                            var blobData = await fetchBlob.blob();
-                            var b64 = await new Promise(function(res) {
-                                var fr = new FileReader();
-                                fr.onload = () => res(fr.result);
-                                fr.onerror = () => res(null);
-                                fr.readAsDataURL(blobData);
-                            });
-                            item._pdfImgSrc = b64;
-                        } catch(e) {}
-                    } else if (domSrc && domSrc.startsWith('http')) {
-                        item._pdfImgSrc = await getBase64ImageFromUrl(domSrc);
+
+                var blob = await getImageFromDB(cacheKey);
+                if (blob) {
+                    item._pdfImgSrc = await blobToBase64Direct(blob);
+                    if (!item._pdfImgSrc) {
+                        item._pdfFailReason = 'Corrupt blob';
                     }
+                } else {
+                    item._pdfImgSrc = null;
+                    item._pdfFailReason = (dId === 'DIRECT' || dId === 'Cover') ? 'Cover not synced' : 'Design not synced';
                 }
             }
         }
@@ -422,18 +371,22 @@ async function generateCartOrderPDF(actionType) {
                             // Make the thumbnail image a clickable link
                             doc.link(imgX, imgY, drawW, drawH, { url: wixUrl });
                         } catch(e) {
+                            // Render error placeholder with reason
+                            var errMsg = item._pdfFailReason || 'Render error';
                             doc.setFillColor(240, 240, 240);
                             doc.rect(cellX + 3, y, CELL_W - THUMB_GAP - 6, THUMB_SIZE, 'F');
                             doc.setFontSize(6);
                             doc.setTextColor(150, 150, 150);
-                            doc.text("Image Not Found", cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2, { align: "center" });
+                            doc.text(errMsg, cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2, { align: 'center', maxWidth: CELL_W - THUMB_GAP - 6 });
                         }
                     } else {
+                        // No image in cache — draw grey block + short reason
+                        var reason = item._pdfFailReason || 'Not synced';
                         doc.setFillColor(240, 240, 240);
                         doc.rect(cellX + 3, y, CELL_W - THUMB_GAP - 6, THUMB_SIZE, 'F');
                         doc.setFontSize(6);
                         doc.setTextColor(150, 150, 150);
-                        doc.text("Image Not Found", cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2, { align: "center" });
+                        doc.text(reason, cellX + (CELL_W - THUMB_GAP) / 2, y + THUMB_SIZE / 2, { align: 'center', maxWidth: CELL_W - THUMB_GAP - 6 });
                     }
 
                     // Single row Design Label + Qty
