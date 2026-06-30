@@ -227,9 +227,10 @@
         <i class="fas fa-times" style="cursor:pointer; color:var(--text-light); font-size:16px;" onclick="closeModals()"></i>
       </div>
       <div style="padding: 16px; border-bottom: 1px solid var(--border); background: #f9f9fa;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; gap:8px;">
             <button id="btnRunSyncReport" onclick="runSyncReport()" style="background:var(--myntra-pink); color:#fff; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Run Report</button>
-            <label style="font-size:13px; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+            <button id="btnResyncErrors" onclick="resyncFailedProducts()" style="display:none; background:#ff9800; color:#fff; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Resync Errors</button>
+            <label style="font-size:13px; color:var(--text-main); display:flex; align-items:center; gap:6px; flex:1; justify-content:flex-end;">
                 <input type="checkbox" id="chkShowCompletedSync" onchange="filterSyncReport()" style="accent-color:var(--myntra-pink);"> Show Completed
             </label>
         </div>

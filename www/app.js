@@ -3277,6 +3277,8 @@ function openSyncReportModal() {
         document.getElementById('syncReportProgress').style.display = 'none';
         document.getElementById('btnRunSyncReport').disabled = false;
         document.getElementById('chkShowCompletedSync').checked = false;
+        var btnResync = document.getElementById('btnResyncErrors');
+        if (btnResync) btnResync.style.display = 'none';
     } else {
         // Resolve any entries whose id was null (sync happened before allProducts loaded)
         if (window.allProducts && window.allProducts.length > 0) {
@@ -3290,7 +3292,10 @@ function openSyncReportModal() {
                 }
             });
         }
-        document.getElementById('syncReportStatus').innerText = 'Showing last sync errors (' + window.syncReportResults.filter(r => r.status === 'error').length + ' errors). Run report for full scan.';
+        var errCount = window.syncReportResults.filter(r => r.status === 'error').length;
+        document.getElementById('syncReportStatus').innerText = 'Showing last sync errors (' + errCount + ' errors). Run report for full scan.';
+        var btnResync = document.getElementById('btnResyncErrors');
+        if (btnResync) btnResync.style.display = errCount > 0 ? 'inline-block' : 'none';
         renderSyncReportPartial();
     }
 }
@@ -3379,8 +3384,11 @@ async function runSyncReport() {
     }
     
     bar.style.width = '100%';
-    status.innerText = "Scan complete! Found " + window.syncReportResults.filter(r => r.status === 'error').length + " errors.";
+    var errCount = window.syncReportResults.filter(r => r.status === 'error').length;
+    status.innerText = "Scan complete! Found " + errCount + " errors.";
     btn.disabled = false;
+    var btnResync = document.getElementById('btnResyncErrors');
+    if (btnResync) btnResync.style.display = errCount > 0 ? 'inline-block' : 'none';
 }
 
 function renderSyncReportPartial() {
@@ -3448,3 +3456,78 @@ function renderSyncReportPartial() {
 }
 
 window.filterSyncReport = renderSyncReportPartial;
+
+// ====================================
+// RESYNC FAILED PRODUCTS LOGIC
+// ====================================
+async function resyncFailedProducts() {
+    var errProducts = window.syncReportResults.filter(r => r.status === 'error');
+    if (errProducts.length === 0) return;
+    
+    var btn = document.getElementById('btnRunSyncReport');
+    var btnResync = document.getElementById('btnResyncErrors');
+    var status = document.getElementById('syncReportStatus');
+    var bar = document.getElementById('syncReportBar');
+    var progress = document.getElementById('syncReportProgress');
+    
+    btn.disabled = true;
+    btnResync.disabled = true;
+    progress.style.display = 'block';
+    bar.style.width = '0%';
+    
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    
+    for (var i = 0; i < errProducts.length; i++) {
+        var result = errProducts[i];
+        bar.style.width = ((i / errProducts.length) * 100) + '%';
+        status.innerText = "Resyncing " + (i+1) + " of " + errProducts.length + ": " + result.name;
+        
+        var p = window.allProducts.find(x => x.id === result.id);
+        if (!p || !p.gridUrl || p.gridUrl === "None") {
+            result.error = "Detailed: Product deleted or has no Grid Folder.";
+            continue;
+        }
+        
+        var cleanGridPath = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+        var gridImgUrl = fbBase + cleanGridPath + "%2F01.webp?alt=media";
+        
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
+            var res = await fetch(gridImgUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            if (res.ok) {
+                var blob = await res.blob();
+                await saveImageToDB(gridImgUrl, blob);
+                
+                // Update local cache mappings
+                window.coverExistsMap = window.coverExistsMap || {};
+                window.coverExistsMap[p.gridUrl] = true;
+                saveCoverExistsMap();
+                
+                result.status = 'completed';
+                result.error = "Resynced successfully.";
+                result.imageCount = 1;
+            } else {
+                result.error = "Detailed: HTTP " + res.status + " (" + res.statusText + ") for 01.webp";
+            }
+        } catch(e) {
+            result.error = "Detailed: " + (e.name === 'AbortError' ? 'Connection Timeout fetching 01.webp' : e.message);
+        }
+        
+        renderSyncReportPartial();
+        
+        // Small delay to prevent connection overload
+        await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    
+    bar.style.width = '100%';
+    var remainingErrCount = window.syncReportResults.filter(r => r.status === 'error').length;
+    status.innerText = "Resync complete! " + remainingErrCount + " still failed.";
+    btn.disabled = false;
+    btnResync.disabled = false;
+    if (remainingErrCount === 0) btnResync.style.display = 'none';
+}
