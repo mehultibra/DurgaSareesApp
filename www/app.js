@@ -2340,28 +2340,13 @@ async function syncImages() {
                     console.error("❌ SYNC FAILED:", p.name, "| Path:", p.gridUrl, "| Reason:", lastFailReason);
                 }
 
-                // Download ready design grid images
+                // Download ready design grid images based strictly on Firebase folder contents! (Ignores Excel 'ready' column)
                 var designFilesToDownload = [];
 
-                if (p.ready && p.ready.trim() !== "") {
-                    // Download specific designs listed in Excel
-                    var rawDesigns = String(p.ready).split(',').map(d => d.trim()).filter(Boolean);
-                    rawDesigns.forEach(d => {
-                        var cleanNum = d.replace(/\D/g, '');
-                        if (d.length <= 10 && cleanNum !== "") {
-                            var numVal = parseInt(cleanNum);
-                            if (numVal >= 1 && numVal <= 99) {
-                                var numStr = cleanNum.length === 1 ? "0" + cleanNum : cleanNum;
-                                designFilesToDownload.push({ name: numStr + ".webp", altName: cleanNum + ".webp" });
-                            }
-                        } else {
-                            designFilesToDownload.push({ name: d + ".webp" });
-                        }
-                    });
-                } else if (folderItems && folderItems.length > 0) {
-                    // No specific designs in Excel — download ALL discovered files in the folder!
+                if (folderItems && folderItems.length > 0) {
+                    // Download ALL discovered files in the folder!
                     folderItems.forEach(file => {
-                        // Skip the cover file since it was already downloaded
+                        // Skip the cover file since it was already downloaded earlier in the loop
                         if (file === coverFile) return;
                         designFilesToDownload.push({ name: file });
                     });
@@ -3144,3 +3129,127 @@ function saveCartInlineEdit(productId) {
     window.cartEditingMap[productId] = false;
     openCart(); // Re-render to show updated static text
 }
+
+// ====================================
+// 🔍 SYNC REPORT LOGIC
+// ====================================
+
+function openSyncReportModal() {
+    closeModals();
+    openModal('syncReportModal');
+    document.getElementById('syncReportBody').innerHTML = '';
+    document.getElementById('syncReportStatus').innerText = 'Ready to scan.';
+    document.getElementById('syncReportProgress').style.display = 'none';
+    document.getElementById('btnRunSyncReport').disabled = false;
+    document.getElementById('chkShowCompletedSync').checked = false;
+}
+
+window.syncReportResults = [];
+
+async function runSyncReport() {
+    var btn = document.getElementById('btnRunSyncReport');
+    var status = document.getElementById('syncReportStatus');
+    var bar = document.getElementById('syncReportBar');
+    var progress = document.getElementById('syncReportProgress');
+    
+    btn.disabled = true;
+    progress.style.display = 'block';
+    bar.style.width = '0%';
+    window.syncReportResults = [];
+    
+    var productsToScan = window.allProducts.filter(p => p.gridUrl && p.gridUrl !== "None");
+    var total = productsToScan.length;
+    
+    if (total === 0) {
+        status.innerText = "No products found to scan.";
+        btn.disabled = false;
+        return;
+    }
+    
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=";
+    
+    for (var i = 0; i < total; i++) {
+        var p = productsToScan[i];
+        bar.style.width = ((i / total) * 100) + '%';
+        status.innerText = "Scanning " + (i+1) + " of " + total + ": " + p.name;
+        
+        var cleanGridPath = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+        var listUrl = fbBase + cleanGridPath + "&delimiter=/";
+        
+        var result = {
+            id: p.id,
+            name: p.name,
+            sku: p.sku || '-',
+            error: null,
+            imageCount: 0,
+            status: 'completed'
+        };
+        
+        try {
+            var res = await fetch(listUrl);
+            if (!res.ok) {
+                result.error = "HTTP Error " + res.status;
+                result.status = 'error';
+            } else {
+                var data = await res.json();
+                var items = data.items || [];
+                var imgCount = items.filter(it => /\.(webp|jpg|jpeg|png)$/i.test(it.name)).length;
+                result.imageCount = imgCount;
+                if (imgCount === 0) {
+                    result.error = "Empty folder / No images found";
+                    result.status = 'error';
+                }
+            }
+        } catch(e) {
+            result.error = "Network fetch failed";
+            result.status = 'error';
+        }
+        
+        window.syncReportResults.push(result);
+        renderSyncReportPartial();
+    }
+    
+    bar.style.width = '100%';
+    status.innerText = "Scan complete! Found " + window.syncReportResults.filter(r => r.status === 'error').length + " errors.";
+    btn.disabled = false;
+}
+
+function renderSyncReportPartial() {
+    var showCompleted = document.getElementById('chkShowCompletedSync').checked;
+    var container = document.getElementById('syncReportBody');
+    
+    var html = '';
+    var errorCount = 0;
+    
+    for (var i = 0; i < window.syncReportResults.length; i++) {
+        var r = window.syncReportResults[i];
+        if (r.status === 'error') errorCount++;
+        
+        if (r.status === 'completed' && !showCompleted) continue;
+        
+        var bg = r.status === 'error' ? '#fff3f3' : '#f5fbf5';
+        var border = r.status === 'error' ? '#ffcdd2' : '#c8e6c9';
+        var iconColor = r.status === 'error' ? '#e53935' : '#4caf50';
+        var iconCls = r.status === 'error' ? 'fa-exclamation-triangle' : 'fa-check-circle';
+        
+        html += `
+        <div style="background:${bg}; border:1px solid ${border}; border-radius:6px; padding:10px; display:flex; align-items:flex-start; gap:10px;">
+            <i class="fas ${iconCls}" style="color:${iconColor}; margin-top:2px;"></i>
+            <div style="flex:1;">
+                <div style="font-weight:bold; font-size:13px; color:var(--text-main);">${r.name}</div>
+                <div style="font-size:11px; color:var(--text-light); margin-bottom:4px;">SKU: ${r.sku}</div>
+                ${r.status === 'error' ? `<div style="font-size:12px; color:#c62828; font-weight:bold;">Error: ${r.error}</div>` : `<div style="font-size:12px; color:#2e7d32;">Found ${r.imageCount} images</div>`}
+            </div>
+        </div>
+        `;
+    }
+    
+    if (html === '' && window.syncReportResults.length > 0) {
+        html = '<div style="text-align:center; padding:20px; color:var(--text-light); font-size:13px;">No errors to show!</div>';
+    }
+    
+    container.innerHTML = html;
+}
+
+window.filterSyncReport = renderSyncReportPartial;
