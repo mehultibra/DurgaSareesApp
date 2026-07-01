@@ -1204,11 +1204,11 @@ function fetchZoomNatively(zoomUrl, imgEl) {
     tempImg.onerror = function() {
         if (imgEl.dataset.loadedZoom === "true") return;
         var newZoomUrl = null;
-        if (zoomUrl.toLowerCase().endsWith('.webp')) {
-            newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 5) + '.jpg';
-        } else if (zoomUrl.toLowerCase().endsWith('.jpg')) {
-            newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 4) + '.webp';
-        }
+        var lowerUrl = zoomUrl.toLowerCase();
+        if (lowerUrl.endsWith('.webp')) newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 5) + '.jpg';
+        else if (lowerUrl.endsWith('.jpg')) newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 4) + '.webp';
+        else if (lowerUrl.endsWith('.jpeg')) newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 5) + '.jpg';
+        else if (lowerUrl.endsWith('.png')) newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 4) + '.webp';
         if (newZoomUrl) {
             var fallbackImg = new Image();
             fallbackImg.onload = function() {
@@ -1346,8 +1346,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 // Grid path: item.name already IS the Grid path
                 var gridEncName = fullPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
                 // Zoom path: replace Grid folder prefix with Zoom folder prefix
-                var zoomFullPath = fullPath.replace(cleanGridPath, cleanZoomPath);
-                var zoomEncName = zoomFullPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                // Strictly append the filename to the zoom folder path, bypassing case-sensitive .replace() errors
+                var zoomEncName = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') + '%2F' + encodeURIComponent(filename);
 
                 var gridUrl = fbBase + gridEncName + "?alt=media";
                 var zoomUrl = fbBase + zoomEncName + "?alt=media";
@@ -1450,10 +1450,15 @@ function openDetail(productId, skipShow, keepSearchShown) {
         // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
         await Promise.all(files.map(async (file, idx) => {
             if (!file.isVideo) {
-                var isCover = (idx === 0);
-                var gridBlob = null;
-                if (isCover && p.gridUrl) gridBlob = await getImageFromDB(p.gridUrl);
-                if (!gridBlob && file.gridUrl) gridBlob = await getImageFromDB(file.gridUrl);
+                var isCover = /^(01|1|cover)$/i.test(file.name);
+                var gridBlob = await getImageFromDB(file.gridUrl);
+                if (!gridBlob && window.findDesignKeyInCache) {
+                    var altKey = await window.findDesignKeyInCache(p.gridUrl, file.name);
+                    if (altKey) gridBlob = await getImageFromDB(altKey);
+                }
+                if (!gridBlob && isCover && p.gridUrl) {
+                    gridBlob = await getImageFromDB(p.gridUrl);
+                }
                 
                 if (gridBlob) {
                     file.cachedObjectUrl = URL.createObjectURL(gridBlob);
@@ -1503,7 +1508,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgEl = document.getElementById(imgId);
                 if (imgEl) {
-                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, idx === 0);
+                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(01|1|cover)$/i.test(file.name));
                 }
             }
         });
