@@ -171,9 +171,9 @@ window.addEventListener('DOMContentLoaded', function () {
 
                 window.CapacitorFirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
                     var errEl = document.getElementById('lErr');
-                    if (errEl) errEl.innerText = "âŒ Verification Failed: " + event.message;
+                    if (errEl) errEl.innerText = "❌ Verification Failed: " + event.message;
                     var errElOtp = document.getElementById('lErrOtp');
-                    if (errElOtp) errElOtp.innerText = "âŒ " + event.message;
+                    if (errElOtp) errElOtp.innerText = "❌ " + event.message;
                     var btn = document.getElementById('btnSendOtp');
                     if (btn) btn.innerText = "SEND OTP";
                 });
@@ -185,7 +185,7 @@ window.addEventListener('DOMContentLoaded', function () {
         setupEditableFields();
         setupFsGestures();
         
-        // ðŸš€ Initialize Capgo OTA Updater
+        // 🚀 Initialize Capgo OTA Updater
         if (window.Capacitor && window.Capacitor.Plugins.CapacitorUpdater) {
             window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady();
             checkForOTAUpdates();
@@ -259,7 +259,7 @@ async function sendOtp() {
             if (btn) btn.innerText = "SEND OTP";
         }
     } catch (err) {
-        if (errEl) errEl.innerText = "âŒ " + (err.message || "Failed to send OTP");
+        if (errEl) errEl.innerText = "❌ " + (err.message || "Failed to send OTP");
         if (btn) btn.innerText = "SEND OTP";
     }
 }
@@ -303,7 +303,7 @@ async function verifyOtp() {
             }
         });
     } catch (err) {
-        if (errEl) errEl.innerText = "âŒ Invalid OTP or Error: " + (err.message || "");
+        if (errEl) errEl.innerText = "❌ Invalid OTP or Error: " + (err.message || "");
         if (btn) btn.innerText = "VERIFY";
     }
 }
@@ -549,11 +549,11 @@ function processProducts(docs) {
 }
 
 // ==========================================
-// ðŸš€ FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
+// 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
 // ==========================================
-// ðŸ›¡ï¸ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
+// 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
 // ==========================================
-// ðŸ“¦ INDEXEDDB CACHE DATABASE FOR IMAGES
+// 📦 INDEXEDDB CACHE DATABASE FOR IMAGES
 // ==========================================
 var dbName = "DurgaSareesCache";
 var storeName = "images";
@@ -671,7 +671,7 @@ async function manageProductHDCache(product, action) {
                                         var newBlob = await r.blob();
                                         await saveImageToDB(fullUrl, newBlob);
 
-                                        // ðŸŸ¢ LIVE UI INJECTION: Update swipe deck instantly
+                                        // 🟢 LIVE UI INJECTION: Update swipe deck instantly
                                         var liveImgs = document.querySelectorAll('img[data-zoom-url="' + fullUrl + '"]');
                                         if (liveImgs.length > 0) {
                                             var objUrl = URL.createObjectURL(newBlob);
@@ -683,7 +683,7 @@ async function manageProductHDCache(product, action) {
                                             });
                                         }
 
-                                        // ðŸŸ¢ LIVE FULLSCREEN INJECTION: Update if user is currently zoomed in
+                                        // 🟢 LIVE FULLSCREEN INJECTION: Update if user is currently zoomed in
                                         var fsImg = document.getElementById('fsImg');
                                         var fsModal = document.getElementById('fsModal');
                                         if (fsImg && fsModal && fsModal.style.display === 'flex') {
@@ -728,7 +728,7 @@ async function manageProductHDCache(product, action) {
     }
 }
 
-// ðŸ§  CORE FIX: Resolves the exact IndexedDB cache key for a given design label
+// 🧠 CORE FIX: Resolves the exact IndexedDB cache key for a given design label
 // It ignores file extensions (.jpg vs .webp) and padding (2 vs 02) to guarantee a match
 window.findDesignKeyInCache = async function(gridUrl, designLabel) {
     if (!gridUrl || gridUrl.startsWith('http')) return null;
@@ -807,9 +807,9 @@ function getCachedImageBlob(url) {
 
 
 
-// ðŸš€ FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
+// 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
 // ==========================================
-// ðŸ›¡ï¸ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
+// 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
 window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFile) {
     if (!gridPath || gridPath.trim() === "" || gridPath.toLowerCase() === "none") {
         imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
@@ -841,7 +841,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         tryFolderListFallback();
     }
 
-        // ðŸ” LAST RESORT: Call Firebase list API to discover actual filenames
+        // 🔄 LAST RESORT: Call Firebase list API to discover actual filenames
         function tryFolderListFallback() {
             // Check if we already cached the fallback filename
             if (dsFallbackMap[gridPath]) {
@@ -938,7 +938,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         loadFromNetwork();
     });
 
-    // 2. Background Load High-Res Zoom Image (if applicable) â€” saved to IndexedDB for PDF speed
+    // 2. Background Load High-Res Zoom Image (if applicable) — saved to IndexedDB for PDF speed
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
         var encZoomPath = zoomPath.trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
         var highResUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
@@ -1405,7 +1405,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             }
         });
 
-        // ðŸ›¡ï¸ SORT LATEST DESIGNS FIRST (DESCENDING NUMERICAL)
+        // 🛡️ SORT LATEST DESIGNS FIRST (DESCENDING NUMERICAL)
         validFiles.sort((a, b) => {
             var numA = parseInt(a.name.replace(/\D/g, ''));
             var numB = parseInt(b.name.replace(/\D/g, ''));
@@ -1472,7 +1472,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             })
             .catch(err => {
                 console.warn("Background folder list load failed", err);
-                // ðŸ›¡ï¸ OFFLINE FALLBACK: Generate dummy array from p.designs
+                // 🛡️ OFFLINE FALLBACK: Generate dummy array from p.designs
                 var fallbackItems = [];
                 for (var i = 1; i <= totalCards; i++) {
                     var n = String(i);
@@ -1489,7 +1489,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
         var placeholderSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#f9f9fa"/></svg>');
 
-        // ðŸš€ PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
+        // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
         await Promise.all(files.map(async (file, idx) => {
             if (!file.isVideo) {
                 var isCover = /^(01|1|cover)$/i.test(file.name);
@@ -1581,7 +1581,7 @@ window.changeQty = function (pid, designId, amount) {
     var input = document.getElementById('qty_' + pid + '_' + designId);
     if (input) input.value = newQ;
 
-    // 2. ðŸ›¡ï¸ THE FIX: Update Full Screen Bottom Row instantly if it's open
+    // 2. 🛡️ THE FIX: Update Full Screen Bottom Row instantly if it's open
     if (typeof fsDesignId !== 'undefined' && fsDesignId === designId) {
         var fsInp = document.getElementById('fsQty');
         if (fsInp) fsInp.innerText = newQ;
@@ -1590,7 +1590,7 @@ window.changeQty = function (pid, designId, amount) {
     try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
     refreshCardUI(pid);
     updateLiveDetailHeader(); // Updates the total Master Qty at bottom!
-    updateBottomQtyFromActiveDesign(); // ðŸ›¡ï¸ Keep bottom row selection updated
+    updateBottomQtyFromActiveDesign(); // 🛡️ Keep bottom row selection updated
     
     var totalQty = 0;
     for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
@@ -1671,7 +1671,7 @@ function closeDetail() {
 }
 
 // ====================================
-// ðŸ” 5. FULL SCREEN MODAL & LIVE BOTTOM ROW
+// 🧠 5. FULL SCREEN MODAL & LIVE BOTTOM ROW
 // ====================================
 var fsIndex = 0;
 var fsDesignId = '';
@@ -1712,6 +1712,18 @@ function setupFsGestures() {
         if (window.fsIsStandalone) return;
         var threshold = 50;
         if (Math.abs(diffX) > threshold) {
+            // Find current index based on fsDesignId to ensure sync when swiping from Cart!
+            var deck = document.getElementById('dtDesigns');
+            if (deck && typeof fsDesignId !== 'undefined') {
+                var cards = Array.from(deck.querySelectorAll('.swipe-card')).filter(c => c.style.display !== 'none');
+                var foundIdx = cards.findIndex(card => {
+                    var inputField = card.querySelector('input[type="number"]');
+                    var cardDId = inputField ? inputField.id.replace("qty_" + (typeof curProduct !== 'undefined' && curProduct ? curProduct.id : '') + "_", "") : 'DIRECT';
+                    return cardDId === fsDesignId;
+                });
+                if (foundIdx !== -1) fsIndex = foundIdx;
+            }
+
             if (diffX > 0) {
                 // Swipe Right (Go to previous image)
                 openFs(fsIndex - 1);
@@ -1839,7 +1851,9 @@ function openFs(arg1, arg2, arg3, arg4) {
     }
 
     if (cartImgSrc) {
-        window.fsIsStandalone = true;
+        window.fsIsStandalone = false; // THE FIX: Allow swiping from Cart!
+        fsDesignId = dId;
+        
         var fsModal = document.getElementById('fsModal');
         var fsImg = document.getElementById('fsImg');
         var fsVideo = document.getElementById('fsVideo');
@@ -1870,7 +1884,7 @@ function openFs(arg1, arg2, arg3, arg4) {
     var deck = document.getElementById('dtDesigns');
     if (!deck) return;
 
-    // ðŸ“± Filter to only visible cards (images/videos that successfully loaded and aren't hidden)
+    // 📱 Filter to only visible cards (images/videos that successfully loaded and aren't hidden)
     var cards = Array.from(deck.querySelectorAll('.swipe-card')).filter(card => card.style.display !== 'none');
 
     if (dId) {
@@ -1953,7 +1967,7 @@ function openFs(arg1, arg2, arg3, arg4) {
     var fsModal = document.getElementById('fsModal');
     if (fsModal.style.display !== 'flex') {
         fsModal.style.display = 'flex';
-        pushHistoryState('fs'); // ðŸ›¡ï¸ TRAPS BACK BUTTON
+        pushHistoryState('fs'); // 🛡️ TRAPS BACK BUTTON
     }
 }
 
@@ -1973,7 +1987,7 @@ function fsChg(amt) {
 }
 
 // ====================================
-// ðŸ›’ CART MODAL
+// 🛒 CART MODAL
 // ====================================
 function openCart() {
     cameFromDetail = false;
@@ -1986,7 +2000,7 @@ function openCart() {
 
         function safeText(str) { return str ? String(str).replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''; }
 
-        // ðŸ›¡ï¸ INTERNAL CACHE LOADING
+        // 🛡️ INTERNAL CACHE LOADING
         for (var k in cart) {
             var c = cart[k];
             if (!c || !c.p || !c.p.id) { delete cart[k]; continue; }
@@ -2156,7 +2170,7 @@ function clearCart() {
 }
 
 // ====================================
-// ðŸ“„ SAVE ORDER â€” GENERATES CART PDF (Lightning Fast from Cache)
+// 📄 SAVE ORDER — GENERATES CART PDF (Lightning Fast from Cache)
 // ====================================
 function sendWhatsapp() {
     var keys = Object.keys(cart);
@@ -2171,13 +2185,13 @@ function sendWhatsapp() {
 }
 
 // ====================================
-// ðŸ’¬ WHATSAPP TEXT ORDER (Legacy â€” PC & Mobile)
+// 💬 WHATSAPP TEXT ORDER (Legacy — PC & Mobile)
 // ====================================
 function sendWhatsappText() {
     var keys = Object.keys(cart);
     if (keys.length === 0) return alert("Your cart is empty!");
 
-    var msg = "ðŸ›ï¸ *New Order from Durga Sarees App*\n\n";
+    var msg = "🛍️ *New Order from Durga Sarees App*\n\n";
     var totalQty = 0;
     var groups = {};
 
@@ -2190,7 +2204,7 @@ function sendWhatsappText() {
 
     for (var r in groups) {
         var g = groups[r];
-        msg += "ðŸ·ï¸ *" + g.p.name + "* (SKU: " + (g.p.sku || "-") + ")\n";
+        msg += "🏷️ *" + g.p.name + "* (SKU: " + (g.p.sku || "-") + ")\n";
         g.items.forEach(function (item) {
             var dName = item.design === 'DIRECT' ? 'Cover' : item.design;
             msg += "  - " + dName + ": " + item.qty + " pcs\n";
@@ -2198,8 +2212,8 @@ function sendWhatsappText() {
         });
         msg += "\n";
     }
-    msg += "ðŸ“¦ *Total Quantity:* " + totalQty + " pcs\n";
-    msg += "ðŸŒ www.durgasarees.com\n";
+    msg += "📦 *Total Quantity:* " + totalQty + " pcs\n";
+    msg += "🌐 www.durgasarees.com\n";
 
     var number = "919998232380";
     var encodedMsg = encodeURIComponent(msg);
@@ -2406,8 +2420,8 @@ window.triggerShare = async function (action) {
     }
 
     if (action === 'images') {
-        if (highResUrls.length > 30) {
-            alert("WhatsApp limit is 30 images. You are trying to share " + highResUrls.length + " images. Please share as PDF.");
+        if (highResUrls.length > 100) {
+            alert("WhatsApp limit is 100 images. You are trying to share " + highResUrls.length + " images. Please share as PDF.");
             return;
         }
         if (typeof shareNativeImages === 'function') {
@@ -2422,6 +2436,10 @@ window.triggerShare = async function (action) {
 
 window.openCartFs = function (productId, designId, cartImgSrc) {
     var actualProductId = curProduct ? curProduct.id : productId;
+    
+    // THE FIX: Pre-load the swipe deck in the background so swiping works correctly!
+    openDetail(actualProductId, true, true);
+    
     // Open full screen viewer instantly with the clicked cart image
     openFs(actualProductId, 0, designId, cartImgSrc);
 };
@@ -2451,6 +2469,11 @@ window.openCartFsFromCache = function (productId, designId, gridUrl) {
         document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'none');
         fsModal.style.display = 'flex';
         pushHistoryState('fs');
+        
+        // THE FIX: Sync design ID and preload product images so they can SWIPE!
+        fsDesignId = designId;
+        window.fsIsStandalone = false;
+        openDetail(productId, true, true);
     }
 
     window.findDesignKeyInCache(gridUrl, designId).then(async function(gridCacheKey) {
@@ -2762,12 +2785,12 @@ async function syncImages() {
             var elSum = document.getElementById('syncReportSummary');
             var elDet = document.getElementById('syncReportDetails');
             if (elSum && elDet) {
-                elSum.innerText = "âœ… Sync complete!";
+                elSum.innerText = "✅ Sync complete!";
                 elSum.style.color = "#25D366";
                 elDet.innerHTML = "<div style='text-align:center; padding: 20px;'>All " + total + " products synced successfully!</div>";
                 openModal('syncResultsModal');
             } else {
-                alert("âœ… Sync complete! All " + total + " products synced.");
+                alert("✅ Sync complete! All " + total + " products synced.");
             }
         }
 
