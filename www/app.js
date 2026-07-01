@@ -655,8 +655,8 @@ async function manageProductHDCache(product, action) {
         try {
             var bucket = "durga-sarees.firebasestorage.app";
             var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-            var encPath = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-            var listUrl = fbBase + "?prefix=" + encPath + "%2F&delimiter=/";
+            var encPath = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/');
+            var listUrl = fbBase + "?prefix=" + encPath + "/&delimiter=/";
             
             fetch(listUrl).then(res => res.json()).then(data => {
                 if (data && data.items) {
@@ -1226,10 +1226,10 @@ function fetchZoomNatively(zoomUrl, imgEl) {
         if (imgEl.dataset.loadedZoom === "true") return;
         var newZoomUrl = null;
         var lowerUrl = zoomUrl.toLowerCase();
-        if (lowerUrl.endsWith('.webp')) newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 5) + '.jpg';
-        else if (lowerUrl.endsWith('.jpg')) newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 4) + '.webp';
-        else if (lowerUrl.endsWith('.jpeg')) newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 5) + '.jpg';
-        else if (lowerUrl.endsWith('.png')) newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 4) + '.webp';
+        if (lowerUrl.includes('.webp?alt=media')) newZoomUrl = zoomUrl.replace(/\.webp\?alt=media/i, '.jpg?alt=media');
+        else if (lowerUrl.includes('.jpg?alt=media')) newZoomUrl = zoomUrl.replace(/\.jpg\?alt=media/i, '.webp?alt=media');
+        else if (lowerUrl.includes('.jpeg?alt=media')) newZoomUrl = zoomUrl.replace(/\.jpeg\?alt=media/i, '.jpg?alt=media');
+        else if (lowerUrl.includes('.png?alt=media')) newZoomUrl = zoomUrl.replace(/\.png\?alt=media/i, '.webp?alt=media');
         if (newZoomUrl) {
             var fallbackImg = new Image();
             fallbackImg.onload = function() {
