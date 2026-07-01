@@ -1,4 +1,4 @@
-﻿// ==========================================
+// ==========================================
 // 🌸 DURGA SAREES - FIXED APP.JS v3 (RESTORED UI)
 // ==========================================
 
@@ -670,6 +670,32 @@ async function manageProductHDCache(product, action) {
                                     if (r.ok) {
                                         var newBlob = await r.blob();
                                         await saveImageToDB(fullUrl, newBlob);
+
+                                        // 🟢 LIVE UI INJECTION: Update swipe deck instantly
+                                        var liveImgs = document.querySelectorAll('img[data-zoom-url="' + fullUrl + '"]');
+                                        if (liveImgs.length > 0) {
+                                            var objUrl = URL.createObjectURL(newBlob);
+                                            liveImgs.forEach(img => {
+                                                if (img.dataset.tempBlobUrl) URL.revokeObjectURL(img.dataset.tempBlobUrl);
+                                                img.dataset.tempBlobUrl = objUrl;
+                                                img.src = objUrl;
+                                                img.dataset.loadedZoom = 'true';
+                                            });
+                                        }
+
+                                        // 🟢 LIVE FULLSCREEN INJECTION: Update if user is currently zoomed in
+                                        var fsImg = document.getElementById('fsImg');
+                                        var fsModal = document.getElementById('fsModal');
+                                        if (fsImg && fsModal && fsModal.style.display === 'flex') {
+                                            var filename = decodeURIComponent(fullUrl.split('%2F').pop().split('?')[0]);
+                                            var dName = filename.substring(0, filename.lastIndexOf('.'));
+                                            if (typeof fsDesignId !== 'undefined') {
+                                                var isCoverMatch = (fsDesignId === 'DIRECT' || fsDesignId === 'Cover') && /^(01|1|cover)$/i.test(dName);
+                                                if (fsDesignId === dName || isCoverMatch) {
+                                                    fsImg.src = URL.createObjectURL(newBlob); 
+                                                }
+                                            }
+                                        }
                                     }
                                 } catch(e) { console.warn("Background fetch skipped:", e); }
                             }
@@ -1467,18 +1493,24 @@ function openDetail(productId, skipShow, keepSearchShown) {
         await Promise.all(files.map(async (file, idx) => {
             if (!file.isVideo) {
                 var isCover = /^(01|1|cover)$/i.test(file.name);
-                var gridBlob = await getImageFromDB(file.gridUrl);
-                if (!gridBlob && window.findDesignKeyInCache) {
-                    var altKey = await window.findDesignKeyInCache(p.gridUrl, file.name);
-                    if (altKey) gridBlob = await getImageFromDB(altKey);
-                }
-                if (!gridBlob && isCover && p.gridUrl) {
-                    gridBlob = await getImageFromDB(p.gridUrl);
+                
+                // 1. Try HD Zoom First
+                var targetBlob = await getImageFromDB(file.url);
+                if (targetBlob) {
+                    file.isZoomLoaded = true;
+                } else {
+                    // 2. Fallback to Grid
+                    targetBlob = await getImageFromDB(file.gridUrl);
+                    if (!targetBlob && window.findDesignKeyInCache) {
+                        var altKey = await window.findDesignKeyInCache(p.gridUrl, file.name);
+                        if (altKey) targetBlob = await getImageFromDB(altKey);
+                    }
+                    if (!targetBlob && isCover && p.gridUrl) {
+                        targetBlob = await getImageFromDB(p.gridUrl);
+                    }
                 }
                 
-                if (gridBlob) {
-                    file.cachedObjectUrl = URL.createObjectURL(gridBlob);
-                }
+                if (targetBlob) file.cachedObjectUrl = URL.createObjectURL(targetBlob);
             }
         }));
 
@@ -1500,11 +1532,12 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 </div>`;
             } else {
                 var imgId = "design_img_" + p.id + "_" + idx;
+                var loadedZoomAttr = file.isZoomLoaded ? 'data-loaded-zoom="true"' : 'data-loaded-zoom="false"';
                 var imgSrc = file.cachedObjectUrl ? file.cachedObjectUrl : placeholderSVG;
                 var tempUrlAttr = file.cachedObjectUrl ? 'data-temp-blob-url="' + file.cachedObjectUrl + '"' : '';
                 html += `
                 <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
-                    <img id="${imgId}" src="${imgSrc}" data-loaded-zoom="false" ${tempUrlAttr}>
+                    <img id="${imgId}" src="${imgSrc}" ${loadedZoomAttr} data-zoom-url="${file.url}" ${tempUrlAttr}>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
