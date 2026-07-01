@@ -1,4 +1,4 @@
-// ==========================================
+﻿// ==========================================
 // 🌸 DURGA SAREES - FIXED APP.JS v3 (RESTORED UI)
 // ==========================================
 
@@ -1129,37 +1129,54 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
     if (imgEl.getAttribute('data-loaded-zoom') === 'true') return;
     setTimeout(async function() {
         try {
-            // STEP 1: IDB direct hit for zoom
+            // STEP 1: IDB direct hit for zoom (Fastest)
             var zoomBlob = await getImageFromDB(url);
             if (zoomBlob) {
                 console.log('[ZOOM] IDB HIT:', fileName);
-                imgEl.src = URL.createObjectURL(zoomBlob);
+                // RAM FIX: Revoke old grid placeholder and assign new temp URL
+                if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
+                var objUrl = URL.createObjectURL(zoomBlob);
+                imgEl.dataset.tempBlobUrl = objUrl;
+                imgEl.src = objUrl;
                 imgEl.dataset.loadedZoom = 'true';
                 return;
             }
+
             // STEP 2: Show grid placeholder from IDB instantly
             var gridBlob = null;
             if (isCover && folderPath && !String(folderPath).startsWith('http')) {
                 gridBlob = await getImageFromDB(folderPath);
             }
             if (!gridBlob && designGridUrl) gridBlob = await getImageFromDB(designGridUrl);
-            if (gridBlob && !imgEl.dataset.loadedZoom) imgEl.src = URL.createObjectURL(gridBlob);
-            // STEP 3: No distinct zoom? Mark done
-            if (!url || url === designGridUrl) { imgEl.dataset.loadedZoom = 'true'; return; }
-            // STEP 4: Fetch zoom from network, save, display
+            if (gridBlob && !imgEl.dataset.loadedZoom) {
+                if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
+                var gridObjUrl = URL.createObjectURL(gridBlob);
+                imgEl.dataset.tempBlobUrl = gridObjUrl;
+                imgEl.src = gridObjUrl;
+            }
+
+            // STEP 3: No distinct zoom? Mark done.
+            if (!url || url === designGridUrl) {
+                imgEl.dataset.loadedZoom = 'true';
+                return;
+            }
+
+            // STEP 4: Fetch zoom from network (RAM ONLY - NO permanent storage bloat)
             console.log('[ZOOM] Network fetch:', fileName);
             var r = await fetch(url);
             if (r.ok) {
                 var blob = await r.blob();
-                saveImageToDB(url, blob);
+                // We do NOT call saveImageToDB here. Intent-engine handles permanent saves.
                 if (!imgEl.dataset.loadedZoom) {
                     if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
                     var oUrl = URL.createObjectURL(blob);
-                    imgEl.src = oUrl; imgEl.dataset.tempBlobUrl = oUrl; imgEl.dataset.loadedZoom = 'true';
+                    imgEl.dataset.tempBlobUrl = oUrl;
+                    imgEl.src = oUrl;
+                    imgEl.dataset.loadedZoom = 'true';
                 }
-                console.log('[ZOOM] Saved to IDB:', fileName);
+                console.log('[ZOOM] Loaded into RAM:', fileName);
             } else if (r.status === 404) {
-                // STEP 5: Extension fallback (.webp -> .jpg)
+                // STEP 5: Extension fallback (.webp <-> .jpg)
                 var fbUrl = null, lu = url.toLowerCase();
                 if (lu.includes('.webp?alt=media')) fbUrl = url.replace(/\.webp\?alt=media/i, '.jpg?alt=media');
                 else if (lu.includes('.jpg?alt=media')) fbUrl = url.replace(/\.jpg\?alt=media/i, '.webp?alt=media');
@@ -1168,14 +1185,20 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                 if (fbUrl) {
                     var r2 = await fetch(fbUrl);
                     if (r2.ok) {
-                        var b2 = await r2.blob(); saveImageToDB(fbUrl, b2);
+                        var b2 = await r2.blob();
                         if (!imgEl.dataset.loadedZoom) {
                             if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
                             var u2 = URL.createObjectURL(b2);
-                            imgEl.src = u2; imgEl.dataset.tempBlobUrl = u2; imgEl.dataset.loadedZoom = 'true';
+                            imgEl.dataset.tempBlobUrl = u2;
+                            imgEl.src = u2;
+                            imgEl.dataset.loadedZoom = 'true';
                         }
-                    } else if (!gridBlob && designGridUrl) { imgEl.src = designGridUrl; imgEl.dataset.loadedZoom = 'true'; }
-                } else if (!gridBlob && designGridUrl) { imgEl.src = designGridUrl; imgEl.dataset.loadedZoom = 'true'; }
+                    } else {
+                        imgEl.dataset.loadedZoom = 'true'; // Stop trying, leave grid image
+                    }
+                } else {
+                    imgEl.dataset.loadedZoom = 'true';
+                }
             }
         } catch(e) { console.error('[ZOOM] Error for', fileName, ':', e.message); }
     }, 0);
