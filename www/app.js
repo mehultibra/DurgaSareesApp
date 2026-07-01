@@ -586,6 +586,11 @@ function saveImageToDB(key, blob) {
     if (window.sessionImageCache.size > 80) {
         window.sessionImageCache.delete(window.sessionImageCache.keys().next().value);
     }
+    
+    if (window.designKeyPrefixCache && typeof key === 'string' && key.includes('%2F')) {
+        var prefix = key.substring(0, key.lastIndexOf('%2F') + 3);
+        if (window.designKeyPrefixCache[prefix]) delete window.designKeyPrefixCache[prefix];
+    }
     return getDB().then(db => {
         return new Promise((resolve, reject) => {
             var tx = db.transaction(storeName, "readwrite");
@@ -602,6 +607,11 @@ function saveImageToDB(key, blob) {
 
 function deleteImageFromDB(key) {
     window.sessionImageCache.delete(key);
+    
+    if (window.designKeyPrefixCache && typeof key === 'string' && key.includes('%2F')) {
+        var prefix = key.substring(0, key.lastIndexOf('%2F') + 3);
+        if (window.designKeyPrefixCache[prefix]) delete window.designKeyPrefixCache[prefix];
+    }
     return getDB().then(db => {
         return new Promise((resolve) => {
             var tx = db.transaction(storeName, "readwrite");
