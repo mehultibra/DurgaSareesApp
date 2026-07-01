@@ -1441,7 +1441,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
                     <div class="qty-clean">
                         <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
-                        <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
+                        <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" onchange="setExactQty('${p.id}', 'DIRECT', this.value)">
                         <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
                     </div>
                 </div>
@@ -1525,7 +1525,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
                             <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
-                            <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
+                            <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" onchange="setExactQty('${p.id}', '${file.name}', this.value)">
                             <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
                         </div>
                     </div>
@@ -1542,7 +1542,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
                             <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
-                            <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
+                            <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" onchange="setExactQty('${p.id}', '${file.name}', this.value)">
                             <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
                         </div>
                     </div>
