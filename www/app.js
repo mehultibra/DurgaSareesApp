@@ -1129,63 +1129,74 @@ var missingDesignSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
 </svg>
 `);
 
-function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName, folderPath, isCover) {
+function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName, folderPath, isCover, zoomFolderPath) {
     if (imgEl.getAttribute('data-loaded-zoom') === 'true') {
         return; // Already loaded zoom image from cache!
     }
     
-    // 1. ALWAYS check IndexedDB offline cache first
-    getImageFromDB(url).then(async blob => {
-        if (blob) {
-            // Found ZOOM in cache!
-            imgEl.src = URL.createObjectURL(blob);
-            imgEl.dataset.loadedZoom = "true";
-        } else {
-            // Check if GRID image is in cache
-            var gridBlob = null;
-            if (isCover && folderPath) {
-                gridBlob = await getImageFromDB(folderPath); // Try finding it via the folder path key
+    // Fire and forget logic - don't block
+    setTimeout(async function() {
+        try {
+            var exactZoomUrl = url;
+            if (window.findDesignKeyInCache && zoomFolderPath && zoomFolderPath !== "None") {
+                var altZoomKey = await window.findDesignKeyInCache(zoomFolderPath, fileName);
+                if (altZoomKey) exactZoomUrl = altZoomKey;
             }
-            if (!gridBlob && designGridUrl) {
-                gridBlob = await getImageFromDB(designGridUrl);
-                // Also check alternative key if needed
-                if (!gridBlob && window.findDesignKeyInCache) {
-                    var altKey = await window.findDesignKeyInCache(folderPath, fileName);
-                    if (altKey) gridBlob = await getImageFromDB(altKey);
+
+            // 1. ALWAYS check IndexedDB offline cache first
+            var zoomBlob = await getImageFromDB(exactZoomUrl);
+            if (zoomBlob) {
+                // Found ZOOM in cache!
+                imgEl.src = URL.createObjectURL(zoomBlob);
+                imgEl.dataset.loadedZoom = "true";
+            } else {
+                // Check if GRID image is in cache
+                var gridBlob = null;
+                if (isCover && folderPath) {
+                    gridBlob = await getImageFromDB(folderPath); // Try finding it via the folder path key
                 }
-            }
-            
-            if (gridBlob && !imgEl.dataset.loadedZoom) {
-                // Found Grid in cache! Display it instantly!
-                imgEl.src = URL.createObjectURL(gridBlob);
-                // Background fetch zoom image natively
-                fetchZoomNatively(url, imgEl);
-            } else if (designGridUrl) {
-                // 🛡️ NOT IN CACHE! The user is ONLINE and background sync might be running.
-                // DO NOT use JS fetch() because it will get queued behind the massive background sync!
-                // Let the browser load the image natively with highest priority!
-                
-                imgEl.src = designGridUrl; // Native load
-                
-                imgEl.onload = function() {
-                    // Once low-res grid loads, silently upgrade to zoom in the background
-                    if (url && url !== designGridUrl && !imgEl.dataset.loadedZoom) {
-                        fetchZoomNatively(url, imgEl);
+                if (!gridBlob && designGridUrl) {
+                    gridBlob = await getImageFromDB(designGridUrl);
+                    // Also check alternative key if needed
+                    if (!gridBlob && window.findDesignKeyInCache) {
+                        var altKey = await window.findDesignKeyInCache(folderPath, fileName);
+                        if (altKey) gridBlob = await getImageFromDB(altKey);
                     }
-                };
+                }
                 
-                imgEl.onerror = function() {
-                    // If grid fails, try loading zoom directly
-                    if (url && url !== designGridUrl && !imgEl.dataset.loadedZoom) {
-                        imgEl.src = url;
+                if (gridBlob && !imgEl.dataset.loadedZoom) {
+                    // Found Grid in cache! Display it instantly!
+                    imgEl.src = URL.createObjectURL(gridBlob);
+                    if (exactZoomUrl && exactZoomUrl !== designGridUrl) {
+                        // Background fetch zoom image natively
+                        fetchZoomNatively(exactZoomUrl, imgEl);
+                    } else {
                         imgEl.dataset.loadedZoom = "true";
                     }
-                };
-            } else {
-                fetchZoomNatively(url, imgEl);
+                } else if (designGridUrl) {
+                    // 🛡️ NOT IN CACHE! The user is ONLINE and background sync might be running.
+                    imgEl.src = designGridUrl; // Native load
+                    
+                    imgEl.onload = function() {
+                        if (exactZoomUrl && exactZoomUrl !== designGridUrl && !imgEl.dataset.loadedZoom) {
+                            fetchZoomNatively(exactZoomUrl, imgEl);
+                        } else {
+                            imgEl.dataset.loadedZoom = "true";
+                        }
+                    };
+                    
+                    imgEl.onerror = function() {
+                        if (exactZoomUrl && exactZoomUrl !== designGridUrl && !imgEl.dataset.loadedZoom) {
+                            imgEl.src = exactZoomUrl;
+                            imgEl.dataset.loadedZoom = "true";
+                        }
+                    };
+                } else {
+                    fetchZoomNatively(exactZoomUrl, imgEl);
+                }
             }
-        }
-    });
+        } catch(e) {}
+    }, 0);
 }
 
 function fetchZoomNatively(zoomUrl, imgEl) {
@@ -1408,7 +1419,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             updateLiveDetailHeader();
             var imgEl = document.getElementById("design_img_" + p.id + "_DIRECT");
             if (imgEl && fallbackZoomUrl) {
-                loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover', p.gridUrl, true);
+                loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover', p.gridUrl, true, cleanZoomPath);
             }
         }
     }
@@ -1508,7 +1519,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgEl = document.getElementById(imgId);
                 if (imgEl) {
-                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(01|1|cover)$/i.test(file.name));
+                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(01|1|cover)$/i.test(file.name), cleanZoomPath);
                 }
             }
         });
