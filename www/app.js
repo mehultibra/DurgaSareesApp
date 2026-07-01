@@ -82,6 +82,7 @@ function saveFallbackMap() {
     }
 }
 
+window.sessionImageCache = new Map();
 window.dsFolderCache = {};
 try {
     var _cacheVer = localStorage.getItem("dsFolderCacheVer");
@@ -581,6 +582,10 @@ function getDB() {
 }
 
 function saveImageToDB(key, blob) {
+    window.sessionImageCache.set(key, blob);
+    if (window.sessionImageCache.size > 80) {
+        window.sessionImageCache.delete(window.sessionImageCache.keys().next().value);
+    }
     return getDB().then(db => {
         return new Promise((resolve, reject) => {
             var tx = db.transaction(storeName, "readwrite");
@@ -596,6 +601,7 @@ function saveImageToDB(key, blob) {
 }
 
 function deleteImageFromDB(key) {
+    window.sessionImageCache.delete(key);
     return getDB().then(db => {
         return new Promise((resolve) => {
             var tx = db.transaction(storeName, "readwrite");
@@ -631,10 +637,65 @@ function listDBKeysForPrefix(prefix) {
     }).catch(() => []);
 }
 
+async function manageProductHDCache(product, action) {
+    if (!product) return;
+    var zoomUrl = (product.zoomUrl && product.zoomUrl.toLowerCase() !== "none") ? product.zoomUrl : product.gridUrl;
+    
+    if (action === 'CACHE') {
+        try {
+            var bucket = "durga-sarees.firebasestorage.app";
+            var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+            var encPath = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+            var listUrl = fbBase + "?prefix=" + encPath + "%2F&delimiter=/";
+            
+            fetch(listUrl).then(res => res.json()).then(data => {
+                if (data && data.items) {
+                    async function processCache() {
+                        for (const item of data.items) {
+                            var fullUrl = fbBase + encodeURIComponent(item.name) + "?alt=media";
+                            var blob = await getImageFromDB(fullUrl);
+                            if (!blob) {
+                                try {
+                                    var r = await fetch(fullUrl);
+                                    if (r.ok) {
+                                        var newBlob = await r.blob();
+                                        await saveImageToDB(fullUrl, newBlob);
+                                    }
+                                } catch(e) { console.warn("Background fetch skipped:", e); }
+                            }
+                        }
+                    }
+                    processCache();
+                }
+            }).catch(e => { console.warn("HD Cache Fetch aborted (Offline/Network Error):", e); return; });
+        } catch (e) { console.warn("HD Cache Fetch aborted (Offline/Network Error):", e); return; }
+    } else if (action === 'DELETE') {
+        if (favorites[product.id] === true) return;
+        var totalQty = 0;
+        for (var k in cart) {
+            if (k.startsWith(product.id + '_')) totalQty += cart[k].qty;
+        }
+        if (totalQty > 0) return;
+        
+        if (!product.zoomUrl || product.zoomUrl === product.gridUrl || product.zoomUrl.toLowerCase() === "none") return;
+        
+        var cleanZoom = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+        var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+        var bucket = "durga-sarees.firebasestorage.app";
+        var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+        var prefix = fbBase + encZoomPath + "%2F";
+        
+        var keys = await listDBKeysForPrefix(prefix);
+        for (var i = 0; i < keys.length; i++) {
+            await deleteImageFromDB(keys[i]);
+        }
+    }
+}
+
 // 🧠 CORE FIX: Resolves the exact IndexedDB cache key for a given design label
 // It ignores file extensions (.jpg vs .webp) and padding (2 vs 02) to guarantee a match
 window.findDesignKeyInCache = async function(gridUrl, designLabel) {
-    if (!gridUrl) return null;
+    if (!gridUrl || gridUrl.startsWith('http')) return null;
     if (designLabel === 'DIRECT' || designLabel === 'Cover') return gridUrl;
     
     var cleanGrid = gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
@@ -674,12 +735,21 @@ window.findDesignKeyInCache = async function(gridUrl, designLabel) {
     return bestKey;
 };
 function getImageFromDB(key) {
+    if (window.sessionImageCache.has(key)) return Promise.resolve(window.sessionImageCache.get(key));
     return getDB().then(db => {
         return new Promise((resolve, reject) => {
             var tx = db.transaction(storeName, "readonly");
             var store = tx.objectStore(storeName);
             var req = store.get(key);
-            req.onsuccess = () => resolve(req.result);
+            req.onsuccess = () => {
+                if (req.result) {
+                    window.sessionImageCache.set(key, req.result);
+                    if (window.sessionImageCache.size > 80) {
+                        window.sessionImageCache.delete(window.sessionImageCache.keys().next().value);
+                    }
+                }
+                resolve(req.result);
+            };
             req.onerror = () => reject(req.error);
         });
     }).catch(e => {
@@ -858,13 +928,22 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                     .then(function(res) { return res.ok ? res.blob() : null; })
                     .then(function(blob) {
                         if (blob) {
-                            saveImageToDB(highResUrl, blob);
-                            imgElement.src = URL.createObjectURL(blob);
+                            if (imgElement.dataset.tempBlobUrl) {
+                                URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
+                            }
+                            var objUrl = URL.createObjectURL(blob);
+                            imgElement.dataset.tempBlobUrl = objUrl;
+                            imgElement.src = objUrl;
                         }
                     })
                     .catch(function() {});
             } else {
-                imgElement.src = URL.createObjectURL(existingBlob);
+                if (imgElement.dataset.tempBlobUrl) {
+                    URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
+                }
+                var objUrl = URL.createObjectURL(existingBlob);
+                imgElement.dataset.tempBlobUrl = objUrl;
+                imgElement.src = objUrl;
             }
         }).catch(function() {
             var hdImage = new Image();
@@ -1007,6 +1086,10 @@ function chgMainRow(pid, dir) {
 
     try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
     refreshCardUI(pid);
+    
+    var totalQty = 0;
+    for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
+    manageProductHDCache(p, totalQty > 0 ? 'CACHE' : 'DELETE');
 }
 
 function toggleFav(pid, event) {
@@ -1014,6 +1097,9 @@ function toggleFav(pid, event) {
     if (favorites[pid]) delete favorites[pid]; else favorites[pid] = true;
     try { localStorage.setItem("dsFavs", JSON.stringify(favorites)); } catch (err) { }
     refreshCardUI(pid);
+    
+    var p = allProducts.find(x => x.id === pid);
+    if (p) manageProductHDCache(p, favorites[pid] ? 'CACHE' : 'DELETE');
 }
 
 function updateCartHeader() {
@@ -1064,7 +1150,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                 gridBlob = await getImageFromDB(designGridUrl);
                 // Also check alternative key if needed
                 if (!gridBlob && window.findDesignKeyInCache) {
-                    var altKey = await window.findDesignKeyInCache(designGridUrl, fileName);
+                    var altKey = await window.findDesignKeyInCache(folderPath, fileName);
                     if (altKey) gridBlob = await getImageFromDB(altKey);
                 }
             }
@@ -1107,8 +1193,35 @@ function fetchZoomNatively(zoomUrl, imgEl) {
     var tempImg = new Image();
     tempImg.onload = function() {
         if (!imgEl.dataset.loadedZoom) {
+            if (imgEl.dataset.tempBlobUrl) {
+                URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
+                imgEl.removeAttribute('data-temp-blob-url');
+            }
             imgEl.src = zoomUrl;
             imgEl.dataset.loadedZoom = "true";
+        }
+    };
+    tempImg.onerror = function() {
+        if (imgEl.dataset.loadedZoom === "true") return;
+        var newZoomUrl = null;
+        if (zoomUrl.toLowerCase().endsWith('.webp')) {
+            newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 5) + '.jpg';
+        } else if (zoomUrl.toLowerCase().endsWith('.jpg')) {
+            newZoomUrl = zoomUrl.substring(0, zoomUrl.length - 4) + '.webp';
+        }
+        if (newZoomUrl) {
+            var fallbackImg = new Image();
+            fallbackImg.onload = function() {
+                if (!imgEl.dataset.loadedZoom) {
+                    if (imgEl.dataset.tempBlobUrl) {
+                        URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
+                        imgEl.removeAttribute('data-temp-blob-url');
+                    }
+                    imgEl.src = newZoomUrl;
+                    imgEl.dataset.loadedZoom = "true";
+                }
+            };
+            fallbackImg.src = newZoomUrl;
         }
     };
     tempImg.src = zoomUrl;
@@ -1367,9 +1480,10 @@ function openDetail(productId, skipShow, keepSearchShown) {
             } else {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgSrc = file.cachedObjectUrl ? file.cachedObjectUrl : placeholderSVG;
+                var tempUrlAttr = file.cachedObjectUrl ? 'data-temp-blob-url="' + file.cachedObjectUrl + '"' : '';
                 html += `
                 <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
-                    <img id="${imgId}" src="${imgSrc}" data-loaded-zoom="false">
+                    <img id="${imgId}" src="${imgSrc}" data-loaded-zoom="false" ${tempUrlAttr}>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
@@ -1423,6 +1537,10 @@ window.changeQty = function (pid, designId, amount) {
     refreshCardUI(pid);
     updateLiveDetailHeader(); // Updates the total Master Qty at bottom!
     updateBottomQtyFromActiveDesign(); // 🛡️ Keep bottom row selection updated
+    
+    var totalQty = 0;
+    for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
+    manageProductHDCache(p, totalQty > 0 ? 'CACHE' : 'DELETE');
 };
 
 function updateLiveDetailHeader() {
@@ -1467,6 +1585,13 @@ function closeDetail() {
         var videos = panel.querySelectorAll('video');
         videos.forEach(function (v) {
             v.pause();
+        });
+        var imgs = panel.querySelectorAll('img');
+        imgs.forEach(function (img) {
+            if (img.dataset.tempBlobUrl) {
+                URL.revokeObjectURL(img.dataset.tempBlobUrl);
+                img.removeAttribute('data-temp-blob-url');
+            }
         });
     }
 

@@ -47,9 +47,6 @@ function getBase64FromCache(cacheKey) {
                 .then(function(res) { return res.ok ? res.blob() : null; })
                 .then(function(netBlob) { 
                     if (netBlob) {
-                        if (typeof window.saveImageToDB === 'function') {
-                            window.saveImageToDB(cacheKey, netBlob);
-                        }
                         return blobToBase64Direct(netBlob);
                     }
                     return null;
