@@ -1,5 +1,5 @@
-// ==========================================
-// 🌸 DURGA SAREES - FIXED APP.JS v3 (RESTORED UI)
+﻿// ==========================================
+// ðŸŒ¸ DURGA SAREES - FIXED APP.JS v3 (RESTORED UI)
 // ==========================================
 
 const FIRESTORE_PRODUCTS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products?pageSize=1000";
@@ -171,9 +171,9 @@ window.addEventListener('DOMContentLoaded', function () {
 
                 window.CapacitorFirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
                     var errEl = document.getElementById('lErr');
-                    if (errEl) errEl.innerText = "❌ Verification Failed: " + event.message;
+                    if (errEl) errEl.innerText = "âŒ Verification Failed: " + event.message;
                     var errElOtp = document.getElementById('lErrOtp');
-                    if (errElOtp) errElOtp.innerText = "❌ " + event.message;
+                    if (errElOtp) errElOtp.innerText = "âŒ " + event.message;
                     var btn = document.getElementById('btnSendOtp');
                     if (btn) btn.innerText = "SEND OTP";
                 });
@@ -185,7 +185,7 @@ window.addEventListener('DOMContentLoaded', function () {
         setupEditableFields();
         setupFsGestures();
         
-        // 🚀 Initialize Capgo OTA Updater
+        // ðŸš€ Initialize Capgo OTA Updater
         if (window.Capacitor && window.Capacitor.Plugins.CapacitorUpdater) {
             window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady();
             checkForOTAUpdates();
@@ -259,7 +259,7 @@ async function sendOtp() {
             if (btn) btn.innerText = "SEND OTP";
         }
     } catch (err) {
-        if (errEl) errEl.innerText = "❌ " + (err.message || "Failed to send OTP");
+        if (errEl) errEl.innerText = "âŒ " + (err.message || "Failed to send OTP");
         if (btn) btn.innerText = "SEND OTP";
     }
 }
@@ -303,7 +303,7 @@ async function verifyOtp() {
             }
         });
     } catch (err) {
-        if (errEl) errEl.innerText = "❌ Invalid OTP or Error: " + (err.message || "");
+        if (errEl) errEl.innerText = "âŒ Invalid OTP or Error: " + (err.message || "");
         if (btn) btn.innerText = "VERIFY";
     }
 }
@@ -549,11 +549,11 @@ function processProducts(docs) {
 }
 
 // ==========================================
-// 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
+// ðŸš€ FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
 // ==========================================
-// 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
+// ðŸ›¡ï¸ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
 // ==========================================
-// 📦 INDEXEDDB CACHE DATABASE FOR IMAGES
+// ðŸ“¦ INDEXEDDB CACHE DATABASE FOR IMAGES
 // ==========================================
 var dbName = "DurgaSareesCache";
 var storeName = "images";
@@ -671,7 +671,7 @@ async function manageProductHDCache(product, action) {
                                         var newBlob = await r.blob();
                                         await saveImageToDB(fullUrl, newBlob);
 
-                                        // 🟢 LIVE UI INJECTION: Update swipe deck instantly
+                                        // ðŸŸ¢ LIVE UI INJECTION: Update swipe deck instantly
                                         var liveImgs = document.querySelectorAll('img[data-zoom-url="' + fullUrl + '"]');
                                         if (liveImgs.length > 0) {
                                             var objUrl = URL.createObjectURL(newBlob);
@@ -683,7 +683,7 @@ async function manageProductHDCache(product, action) {
                                             });
                                         }
 
-                                        // 🟢 LIVE FULLSCREEN INJECTION: Update if user is currently zoomed in
+                                        // ðŸŸ¢ LIVE FULLSCREEN INJECTION: Update if user is currently zoomed in
                                         var fsImg = document.getElementById('fsImg');
                                         var fsModal = document.getElementById('fsModal');
                                         if (fsImg && fsModal && fsModal.style.display === 'flex') {
@@ -728,7 +728,7 @@ async function manageProductHDCache(product, action) {
     }
 }
 
-// 🧠 CORE FIX: Resolves the exact IndexedDB cache key for a given design label
+// ðŸ§  CORE FIX: Resolves the exact IndexedDB cache key for a given design label
 // It ignores file extensions (.jpg vs .webp) and padding (2 vs 02) to guarantee a match
 window.findDesignKeyInCache = async function(gridUrl, designLabel) {
     if (!gridUrl || gridUrl.startsWith('http')) return null;
@@ -807,9 +807,9 @@ function getCachedImageBlob(url) {
 
 
 
-// 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
+// ðŸš€ FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
 // ==========================================
-// 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
+// ðŸ›¡ï¸ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
 window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFile) {
     if (!gridPath || gridPath.trim() === "" || gridPath.toLowerCase() === "none") {
         imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
@@ -841,7 +841,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         tryFolderListFallback();
     }
 
-        // 🔍 LAST RESORT: Call Firebase list API to discover actual filenames
+        // ðŸ” LAST RESORT: Call Firebase list API to discover actual filenames
         function tryFolderListFallback() {
             // Check if we already cached the fallback filename
             if (dsFallbackMap[gridPath]) {
@@ -938,7 +938,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         loadFromNetwork();
     });
 
-    // 2. Background Load High-Res Zoom Image (if applicable) — saved to IndexedDB for PDF speed
+    // 2. Background Load High-Res Zoom Image (if applicable) â€” saved to IndexedDB for PDF speed
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
         var encZoomPath = zoomPath.trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
         var highResUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
@@ -1003,8 +1003,8 @@ function buildCardDetails(p) {
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
     h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; width:100%;">');
     h.push('<div style="display:flex; align-items:baseline; gap:0; overflow:hidden;">');
-    if (displayMrp > 0) h.push('<span class="mrp" style="font-size:11px; margin-right:4px;">₹' + displayMrp + '</span>');
-    h.push('<span style="font-weight:bold; font-size:13px; display:flex; align-items:center;">₹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
+    if (displayMrp > 0) h.push('<span class="mrp" style="font-size:11px; margin-right:4px;">â‚¹' + displayMrp + '</span>');
+    h.push('<span style="font-weight:bold; font-size:13px; display:flex; align-items:center;">â‚¹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
     if (offPercent > 0) h.push('<span class="discount" style="font-size:10px; color:#ff905a; font-weight:bold; white-space:nowrap; margin-left: 2px;">' + offPercent + '% OFF</span>');
     h.push('</div>');
 
@@ -1013,7 +1013,7 @@ function buildCardDetails(p) {
         h.push('<div class="add-btn-clean" onclick="chgMainRow(\'' + p.id + '\', 1); event.stopPropagation();">ADD</div>');
     } else {
         h.push('<div class="qty-clean" onclick="event.stopPropagation()">');
-        h.push('<button onclick="chgMainRow(\'' + p.id + '\', -1)">−</button>');
+        h.push('<button onclick="chgMainRow(\'' + p.id + '\', -1)">âˆ’</button>');
         h.push('<input type="number" id="mqty-' + p.id + '" value="' + coverQty + '" readonly>');
         h.push('<button onclick="chgMainRow(\'' + p.id + '\', 1)">+</button>');
         h.push('</div>');
@@ -1174,7 +1174,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                 gridBlob = await getImageFromDB(folderPath);
             }
             if (!gridBlob && designGridUrl) gridBlob = await getImageFromDB(designGridUrl);
-            if (gridBlob && !imgEl.dataset.loadedZoom) {
+            if (gridBlob && imgEl.dataset.loadedZoom !== 'true') {
                 if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
                 var gridObjUrl = URL.createObjectURL(gridBlob);
                 imgEl.dataset.tempBlobUrl = gridObjUrl;
@@ -1193,7 +1193,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
             if (r.ok) {
                 var blob = await r.blob();
                 // We do NOT call saveImageToDB here. Intent-engine handles permanent saves.
-                if (!imgEl.dataset.loadedZoom) {
+                if (imgEl.dataset.loadedZoom !== 'true') {
                     if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
                     var oUrl = URL.createObjectURL(blob);
                     imgEl.dataset.tempBlobUrl = oUrl;
@@ -1212,7 +1212,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                     var r2 = await fetch(fbUrl);
                     if (r2.ok) {
                         var b2 = await r2.blob();
-                        if (!imgEl.dataset.loadedZoom) {
+                        if (imgEl.dataset.loadedZoom !== 'true') {
                             if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
                             var u2 = URL.createObjectURL(b2);
                             imgEl.dataset.tempBlobUrl = u2;
@@ -1234,7 +1234,7 @@ function fetchZoomNatively(zoomUrl, imgEl) {
     if (!zoomUrl) return;
     var tempImg = new Image();
     tempImg.onload = function() {
-        if (!imgEl.dataset.loadedZoom) {
+        if (imgEl.dataset.loadedZoom !== 'true') {
             if (imgEl.dataset.tempBlobUrl) {
                 URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
                 imgEl.removeAttribute('data-temp-blob-url');
@@ -1254,7 +1254,7 @@ function fetchZoomNatively(zoomUrl, imgEl) {
         if (newZoomUrl) {
             var fallbackImg = new Image();
             fallbackImg.onload = function() {
-                if (!imgEl.dataset.loadedZoom) {
+                if (imgEl.dataset.loadedZoom !== 'true') {
                     if (imgEl.dataset.tempBlobUrl) {
                         URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
                         imgEl.removeAttribute('data-temp-blob-url');
@@ -1405,7 +1405,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             }
         });
 
-        // 🛡️ SORT LATEST DESIGNS FIRST (DESCENDING NUMERICAL)
+        // ðŸ›¡ï¸ SORT LATEST DESIGNS FIRST (DESCENDING NUMERICAL)
         validFiles.sort((a, b) => {
             var numA = parseInt(a.name.replace(/\D/g, ''));
             var numB = parseInt(b.name.replace(/\D/g, ''));
@@ -1440,7 +1440,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
                     <div class="qty-clean">
-                        <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
+                        <button onclick="changeQty('${p.id}', 'DIRECT', -1)">âˆ’</button>
                         <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
                         <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
                     </div>
@@ -1472,7 +1472,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             })
             .catch(err => {
                 console.warn("Background folder list load failed", err);
-                // 🛡️ OFFLINE FALLBACK: Generate dummy array from p.designs
+                // ðŸ›¡ï¸ OFFLINE FALLBACK: Generate dummy array from p.designs
                 var fallbackItems = [];
                 for (var i = 1; i <= totalCards; i++) {
                     var n = String(i);
@@ -1489,7 +1489,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
         var placeholderSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#f9f9fa"/></svg>');
 
-        // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
+        // ðŸš€ PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
         await Promise.all(files.map(async (file, idx) => {
             if (!file.isVideo) {
                 var isCover = /^(01|1|cover)$/i.test(file.name);
@@ -1524,7 +1524,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
-                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
+                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">âˆ’</button>
                             <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
                             <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
                         </div>
@@ -1541,7 +1541,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
-                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
+                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">âˆ’</button>
                             <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
                             <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
                         </div>
@@ -1581,7 +1581,7 @@ window.changeQty = function (pid, designId, amount) {
     var input = document.getElementById('qty_' + pid + '_' + designId);
     if (input) input.value = newQ;
 
-    // 2. 🛡️ THE FIX: Update Full Screen Bottom Row instantly if it's open
+    // 2. ðŸ›¡ï¸ THE FIX: Update Full Screen Bottom Row instantly if it's open
     if (typeof fsDesignId !== 'undefined' && fsDesignId === designId) {
         var fsInp = document.getElementById('fsQty');
         if (fsInp) fsInp.innerText = newQ;
@@ -1590,7 +1590,7 @@ window.changeQty = function (pid, designId, amount) {
     try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
     refreshCardUI(pid);
     updateLiveDetailHeader(); // Updates the total Master Qty at bottom!
-    updateBottomQtyFromActiveDesign(); // 🛡️ Keep bottom row selection updated
+    updateBottomQtyFromActiveDesign(); // ðŸ›¡ï¸ Keep bottom row selection updated
     
     var totalQty = 0;
     for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
@@ -1671,7 +1671,7 @@ function closeDetail() {
 }
 
 // ====================================
-// 🔍 5. FULL SCREEN MODAL & LIVE BOTTOM ROW
+// ðŸ” 5. FULL SCREEN MODAL & LIVE BOTTOM ROW
 // ====================================
 var fsIndex = 0;
 var fsDesignId = '';
@@ -1867,7 +1867,7 @@ function openFs(arg1, arg2, arg3, arg4) {
     var deck = document.getElementById('dtDesigns');
     if (!deck) return;
 
-    // 📱 Filter to only visible cards (images/videos that successfully loaded and aren't hidden)
+    // ðŸ“± Filter to only visible cards (images/videos that successfully loaded and aren't hidden)
     var cards = Array.from(deck.querySelectorAll('.swipe-card')).filter(card => card.style.display !== 'none');
 
     if (dId) {
@@ -1950,7 +1950,7 @@ function openFs(arg1, arg2, arg3, arg4) {
     var fsModal = document.getElementById('fsModal');
     if (fsModal.style.display !== 'flex') {
         fsModal.style.display = 'flex';
-        pushHistoryState('fs'); // 🛡️ TRAPS BACK BUTTON
+        pushHistoryState('fs'); // ðŸ›¡ï¸ TRAPS BACK BUTTON
     }
 }
 
@@ -1970,7 +1970,7 @@ function fsChg(amt) {
 }
 
 // ====================================
-// 🛒 CART MODAL
+// ðŸ›’ CART MODAL
 // ====================================
 function openCart() {
     cameFromDetail = false;
@@ -1983,7 +1983,7 @@ function openCart() {
 
         function safeText(str) { return str ? String(str).replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''; }
 
-        // 🛡️ INTERNAL CACHE LOADING
+        // ðŸ›¡ï¸ INTERNAL CACHE LOADING
         for (var k in cart) {
             var c = cart[k];
             if (!c || !c.p || !c.p.id) { delete cart[k]; continue; }
@@ -2021,12 +2021,12 @@ function openCart() {
             
             if (isEditing) {
                 cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + 
-                           ' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
+                           ' | Rate: â‚¹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
                            ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;"></div>');
                 cHtml.push('</div>');
                 cHtml.push('<i class="fas fa-check-circle" onclick="saveCartInlineEdit(\'' + g.p.id + '\')" style="cursor:pointer; color:green; font-size:22px; padding: 10px;" title="Save"></i>');
             } else {
-                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
+                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: â‚¹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
                 cHtml.push('</div>');
                 cHtml.push('<i class="fas fa-edit" onclick="toggleCartInlineEdit(\'' + g.p.id + '\')" style="cursor:pointer; color:var(--myntra-pink); font-size:18px; padding: 10px;"></i>');
             }
@@ -2153,7 +2153,7 @@ function clearCart() {
 }
 
 // ====================================
-// 📄 SAVE ORDER — GENERATES CART PDF (Lightning Fast from Cache)
+// ðŸ“„ SAVE ORDER â€” GENERATES CART PDF (Lightning Fast from Cache)
 // ====================================
 function sendWhatsapp() {
     var keys = Object.keys(cart);
@@ -2168,13 +2168,13 @@ function sendWhatsapp() {
 }
 
 // ====================================
-// 💬 WHATSAPP TEXT ORDER (Legacy — PC & Mobile)
+// ðŸ’¬ WHATSAPP TEXT ORDER (Legacy â€” PC & Mobile)
 // ====================================
 function sendWhatsappText() {
     var keys = Object.keys(cart);
     if (keys.length === 0) return alert("Your cart is empty!");
 
-    var msg = "🛍️ *New Order from Durga Sarees App*\n\n";
+    var msg = "ðŸ›ï¸ *New Order from Durga Sarees App*\n\n";
     var totalQty = 0;
     var groups = {};
 
@@ -2187,7 +2187,7 @@ function sendWhatsappText() {
 
     for (var r in groups) {
         var g = groups[r];
-        msg += "🏷️ *" + g.p.name + "* (SKU: " + (g.p.sku || "-") + ")\n";
+        msg += "ðŸ·ï¸ *" + g.p.name + "* (SKU: " + (g.p.sku || "-") + ")\n";
         g.items.forEach(function (item) {
             var dName = item.design === 'DIRECT' ? 'Cover' : item.design;
             msg += "  - " + dName + ": " + item.qty + " pcs\n";
@@ -2195,8 +2195,8 @@ function sendWhatsappText() {
         });
         msg += "\n";
     }
-    msg += "📦 *Total Quantity:* " + totalQty + " pcs\n";
-    msg += "🌐 www.durgasarees.com\n";
+    msg += "ðŸ“¦ *Total Quantity:* " + totalQty + " pcs\n";
+    msg += "ðŸŒ www.durgasarees.com\n";
 
     var number = "919998232380";
     var encodedMsg = encodeURIComponent(msg);
@@ -2229,7 +2229,7 @@ function getExactFirebaseUrl(folderPath, dId) {
 }
 
 // ====================================
-// 📦 2. MODAL & SHARE LOGIC (MULTI-IMAGE UPGRADE)
+// ðŸ“¦ 2. MODAL & SHARE LOGIC (MULTI-IMAGE UPGRADE)
 // ====================================
 function askShareTypeAsync() {
     return new Promise((resolve) => {
@@ -2353,7 +2353,7 @@ window.triggerShare = async function (action) {
 
         if (action === 'images') {
             if (allHighResUrls.length > 100) {
-                alert("⚠️ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
+                alert("âš ï¸ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
                 allHighResUrls = allHighResUrls.slice(0, 100);
             }
             if (typeof shareNativeImages === 'function') {
@@ -2423,7 +2423,7 @@ window.openCartFs = function (productId, designId, cartImgSrc) {
     openFs(actualProductId, 0, designId, cartImgSrc);
 };
 
-// 🚀 Cart fullscreen: loads image from IndexedDB using exact cache key, then opens FS
+// ðŸš€ Cart fullscreen: loads image from IndexedDB using exact cache key, then opens FS
 window.openCartFsFromCache = function (productId, designId, gridUrl) {
     var pItem = allProducts.find(x => x.id === productId);
     var bucket = "durga-sarees.firebasestorage.app";
@@ -2575,7 +2575,7 @@ async function syncImages() {
 
         if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
-        // 🛡️ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
+        // ðŸ›¡ï¸ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
         // This guarantees we never hit Samsung/Android OS TCP socket connection limits (ERR_INSUFFICIENT_RESOURCES).
         var batchSize = 1;
         for (var i = 0; i < productsToSync.length; i += batchSize) {
@@ -2588,13 +2588,13 @@ async function syncImages() {
                 var lastFailReason = "";
                 var downloaded = false;
 
-                // ── 1. Fetch Firebase folder listing ──────────────────────────
+                // â”€â”€ 1. Fetch Firebase folder listing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 var folderFiles = []; // filenames only (e.g. "01.webp", "02.webp")
                 var listSuccess = false;
                 try {
                     const ctrl = new AbortController();
                     const tid  = setTimeout(() => ctrl.abort(), 15000);
-                    // 🛡️ CRITICAL FIX: Bulletproof retry for "failed to fetch"
+                    // ðŸ›¡ï¸ CRITICAL FIX: Bulletproof retry for "failed to fetch"
                     var listRes = await window.fetchWithRetry(listUrl, { signal: ctrl.signal }, 3);
                     clearTimeout(tid);
                     if (listRes.ok) {
@@ -2615,13 +2615,13 @@ async function syncImages() {
                 }
 
                 if (!listSuccess) {
-                    // Offline / error — keep existing cache, log error
+                    // Offline / error â€” keep existing cache, log error
                     var existingCover = await getImageFromDB(p.gridUrl);
                     if (existingCover) downloaded = true;
                     else lastFailReason = lastFailReason || "Offline & no local cache";
 
                 } else if (folderFiles.length === 0) {
-                    // Firebase folder is EMPTY — keep existing cover, do NOT delete
+                    // Firebase folder is EMPTY â€” keep existing cover, do NOT delete
                     downloaded = true;
                     console.log("[SYNC] Folder empty for", p.name, "- keeping cached cover.");
 
@@ -2635,13 +2635,13 @@ async function syncImages() {
                     // Designs = each file, key stored as full Firebase URL
                     var coverFile  = folderFiles[0];
                     var coverUrl   = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-                    var designKeys = {}; // key → url map for all files
+                    var designKeys = {}; // key â†’ url map for all files
                     folderFiles.forEach(f => {
                         var key = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
                         designKeys[key] = key;
                     });
 
-                    // ── 2. Cleanup: Delete from DB keys NOT in Firebase anymore ──
+                    // â”€â”€ 2. Cleanup: Delete from DB keys NOT in Firebase anymore â”€â”€
                     // Scan DB for all keys that belong to this product's folder
                     var dbKeyPrefix = fbBase + encGridPath + "%2F";
                     var cachedKeys  = await listDBKeysForPrefix(dbKeyPrefix);
@@ -2652,7 +2652,7 @@ async function syncImages() {
                         }
                     }
 
-                    // ── 3. Download the COVER file ─────────────────────────────
+                    // â”€â”€ 3. Download the COVER file â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     var coverUrl   = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
                     var existingCover = await getImageFromDB(p.gridUrl);
 
@@ -2662,14 +2662,14 @@ async function syncImages() {
                         try {
                             const ctrl2 = new AbortController();
                             const tid2  = setTimeout(() => ctrl2.abort(), 30000);
-                            // 🛡️ CRITICAL FIX: Bulletproof retry for cover image
+                            // ðŸ›¡ï¸ CRITICAL FIX: Bulletproof retry for cover image
                             var coverRes = await window.fetchWithRetry(coverUrl, { signal: ctrl2.signal }, 3);
                             clearTimeout(tid2);
 
                             if (coverRes.ok) {
                                 var coverBlob = await coverRes.blob();
                                 await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
-                                await saveImageToDB(coverUrl, coverBlob);  // 🛡️ CRITICAL: Also save under its full URL!
+                                await saveImageToDB(coverUrl, coverBlob);  // ðŸ›¡ï¸ CRITICAL: Also save under its full URL!
                                 downloaded = true;
                             } else {
                                 lastFailReason = "Cover HTTP " + coverRes.status;
@@ -2679,7 +2679,7 @@ async function syncImages() {
                         }
                     }
 
-                    // ── 4. Download remaining design files (FAST PARALLEL BATCHING) ──
+                    // â”€â”€ 4. Download remaining design files (FAST PARALLEL BATCHING) â”€â”€
                     if (downloaded) {
                         var innerBatchSize = 5; // Download 5 inner images concurrently!
                         var remainingFiles = folderFiles.filter(f => f !== coverFile);
@@ -2692,7 +2692,7 @@ async function syncImages() {
                                 try {
                                     const ctrl3 = new AbortController();
                                     const tid3  = setTimeout(() => ctrl3.abort(), 15000);
-                                    // 🛡️ CRITICAL FIX: Bulletproof retry for inner images
+                                    // ðŸ›¡ï¸ CRITICAL FIX: Bulletproof retry for inner images
                                     var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
                                     clearTimeout(tid3);
                                     if (dRes.ok) {
@@ -2706,11 +2706,11 @@ async function syncImages() {
                     }
                 }
 
-                // ── 5. Track errors ───────────────────────────────────────────
+                // â”€â”€ 5. Track errors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if (!downloaded) {
                     failed++;
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
-                    console.error("❌ SYNC FAILED:", p.name, "|", lastFailReason);
+                    console.error("âŒ SYNC FAILED:", p.name, "|", lastFailReason);
                     if (!window.syncReportResults) window.syncReportResults = [];
                     var syncErrKey = p.gridUrl;
                     var existing2  = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
@@ -2759,12 +2759,12 @@ async function syncImages() {
             var elSum = document.getElementById('syncReportSummary');
             var elDet = document.getElementById('syncReportDetails');
             if (elSum && elDet) {
-                elSum.innerText = "✅ Sync complete!";
+                elSum.innerText = "âœ… Sync complete!";
                 elSum.style.color = "#25D366";
                 elDet.innerHTML = "<div style='text-align:center; padding: 20px;'>All " + total + " products synced successfully!</div>";
                 openModal('syncResultsModal');
             } else {
-                alert("✅ Sync complete! All " + total + " products synced.");
+                alert("âœ… Sync complete! All " + total + " products synced.");
             }
         }
 
@@ -2878,7 +2878,7 @@ function updateBottomQtyFromActiveDesign() {
     }
 }
 
-// 📱 Listen to hybrid app native backbutton event to prevent app minimization and handle stack back transition
+// ðŸ“± Listen to hybrid app native backbutton event to prevent app minimization and handle stack back transition
 document.addEventListener("backbutton", function (e) {
     var hasActiveModal = false;
 
@@ -2909,7 +2909,7 @@ document.addEventListener("backbutton", function (e) {
 }, false);
 
 // ====================================
-// 🔍 SEARCH, SORT, FILTER & FAVORITES ENGINE
+// ðŸ” SEARCH, SORT, FILTER & FAVORITES ENGINE
 // ====================================
 var showOnlyFavs = false;
 
@@ -3113,7 +3113,7 @@ window.applyFilter = function () {
     renderProductGrid(displayList);
 };
 
-// 📱 Listen to popstate to handle history back/forward navigation and close/open modals accordingly
+// ðŸ“± Listen to popstate to handle history back/forward navigation and close/open modals accordingly
 function applyModalState(modal) {
     var detailPanel = document.getElementById('detailPanel');
     var cartPanel = document.getElementById('cartPanel');
@@ -3266,7 +3266,7 @@ async function logout() {
 }
 
 // ====================================
-// 🛒 CART CUSTOMER DETAILS & EDIT MODALS
+// ðŸ›’ CART CUSTOMER DETAILS & EDIT MODALS
 // ====================================
 
 var _currentEditProductId = null;
@@ -3496,7 +3496,7 @@ function saveCartInlineEdit(productId) {
 }
 
 // ====================================
-// 🔍 SYNC REPORT LOGIC
+// ðŸ” SYNC REPORT LOGIC
 // ====================================
 
 function openSyncReportModal() {
@@ -3576,7 +3576,7 @@ async function runSyncReport() {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000);
-            // 🛡️ Bulletproof Retry applied to Sync Report
+            // ðŸ›¡ï¸ Bulletproof Retry applied to Sync Report
             var res = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
             clearTimeout(timeoutId);
             
@@ -3730,7 +3730,7 @@ async function resyncFailedProducts() {
             // 1. Fetch directory listing first
             var prefix = cleanGridPath + "/";
             var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix + "&delimiter=/";
-            // 🛡️ Bulletproof Retry applied to Resync
+            // ðŸ›¡ï¸ Bulletproof Retry applied to Resync
             var listRes = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
             
             if (!listRes.ok) {
@@ -3761,7 +3761,7 @@ async function resyncFailedProducts() {
             if (res.ok) {
                 var blob = await res.blob();
                 await saveImageToDB(gridImgUrl, blob);
-                await saveImageToDB(p.gridUrl, blob); // 🛡️ CRITICAL: Save using folder path key!
+                await saveImageToDB(p.gridUrl, blob); // ðŸ›¡ï¸ CRITICAL: Save using folder path key!
                 
                 // Update local cache mappings
                 window.coverExistsMap = window.coverExistsMap || {};
