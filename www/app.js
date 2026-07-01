@@ -1,4 +1,4 @@
-﻿// ==========================================
+// ==========================================
 // ðŸŒ¸ DURGA SAREES - FIXED APP.JS v3 (RESTORED UI)
 // ==========================================
 
@@ -1003,8 +1003,8 @@ function buildCardDetails(p) {
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
     h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; width:100%;">');
     h.push('<div style="display:flex; align-items:baseline; gap:0; overflow:hidden;">');
-    if (displayMrp > 0) h.push('<span class="mrp" style="font-size:11px; margin-right:4px;">â‚¹' + displayMrp + '</span>');
-    h.push('<span style="font-weight:bold; font-size:13px; display:flex; align-items:center;">â‚¹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
+    if (displayMrp > 0) h.push('<span class="mrp" style="font-size:11px; margin-right:4px;">₹' + displayMrp + '</span>');
+    h.push('<span style="font-weight:bold; font-size:13px; display:flex; align-items:center;">₹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
     if (offPercent > 0) h.push('<span class="discount" style="font-size:10px; color:#ff905a; font-weight:bold; white-space:nowrap; margin-left: 2px;">' + offPercent + '% OFF</span>');
     h.push('</div>');
 
@@ -1013,7 +1013,7 @@ function buildCardDetails(p) {
         h.push('<div class="add-btn-clean" onclick="chgMainRow(\'' + p.id + '\', 1); event.stopPropagation();">ADD</div>');
     } else {
         h.push('<div class="qty-clean" onclick="event.stopPropagation()">');
-        h.push('<button onclick="chgMainRow(\'' + p.id + '\', -1)">âˆ’</button>');
+        h.push('<button onclick="chgMainRow(\'' + p.id + '\', -1)">−</button>');
         h.push('<input type="number" id="mqty-' + p.id + '" value="' + coverQty + '" readonly>');
         h.push('<button onclick="chgMainRow(\'' + p.id + '\', 1)">+</button>');
         h.push('</div>');
@@ -1440,7 +1440,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
                     <div class="qty-clean">
-                        <button onclick="changeQty('${p.id}', 'DIRECT', -1)">âˆ’</button>
+                        <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
                         <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" readonly>
                         <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
                     </div>
@@ -1524,7 +1524,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
-                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">âˆ’</button>
+                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
                             <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
                             <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
                         </div>
@@ -1541,7 +1541,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         <div class="qty-clean">
-                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">âˆ’</button>
+                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
                             <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" readonly>
                             <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
                         </div>
@@ -1709,6 +1709,7 @@ function setupFsGestures() {
 
     // Swipe navigation logic
     function handleSwipe(diffX) {
+        if (window.fsIsStandalone) return;
         var threshold = 50;
         if (Math.abs(diffX) > threshold) {
             if (diffX > 0) {
@@ -1838,6 +1839,7 @@ function openFs(arg1, arg2, arg3, arg4) {
     }
 
     if (cartImgSrc) {
+        window.fsIsStandalone = true;
         var fsModal = document.getElementById('fsModal');
         var fsImg = document.getElementById('fsImg');
         var fsVideo = document.getElementById('fsVideo');
@@ -1862,6 +1864,7 @@ function openFs(arg1, arg2, arg3, arg4) {
         return;
     }
 
+    window.fsIsStandalone = false;
     document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'block');
 
     var deck = document.getElementById('dtDesigns');
@@ -2021,12 +2024,12 @@ function openCart() {
             
             if (isEditing) {
                 cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + 
-                           ' | Rate: â‚¹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
+                           ' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
                            ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;"></div>');
                 cHtml.push('</div>');
                 cHtml.push('<i class="fas fa-check-circle" onclick="saveCartInlineEdit(\'' + g.p.id + '\')" style="cursor:pointer; color:green; font-size:22px; padding: 10px;" title="Save"></i>');
             } else {
-                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: â‚¹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
+                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
                 cHtml.push('</div>');
                 cHtml.push('<i class="fas fa-edit" onclick="toggleCartInlineEdit(\'' + g.p.id + '\')" style="cursor:pointer; color:var(--myntra-pink); font-size:18px; padding: 10px;"></i>');
             }
@@ -2353,7 +2356,7 @@ window.triggerShare = async function (action) {
 
         if (action === 'images') {
             if (allHighResUrls.length > 100) {
-                alert("âš ï¸ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
+                alert("⚠ ï¸ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
                 allHighResUrls = allHighResUrls.slice(0, 100);
             }
             if (typeof shareNativeImages === 'function') {
