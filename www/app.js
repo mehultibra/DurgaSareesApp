@@ -779,21 +779,7 @@ function getCachedImageBlob(url) {
     });
 }
 
-function getCachedDesignUrl(zoomUrl, gridUrl) {
-    // 1. Check if the zoom image is cached
-    return getCachedImageBlob(zoomUrl).then(zoomBlob => {
-        if (zoomBlob) {
-            return { src: URL.createObjectURL(zoomBlob), isZoom: true };
-        }
-        // 2. Check if the grid image is cached
-        return getCachedImageBlob(gridUrl).then(gridBlob => {
-            if (gridBlob) {
-                return { src: URL.createObjectURL(gridBlob), isZoom: false };
-            }
-            return { src: "", isZoom: false };
-        });
-    });
-}
+
 
 // 🚀 FAST PROGRESSIVE IMAGE LOADER (GRID -> ZOOM)
 // ==========================================
@@ -1140,72 +1126,58 @@ var missingDesignSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
 `);
 
 function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName, folderPath, isCover, zoomFolderPath) {
-    if (imgEl.getAttribute('data-loaded-zoom') === 'true') {
-        return; // Already loaded zoom image from cache!
-    }
-    
-    // Fire and forget logic - don't block
+    if (imgEl.getAttribute('data-loaded-zoom') === 'true') return;
     setTimeout(async function() {
         try {
-            var exactZoomUrl = url;
-            if (window.findDesignKeyInCache && zoomFolderPath && zoomFolderPath !== "None") {
-                var altZoomKey = await window.findDesignKeyInCache(zoomFolderPath, fileName);
-                if (altZoomKey) exactZoomUrl = altZoomKey;
-            }
-
-            // 1. ALWAYS check IndexedDB offline cache first
-            var zoomBlob = await getImageFromDB(exactZoomUrl);
+            // STEP 1: IDB direct hit for zoom
+            var zoomBlob = await getImageFromDB(url);
             if (zoomBlob) {
-                // Found ZOOM in cache!
+                console.log('[ZOOM] IDB HIT:', fileName);
                 imgEl.src = URL.createObjectURL(zoomBlob);
-                imgEl.dataset.loadedZoom = "true";
-            } else {
-                // Check if GRID image is in cache
-                var gridBlob = null;
-                if (isCover && folderPath) {
-                    gridBlob = await getImageFromDB(folderPath); // Try finding it via the folder path key
-                }
-                if (!gridBlob && designGridUrl) {
-                    gridBlob = await getImageFromDB(designGridUrl);
-                    // Also check alternative key if needed
-                    if (!gridBlob && window.findDesignKeyInCache) {
-                        var altKey = await window.findDesignKeyInCache(folderPath, fileName);
-                        if (altKey) gridBlob = await getImageFromDB(altKey);
-                    }
-                }
-                
-                if (gridBlob && !imgEl.dataset.loadedZoom) {
-                    // Found Grid in cache! Display it instantly!
-                    imgEl.src = URL.createObjectURL(gridBlob);
-                    if (exactZoomUrl && exactZoomUrl !== designGridUrl) {
-                        // Background fetch zoom image natively
-                        fetchZoomNatively(exactZoomUrl, imgEl);
-                    } else {
-                        imgEl.dataset.loadedZoom = "true";
-                    }
-                } else if (designGridUrl) {
-                    // 🛡️ NOT IN CACHE! The user is ONLINE and background sync might be running.
-                    imgEl.src = designGridUrl; // Native load
-                    
-                    imgEl.onload = function() {
-                        if (exactZoomUrl && exactZoomUrl !== designGridUrl && !imgEl.dataset.loadedZoom) {
-                            fetchZoomNatively(exactZoomUrl, imgEl);
-                        } else {
-                            imgEl.dataset.loadedZoom = "true";
-                        }
-                    };
-                    
-                    imgEl.onerror = function() {
-                        if (exactZoomUrl && exactZoomUrl !== designGridUrl && !imgEl.dataset.loadedZoom) {
-                            imgEl.src = exactZoomUrl;
-                            imgEl.dataset.loadedZoom = "true";
-                        }
-                    };
-                } else {
-                    fetchZoomNatively(exactZoomUrl, imgEl);
-                }
+                imgEl.dataset.loadedZoom = 'true';
+                return;
             }
-        } catch(e) {}
+            // STEP 2: Show grid placeholder from IDB instantly
+            var gridBlob = null;
+            if (isCover && folderPath && !String(folderPath).startsWith('http')) {
+                gridBlob = await getImageFromDB(folderPath);
+            }
+            if (!gridBlob && designGridUrl) gridBlob = await getImageFromDB(designGridUrl);
+            if (gridBlob && !imgEl.dataset.loadedZoom) imgEl.src = URL.createObjectURL(gridBlob);
+            // STEP 3: No distinct zoom? Mark done
+            if (!url || url === designGridUrl) { imgEl.dataset.loadedZoom = 'true'; return; }
+            // STEP 4: Fetch zoom from network, save, display
+            console.log('[ZOOM] Network fetch:', fileName);
+            var r = await fetch(url);
+            if (r.ok) {
+                var blob = await r.blob();
+                saveImageToDB(url, blob);
+                if (!imgEl.dataset.loadedZoom) {
+                    if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
+                    var oUrl = URL.createObjectURL(blob);
+                    imgEl.src = oUrl; imgEl.dataset.tempBlobUrl = oUrl; imgEl.dataset.loadedZoom = 'true';
+                }
+                console.log('[ZOOM] Saved to IDB:', fileName);
+            } else if (r.status === 404) {
+                // STEP 5: Extension fallback (.webp -> .jpg)
+                var fbUrl = null, lu = url.toLowerCase();
+                if (lu.includes('.webp?alt=media')) fbUrl = url.replace(/\.webp\?alt=media/i, '.jpg?alt=media');
+                else if (lu.includes('.jpg?alt=media')) fbUrl = url.replace(/\.jpg\?alt=media/i, '.webp?alt=media');
+                else if (lu.includes('.jpeg?alt=media')) fbUrl = url.replace(/\.jpeg\?alt=media/i, '.jpg?alt=media');
+                else if (lu.includes('.png?alt=media')) fbUrl = url.replace(/\.png\?alt=media/i, '.webp?alt=media');
+                if (fbUrl) {
+                    var r2 = await fetch(fbUrl);
+                    if (r2.ok) {
+                        var b2 = await r2.blob(); saveImageToDB(fbUrl, b2);
+                        if (!imgEl.dataset.loadedZoom) {
+                            if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
+                            var u2 = URL.createObjectURL(b2);
+                            imgEl.src = u2; imgEl.dataset.tempBlobUrl = u2; imgEl.dataset.loadedZoom = 'true';
+                        }
+                    } else if (!gridBlob && designGridUrl) { imgEl.src = designGridUrl; imgEl.dataset.loadedZoom = 'true'; }
+                } else if (!gridBlob && designGridUrl) { imgEl.src = designGridUrl; imgEl.dataset.loadedZoom = 'true'; }
+            }
+        } catch(e) { console.error('[ZOOM] Error for', fileName, ':', e.message); }
     }, 0);
 }
 
