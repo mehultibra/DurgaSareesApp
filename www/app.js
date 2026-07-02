@@ -1595,6 +1595,66 @@ window.changeQty = function (pid, designId, amount) {
     var totalQty = 0;
     for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
     manageProductHDCache(p, totalQty > 0 ? 'CACHE' : 'DELETE');
+    
+    // 3. Update Cart Live if it's open in the background!
+    var cartPanel = document.getElementById('cartPanel');
+    if (cartPanel && cartPanel.classList.contains('open')) {
+        var isEditingAny = false;
+        if (window.cartEditingMap) {
+            for (var ed in window.cartEditingMap) {
+                if (window.cartEditingMap[ed]) isEditingAny = true;
+            }
+        }
+        if (!isEditingAny) openCart();
+    }
+};
+
+window.setExactQty = function(pid, designId, value) {
+    var p = allProducts.find(x => x.id === pid); if (!p) return;
+    var key = pid + '_' + designId;
+    var newQ = parseInt(value) || 0;
+    if (newQ < 0) newQ = 0;
+    
+    var mult = p.mult || 1;
+    if (newQ % mult !== 0) {
+        newQ = Math.round(newQ / mult) * mult;
+    }
+
+    if (newQ === 0) delete cart[key];
+    else cart[key] = { p: p, design: designId, qty: newQ };
+
+    var input = document.getElementById('qty_' + pid + '_' + designId);
+    if (input) input.value = newQ;
+    
+    if (designId === 'DIRECT') {
+        var topInput = document.getElementById('dtQtyDirect');
+        if (topInput) topInput.value = newQ;
+    }
+
+    if (typeof fsDesignId !== 'undefined' && fsDesignId === designId) {
+        var fsInp = document.getElementById('fsQty');
+        if (fsInp) fsInp.innerText = newQ;
+    }
+
+    try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
+    refreshCardUI(pid);
+    updateLiveDetailHeader(); 
+    updateBottomQtyFromActiveDesign(); 
+    
+    var totalQty = 0;
+    for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
+    manageProductHDCache(p, totalQty > 0 ? 'CACHE' : 'DELETE');
+    
+    var cartPanel = document.getElementById('cartPanel');
+    if (cartPanel && cartPanel.classList.contains('open')) {
+        var isEditingAny = false;
+        if (window.cartEditingMap) {
+            for (var ed in window.cartEditingMap) {
+                if (window.cartEditingMap[ed]) isEditingAny = true;
+            }
+        }
+        if (!isEditingAny) openCart();
+    }
 };
 
 function updateLiveDetailHeader() {
@@ -3520,8 +3580,38 @@ function saveCartInlineEdit(productId, closeEdit = true) {
     
     localStorage.setItem("dsCart", JSON.stringify(cart));
     
-    window.cartEditingMap[productId] = false;
+    if (closeEdit) window.cartEditingMap[productId] = false;
+    updateCartHeader();
     openCart(); // Re-render to show updated static text
+}
+
+window.deleteCartProduct = function(productId) {
+    var deletedAny = false;
+    for (var k in cart) {
+        if (cart[k].p && cart[k].p.id === productId) {
+            delete cart[k];
+            deletedAny = true;
+        }
+    }
+    if (deletedAny) {
+        var p = allProducts.find(x => x.id === productId);
+        if (p) manageProductHDCache(p, 'DELETE');
+        
+        if (window.cartEditingMap) delete window.cartEditingMap[productId];
+        updateCartHeader();
+        localStorage.setItem("dsCart", JSON.stringify(cart));
+        openCart();
+    }
+};
+
+function printCartPdf() {
+    var keys = Object.keys(cart);
+    if (keys.length === 0) return alert("Your cart is empty!");
+    if (typeof generateCartOrderPDF === 'function') {
+        generateCartOrderPDF('print');
+    } else {
+        alert("PDF Engine not loaded!");
+    }
 }
 
 // ====================================
