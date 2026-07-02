@@ -511,6 +511,18 @@ async function generateCartOrderPDF(actionType) {
 
         var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
 
+        if (actionType === 'print') {
+            doc.autoPrint();
+            if (isCapacitor) {
+                // Try dataurlnewwindow for native print spooler / viewer
+                doc.output('dataurlnewwindow');
+            } else {
+                var blobUrl = URL.createObjectURL(doc.output('blob'));
+                window.open(blobUrl, '_blank');
+            }
+            return;
+        }
+
         if (isCapacitor) {
             // 1. Save PDF to device
             var pureBase64 = doc.output('datauristring').split(',')[1];
