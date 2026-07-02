@@ -15,9 +15,26 @@ window.isSuperAdmin = localStorage.getItem('dsIsAdmin') === 'true';
 // --- ERROR LOGGING ---
 window.globalErrorLog = JSON.parse(localStorage.getItem('dsGlobalErrors') || '[]');
 window.logAppError = function(context, message) {
-    window.globalErrorLog.push({ time: new Date().toISOString(), context: context, message: message });
-    if (window.globalErrorLog.length > 20) window.globalErrorLog.shift();
+    window.globalErrorLog.push({ ts: new Date().getTime(), src: context, msg: message });
+    if (window.globalErrorLog.length > 50) window.globalErrorLog.shift();
     setTimeout(() => localStorage.setItem('dsGlobalErrors', JSON.stringify(window.globalErrorLog)), 0);
+
+    if (window.syncReportResults && window.syncReportResults.length > 0) {
+        var parts = message.split(' | ');
+        if (parts.length > 1) {
+            var pName = parts[parts.length - 1].trim();
+            var target = window.syncReportResults.find(r => r.name === pName);
+            if (target) {
+                target.status = 'error';
+                target.error = (target.error ? target.error + ', ' : '') + context;
+                if (typeof renderSyncReportPartial === 'function') {
+                    renderSyncReportPartial();
+                    var btnResync = document.getElementById('btnResyncErrors');
+                    if (btnResync) btnResync.style.display = 'inline-block';
+                }
+            }
+        }
+    }
 };
 
 // Initialize Web Firebase Fallback Config
@@ -4200,5 +4217,9 @@ window.showGlobalErrorLogs = function() {
         body.innerHTML = h;
     }
 };
+
+
+
+
 
 
