@@ -2038,10 +2038,13 @@ function openCart() {
             
             if (isEditing) {
                 cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + 
-                           ' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
-                           ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;"></div>');
+                           ' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
+                           ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;"></div>');
                 cHtml.push('</div>');
-                cHtml.push('<i class="fas fa-check-circle" onclick="saveCartInlineEdit(\'' + g.p.id + '\')" style="cursor:pointer; color:green; font-size:22px; padding: 10px;" title="Save"></i>');
+                cHtml.push('<div style="display:flex; gap:8px; padding:10px; align-items:center;">');
+                cHtml.push('<i class="fas fa-trash" onclick="deleteCartProduct(\'' + g.p.id + '\')" style="cursor:pointer; color:red; font-size:18px;" title="Delete Product"></i>');
+                cHtml.push('<i class="fas fa-check-circle" onclick="saveCartInlineEdit(\'' + g.p.id + '\', true)" style="cursor:pointer; color:green; font-size:22px;" title="Done"></i>');
+                cHtml.push('</div>');
             } else {
                 cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
                 cHtml.push('</div>');
@@ -2064,7 +2067,7 @@ function openCart() {
                 cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + dLabel + '</div>');
                 
                 if (isEditing) {
-                    cHtml.push('<input type="number" id="ie_qty_' + g.p.id + '_' + safeDesignLabel + '" value="' + (item.qty || 0) + '" style="width:60px; padding:4px; border:1px solid var(--myntra-pink); border-radius:4px; text-align:center; font-size:12px; font-weight:bold; color:var(--text-main); margin-top:2px;">');
+                    cHtml.push('<input type="number" id="ie_qty_' + g.p.id + '_' + safeDesignLabel + '" value="' + (item.qty || 0) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:4px; border:1px solid var(--myntra-pink); border-radius:4px; text-align:center; font-size:12px; font-weight:bold; color:var(--text-main); margin-top:2px;">');
                 } else {
                     cHtml.push('<div style="font-size: 12px; font-weight: bold; color: var(--myntra-pink);">' + (item.qty || 0) + ' pcs</div>');
                 }
@@ -3471,7 +3474,7 @@ function toggleCartInlineEdit(productId) {
     openCart(); // Re-render to show input fields
 }
 
-function saveCartInlineEdit(productId) {
+function saveCartInlineEdit(productId, closeEdit = true) {
     var rateInput = document.getElementById('ie_rate_' + productId);
     var packInput = document.getElementById('ie_pack_' + productId);
     

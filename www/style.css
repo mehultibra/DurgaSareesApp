@@ -282,7 +282,8 @@ html {
     font-weight: bold;
     color: var(--myntra-pink);
     cursor: pointer;
-    padding: 0 8px;
+    padding: 10px 16px;
+    margin: -10px -8px;
     outline: none;
 }
 
@@ -443,30 +444,7 @@ html {
     flex-shrink: 0;
 }
 
-/* PC Override for Swipe Deck */
-@media(min-width: 768px) {
-    .swipe-deck-wrapper {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        overflow-x: visible;
-        scroll-snap-type: none;
-        height: auto;
-        padding: 10px 0;
-    }
 
-    .swipe-card {
-        flex: auto;
-        height: auto;
-        width: 100%;
-    }
-
-    .swipe-card img,
-    .swipe-card video {
-        width: 100%;
-        height: auto;
-        aspect-ratio: 3/5;
-    }
-}
 
 /* 🚀 CART PANEL */
 #cartPanel {

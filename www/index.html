@@ -265,7 +265,7 @@
         <!-- Shifted Cover Qty Selector (Top Row) -->
         <div class="qty-clean" style="display:flex; align-items:center; gap:0;">
           <button id="dtQtyBotMinus" style="padding: 0 6px; font-size:18px;">−</button>
-          <input type="number" id="dtQtyDirect" value="0" readonly style="font-size:13px; font-weight:bold; width:22px; text-align:center;">
+          <input type="number" id="dtQtyDirect" value="0" onchange="if(curProduct) setExactQty(curProduct.id, 'DIRECT', this.value)" style="font-size:13px; font-weight:bold; width:22px; text-align:center; border:none; background:transparent;">
           <button id="dtQtyBotPlus" style="padding: 0 6px; font-size:18px;">+</button>
         </div>
       </div>
