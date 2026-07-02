@@ -564,6 +564,7 @@ async function generateCartOrderPDF(actionType) {
         }
 
     } catch (error) {
+        if (typeof window.logAppError === 'function') window.logAppError('generateOrderPDF', error.message);
         if (bootScreen) bootScreen.style.display = 'none';
         alert("Order PDF Error: " + error.message);
     }
@@ -787,6 +788,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
         }
 
     } catch (error) {
+        if (typeof window.logAppError === 'function') window.logAppError('generateProductPDF', error.message);
         alert("PDF Generation Error: " + error.message);
     }
 
@@ -1020,6 +1022,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
         }
         
     } catch (err) {
+        if (typeof window.logAppError === 'function') window.logAppError('generateFavoritesPDF', err.message);
         alert("Favorites PDF Error: " + err.message);
     }
     if (bootScreen) bootScreen.style.display = 'none';
@@ -1139,6 +1142,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
             }
         }
     } catch (error) {
+        if (typeof window.logAppError === 'function') window.logAppError('shareImages', error.message);
         alert("Image Sharing Error: " + error.message);
     }
 

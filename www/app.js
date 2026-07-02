@@ -7,6 +7,19 @@ const FIRESTORE_USERS_URL = "https://firestore.googleapis.com/v1/projects/durga-
 
 history.replaceState({ modal: 'main' }, '');
 
+// --- ADMIN MODE GLOBALS ---
+window.isAdminMode = false;
+window.adminTapCount = 0;
+window.isSuperAdmin = localStorage.getItem('dsIsAdmin') === 'true';
+
+// --- ERROR LOGGING ---
+window.globalErrorLog = JSON.parse(localStorage.getItem('dsGlobalErrors') || '[]');
+window.logAppError = function(context, message) {
+    window.globalErrorLog.push({ time: new Date().toISOString(), context: context, message: message });
+    if (window.globalErrorLog.length > 20) window.globalErrorLog.shift();
+    setTimeout(() => localStorage.setItem('dsGlobalErrors', JSON.stringify(window.globalErrorLog)), 0);
+};
+
 // Initialize Web Firebase Fallback Config
 const firebaseConfig = {
   apiKey: "AIzaSyA3Za-dZ8OWWF7ZJdneKGd7A2t8xm_7IZQ",
@@ -113,6 +126,28 @@ window.addEventListener('DOMContentLoaded', function () {
 
         var loginScreen = document.getElementById('loginScreen');
         var appBody = document.getElementById('appBody');
+
+        var logoImg = document.getElementById('appLogoImg');
+        if (logoImg) {
+            var tapTimeout = null;
+            logoImg.addEventListener('click', function() {
+                window.adminTapCount++;
+                clearTimeout(tapTimeout);
+                tapTimeout = setTimeout(() => { window.adminTapCount = 0; }, 1500);
+                if (window.adminTapCount === 3) {
+                    window.adminTapCount = 0;
+                    if (window.isSuperAdmin) {
+                        window.isAdminMode = !window.isAdminMode;
+                        document.getElementById('appLogoImg').style.border = window.isAdminMode ? '2px solid red' : 'none';
+                        document.getElementById('appLogoImg').style.borderRadius = '4px';
+                        alert("Admin Mode: " + (window.isAdminMode ? "ON" : "OFF"));
+                        if (typeof applyFilter === 'function') applyFilter();
+                    } else {
+                        alert("Access Denied: Not an Administrator.");
+                    }
+                }
+            });
+        }
 
         if (activeUser && activeUser !== "null" && activeUser !== "undefined") {
             if (loginScreen && appBody) {
@@ -429,11 +464,30 @@ async function saveProfile() {
     }
 }
 
+async function checkAdminStatus(phone) {
+    try {
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + phone);
+        if (res.ok) {
+            var data = await res.json();
+            if (data.fields && data.fields.isAdmin && data.fields.isAdmin.booleanValue === true) {
+                localStorage.setItem('dsIsAdmin', 'true');
+                window.isSuperAdmin = true;
+            } else {
+                localStorage.setItem('dsIsAdmin', 'false');
+                window.isSuperAdmin = false;
+            }
+        }
+    } catch (e) {
+        window.logAppError("checkAdminStatus", e.message);
+    }
+}
+
 function completeLogin(phoneStr) {
     try { localStorage.setItem("dsUserToken", phoneStr); } catch (e) { }
     activeUser = phoneStr;
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appBody').style.display = 'flex';
+    checkAdminStatus(phoneStr);
     initApp();
 }
 
@@ -469,7 +523,21 @@ function processProducts(docs) {
                 if (edited[name].packing !== undefined) finalPacking = edited[name].packing;
             }
 
+            // --- ADMIN & INVENTORY PARSING ---
+            var actualDocId = d.name ? d.name.split('/').pop() : "";
+            var stockMap = {};
+            if (f.stock && f.stock.mapValue && f.stock.mapValue.fields) {
+                for (var k in f.stock.mapValue.fields) {
+                    var vObj = f.stock.mapValue.fields[k];
+                    stockMap[k] = parseInt(vObj.integerValue || vObj.doubleValue || vObj.stringValue || 0);
+                }
+            }
+            var tStock = f.stock ? Object.values(stockMap).reduce((a, b) => a + b, 0) : 999;
+
             allProducts.push({
+                docId: actualDocId,
+                stock: stockMap,
+                totalStock: tStock,
                 id: "p_" + validCounter,
                 name: name,
                 sku: f.sku ? f.sku.stringValue : "",
@@ -1025,7 +1093,9 @@ function buildCardDetails(p) {
     h.push('</div>');
 
     h.push('<div style="flex-shrink:0;">');
-    if (coverQty === 0 || isNaN(coverQty)) {
+    if (!window.isAdminMode && p.totalStock === 0) {
+        h.push('<div style="background: red; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">PACKED</div>');
+    } else if (coverQty === 0 || isNaN(coverQty)) {
         h.push('<div class="add-btn-clean" onclick="chgMainRow(\'' + p.id + '\', 1); event.stopPropagation();">ADD</div>');
     } else {
         h.push('<div class="qty-clean" onclick="event.stopPropagation()">');
@@ -1065,6 +1135,10 @@ function renderProductGrid(products) {
 
     // Sort products primarily by category (alphabetically), and secondarily by the active sort rule
     var sorted = [...products].sort((a, b) => {
+        // --- ADMIN & INVENTORY: OUT OF STOCK TO BOTTOM ---
+        if (a.totalStock === 0 && b.totalStock > 0) return 1;
+        if (b.totalStock === 0 && a.totalStock > 0) return -1;
+
         var catA = (a.cat || "Uncategorized").toLowerCase();
         var catB = (b.cat || "Uncategorized").toLowerCase();
 
@@ -1115,6 +1189,7 @@ function renderProductGrid(products) {
 // ====================================
 function chgMainRow(pid, dir) {
     var p = allProducts.find(x => x.id === pid); if (!p) return;
+    if (!window.isAdminMode && p.totalStock === 0) return; // Cart Protection
     var key = p.id + '_DIRECT';
     var curQ = cart[key] ? cart[key].qty : 0;
     var newQ = Math.max(0, curQ + (dir * (p.mult || 1)));
@@ -1533,17 +1608,29 @@ function openDetail(productId, skipShow, keepSearchShown) {
         var html = '';
         files.forEach((file, idx) => {
             var dKey = p.id + '_' + file.name;
+            var curStock = p.stock && p.stock[file.name] !== undefined ? p.stock[file.name] : 999;
+            
+            var qtyHtml = '';
+            if (window.isAdminMode) {
+                qtyHtml = `<input type="number" class="admin-stock-input" value="${curStock}" onblur="window.updateAdminStock(this, '${p.docId}', '${p.id}', '${file.name}')" onkeyup="if(event.key === 'Enter') this.blur();" style="width: 60px; text-align: center; border: 1px solid #ccc; border-radius: 4px;">`;
+            } else if (curStock === 0) {
+                qtyHtml = `<div style="background: red; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">PACKED</div>`;
+            } else {
+                qtyHtml = `
+                    <div class="qty-clean">
+                        <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
+                        <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" onchange="setExactQty('${p.id}', '${file.name}', this.value)">
+                        <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
+                    </div>`;
+            }
+
             if (file.isVideo) {
                 html += `
                 <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
                     <video src="${file.url}" controls playsinline style="width: 100%; object-fit: cover;" onclick="event.stopPropagation()"></video>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
-                        <div class="qty-clean">
-                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
-                            <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" onchange="setExactQty('${p.id}', '${file.name}', this.value)">
-                            <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
-                        </div>
+                        ${qtyHtml}
                     </div>
                 </div>`;
             } else {
@@ -1556,11 +1643,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     <img id="${imgId}" src="${imgSrc}" ${loadedZoomAttr} data-zoom-url="${file.url}" ${tempUrlAttr}>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
-                        <div class="qty-clean">
-                            <button onclick="changeQty('${p.id}', '${file.name}', -1)">−</button>
-                            <input type="number" id="qty_${p.id}_${file.name}" value="${cart[dKey] ? cart[dKey].qty : 0}" onchange="setExactQty('${p.id}', '${file.name}', this.value)">
-                            <button onclick="changeQty('${p.id}', '${file.name}', 1)">+</button>
-                        </div>
+                        ${qtyHtml}
                     </div>
                 </div>`;
             }
@@ -1586,6 +1669,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
 window.changeQty = function (pid, designId, amount) {
     var p = allProducts.find(x => x.id === pid); if (!p) return;
+    if (!window.isAdminMode && p.stock && p.stock[designId] === 0) return; // Cart Protection
     var key = pid + '_' + designId;
     var curQ = cart[key] ? cart[key].qty : 0;
     var newQ = Math.max(0, curQ + (amount * (p.mult || 1)));
@@ -2717,6 +2801,7 @@ async function syncImages() {
                     }
                 } catch(e) {
                     lastFailReason = "List failed: " + (e.name === 'AbortError' ? 'Timeout (15s)' : e.message);
+                    window.logAppError('syncImages List', lastFailReason + " | " + p.name);
                 }
 
                 if (!listSuccess) {
@@ -2767,14 +2852,14 @@ async function syncImages() {
                         try {
                             const ctrl2 = new AbortController();
                             const tid2  = setTimeout(() => ctrl2.abort(), 30000);
-                            // ðŸ›¡ï¸ CRITICAL FIX: Bulletproof retry for cover image
+                            // 🛡️ CRITICAL FIX: Bulletproof retry for cover image
                             var coverRes = await window.fetchWithRetry(coverUrl, { signal: ctrl2.signal }, 3);
                             clearTimeout(tid2);
 
                             if (coverRes.ok) {
                                 var coverBlob = await coverRes.blob();
                                 await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
-                                await saveImageToDB(coverUrl, coverBlob);  // ðŸ›¡ï¸ CRITICAL: Also save under its full URL!
+                                await saveImageToDB(coverUrl, coverBlob);  // 🛡️ CRITICAL: Also save under its full URL!
                                 downloaded = true;
                             } else {
                                 lastFailReason = "Cover HTTP " + coverRes.status;
@@ -3926,3 +4011,44 @@ async function resyncFailedProducts() {
     btnResync.disabled = false;
     if (remainingErrCount === 0) btnResync.style.display = 'none';
 }
+
+
+window.updateAdminStock = async function(element, docId, pid, dId) {
+    element.style.backgroundColor = '#fff9c4'; // Yellow (Saving)
+    try {
+        var newVal = parseInt(element.value) || 0;
+        var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock.%60" + dId + "%60";
+        var payload = {
+            fields: {
+                stock: {
+                    mapValue: {
+                        fields: {
+                            [dId]: { integerValue: newVal }
+                        }
+                    }
+                }
+            }
+        };
+        var res = await fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            element.style.backgroundColor = '#c8e6c9'; // Green (Success)
+            var p = allProducts.find(x => x.id === pid);
+            if (p) {
+                if (!p.stock) p.stock = {};
+                p.stock[dId] = newVal;
+                p.totalStock = Object.values(p.stock).reduce((a,b)=>a+b, 0);
+            }
+            setTimeout(() => { element.style.backgroundColor = ''; }, 1000);
+        } else {
+            element.style.backgroundColor = '#ffcdd2'; // Red (Fail)
+            window.logAppError('updateAdminStock', 'HTTP ' + res.status);
+        }
+    } catch (e) {
+        element.style.backgroundColor = '#ffcdd2'; // Red (Fail)
+        window.logAppError('updateAdminStock', e.message);
+    }
+};
