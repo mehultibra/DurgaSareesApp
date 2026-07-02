@@ -2070,7 +2070,16 @@ function openFs(arg1, arg2, arg3, arg4) {
         document.getElementById('fsTitle').innerText = (pItem ? pItem.name : pId) + " - " + (dId === 'DIRECT' ? "Cover" : dId);
         
         var keyCart = pId + '_' + dId;
-        document.getElementById('fsQty').innerText = cart[keyCart] ? cart[keyCart].qty : 0;
+        
+        var curStock = pItem && pItem.stock && pItem.stock[dId] !== undefined ? pItem.stock[dId] : 999;
+        var fsControls = document.querySelector('.fs-controls');
+        if (fsControls) {
+            if (!window.isAdminMode && curStock === 0) {
+                fsControls.innerHTML = '<span style="background: red; color: white; padding: 6px 16px; border-radius: 4px; font-weight: bold; font-size: 16px;">PACKED</span>';
+            } else {
+                fsControls.innerHTML = '<button onclick="fsChg(-1)">−</button><span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">' + (cart[keyCart] ? cart[keyCart].qty : 0) + '</span><button onclick="fsChg(1)">+</button>';
+            }
+        }
         
         document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'none');
         
