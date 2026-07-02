@@ -2163,7 +2163,16 @@ function openFs(arg1, arg2, arg3, arg4) {
     }
 
     var key = pId + '_' + fsDesignId;
-    document.getElementById('fsQty').innerText = cart[key] ? cart[key].qty : 0;
+    
+    var curStock = window.curProduct && window.curProduct.stock && window.curProduct.stock[fsDesignId] !== undefined ? window.curProduct.stock[fsDesignId] : 999;
+    var fsControls = document.querySelector('.fs-controls');
+    if (fsControls) {
+        if (!window.isAdminMode && curStock === 0) {
+            fsControls.innerHTML = '<span style="background: red; color: white; padding: 6px 16px; border-radius: 4px; font-weight: bold; font-size: 16px;">PACKED</span>';
+        } else {
+            fsControls.innerHTML = '<button onclick="fsChg(-1)">−</button><span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">' + (cart[key] ? cart[key].qty : 0) + '</span><button onclick="fsChg(1)">+</button>';
+        }
+    }
 
     var fsModal = document.getElementById('fsModal');
     if (fsModal.style.display !== 'flex') {
@@ -3464,12 +3473,22 @@ function updateAndroidBackState() {
 // Sync back state on initial script load
 updateAndroidBackState();
 
-function toggleHdrMenu() {
+function toggleHdrMenu(event) {
+    if (event) event.stopPropagation();
     var menu = document.getElementById('hdrMenu');
     if (menu) {
         menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
     }
 }
+
+document.addEventListener('click', function(e) {
+    var menu = document.getElementById('hdrMenu');
+    if (menu && menu.style.display === 'block') {
+        if (!menu.contains(e.target)) {
+            menu.style.display = 'none';
+        }
+    }
+});
 
 async function logout() {
     if (typeof toggleHdrMenu === 'function') toggleHdrMenu();
@@ -4172,4 +4191,5 @@ window.showGlobalErrorLogs = function() {
         body.innerHTML = h;
     }
 };
+
 

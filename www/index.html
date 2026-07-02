@@ -127,7 +127,7 @@
         </div>
         <i class="fas fa-sync-alt" onclick="syncImages()" style="cursor:pointer; margin-left:5px;"></i>
         <div style="position:relative; margin-left:5px; display:flex; align-items:center;">
-          <i class="fas fa-ellipsis-v" onclick="toggleHdrMenu()" style="cursor:pointer; color:#555; padding: 0 5px;" title="Menu"></i>
+          <i class="fas fa-ellipsis-v" onclick="toggleHdrMenu(event)" style="cursor:pointer; color:#555; padding: 0 5px;" title="Menu"></i>
           <div id="hdrMenu" style="display:none; position:absolute; right:0; top:25px; background:#fff; border:1px solid var(--border); border-radius:4px; box-shadow:0 4px 10px rgba(0,0,0,0.1); z-index:1000; width:160px;">
             <div onclick="openSyncReportModal()" style="padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text-main); font-size:14px; display:flex; align-items:center; gap:8px;"><i class="fas fa-file-contract" style="color:var(--myntra-pink);"></i> Sync Report</div>
             <div onclick="logout()" style="padding:12px; cursor:pointer; color:var(--text-main); font-size:14px; display:flex; align-items:center; gap:8px;"><i class="fas fa-sign-out-alt" style="color:var(--text-light);"></i> Logout</div>
@@ -265,9 +265,9 @@
         </div>
         <!-- Shifted Cover Qty Selector (Top Row) -->
         <div class="qty-clean" style="display:flex; align-items:center; gap:0;">
-          <button id="dtQtyBotMinus" style="padding: 0 6px; font-size:18px;">−</button>
-          <input type="number" id="dtQtyDirect" value="0" onchange="if(curProduct) setExactQty(curProduct.id, 'DIRECT', this.value)" style="font-size:13px; font-weight:bold; width:22px; text-align:center; border:none; background:transparent;">
-          <button id="dtQtyBotPlus" style="padding: 0 6px; font-size:18px;">+</button>
+          <button id="dtQtyBotMinus" style="padding: 4px 10px; font-size:20px; font-weight:bold; background:var(--bg-light); border-radius:4px;">-</button>
+          <input type="number" id="dtQtyDirect" value="0" onchange="if(curProduct) setExactQty(curProduct.id, 'DIRECT', this.value)" style="font-size:16px; font-weight:bold; width:36px; text-align:center; border:none; background:transparent;">
+          <button id="dtQtyBotPlus" style="padding: 4px 10px; font-size:20px; font-weight:bold; background:var(--bg-light); border-radius:4px;">+</button>
         </div>
       </div>
       </div>
@@ -412,3 +412,4 @@
 </body>
 
 </html>
+
