@@ -630,13 +630,13 @@ function listDBKeysForPrefix(prefix) {
             var tx = db.transaction(storeName, "readonly");
             var store = tx.objectStore(storeName);
             var keys = [];
-            var req = store.openKeyCursor();
+            // OPTIMIZATION: Use IDBKeyRange to instantly jump to prefix, preventing full DB scan
+            var range = IDBKeyRange.bound(prefix, prefix + '\uffff');
+            var req = store.openKeyCursor(range);
             req.onsuccess = function(e) {
                 var cursor = e.target.result;
                 if (cursor) {
-                    if (String(cursor.key).startsWith(prefix)) {
-                        keys.push(cursor.key);
-                    }
+                    keys.push(cursor.key);
                     cursor.continue();
                 } else {
                     resolve(keys);
@@ -791,6 +791,22 @@ function getImageFromDB(key) {
     }).catch(e => {
         console.error("IndexedDB read failed", e);
         return null;
+    });
+}
+
+function checkImageInDB(key) {
+    if (window.sessionImageCache.has(key)) return Promise.resolve(true);
+    return getDB().then(db => {
+        return new Promise((resolve) => {
+            var tx = db.transaction(storeName, "readonly");
+            var store = tx.objectStore(storeName);
+            // Use getKey instead of get to avoid reading the massive Blob into RAM!
+            var req = store.getKey(key);
+            req.onsuccess = () => resolve(!!req.result);
+            req.onerror = () => resolve(false);
+        });
+    }).catch(e => {
+        return false;
     });
 }
 
@@ -2705,7 +2721,7 @@ async function syncImages() {
 
                 if (!listSuccess) {
                     // Offline / error â€” keep existing cache, log error
-                    var existingCover = await getImageFromDB(p.gridUrl);
+                    var existingCover = await checkImageInDB(p.gridUrl);
                     if (existingCover) downloaded = true;
                     else lastFailReason = lastFailReason || "Offline & no local cache";
 
@@ -2743,7 +2759,7 @@ async function syncImages() {
 
                     // â”€â”€ 3. Download the COVER file â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     var coverUrl   = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-                    var existingCover = await getImageFromDB(p.gridUrl);
+                    var existingCover = await checkImageInDB(p.gridUrl);
 
                     if (existingCover) {
                         downloaded = true;
@@ -2776,7 +2792,7 @@ async function syncImages() {
                             var fBatch = remainingFiles.slice(fIdx, fIdx + innerBatchSize);
                             await Promise.all(fBatch.map(async (fname) => {
                                 var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                                var existing  = await getImageFromDB(designUrl);
+                                var existing  = await checkImageInDB(designUrl);
                                 if (existing) return; // already in cache
                                 try {
                                     const ctrl3 = new AbortController();
