@@ -512,14 +512,17 @@ async function generateCartOrderPDF(actionType) {
         var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
 
         if (actionType === 'print') {
-            doc.autoPrint();
-            if (isCapacitor) {
-                // Try dataurlnewwindow for native print spooler / viewer
-                doc.output('dataurlnewwindow');
+            if (isCapacitor && window.CapacitorPrinter) {
+                // Use native printer plugin
+                var base64Data = doc.output('datauristring'); // data:application/pdf;filename=generated.pdf;base64,...
+                window.CapacitorPrinter.print({ content: "base64:" + base64Data }).catch(e => alert("Print error: " + e));
             } else {
+                // Fallback for Web
+                doc.autoPrint();
                 var blobUrl = URL.createObjectURL(doc.output('blob'));
                 window.open(blobUrl, '_blank');
             }
+            if (bootScreen) bootScreen.style.display = 'none';
             return;
         }
 

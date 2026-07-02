@@ -1880,6 +1880,42 @@
     }
   });
 
+  // node_modules/@bcyesil/capacitor-plugin-printer/dist/esm/definitions.js
+  var init_definitions4 = __esm({
+    "node_modules/@bcyesil/capacitor-plugin-printer/dist/esm/definitions.js"() {
+    }
+  });
+
+  // node_modules/@bcyesil/capacitor-plugin-printer/dist/esm/web.js
+  var web_exports4 = {};
+  __export(web_exports4, {
+    PrinterWeb: () => PrinterWeb
+  });
+  var PrinterWeb;
+  var init_web4 = __esm({
+    "node_modules/@bcyesil/capacitor-plugin-printer/dist/esm/web.js"() {
+      init_dist();
+      PrinterWeb = class extends WebPlugin {
+        async print() {
+          console.log("Not supported web browsers!");
+          return Promise.reject("Printer plugin is not supported on web.");
+        }
+      };
+    }
+  });
+
+  // node_modules/@bcyesil/capacitor-plugin-printer/dist/esm/index.js
+  var Printer;
+  var init_esm4 = __esm({
+    "node_modules/@bcyesil/capacitor-plugin-printer/dist/esm/index.js"() {
+      init_dist();
+      init_definitions4();
+      Printer = registerPlugin("Printer", {
+        web: () => Promise.resolve().then(() => (init_web4(), web_exports4)).then((m) => new m.PrinterWeb())
+      });
+    }
+  });
+
   // capacitor-init.js
   var require_capacitor_init = __commonJS({
     "capacitor-init.js"() {
@@ -1887,11 +1923,13 @@
       init_esm();
       init_esm2();
       init_esm3();
+      init_esm4();
       window.Capacitor = Capacitor;
       window.CapacitorShare = Share;
       window.CapacitorFilesystem = Filesystem;
       window.CapacitorDirectory = Directory;
       window.CapacitorFirebaseAuthentication = FirebaseAuthentication;
+      window.CapacitorPrinter = Printer;
     }
   });
   require_capacitor_init();
