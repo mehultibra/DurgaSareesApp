@@ -1509,10 +1509,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
             var lowerName = filename.toLowerCase();
 
-            // Filter out cover images
-            if (/^(01|1|cover)\.(webp|jpg|jpeg|png)$/i.test(lowerName)) {
-                return;
-            }
+            // Define isCoverImg (we will filter them out later if there are other designs)
+            var isCoverImg = /^(01|1|cover)\.(webp|jpg|jpeg|png)$/i.test(lowerName);
 
             var ext = lowerName.substring(lowerName.lastIndexOf('.'));
             var isVideo = [".mp4", ".mov", ".webm", ".avi", ".mkv", ".3gp", ".ogg"].includes(ext);
