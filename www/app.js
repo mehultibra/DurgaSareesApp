@@ -1534,10 +1534,16 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     gridUrl: gridUrl,
                     url: zoomUrl,
                     isVideo: isVideo,
-                    isImage: isImage
+                    isImage: isImage,
+                    isCoverImg: isCoverImg
                 });
             }
         });
+
+        var hasOtherDesigns = validFiles.some(f => !f.isCoverImg);
+        if (hasOtherDesigns) {
+            validFiles = validFiles.filter(f => !f.isCoverImg);
+        }
 
         // 🛡️ SORT LATEST DESIGNS FIRST (DESCENDING NUMERICAL) WITH HIGHEST STOCK FIRST
         validFiles.sort((a, b) => {
@@ -1573,16 +1579,35 @@ function openDetail(productId, skipShow, keepSearchShown) {
             } else {
                 fallbackZoomUrl = fallbackGridUrl;
             }
-            deck.innerHTML = `
-            <div class="swipe-card" data-design="DIRECT" onclick="openFs('${p.id}', 0, 'Cover')">
-                <img id="design_img_${p.id}_DIRECT" src="${coverSrc || ''}" data-loaded-zoom="false" style="width: 100%; object-fit: cover;">
-                <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
+            var curStock = p.stock && p.stock['DIRECT'] !== undefined ? p.stock['DIRECT'] : 999;
+            var adminCheckboxHtml = '';
+            var qtyHtml = '';
+            if (window.isAdminMode) {
+                adminCheckboxHtml = `<input type="checkbox" class="admin-bulk-check" data-did="DIRECT" data-docid="${p.docId}" data-pid="${p.id}" onclick="event.stopPropagation()" style="position:absolute; top:8px; left:8px; z-index:10; transform:scale(1.5); box-shadow: 0 0 5px rgba(255,255,255,0.8);">`;
+                qtyHtml = `
+                    <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
+                        <span style="font-size:11px; font-weight:bold; color:var(--text-main);">Stock:</span>
+                        <input type="number" class="admin-stock-input" value="${curStock}" onblur="window.updateAdminStock(this, '${p.docId}', '${p.id}', 'DIRECT')" onkeyup="if(event.key === 'Enter') this.blur();" style="width: 60px; text-align: center; border: 1px solid #ccc; border-radius: 4px;">
+                    </div>
+                `;
+            } else if (curStock === 0) {
+                qtyHtml = '<div style="color:white; background:red; padding:4px 12px; font-weight:bold; border-radius:4px; margin-top:4px;">PACKED</div>';
+            } else {
+                qtyHtml = `
                     <div class="qty-clean">
                         <button onclick="changeQty('${p.id}', 'DIRECT', -1)">−</button>
                         <input type="number" id="qty_${p.id}_DIRECT" value="${cart[p.id + '_DIRECT'] ? cart[p.id + '_DIRECT'].qty : 0}" onchange="setExactQty('${p.id}', 'DIRECT', this.value)">
                         <button onclick="changeQty('${p.id}', 'DIRECT', 1)">+</button>
                     </div>
+                `;
+            }
+            deck.innerHTML = `
+            <div class="swipe-card" data-design="DIRECT" onclick="openFs('${p.id}', 0, 'Cover')" style="position:relative;">
+                ${adminCheckboxHtml}
+                <img id="design_img_${p.id}_DIRECT" src="${coverSrc || ''}" data-loaded-zoom="false" style="width: 100%; object-fit: cover;" onerror="if(typeof window.logAppError === 'function') window.logAppError('Image Load Error', 'Fallback Cover Image Missing (404) | ${p.name}'); this.onerror=null; this.src='https://placehold.co/600x800/f0f0f0/a0a0a0?text=No+Image';">
+                <div class="swipe-card-bot" onclick="event.stopPropagation()">
+                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
+                    ${qtyHtml}
                 </div>
             </div>`;
             setTimeout(updateBottomQtyFromActiveDesign, 50);
@@ -4219,6 +4244,8 @@ window.showGlobalErrorLogs = function() {
         body.innerHTML = h;
     }
 };
+
+
 
 
 
