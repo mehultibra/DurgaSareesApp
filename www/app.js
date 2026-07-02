@@ -466,10 +466,28 @@ async function saveProfile() {
 
 async function checkAdminStatus(phone) {
     try {
-        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + phone);
-        if (res.ok) {
-            var data = await res.json();
-            if (data.fields && data.fields.isAdmin && data.fields.isAdmin.booleanValue === true) {
+        var query = {
+            structuredQuery: {
+                from: [{ collectionId: "Users" }],
+                where: {
+                    fieldFilter: {
+                        field: { fieldPath: "phone" },
+                        op: "EQUAL",
+                        value: { stringValue: phone }
+                    }
+                },
+                limit: 1
+            }
+        };
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(query)
+        });
+        var data = await res.json();
+        if (data && data.length > 0 && data[0].document) {
+            var f = data[0].document.fields;
+            if (f.isAdmin && f.isAdmin.booleanValue === true) {
                 localStorage.setItem('dsIsAdmin', 'true');
                 window.isSuperAdmin = true;
             } else {
@@ -478,7 +496,7 @@ async function checkAdminStatus(phone) {
             }
         }
     } catch (e) {
-        window.logAppError("checkAdminStatus", e.message);
+        if (typeof window.logAppError === 'function') window.logAppError("checkAdminStatus", e.message);
     }
 }
 
