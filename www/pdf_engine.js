@@ -181,7 +181,25 @@ async function generateCartOrderPDF(actionType) {
                     
                     try {
                         var res = await fetch(fallbackUrl);
-                        if (res.ok) blob = await res.blob();
+                        if (res.ok) {
+                            blob = await res.blob();
+                        } else {
+                            var jpgUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".jpg") + "?alt=media";
+                            var res2 = await fetch(jpgUrl);
+                            if (res2.ok) {
+                                blob = await res2.blob();
+                                if (typeof window.logAppError === 'function') window.logAppError('PDF Fallback Triggered', `Failed to load ${cleanNum2}.webp. Trying .jpg`);
+                            } else {
+                                var pngUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".png") + "?alt=media";
+                                var res3 = await fetch(pngUrl);
+                                if (res3.ok) {
+                                    blob = await res3.blob();
+                                    if (typeof window.logAppError === 'function') window.logAppError('PDF Fallback Triggered', `Failed to load ${cleanNum2}.webp. Trying .png`);
+                                } else {
+                                    if (typeof window.logAppError === 'function') window.logAppError('PDF Fallback Failed (404)', `Both original and fallback missing. Failed on ${cleanNum2}.webp`);
+                                }
+                            }
+                        }
                     } catch(e) {}
                 }
 

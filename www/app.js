@@ -572,7 +572,9 @@ function processProducts(docs) {
             if (f.stock) {
                 var vals = Object.values(stockMap);
                 var sum = vals.reduce((a, b) => a + b, 0);
-                if (sum > 0) {
+                if (stockMap['FULLY_PACKED'] === 1) {
+                    tStock = 0;
+                } else if (sum > 0) {
                     tStock = sum;
                 } else if (Object.keys(stockMap).length === 1 && stockMap['DIRECT'] !== undefined) {
                     tStock = 0; // Explicitly marked cover as packed
@@ -1392,10 +1394,19 @@ function fetchZoomNatively(zoomUrl, imgEl) {
         if (imgEl.dataset.loadedZoom === "true") return;
         var newZoomUrl = null;
         var lowerUrl = zoomUrl.toLowerCase();
-        if (lowerUrl.includes('.webp?alt=media')) newZoomUrl = zoomUrl.replace(/\.webp\?alt=media/i, '.jpg?alt=media');
-        else if (lowerUrl.includes('.jpg?alt=media')) newZoomUrl = zoomUrl.replace(/\.jpg\?alt=media/i, '.webp?alt=media');
-        else if (lowerUrl.includes('.jpeg?alt=media')) newZoomUrl = zoomUrl.replace(/\.jpeg\?alt=media/i, '.jpg?alt=media');
-        else if (lowerUrl.includes('.png?alt=media')) newZoomUrl = zoomUrl.replace(/\.png\?alt=media/i, '.webp?alt=media');
+        var extMatch = zoomUrl.match(/\/([^/?]+)\?alt=media/i);
+        var filename = extMatch ? extMatch[1] : zoomUrl;
+        var extChangeMsg = "";
+
+        if (lowerUrl.includes('.webp?alt=media')) { newZoomUrl = zoomUrl.replace(/\.webp\?alt=media/i, '.jpg?alt=media'); extChangeMsg = ".webp -> .jpg"; }
+        else if (lowerUrl.includes('.jpg?alt=media')) { newZoomUrl = zoomUrl.replace(/\.jpg\?alt=media/i, '.webp?alt=media'); extChangeMsg = ".jpg -> .webp"; }
+        else if (lowerUrl.includes('.jpeg?alt=media')) { newZoomUrl = zoomUrl.replace(/\.jpeg\?alt=media/i, '.jpg?alt=media'); extChangeMsg = ".jpeg -> .jpg"; }
+        else if (lowerUrl.includes('.png?alt=media')) { newZoomUrl = zoomUrl.replace(/\.png\?alt=media/i, '.webp?alt=media'); extChangeMsg = ".png -> .webp"; }
+
+        if (typeof window.logAppError === 'function') {
+            window.logAppError('Image Fallback Triggered', `Failed to load ${filename}. Trying ${extChangeMsg}`);
+        }
+
         if (newZoomUrl) {
             var fallbackImg = new Image();
             fallbackImg.onload = function() {
@@ -1406,6 +1417,13 @@ function fetchZoomNatively(zoomUrl, imgEl) {
                     }
                     imgEl.src = newZoomUrl;
                     imgEl.dataset.loadedZoom = "true";
+                }
+            };
+            fallbackImg.onerror = function() {
+                if (typeof window.logAppError === 'function') {
+                    var newFilename = newZoomUrl.match(/\/([^/?]+)\?alt=media/i);
+                    newFilename = newFilename ? newFilename[1] : newZoomUrl;
+                    window.logAppError('Image Fallback Failed (404)', `Both original and fallback missing. Failed on ${newFilename}`);
                 }
             };
             fallbackImg.src = newZoomUrl;
@@ -2776,15 +2794,12 @@ window.openCartFsFromCache = function (productId, designId, gridUrl) {
             if (!cleanNum2) cleanNum2 = designId;
             var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
             
-            fetch(fallbackUrl).then(function(res) {
-                if (res.ok) return res.blob();
-                throw new Error('Network failed');
-            }).then(function(blob) {
-                showInFullscreen(URL.createObjectURL(blob));
-                saveImageToDB(fallbackUrl, blob); // Cache it for future!
-            }).catch(function() {
-                showInFullscreen("https://placehold.co/600x800/f0f0f0/a0a0a0?text=Not+Synced");
-            });
+            showInFullscreen("https://placehold.co/600x800/f0f0f0/a0a0a0?text=Loading...");
+            var fsImg = document.getElementById('fsImg');
+            fsImg.dataset.loadedZoom = "false";
+            if (typeof fetchZoomNatively === 'function') {
+                fetchZoomNatively(fallbackUrl, fsImg);
+            }
         }
     });
 };
@@ -3543,14 +3558,16 @@ function toggleHdrMenu(event) {
     }
 }
 
-document.addEventListener('click', function(e) {
-    var menu = document.getElementById('hdrMenu');
-    if (menu && menu.style.display === 'block') {
-        if (!menu.contains(e.target)) {
-            menu.style.display = 'none';
+['click', 'touchstart'].forEach(evt => 
+    document.addEventListener(evt, function(e) {
+        var menu = document.getElementById('hdrMenu');
+        if (menu && menu.style.display === 'block') {
+            if (!menu.contains(e.target) && (!e.target.closest || !e.target.closest('.fa-ellipsis-v'))) {
+                menu.style.display = 'none';
+            }
         }
-    }
-});
+    })
+);
 
 async function logout() {
     if (typeof toggleHdrMenu === 'function') toggleHdrMenu();
@@ -4135,10 +4152,10 @@ async function resyncFailedProducts() {
 }
 
 
-window.updateAdminStock = async function(element, docId, pid, dId) {
-    element.style.backgroundColor = '#fff9c4'; // Yellow (Saving)
+window.updateAdminStock = async function(element, docId, pid, dId, overrideVal = null) {
+    if (element) element.style.backgroundColor = '#fff9c4'; // Yellow (Saving)
     try {
-        var newVal = parseInt(element.value) || 0;
+        var newVal = overrideVal !== null ? overrideVal : (parseInt(element.value) || 0);
         var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock.%60" + dId + "%60";
         var payload = {
             fields: {
@@ -4163,24 +4180,30 @@ window.updateAdminStock = async function(element, docId, pid, dId) {
                 if (!p.stock) p.stock = {};
                 p.stock[dId] = newVal;
                 
-                var vals = Object.values(p.stock);
-                var sum = vals.reduce((a, b) => a + b, 0);
-                if (sum > 0) {
-                    p.totalStock = sum;
-                } else if (Object.keys(p.stock).length === 1 && p.stock['DIRECT'] !== undefined) {
-                    p.totalStock = 0; // Explicitly marked cover as packed
+                if (p.stock['FULLY_PACKED'] === 1) {
+                    p.totalStock = 0;
                 } else {
-                    p.totalStock = 999; // Assume untracked designs exist
+                    var vals = Object.values(p.stock);
+                    var sum = vals.reduce((a, b) => a + b, 0);
+                    if (sum > 0) {
+                        p.totalStock = sum;
+                    } else if (Object.keys(p.stock).length === 1 && p.stock['DIRECT'] !== undefined) {
+                        p.totalStock = 0; // Explicitly marked cover as packed
+                    } else {
+                        p.totalStock = 999; // Assume untracked designs exist
+                    }
                 }
             }
-            setTimeout(() => { element.style.backgroundColor = ''; }, 1000);
+            if (element) {
+                setTimeout(() => { element.style.backgroundColor = ''; }, 1000);
+            }
         } else {
-            element.style.backgroundColor = '#ffcdd2'; // Red (Fail)
-            window.logAppError('updateAdminStock', 'HTTP ' + res.status);
+            if (element) element.style.backgroundColor = '#ffcdd2'; // Red (Fail)
+            if (typeof window.logAppError === 'function') window.logAppError('updateAdminStock', 'HTTP ' + res.status);
         }
     } catch (e) {
-        element.style.backgroundColor = '#ffcdd2'; // Red (Fail)
-        window.logAppError('updateAdminStock', e.message);
+        if (element) element.style.backgroundColor = '#ffcdd2'; // Red (Fail)
+        if (typeof window.logAppError === 'function') window.logAppError('updateAdminStock', e.message);
     }
 };
 
@@ -4200,6 +4223,9 @@ window.applyBulkAdminStock = async function() {
     btn.disabled = true;
     btn.innerText = 'UPDATING...';
 
+    var allBoxes = document.querySelectorAll('.admin-bulk-check');
+    var isPackingAll = (boxes.length === allBoxes.length && qtyInput.value === '0');
+
     // Process sequentially to avoid 409 Contention error
     for (var i = 0; i < boxes.length; i++) {
         var box = boxes[i];
@@ -4215,6 +4241,16 @@ window.applyBulkAdminStock = async function() {
             // Await the update to prevent overloading firestore
             await window.updateAdminStock(stockInput, docid, pid, did);
         }
+    }
+
+    if (isPackingAll && boxes.length > 0) {
+        var docid = boxes[0].getAttribute('data-docid');
+        var pid = boxes[0].getAttribute('data-pid');
+        await window.updateAdminStock(null, docid, pid, 'FULLY_PACKED', 1);
+    } else if (boxes.length > 0) {
+        var docid = boxes[0].getAttribute('data-docid');
+        var pid = boxes[0].getAttribute('data-pid');
+        await window.updateAdminStock(null, docid, pid, 'FULLY_PACKED', 0);
     }
 
     btn.disabled = false;
