@@ -1510,7 +1510,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var lowerName = filename.toLowerCase();
 
             // Filter out cover images
-            if (/^(cover)\.(webp|jpg|jpeg|png)$/i.test(lowerName)) {
+            if (/^(01|1|cover)\.(webp|jpg|jpeg|png)$/i.test(lowerName)) {
                 return;
             }
 
@@ -1679,7 +1679,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
             if (file.isVideo) {
                 html += `
-                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
+                <div class="swipe-card" data-design="${file.name}" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
                     ${adminCheckboxHtml}
                     <video src="${file.url}" controls playsinline style="width: 100%; object-fit: cover;" onclick="event.stopPropagation()"></video>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
@@ -1693,7 +1693,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgSrc = file.cachedObjectUrl ? file.cachedObjectUrl : placeholderSVG;
                 var tempUrlAttr = file.cachedObjectUrl ? 'data-temp-blob-url="' + file.cachedObjectUrl + '"' : '';
                 html += `
-                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
+                <div class="swipe-card" data-design="${file.name}" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
                     ${adminCheckboxHtml}
                     <img id="${imgId}" src="${imgSrc}" ${loadedZoomAttr} data-zoom-url="${file.url}" ${tempUrlAttr}>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
@@ -1940,8 +1940,7 @@ function setupFsGestures() {
             if (deck && typeof fsDesignId !== 'undefined') {
                 var cards = Array.from(deck.querySelectorAll('.swipe-card')).filter(c => c.style.display !== 'none');
                 var foundIdx = cards.findIndex(card => {
-                    var inputField = card.querySelector('input[type="number"]');
-                    var cardDId = inputField ? inputField.id.replace("qty_" + (typeof curProduct !== 'undefined' && curProduct ? curProduct.id : '') + "_", "") : 'DIRECT';
+                    var cardDId = card.getAttribute('data-design') || 'DIRECT';
                     return cardDId === fsDesignId;
                 });
                 if (foundIdx !== -1) fsIndex = foundIdx;
@@ -2121,8 +2120,7 @@ function openFs(arg1, arg2, arg3, arg4) {
 
     if (dId) {
         var foundIdx = cards.findIndex(card => {
-            var inputField = card.querySelector('input[type="number"]');
-            var cardDId = inputField ? inputField.id.replace("qty_" + pId + "_", "") : 'DIRECT';
+            var cardDId = card.getAttribute('data-design') || 'DIRECT';
             return cardDId === dId;
         });
         if (foundIdx !== -1) {
@@ -2140,8 +2138,7 @@ function openFs(arg1, arg2, arg3, arg4) {
     // Keep detail panel swipe deck scrolled to align with full screen active card
     targetCard.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
 
-    var inputField = targetCard.querySelector('input[type="number"]');
-    dId = inputField ? inputField.id.replace("qty_" + pId + "_", "") : 'DIRECT';
+    dId = targetCard.getAttribute('data-design') || 'DIRECT';
 
     fsIndex = index;
     fsDesignId = dId;
@@ -4222,6 +4219,8 @@ window.showGlobalErrorLogs = function() {
         body.innerHTML = h;
     }
 };
+
+
 
 
 
