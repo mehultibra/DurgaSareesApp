@@ -153,6 +153,7 @@ window.addEventListener('DOMContentLoaded', function () {
             if (loginScreen && appBody) {
                 loginScreen.style.display = 'none';
                 appBody.style.display = 'flex';
+                checkAdminStatus(activeUser);
                 setTimeout(initApp, 100);
             }
         } else {
