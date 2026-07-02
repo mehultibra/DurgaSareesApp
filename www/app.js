@@ -1539,8 +1539,13 @@ function openDetail(productId, skipShow, keepSearchShown) {
             }
         });
 
-        // 🛡️ SORT LATEST DESIGNS FIRST (DESCENDING NUMERICAL)
+        // 🛡️ SORT LATEST DESIGNS FIRST (DESCENDING NUMERICAL) WITH HIGHEST STOCK FIRST
         validFiles.sort((a, b) => {
+            var stockA = p.stock && p.stock[a.name] !== undefined ? p.stock[a.name] : 999;
+            var stockB = p.stock && p.stock[b.name] !== undefined ? p.stock[b.name] : 999;
+            if (stockA !== stockB) {
+                return stockB - stockA; // Highest stock first
+            }
             var numA = parseInt(a.name.replace(/\D/g, ''));
             var numB = parseInt(b.name.replace(/\D/g, ''));
             if (isNaN(numA)) numA = 0;
@@ -4217,6 +4222,7 @@ window.showGlobalErrorLogs = function() {
         body.innerHTML = h;
     }
 };
+
 
 
 
