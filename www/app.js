@@ -568,7 +568,18 @@ function processProducts(docs) {
                     stockMap[k] = parseInt(vObj.integerValue || vObj.doubleValue || vObj.stringValue || 0);
                 }
             }
-            var tStock = f.stock ? Object.values(stockMap).reduce((a, b) => a + b, 0) : 999;
+            var tStock = 999;
+            if (f.stock) {
+                var vals = Object.values(stockMap);
+                var sum = vals.reduce((a, b) => a + b, 0);
+                if (sum > 0) {
+                    tStock = sum;
+                } else if (Object.keys(stockMap).length === 1 && stockMap['DIRECT'] !== undefined) {
+                    tStock = 0; // Explicitly marked cover as packed
+                } else {
+                    tStock = 999; // Assume untracked designs exist
+                }
+            }
 
             allProducts.push({
                 docId: actualDocId,
@@ -4151,7 +4162,16 @@ window.updateAdminStock = async function(element, docId, pid, dId) {
             if (p) {
                 if (!p.stock) p.stock = {};
                 p.stock[dId] = newVal;
-                p.totalStock = Object.values(p.stock).reduce((a,b)=>a+b, 0);
+                
+                var vals = Object.values(p.stock);
+                var sum = vals.reduce((a, b) => a + b, 0);
+                if (sum > 0) {
+                    p.totalStock = sum;
+                } else if (Object.keys(p.stock).length === 1 && p.stock['DIRECT'] !== undefined) {
+                    p.totalStock = 0; // Explicitly marked cover as packed
+                } else {
+                    p.totalStock = 999; // Assume untracked designs exist
+                }
             }
             setTimeout(() => { element.style.backgroundColor = ''; }, 1000);
         } else {
