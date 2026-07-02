@@ -1336,7 +1336,14 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                     imgEl.dataset.loadedZoom = 'true';
                 }
             }
-        } catch(e) { console.error('[ZOOM] Error for', fileName, ':', e.message); }
+        } catch(e) { 
+            console.error('[ZOOM] Error for', fileName, ':', e.message); 
+            var prod = window.allProducts && window.allProducts.find(x => x.id === productId);
+            var pName = prod ? prod.name : productId;
+            if (typeof window.logAppError === 'function') {
+                window.logAppError('Zoom Image Error', e.message + " | " + pName);
+            }
+        }
     }, 0);
 }
 
@@ -1643,9 +1650,15 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     </div>`;
             }
 
+            var adminCheckboxHtml = '';
+            if (window.isAdminMode) {
+                adminCheckboxHtml = `<input type="checkbox" class="admin-bulk-check" data-did="${file.name}" data-docid="${p.docId}" data-pid="${p.id}" onclick="event.stopPropagation()" style="position:absolute; top:8px; left:8px; z-index:10; transform:scale(1.5); box-shadow: 0 0 5px rgba(255,255,255,0.8);">`;
+            }
+
             if (file.isVideo) {
                 html += `
-                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
+                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
+                    ${adminCheckboxHtml}
                     <video src="${file.url}" controls playsinline style="width: 100%; object-fit: cover;" onclick="event.stopPropagation()"></video>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
@@ -1658,7 +1671,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgSrc = file.cachedObjectUrl ? file.cachedObjectUrl : placeholderSVG;
                 var tempUrlAttr = file.cachedObjectUrl ? 'data-temp-blob-url="' + file.cachedObjectUrl + '"' : '';
                 html += `
-                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')">
+                <div class="swipe-card" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
+                    ${adminCheckboxHtml}
                     <img id="${imgId}" src="${imgSrc}" ${loadedZoomAttr} data-zoom-url="${file.url}" ${tempUrlAttr}>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
@@ -1789,6 +1803,14 @@ function updateLiveDetailHeader() {
     var dtNameTop = document.getElementById('dtNameTop');
     if (dtNameTop) {
         dtNameTop.innerHTML = esc(curProduct.name) + ' <span style="color: var(--myntra-pink); font-weight: bold; font-size: 14px;">(' + totalQty + ' pcs)</span>';
+    }
+
+    // Admin Bulk Actions Bar Toggle
+    var adminBar = document.getElementById('adminBulkBar');
+    if (adminBar) {
+        adminBar.style.display = window.isAdminMode ? 'flex' : 'none';
+        var checkAll = document.getElementById('adminBulkCheckAll');
+        if (checkAll) checkAll.checked = false; // reset state
     }
 
     // Update design quantities summary in bottom row
@@ -2901,14 +2923,14 @@ async function syncImages() {
                                 try {
                                     const ctrl3 = new AbortController();
                                     const tid3  = setTimeout(() => ctrl3.abort(), 15000);
-                                    // ðŸ›¡ï¸ CRITICAL FIX: Bulletproof retry for inner images
+                                    // 🛡️ CRITICAL FIX: Bulletproof retry for inner images
                                     var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
                                     clearTimeout(tid3);
                                     if (dRes.ok) {
                                         await saveImageToDB(designUrl, await dRes.blob());
                                     }
                                 } catch(e) {
-                                    console.warn("[SYNC] Fast design fetch failed:", fname, e.message);
+                                    console.warn("[SYNC] Fast design fetch failed:", fname, e.message); if (typeof window.logAppError === 'function') window.logAppError('Sync Inner Image', e.message + " | " + p.name);
                                 }
                             }));
                         }
@@ -4071,3 +4093,83 @@ window.updateAdminStock = async function(element, docId, pid, dId) {
         window.logAppError('updateAdminStock', e.message);
     }
 };
+
+
+window.toggleAllBulkCheckboxes = function(checked) {
+    var boxes = document.querySelectorAll('.admin-bulk-check');
+    boxes.forEach(box => box.checked = checked);
+};
+
+window.applyBulkAdminStock = async function() {
+    var qtyInput = document.getElementById('adminBulkQtyInput');
+    var boxes = document.querySelectorAll('.admin-bulk-check:checked');
+    if (boxes.length === 0) { alert('No designs selected.'); return; }
+    if (!qtyInput || qtyInput.value === '') { alert('Please enter a quantity.'); return; }
+
+    var btn = event.currentTarget;
+    btn.disabled = true;
+    btn.innerText = 'UPDATING...';
+
+    // Process sequentially to avoid 409 Contention error
+    for (var i = 0; i < boxes.length; i++) {
+        var box = boxes[i];
+        var did = box.getAttribute('data-did');
+        var pid = box.getAttribute('data-pid');
+        var docid = box.getAttribute('data-docid');
+        
+        // Find the input element associated with this design to pass to updateAdminStock
+        // The input is right next to it in the DOM
+        var stockInput = box.closest('.swipe-card').querySelector('.admin-stock-input');
+        if (stockInput) {
+            stockInput.value = qtyInput.value;
+            // Await the update to prevent overloading firestore
+            await window.updateAdminStock(stockInput, docid, pid, did);
+        }
+    }
+
+    btn.disabled = false;
+    btn.innerText = 'APPLY';
+    // Uncheck all after applying
+    document.getElementById('adminBulkCheckAll').checked = false;
+    window.toggleAllBulkCheckboxes(false);
+    qtyInput.value = '';
+};
+
+window.showGlobalErrorLogs = function() {
+    var body = document.getElementById('syncReportBody');
+    if (body) {
+        var h = '<div style="font-size:14px; font-weight:bold; margin-bottom:8px;">Global App Logs</div>';
+        if (window.globalErrorLog && window.globalErrorLog.length > 0) {
+            var grouped = {};
+            window.globalErrorLog.forEach(err => {
+                var pName = "System / Unknown";
+                var parts = err.msg.split(' | ');
+                if (parts.length > 1) {
+                    pName = parts.pop();
+                    err.cleanMsg = parts.join(' | ');
+                } else {
+                    err.cleanMsg = err.msg;
+                }
+                if (!grouped[pName]) grouped[pName] = [];
+                grouped[pName].push(err);
+            });
+            
+            for (var group in grouped) {
+                h += '<div style="margin-bottom:12px; background:#f9f9f9; border:1px solid #ddd; border-radius:6px; overflow:hidden;">';
+                h += '<div style="background:#eeeeee; font-weight:bold; padding:6px 10px; font-size:13px; border-bottom:1px solid #ddd;">' + group + '</div>';
+                h += '<div style="padding:6px 10px;">';
+                grouped[group].forEach(err => {
+                    var date = new Date(err.ts).toLocaleTimeString();
+                    h += '<div style="color:#b71c1c; font-size:12px; margin-bottom:4px; border-bottom: 1px dashed #e0e0e0; padding-bottom:4px;">';
+                    h += '<span style="color:#666;">[' + date + ']</span> <strong>' + err.src + ':</strong> ' + err.cleanMsg;
+                    h += '</div>';
+                });
+                h += '</div></div>';
+            }
+        } else {
+            h += '<div style="padding:10px; background:#e8f5e9; color:#2e7d32; border-radius:4px; font-size:13px;">No global errors recorded!</div>';
+        }
+        body.innerHTML = h;
+    }
+};
+
