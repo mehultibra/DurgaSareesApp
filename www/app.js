@@ -1697,29 +1697,33 @@ function openDetail(productId, skipShow, keepSearchShown) {
         var placeholderSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#f9f9fa"/></svg>');
 
         // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
-        await Promise.all(files.map(async (file, idx) => {
-            if (!file.isVideo) {
-                var isCover = /^(cover|cover1)$/i.test(file.name);
-                
-                // 1. Try HD Zoom First
-                var targetBlob = await getImageFromDB(file.url);
-                if (targetBlob) {
-                    file.isZoomLoaded = true;
-                } else {
-                    // 2. Fallback to Grid
-                    targetBlob = await getImageFromDB(file.gridUrl);
-                    if (!targetBlob && window.findDesignKeyInCache) {
-                        var altKey = await window.findDesignKeyInCache(p.gridUrl, file.name);
-                        if (altKey) targetBlob = await getImageFromDB(altKey);
+        try {
+            await Promise.all(files.map(async (file, idx) => {
+                if (!file.isVideo) {
+                    var isCover = /^(cover|cover1)$/i.test(file.name);
+                    
+                    // 1. Try HD Zoom First
+                    var targetBlob = await getImageFromDB(file.url);
+                    if (targetBlob) {
+                        file.isZoomLoaded = true;
+                    } else {
+                        // 2. Fallback to Grid
+                        targetBlob = await getImageFromDB(file.gridUrl);
+                        if (!targetBlob && window.findDesignKeyInCache) {
+                            var altKey = await window.findDesignKeyInCache(p.gridUrl, file.name);
+                            if (altKey) targetBlob = await getImageFromDB(altKey);
+                        }
+                        if (!targetBlob && isCover && p.gridUrl) {
+                            targetBlob = await getImageFromDB(p.gridUrl);
+                        }
                     }
-                    if (!targetBlob && isCover && p.gridUrl) {
-                        targetBlob = await getImageFromDB(p.gridUrl);
-                    }
+                    
+                    if (targetBlob) file.cachedObjectUrl = URL.createObjectURL(targetBlob);
                 }
-                
-                if (targetBlob) file.cachedObjectUrl = URL.createObjectURL(targetBlob);
-            }
-        }));
+            }));
+        } catch (fetchErr) {
+            console.warn("Failed to prefetch blobs, continuing with network fallback", fetchErr);
+        }
 
         var html = '';
         files.forEach((file, idx) => {
@@ -1779,7 +1783,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgEl = document.getElementById(imgId);
                 if (imgEl) {
-                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(cover|cover1)$/i.test(file.name), cleanZoomPath, curStock > 0);
+                    var currentStock = p.stock && p.stock[file.name] !== undefined ? p.stock[file.name] : 999;
+                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(cover|cover1)$/i.test(file.name), cleanZoomPath, currentStock > 0);
                 }
             }
         });
@@ -1883,7 +1888,7 @@ window.setExactQty = function(pid, designId, value) {
 function updateLiveDetailHeader() {
     if (!curProduct) return;
     var totalQty = 0;
-    for (var k in cart) { if (cart[k].p.id === curProduct.id) totalQty += cart[k].qty; }
+    for (var k in cart) { if (cart[k].p && cart[k].p.id === curProduct.id) totalQty += cart[k].qty; }
 
     // Top Header Badge
     var dtTotTop = document.getElementById('dtTotalQtyTop');
@@ -4350,8 +4355,20 @@ window.deleteFromOutbox = function(keyId) {
 };
 
 window.triggerAdminCamera = async function(docId, pid) {
-    var designId = prompt("Enter Design Label (e.g., 'cover', '02', '03'):");
-    if (!designId || !designId.trim()) return;
+    var defaultDesignId = "02";
+    if (window.lastRenderedDesignNames) {
+        var names = window.lastRenderedDesignNames.split(',');
+        var maxNum = 1;
+        names.forEach(n => {
+            // Match pure numbers up to 4 digits (ignores random letters and giant timestamps)
+            if (/^\d{1,4}$/.test(n)) {
+                var num = parseInt(n, 10);
+                if (num > maxNum) maxNum = num;
+            }
+        });
+        defaultDesignId = (maxNum + 1).toString().padStart(2, '0');
+    }
+    var designId = defaultDesignId;
     try {
         var photo = await Capacitor.Plugins.Camera.getPhoto({ quality: 90, allowEditing: false, resultType: 'uri', source: 'CAMERA' });
         var outboxId = await window.saveToOutbox(docId, designId.trim(), photo.path || photo.webPath);
