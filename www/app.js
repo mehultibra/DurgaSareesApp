@@ -954,9 +954,10 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     var encZoomPath = (zoomPath && zoomPath !== "None") ? zoomPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
 
-    var fileToFetch = targetFile ? targetFile : "01.webp";
+    var fileToFetch = targetFile ? targetFile : "cover.webp"; // Start at cover.webp by default
 
-    if (fileToFetch === "01.webp" && coverExistsMap[gridPath] === false) {
+    // If cache indicates missing, jump to fallback map
+    if ((fileToFetch === "cover.webp" || fileToFetch === "01.webp") && coverExistsMap[gridPath] === false) {
         if (dsFallbackMap[gridPath]) {
             fileToFetch = dsFallbackMap[gridPath];
         }
@@ -1013,39 +1014,35 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
 
     function loadFromNetwork() {
+        var fallbackQueue = [];
+        if (targetFile && targetFile !== "cover.webp") fallbackQueue.push(targetFile);
+        if (!fallbackQueue.includes("cover.webp")) fallbackQueue.push("cover.webp");
+        fallbackQueue.push("cover1.webp", "01.webp", "1.webp");
+
+        var queueIndex = fallbackQueue.indexOf(fileToFetch) !== -1 ? fallbackQueue.indexOf(fileToFetch) : 0;
+        
         imgElement.src = lowResUrl;
 
-        // Fallback if 01.webp fails on Grid
         imgElement.onerror = function () {
-            if (fileToFetch === "01.webp") {
-                imgElement.src = fbBase + encGridPath + "%2Fcover.webp?alt=media";
-                imgElement.onerror = function () {
-                    imgElement.src = fbBase + encGridPath + "%2F1.webp?alt=media";
-                    imgElement.onerror = function () {
-                        // Fallback to zoom bucket for cover images
-                        imgElement.src = fbBase + encZoomPath + "%2F01.webp?alt=media";
-                        imgElement.onerror = function () {
-                            imgElement.src = fbBase + encZoomPath + "%2Fcover.webp?alt=media";
-                            imgElement.onerror = function () {
-                                coverExistsMap[gridPath] = false;
-                                saveCoverExistsMap();
-                                tryToLoadLatestReadyDesign();
-                            };
-                        };
-                    };
-                    if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
-                }
-            } else if (fileToFetch === targetFile && targetFile !== "01.webp") {
-                if (typeof updateBottomQtyFromActiveDesign === 'function') updateBottomQtyFromActiveDesign();
-                showPlaceholder();
+            queueIndex++;
+            if (queueIndex < fallbackQueue.length) {
+                imgElement.src = fbBase + encGridPath + "%2F" + fallbackQueue[queueIndex] + "?alt=media";
             } else {
-                tryToLoadLatestReadyDesign();
+                imgElement.src = fbBase + encZoomPath + "%2Fcover.webp?alt=media";
+                imgElement.onerror = function () {
+                    imgElement.src = fbBase + encZoomPath + "%2F01.webp?alt=media";
+                    imgElement.onerror = function () {
+                        coverExistsMap[gridPath] = false;
+                        saveCoverExistsMap();
+                        tryToLoadLatestReadyDesign();
+                    };
+                };
             }
         };
 
         // Cache the result if load is successful
         imgElement.onload = function () {
-            if (fileToFetch === "01.webp" && (imgElement.src.includes("01.webp") || imgElement.src.includes("cover.webp") || imgElement.src.includes("1.webp"))) {
+            if ((fileToFetch === "cover.webp" || fileToFetch === "01.webp") && (imgElement.src.includes("cover.webp") || imgElement.src.includes("cover1.webp") || imgElement.src.includes("01.webp") || imgElement.src.includes("1.webp"))) {
                 if (coverExistsMap[gridPath] !== true) {
                     coverExistsMap[gridPath] = true;
                     saveCoverExistsMap();
@@ -1291,7 +1288,7 @@ var missingDesignSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
 </svg>
 `);
 
-function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName, folderPath, isCover, zoomFolderPath) {
+function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName, folderPath, isCover, zoomFolderPath, isInStock) {
     if (imgEl.getAttribute('data-loaded-zoom') === 'true') return;
     setTimeout(async function() {
         try {
@@ -1332,7 +1329,12 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
             var r = await fetch(url);
             if (r.ok) {
                 var blob = await r.blob();
-                // We do NOT call saveImageToDB here. Intent-engine handles permanent saves.
+                if (isInStock) {
+                    saveImageToDB(url, blob);
+                    console.log('[ZOOM] Persisted to IDB Storage:', fileName);
+                } else {
+                    console.log('[ZOOM] Retained in transient RAM Only (PACKED Item):', fileName);
+                }
                 if (imgEl.dataset.loadedZoom !== 'true') {
                     if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
                     var oUrl = URL.createObjectURL(blob);
@@ -1349,9 +1351,18 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                 else if (lu.includes('.jpeg?alt=media')) fbUrl = url.replace(/\.jpeg\?alt=media/i, '.jpg?alt=media');
                 else if (lu.includes('.png?alt=media')) fbUrl = url.replace(/\.png\?alt=media/i, '.webp?alt=media');
                 if (fbUrl) {
+                    if (typeof window.logAppError === 'function') {
+                        window.logAppError('AUDITOR: Fallback Swap', `Swapped ${url} to ${fbUrl} for ${fileName}`);
+                    }
                     var r2 = await fetch(fbUrl);
                     if (r2.ok) {
                         var b2 = await r2.blob();
+                        if (isInStock) {
+                            saveImageToDB(fbUrl, b2);
+                            console.log('[ZOOM] Persisted to IDB Storage (Fallback):', fileName);
+                        } else {
+                            console.log('[ZOOM] Retained in transient RAM Only (Fallback):', fileName);
+                        }
                         if (imgEl.dataset.loadedZoom !== 'true') {
                             if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
                             var u2 = URL.createObjectURL(b2);
@@ -1404,7 +1415,7 @@ function fetchZoomNatively(zoomUrl, imgEl) {
         else if (lowerUrl.includes('.png?alt=media')) { newZoomUrl = zoomUrl.replace(/\.png\?alt=media/i, '.webp?alt=media'); extChangeMsg = ".png -> .webp"; }
 
         if (typeof window.logAppError === 'function') {
-            window.logAppError('Image Fallback Triggered', `Failed to load ${filename}. Trying ${extChangeMsg}`);
+            window.logAppError('AUDITOR: Image Fallback Triggered', `Failed to load ${filename}. Trying ${extChangeMsg}`);
         }
 
         if (newZoomUrl) {
@@ -1423,7 +1434,7 @@ function fetchZoomNatively(zoomUrl, imgEl) {
                 if (typeof window.logAppError === 'function') {
                     var newFilename = newZoomUrl.match(/\/([^/?]+)\?alt=media/i);
                     newFilename = newFilename ? newFilename[1] : newZoomUrl;
-                    window.logAppError('Image Fallback Failed (404)', `Both original and fallback missing. Failed on ${newFilename}`);
+                    window.logAppError('AUDITOR: Image Fallback Failed (404)', `Both original and fallback missing. Failed on ${newFilename}`);
                 }
             };
             fallbackImg.src = newZoomUrl;
@@ -1539,7 +1550,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             var lowerName = filename.toLowerCase();
 
             // Define isCoverImg (we will filter them out later if there are other designs)
-            var isCoverImg = /^(01|1|cover)\.(webp|jpg|jpeg|png)$/i.test(lowerName);
+            var isCoverImg = /^(cover|cover1)\.(webp|jpg|jpeg|png)$/i.test(lowerName);
 
             var ext = lowerName.substring(lowerName.lastIndexOf('.'));
             var isVideo = [".mp4", ".mov", ".webm", ".avi", ".mkv", ".3gp", ".ogg"].includes(ext);
@@ -1641,7 +1652,8 @@ function openDetail(productId, skipShow, keepSearchShown) {
             updateLiveDetailHeader();
             var imgEl = document.getElementById("design_img_" + p.id + "_DIRECT");
             if (imgEl && fallbackZoomUrl) {
-                loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover', p.gridUrl, true, cleanZoomPath);
+                var curStockCover = p.stock && p.stock['Cover'] !== undefined ? p.stock['Cover'] : 999;
+                loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover', p.gridUrl, true, cleanZoomPath, curStockCover > 0);
             }
         }
     }
@@ -1683,7 +1695,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
         await Promise.all(files.map(async (file, idx) => {
             if (!file.isVideo) {
-                var isCover = /^(01|1|cover)$/i.test(file.name);
+                var isCover = /^(cover|cover1)$/i.test(file.name);
                 
                 // 1. Try HD Zoom First
                 var targetBlob = await getImageFromDB(file.url);
@@ -1763,7 +1775,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgEl = document.getElementById(imgId);
                 if (imgEl) {
-                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(01|1|cover)$/i.test(file.name), cleanZoomPath);
+                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(cover|cover1|01|1)$/i.test(file.name), cleanZoomPath, curStock > 0);
                 }
             }
         });
@@ -2524,7 +2536,13 @@ function sendWhatsappText() {
 function getExactFirebaseUrl(folderPath, dId) {
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/";
     var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-    var fileName = "01.webp";
+    var fileName = "cover.webp"; // Default to cover.webp
+    try {
+        if (dId === 'DIRECT' || dId === 'Cover') {
+            var fMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
+            if (fMap[folderPath]) fileName = fMap[folderPath];
+        }
+    } catch(e) {}
     if (dId !== 'DIRECT' && dId !== 'Cover') {
         if (/\.(webp|jpg|jpeg|png)$/i.test(dId)) {
             fileName = dId;
@@ -2788,18 +2806,11 @@ window.openCartFsFromCache = function (productId, designId, gridUrl) {
         if (blobToUse) {
             showInFullscreen(URL.createObjectURL(blobToUse));
         } else {
-            // Fallback to Network if completely missing from cache
-            var cleanNum2 = designId.replace(/\D/g, '');
-            if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
-            if (!cleanNum2) cleanNum2 = designId;
-            var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
-            
-            showInFullscreen("https://placehold.co/600x800/f0f0f0/a0a0a0?text=Loading...");
-            var fsImg = document.getElementById('fsImg');
-            fsImg.dataset.loadedZoom = "false";
-            if (typeof fetchZoomNatively === 'function') {
-                fetchZoomNatively(fallbackUrl, fsImg);
+            if (typeof window.logAppError === 'function') {
+                window.logAppError('AUDITOR: Cart Cache Miss', `CRITICAL: Cart item missing from storage. | Product: ${pItem ? pItem.name : productId} - Design: ${designId}`);
             }
+            // Professional visual fallback for the user:
+            showInFullscreen("https://placehold.co/600x800/eeeeee/888888?text=Image+Unavailable+Offline");
         }
     });
 };
@@ -3014,6 +3025,8 @@ async function syncImages() {
                                     clearTimeout(tid3);
                                     if (dRes.ok) {
                                         await saveImageToDB(designUrl, await dRes.blob());
+                                    } else {
+                                        window.logAppError('AUDITOR: Sync Engine Failure', `Missing File: HTTP ${dRes.status} | ${fname} | ${p.name}`);
                                     }
                                 } catch(e) {
                                     console.warn("[SYNC] Fast design fetch failed:", fname, e.message); if (typeof window.logAppError === 'function') window.logAppError('Sync Inner Image', e.message + " | " + p.name);
@@ -3861,6 +3874,10 @@ function printCartPdf() {
 function openSyncReportModal() {
     closeModals();
     openModal('syncReportModal');
+    var btnResync = document.getElementById('btnResyncErrors');
+    if (btnResync && !document.getElementById('btnViewLogs')) {
+        btnResync.insertAdjacentHTML('afterend', '<button id="btnViewLogs" onclick="window.showGlobalErrorLogs()" style="background:#424242; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer; margin-left: 8px;">View Logs</button>');
+    }
     if (!window.syncReportResults || window.syncReportResults.length === 0) {
         document.getElementById('syncReportBody').innerHTML = '';
         document.getElementById('syncReportStatus').innerText = 'Ready to scan.';
@@ -4297,6 +4314,32 @@ window.showGlobalErrorLogs = function() {
         }
         body.innerHTML = h;
     }
+};
+
+window.showGlobalErrorLogs = function() {
+    var container = document.getElementById('syncReportBody');
+    if (!container) return;
+
+    var logs = window.globalErrorLog || [];
+
+    if (logs.length === 0) {
+        container.innerHTML = '<div style="padding:15px; color:#2e7d32; font-weight:bold; text-align:center; background:#e8f5e9; border-radius:6px;">✅ No anomalies detected. System is clean.</div>';
+        return;
+    }
+
+    var html = '<div style="margin-bottom:10px; font-weight:bold; color:#d32f2f;">System Error Logs (Latest First)</div>';
+    
+    // Reverse loop to show the newest errors at the top
+    for (var i = logs.length - 1; i >= 0; i--) {
+        var log = logs[i];
+        var dateStr = new Date(log.ts || new Date()).toLocaleTimeString();
+        html += '<div style="margin-bottom:8px; padding:10px; border-radius:6px; background:#ffebee; border:1px solid #ffcdd2; font-size:12px; text-align:left;">';
+        html += '<div style="color:#b71c1c; font-weight:bold; margin-bottom:4px; border-bottom:1px dashed #ef9a9a; padding-bottom:4px;">' + (log.src || 'AUDITOR') + ' <span style="float:right; color:#757575; font-weight:normal;">' + dateStr + '</span></div>';
+        html += '<div style="color:#333; word-wrap:break-word;">' + (log.msg || log.message || JSON.stringify(log)) + '</div>';
+        html += '</div>';
+    }
+    
+    container.innerHTML = html;
 };
 
 
