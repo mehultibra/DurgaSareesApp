@@ -17,7 +17,7 @@ jobs:
         run: |
           date > www/build-time.txt
           VERSION=$(git rev-parse --short HEAD)
-          echo "{\"version\": \"$VERSION\", \"url\": \"https://durga-sarees.web.app/update.zip\"}" > www/version.json
+          echo "{\"version\": \"$VERSION\", \"url\": \"https://durga-sarees.web.app/update.zip?v=$VERSION\"}" > www/version.json
           
           cd www
           zip -r ../update.zip .
