@@ -1,4 +1,4 @@
-const functions = require('firebase-functions');
+const functions = require('firebase-functions/v1');
 exports.processCameraImage = functions.storage.object().onFinalize(async (object) => {
     const admin = require('firebase-admin');
     const cloudinary = require('cloudinary').v2;

@@ -538,6 +538,7 @@ function backToPhone() {
 function initApp() {
     var bootScreen = document.getElementById('boot');
     if (bootScreen) bootScreen.style.display = 'flex';
+    if (typeof window.processCameraOutbox === 'function') window.processCameraOutbox();
 
 function processProducts(docs) {
     var validCounter = 0;
@@ -681,11 +682,14 @@ function getDB() {
         return Promise.resolve(cachedDB);
     }
     return new Promise((resolve, reject) => {
-        var request = indexedDB.open(dbName, 1);
+        var request = indexedDB.open(dbName, 2);
         request.onupgradeneeded = function (e) {
             var db = e.target.result;
             if (!db.objectStoreNames.contains(storeName)) {
                 db.createObjectStore(storeName);
+            }
+            if (!db.objectStoreNames.contains("outbox")) {
+                db.createObjectStore("outbox", { keyPath: "id", autoIncrement: true });
             }
         };
         request.onsuccess = function (e) {
@@ -1775,7 +1779,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgEl = document.getElementById(imgId);
                 if (imgEl) {
-                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(cover|cover1|01|1)$/i.test(file.name), cleanZoomPath, curStock > 0);
+                    loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(cover|cover1)$/i.test(file.name), cleanZoomPath, curStock > 0);
                 }
             }
         });
@@ -1917,9 +1921,18 @@ function updateLiveDetailHeader() {
         var displayParts = parts.map(p => p.name + '*' + p.qty);
         summaryEl.innerText = displayParts.length > 0 ? displayParts.join(' + ') : '';
     }
+
+    var oldFab = document.getElementById('adminCamFab');
+    if (oldFab) oldFab.remove();
+
+    if (window.isAdminMode) {
+        var panel = document.getElementById('detailPanel');
+        panel.insertAdjacentHTML('beforeend', `<div id="adminCamFab" onclick="window.triggerAdminCamera('${curProduct.docId}', '${curProduct.id}')" style="position:fixed; bottom:95px; right:20px; background:var(--myntra-pink); color:white; width:55px; height:55px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:2500; cursor:pointer;"><i class="fas fa-camera"></i></div>`);
+    }
 }
 
 function closeDetail() {
+    var fab = document.getElementById('adminCamFab'); if(fab) fab.remove();
     var panel = document.getElementById('detailPanel');
     if (panel) {
         panel.classList.remove('open');
@@ -4279,44 +4292,6 @@ window.applyBulkAdminStock = async function() {
 };
 
 window.showGlobalErrorLogs = function() {
-    var body = document.getElementById('syncReportBody');
-    if (body) {
-        var h = '<div style="font-size:14px; font-weight:bold; margin-bottom:8px;">Global App Logs</div>';
-        if (window.globalErrorLog && window.globalErrorLog.length > 0) {
-            var grouped = {};
-            window.globalErrorLog.forEach(err => {
-                var pName = "System / Unknown";
-                var parts = err.msg.split(' | ');
-                if (parts.length > 1) {
-                    pName = parts.pop();
-                    err.cleanMsg = parts.join(' | ');
-                } else {
-                    err.cleanMsg = err.msg;
-                }
-                if (!grouped[pName]) grouped[pName] = [];
-                grouped[pName].push(err);
-            });
-            
-            for (var group in grouped) {
-                h += '<div style="margin-bottom:12px; background:#f9f9f9; border:1px solid #ddd; border-radius:6px; overflow:hidden;">';
-                h += '<div style="background:#eeeeee; font-weight:bold; padding:6px 10px; font-size:13px; border-bottom:1px solid #ddd;">' + group + '</div>';
-                h += '<div style="padding:6px 10px;">';
-                grouped[group].forEach(err => {
-                    var date = new Date(err.ts).toLocaleTimeString();
-                    h += '<div style="color:#b71c1c; font-size:12px; margin-bottom:4px; border-bottom: 1px dashed #e0e0e0; padding-bottom:4px;">';
-                    h += '<span style="color:#666;">[' + date + ']</span> <strong>' + err.src + ':</strong> ' + err.cleanMsg;
-                    h += '</div>';
-                });
-                h += '</div></div>';
-            }
-        } else {
-            h += '<div style="padding:10px; background:#e8f5e9; color:#2e7d32; border-radius:4px; font-size:13px;">No global errors recorded!</div>';
-        }
-        body.innerHTML = h;
-    }
-};
-
-window.showGlobalErrorLogs = function() {
     var container = document.getElementById('syncReportBody');
     if (!container) return;
 
@@ -4340,6 +4315,126 @@ window.showGlobalErrorLogs = function() {
     }
     
     container.innerHTML = html;
+};
+
+// --- OUTBOX SYSTEM ---
+window.saveToOutbox = function(docId, designId, fileUri) {
+    return getDB().then(db => {
+        return new Promise((resolve) => {
+            var tx = db.transaction("outbox", "readwrite");
+            var req = tx.objectStore("outbox").put({ docId, designId, fileUri, ts: Date.now(), processAfter: Date.now() + 5000 });
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+        });
+    });
+};
+
+window.getOutboxItems = function() {
+    return getDB().then(db => {
+        return new Promise((resolve) => {
+            var tx = db.transaction("outbox", "readonly");
+            var req = tx.objectStore("outbox").getAll();
+            req.onsuccess = () => resolve(req.result || []);
+        });
+    });
+};
+
+window.deleteFromOutbox = function(keyId) {
+    return getDB().then(db => {
+        return new Promise((resolve) => {
+            var tx = db.transaction("outbox", "readwrite");
+            tx.objectStore("outbox").delete(keyId);
+            tx.oncomplete = () => resolve(true);
+        });
+    });
+};
+
+window.triggerAdminCamera = async function(docId, pid) {
+    var designId = prompt("Enter Design Label (e.g., 'cover', '02', '03'):");
+    if (!designId || !designId.trim()) return;
+    try {
+        var photo = await Capacitor.Plugins.Camera.getPhoto({ quality: 90, allowEditing: false, resultType: 'uri', source: 'CAMERA' });
+        var outboxId = await window.saveToOutbox(docId, designId.trim(), photo.path || photo.webPath);
+        
+        if (outboxId) {
+            var toastId = 'undoToast_' + Date.now();
+            var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:12px 20px; border-radius:4px; font-size:14px; box-shadow:0 3px 10px rgba(0,0,0,0.3); z-index:9999; display:flex; align-items:center; gap:15px;">
+                <span>Photo Saved to Outbox.</span>
+                <strong style="color:#ff4081; cursor:pointer;" onclick="window.undoOutbox(${outboxId}, '${toastId}')">UNDO</strong>
+            </div>`;
+            document.body.insertAdjacentHTML('beforeend', toastHtml);
+            
+            setTimeout(() => {
+                var toastEl = document.getElementById(toastId);
+                if (toastEl) toastEl.remove();
+                window.processCameraOutbox();
+            }, 5000);
+        }
+    } catch (e) {
+        window.logAppError('Camera Trigger', e.message);
+    }
+};
+
+window.undoOutbox = async function(outboxId, toastId) {
+    await window.deleteFromOutbox(outboxId);
+    var toastEl = document.getElementById(toastId);
+    if (toastEl) toastEl.remove();
+    var feedbackHtml = `<div id="deletedToast" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#323232; color:#ff4081; padding:10px 20px; border-radius:4px; font-size:14px; z-index:9999;">Photo Upload Cancelled</div>`;
+    document.body.insertAdjacentHTML('beforeend', feedbackHtml);
+    setTimeout(() => {
+        var el = document.getElementById('deletedToast');
+        if (el) el.remove();
+    }, 2000);
+};
+
+window.processCameraOutbox = async function() {
+    if (window.isOutboxSyncing) return;
+    window.isOutboxSyncing = true;
+    var hasSkippedItems = false;
+    try {
+        var items = await window.getOutboxItems();
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            
+            // Time-lock check: skip if still within the 5-second UNDO window
+            if (item.processAfter && Date.now() < item.processAfter) {
+                hasSkippedItems = true;
+                continue;
+            }
+            
+            var filename = `${item.docId}___${item.designId}_${item.ts}.jpg`;
+            try {
+                var fileData = await Capacitor.Plugins.Filesystem.readFile({ path: item.fileUri });
+                var res = await fetch(`data:image/jpeg;base64,${fileData.data}`);
+                var blob = await res.blob();
+                
+                var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
+                
+                var uploadRes = await fetch(uploadUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'image/jpeg' },
+                    body: blob
+                });
+                
+                if (uploadRes.ok) {
+                    await window.deleteFromOutbox(item.id);
+                    console.log(`Successfully uploaded: ${filename}`);
+                } else {
+                    throw new Error(`Status ${uploadRes.status}`);
+                }
+            } catch (err) {
+                window.logAppError('Outbox Uploader', 'Failed to upload ' + filename + ': ' + err.message);
+            }
+        }
+    } catch (e) {
+        console.error("Outbox process error", e);
+    } finally {
+        window.isOutboxSyncing = false;
+        // If items were skipped due to time-lock while uploader was active, schedule a sweep
+        if (hasSkippedItems) {
+            setTimeout(window.processCameraOutbox, 2500);
+        }
+    }
 };
 
 
