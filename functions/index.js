@@ -66,8 +66,8 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             const uploadStream = cloudinary.uploader.upload_stream({
                 folder: 'DurgaSareesTemp',
                 eager: [
-                    { transformation: [ { effect: 'auto_color' }, { effect: 'improve' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60 }, { width: 300, crop: 'fill', format: 'webp' } ] },
-                    { transformation: [ { effect: 'auto_color' }, { effect: 'improve' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60 }, { width: 1024, crop: 'limit', format: 'webp' } ] }
+                    { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60 }, { width: 300, crop: 'fill', format: 'webp' }] },
+                    { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60 }, { width: 1024, crop: 'limit', format: 'webp' }] }
                 ],
                 eager_async: false // Wait for transformations to complete
             }, (error, result) => {
@@ -104,7 +104,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
 
         // Save Grid Buffer to Firebase
         await bucket.file(`${finalGridUrl}${destFileName}`).save(gridBuffer, { metadata: { contentType: 'image/webp' } });
-        
+
         // Save Zoom Buffer to Firebase
         await bucket.file(`${finalZoomUrl}${destFileName}`).save(zoomBuffer, { metadata: { contentType: 'image/webp' } });
 
