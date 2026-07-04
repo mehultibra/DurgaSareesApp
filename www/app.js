@@ -239,10 +239,12 @@ window.addEventListener('DOMContentLoaded', function () {
         setupFsGestures();
         
         // 🚀 Initialize Capgo OTA Updater
-        if (window.Capacitor && window.Capacitor.Plugins.CapacitorUpdater) {
-            window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady();
-            checkForOTAUpdates();
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
+            try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch(e) {}
         }
+        
+        // Check for updates on ALL platforms (Native & Web)
+        setTimeout(checkForOTAUpdates, 2000);
     } catch (err) { console.error("Init error:", err); }
 });
 
@@ -571,16 +573,13 @@ function processProducts(docs) {
             }
             var tStock = 999;
             if (f.stock) {
-                var vals = Object.values(stockMap);
-                var sum = vals.reduce((a, b) => a + b, 0);
-                if (stockMap['FULLY_PACKED'] === 1) {
-                    tStock = 0;
-                } else if (sum > 0) {
-                    tStock = sum;
-                } else if (Object.keys(stockMap).length === 1 && stockMap['DIRECT'] !== undefined) {
-                    tStock = 0; // Explicitly marked cover as packed
+                var designKeys = Object.keys(stockMap).filter(k => k !== 'FULLY_PACKED');
+                var designSum = designKeys.reduce((a, k) => a + stockMap[k], 0);
+
+                if (designKeys.length > 0) {
+                    tStock = designSum > 0 ? designSum : 0;
                 } else {
-                    tStock = 999; // Assume untracked designs exist
+                    tStock = stockMap['FULLY_PACKED'] === 1 ? 0 : 999;
                 }
             }
 
@@ -2845,6 +2844,21 @@ window.goToHome = function () {
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
 };
 window.fetchWithRetry = async function(url, options = {}, retries = 3) {
+    if (typeof url === 'string' && (url.includes('firebasestorage.googleapis.com') || url.includes('firestore.googleapis.com'))) {
+        try {
+            var token = "";
+            if (window.CapacitorFirebaseAuthentication) {
+                var tRes = await window.CapacitorFirebaseAuthentication.getIdToken();
+                if (tRes && tRes.token) token = tRes.token;
+            } else if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+                token = await firebase.auth().currentUser.getIdToken();
+            }
+            if (token) {
+                options.headers = options.headers || {};
+                if (!options.headers['Authorization']) options.headers['Authorization'] = 'Bearer ' + token;
+            }
+        } catch(e) {}
+    }
     for (let i = 0; i < retries; i++) {
         try {
             var res = await fetch(url, options);
@@ -4203,30 +4217,25 @@ window.updateAdminStock = async function(element, docId, pid, dId, overrideVal =
                 }
             }
         };
-        var res = await fetch(url, {
+        var res = await window.fetchWithRetry(url, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
-        });
+        }, 1);
         if (res.ok) {
-            element.style.backgroundColor = '#c8e6c9'; // Green (Success)
+            if (element) element.style.backgroundColor = '#c8e6c9'; // Green (Success)
             var p = allProducts.find(x => x.id === pid);
             if (p) {
                 if (!p.stock) p.stock = {};
                 p.stock[dId] = newVal;
                 
-                if (p.stock['FULLY_PACKED'] === 1) {
-                    p.totalStock = 0;
+                var designKeys = Object.keys(p.stock).filter(k => k !== 'FULLY_PACKED');
+                var designSum = designKeys.reduce((a, k) => a + p.stock[k], 0);
+
+                if (designKeys.length > 0) {
+                    p.totalStock = designSum > 0 ? designSum : 0;
                 } else {
-                    var vals = Object.values(p.stock);
-                    var sum = vals.reduce((a, b) => a + b, 0);
-                    if (sum > 0) {
-                        p.totalStock = sum;
-                    } else if (Object.keys(p.stock).length === 1 && p.stock['DIRECT'] !== undefined) {
-                        p.totalStock = 0; // Explicitly marked cover as packed
-                    } else {
-                        p.totalStock = 999; // Assume untracked designs exist
-                    }
+                    p.totalStock = p.stock['FULLY_PACKED'] === 1 ? 0 : 999;
                 }
             }
             if (element) {
@@ -4427,11 +4436,11 @@ window.processCameraOutbox = async function() {
                 
                 var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
                 
-                var uploadRes = await fetch(uploadUrl, {
+                var uploadRes = await window.fetchWithRetry(uploadUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'image/jpeg' },
                     body: blob
-                });
+                }, 1);
                 
                 if (uploadRes.ok) {
                     await window.deleteFromOutbox(item.id);
