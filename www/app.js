@@ -1346,7 +1346,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
 
             // STEP 4: Fetch zoom from network (RAM ONLY - NO permanent storage bloat)
             console.log('[ZOOM] Network fetch:', fileName);
-            var r = await fetch(url);
+            var r = await window.fetchWithRetry(url);
             if (r.ok) {
                 var blob = await r.blob();
                 if (isInStock) {
@@ -1363,7 +1363,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                     imgEl.dataset.loadedZoom = 'true';
                 }
                 console.log('[ZOOM] Loaded into RAM:', fileName);
-            } else if (r.status === 404) {
+            } else if (r.status === 404 || r.status === 403) {
                 // STEP 5: Extension fallback (.webp <-> .jpg)
                 var fbUrl = null, lu = url.toLowerCase();
                 if (lu.includes('.webp?alt=media')) fbUrl = url.replace(/\.webp\?alt=media/i, '.jpg?alt=media');
@@ -1372,9 +1372,9 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                 else if (lu.includes('.png?alt=media')) fbUrl = url.replace(/\.png\?alt=media/i, '.webp?alt=media');
                 if (fbUrl) {
                     if (typeof window.logAppError === 'function') {
-                        window.logAppError('AUDITOR: Fallback Swap', `Swapped ${url} to ${fbUrl} for ${fileName}`);
+                        window.logAppError('AUDITOR: Fallback Swap', `Swapped ${url} to ${fbUrl} for ${fileName} | HTTP ${r.status}`);
                     }
-                    var r2 = await fetch(fbUrl);
+                    var r2 = await window.fetchWithRetry(fbUrl);
                     if (r2.ok) {
                         var b2 = await r2.blob();
                         if (isInStock) {
@@ -1391,11 +1391,19 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                             imgEl.dataset.loadedZoom = 'true';
                         }
                     } else {
+                        var errText = await r2.text().catch(()=>"No text");
+                        if (typeof window.logAppError === 'function') {
+                            window.logAppError('AUDITOR: Fallback Failed', `HTTP ${r2.status} on fallback | ${errText.substring(0, 100)}`);
+                        }
                         imgEl.dataset.loadedZoom = 'true'; // Stop trying, leave grid image
                     }
-                } else {
-                    imgEl.dataset.loadedZoom = 'true';
                 }
+            } else {
+                var errTextOrig = await r.text().catch(()=>"No text");
+                if (typeof window.logAppError === 'function') {
+                    window.logAppError('AUDITOR: Zoom Fetch Error', `HTTP ${r.status} | ${errTextOrig.substring(0, 100)}`);
+                }
+                imgEl.dataset.loadedZoom = 'true';
             }
         } catch(e) { 
             console.error('[ZOOM] Error for', fileName, ':', e.message); 
@@ -4504,7 +4512,7 @@ window.processCameraOutbox = async function() {
                 var res = await fetch(`data:image/jpeg;base64,${fileData.data}`);
                 var blob = await res.blob();
                 
-                var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
+                var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FTemp_Staging%2F` + encodeURIComponent(filename);
                 
                 var uploadRes = await window.fetchWithRetry(uploadUrl, {
                     method: 'POST',

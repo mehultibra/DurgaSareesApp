@@ -19,8 +19,8 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
     const filePath = object.name;
     const bucketName = object.bucket;
 
-    // Trigger strictly for files in Uploads/Raw/
-    if (!filePath || !filePath.startsWith('Uploads/Raw/')) {
+    // Trigger strictly for files in Uploads/Temp_Staging/
+    if (!filePath || !filePath.startsWith('Uploads/Temp_Staging/')) {
         return null;
     }
 
@@ -67,9 +67,9 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             const uploadStream = cloudinary.uploader.upload_stream({
                 folder: 'DurgaSareesTemp',
                 eager: [
-                    { transformation: [ { width: 360, height: 450, crop: 'fill', gravity: 'auto', effect: 'auto_color', format: 'webp' } ] },
-                    { transformation: [ { width: 1080, height: 1350, crop: 'fill', gravity: 'auto', effect: 'auto_color', format: 'webp' } ] },
-                    { transformation: [ { effect: 'auto_color' }, { effect: 'improve' }, { format: 'jpg' } ] }
+                    { transformation: [ { effect: 'auto_color' }, { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60, fetch_format: 'webp' } ] },
+                    { transformation: [ { effect: 'auto_color' }, { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60, fetch_format: 'webp' } ] },
+                    { transformation: [ { effect: 'auto_color' }, { effect: 'improve' }, { fetch_format: 'jpg' } ] }
                 ],
                 eager_async: false // Wait for transformations to complete
             }, (error, result) => {
@@ -104,7 +104,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             const masterBase64 = masterBuffer.toString('binary');
             const exifObj = {
                 "0th": {
-                    [piexif.ImageIFD.Software]: "Tablet_Pipeline"
+                    [piexif.ImageIFD.Software]: "App"
                 }
             };
             const exifBytes = piexif.dump(exifObj);
@@ -139,19 +139,26 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         const category = categoryParts.length > 0 ? categoryParts[categoryParts.length - 1] : 'Uncategorized';
         
         const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
-        const masterInputPath = `input/${category}/${masterDestName}`;
+        const masterInputPath = `${finalGridUrl}${masterDestName}`;
         await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg' } });
 
         console.log(`Success: Generated ${destFileName} at ${finalGridUrl} and ${finalZoomUrl}. Master saved to ${masterInputPath}`);
-
-        // Delete the original raw upload to keep storage optimized
+        // Delete the staging file since processing succeeded
         await file.delete();
-        console.log(`Cleaned up original raw file: ${filePath}`);
+        console.log(`Cleaned up temp staging file: ${filePath}`);
 
         return null;
 
     } catch (error) {
         console.error(`Fatal Pipeline Error processing ${filename}:`, error);
+        
+        // Move to Errors folder so it can be retried later, instead of deleting it!
+        try {
+            await file.move(`Uploads/Errors/${filename}`);
+            console.log(`Moved failed file to Uploads/Errors/${filename}`);
+        } catch (errMove) {
+            console.error('Could not move to errors folder:', errMove);
+        }
         return null;
     }
 });
