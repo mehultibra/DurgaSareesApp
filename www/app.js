@@ -489,17 +489,12 @@ async function checkAdminStatus(phone) {
         var query = {
             structuredQuery: {
                 from: [{ collectionId: "Users" }],
-                where: {
-                    fieldFilter: {
-                        field: { fieldPath: "phone" },
-                        op: "EQUAL",
-                        value: { stringValue: phone }
-                    }
-                },
+                where: { fieldFilter: { field: { fieldPath: "phone" }, op: "EQUAL", value: { stringValue: phone } } },
                 limit: 1
             }
         };
-        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+        // Securely route through fetchWithRetry to append authorization context
+        var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
             method: "POST",
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(query)
@@ -635,7 +630,7 @@ function processProducts(docs) {
     updateCartHeader();
 }
 
-    fetch(FIRESTORE_PRODUCTS_URL)
+    window.fetchWithRetry(FIRESTORE_PRODUCTS_URL)
         .then(res => res.json())
         .then(data => {
             var docs = data.documents || [];
@@ -647,6 +642,7 @@ function processProducts(docs) {
             var bootScreen = document.getElementById('boot');
             if (bootScreen) bootScreen.style.display = 'none';
             processProducts(docs);
+            setTimeout(() => syncImages(true), 2000);
         })
         .catch(err => {
             console.log("Offline or fetch failed, loading from cache...", err);
@@ -656,6 +652,7 @@ function processProducts(docs) {
                     var bootScreen = document.getElementById('boot');
                     if (bootScreen) bootScreen.style.display = 'none';
                     processProducts(cachedDocs);
+                    setTimeout(() => syncImages(true), 2000);
                     return;
                 }
             } catch(e) {}
@@ -778,7 +775,7 @@ async function manageProductHDCache(product, action) {
             var encPath = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/');
             var listUrl = fbBase + "?prefix=" + encPath + "/&delimiter=/";
             
-            fetch(listUrl).then(res => res.json()).then(data => {
+            window.fetchWithRetry(listUrl).then(res => res.json()).then(data => {
                 if (data && data.items) {
                     async function processCache() {
                         for (const item of data.items) {
@@ -991,7 +988,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
             var listPrefix = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
             var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
 
-            fetch(listUrl)
+            window.fetchWithRetry(listUrl)
                 .then(function (res) { return res.json(); })
                 .then(function (data) {
                     var files = (data.items || [])
@@ -1024,34 +1021,54 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
         var queueIndex = fallbackQueue.indexOf(fileToFetch) !== -1 ? fallbackQueue.indexOf(fileToFetch) : 0;
         
-        imgElement.src = lowResUrl;
-
-        imgElement.onerror = function () {
-            queueIndex++;
-            if (queueIndex < fallbackQueue.length) {
-                imgElement.src = fbBase + encGridPath + "%2F" + fallbackQueue[queueIndex] + "?alt=media";
-            } else {
-                imgElement.src = fbBase + encZoomPath + "%2Fcover.webp?alt=media";
-                imgElement.onerror = function () {
-                    imgElement.src = fbBase + encZoomPath + "%2F01.webp?alt=media";
-                    imgElement.onerror = function () {
+        async function fetchImageSecurely(targetUrl) {
+            try {
+                var res = await window.fetchWithRetry(targetUrl);
+                if (res.ok) {
+                    var blob = await res.blob();
+                    await saveImageToDB(cacheKey, blob);
+                    if (imgElement.dataset.tempBlobUrl) URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
+                    var objUrl = URL.createObjectURL(blob);
+                    imgElement.dataset.tempBlobUrl = objUrl;
+                    imgElement.src = objUrl;
+                    
+                    if ((fileToFetch === "cover.webp" || fileToFetch === "01.webp") && coverExistsMap[gridPath] !== true) {
+                        coverExistsMap[gridPath] = true;
+                        saveCoverExistsMap();
+                    }
+                } else {
+                    throw new Error("HTTP Status " + res.status);
+                }
+            } catch (err) {
+                queueIndex++;
+                if (queueIndex < fallbackQueue.length) {
+                    var nextUrl = fbBase + encGridPath + "%2F" + fallbackQueue[queueIndex] + "?alt=media";
+                    fetchImageSecurely(nextUrl);
+                } else {
+                    // Final fallback sequence using token validation
+                    var finalZoomUrl = fbBase + encZoomPath + "%2Fcover.webp?alt=media";
+                    try {
+                        var zRes = await window.fetchWithRetry(finalZoomUrl);
+                        if (zRes.ok) {
+                            var zBlob = await zRes.blob();
+                            if (imgElement.dataset.tempBlobUrl) URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
+                            var zObj = URL.createObjectURL(zBlob);
+                            imgElement.dataset.tempBlobUrl = zObj;
+                            imgElement.src = zObj;
+                        } else {
+                            coverExistsMap[gridPath] = false;
+                            saveCoverExistsMap();
+                            tryToLoadLatestReadyDesign();
+                        }
+                    } catch(e) {
                         coverExistsMap[gridPath] = false;
                         saveCoverExistsMap();
                         tryToLoadLatestReadyDesign();
-                    };
-                };
-            }
-        };
-
-        // Cache the result if load is successful
-        imgElement.onload = function () {
-            if ((fileToFetch === "cover.webp" || fileToFetch === "01.webp") && (imgElement.src.includes("cover.webp") || imgElement.src.includes("cover1.webp") || imgElement.src.includes("01.webp") || imgElement.src.includes("1.webp"))) {
-                if (coverExistsMap[gridPath] !== true) {
-                    coverExistsMap[gridPath] = true;
-                    saveCoverExistsMap();
+                    }
                 }
             }
-        };
+        }
+        fetchImageSecurely(lowResUrl);
     }
 
     var cacheKey = (fileToFetch === "01.webp") ? gridPath : lowResUrl;
@@ -2877,13 +2894,13 @@ window.fetchWithRetry = async function(url, options = {}, retries = 3) {
 };
 
 window.isSyncing = false;
-async function syncImages() {
+async function syncImages(silent = false) {
     var bootScreen = document.getElementById('boot');
     var bootMsg = document.getElementById('bootMsg');
     var syncIcon = document.querySelector('.fa-sync-alt');
 
     if (window.isSyncing) {
-        if (bootScreen) bootScreen.style.display = 'flex';
+        if (bootScreen && !silent) bootScreen.style.display = 'flex';
         return;
     }
 
@@ -2897,10 +2914,10 @@ async function syncImages() {
     try { localStorage.removeItem("dsFolderCache"); } catch (e) { }
     window.syncReportResults = [];
 
-    if (bootMsg) bootMsg.innerText = "Fetching latest product list...";
+    if (bootMsg && !silent) bootMsg.innerText = "Fetching latest product list...";
 
     try {
-        const res = await fetch(FIRESTORE_PRODUCTS_URL);
+        const res = await window.fetchWithRetry(FIRESTORE_PRODUCTS_URL);
         const data = await res.json();
         var docs = data.documents || [];
 
@@ -2932,7 +2949,7 @@ async function syncImages() {
         var bucket   = "durga-sarees.firebasestorage.app";
         var fbBase   = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
 
-        if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
+        if (bootMsg && !silent) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
         // ðŸ›¡ï¸ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
         // This guarantees we never hit Samsung/Android OS TCP socket connection limits (ERR_INSUFFICIENT_RESOURCES).
@@ -3092,12 +3109,22 @@ async function syncImages() {
                 count++;
             }));
 
-            if (bootMsg) bootMsg.innerText = "Smart syncing " + count + " / " + total + "...";
+            if (bootMsg && !silent) bootMsg.innerText = "Smart syncing " + count + " / " + total + "...";
+
+            if (silent) {
+                await new Promise(resolve => setTimeout(resolve, 350));
+            }
         }
 
-        if (bootScreen) bootScreen.style.display = 'none';
+        if (bootScreen && !silent) bootScreen.style.display = 'none';
         window.isSyncing = false;
         if (syncIcon) syncIcon.classList.remove('fa-spin');
+
+        if (silent) {
+            // Background sync update: update main screen layout with newly localized grid imagery
+            renderProductGrid(displayList);
+            return;
+        }
 
         if (failed > 0) {
             var elSum = document.getElementById('syncReportSummary');
@@ -3135,8 +3162,8 @@ async function syncImages() {
     } catch (err) {
         window.isSyncing = false;
         if (syncIcon) syncIcon.classList.remove('fa-spin');
-        if (bootScreen) bootScreen.style.display = 'none';
-        alert("Sync error: " + err.message);
+        if (bootScreen && !silent) bootScreen.style.display = 'none';
+        if (!silent) alert("Sync error: " + err.message);
         initApp();
     }
 }
@@ -4363,13 +4390,16 @@ window.deleteFromOutbox = function(keyId) {
     });
 };
 
-window.triggerAdminCamera = async function(docId, pid) {
+window.tempCamDocId = null;
+window.tempCamPhotoPath = null;
+window.tempCamPid = null;
+
+window.triggerAdminCamera = async function(docId, pid, productName = "Product Preview") {
     var defaultDesignId = "02";
     if (window.lastRenderedDesignNames) {
         var names = window.lastRenderedDesignNames.split(',');
         var maxNum = 1;
         names.forEach(n => {
-            // Match pure numbers up to 4 digits (ignores random letters and giant timestamps)
             if (/^\d{1,4}$/.test(n)) {
                 var num = parseInt(n, 10);
                 if (num > maxNum) maxNum = num;
@@ -4377,11 +4407,51 @@ window.triggerAdminCamera = async function(docId, pid) {
         });
         defaultDesignId = (maxNum + 1).toString().padStart(2, '0');
     }
-    var designId = defaultDesignId;
+    
     try {
-        var photo = await Capacitor.Plugins.Camera.getPhoto({ quality: 90, allowEditing: false, resultType: 'uri', source: 'CAMERA' });
-        var outboxId = await window.saveToOutbox(docId, designId.trim(), photo.path || photo.webPath);
+        // High Quality Native Camera
+        var photo = await Capacitor.Plugins.Camera.getPhoto({ quality: 100, allowEditing: false, resultType: 'uri', source: 'CAMERA' });
         
+        window.tempCamDocId = docId;
+        window.tempCamPid = pid;
+        window.tempCamPhotoPath = photo.path || photo.webPath;
+        
+        var modal = document.getElementById('adminCameraPreviewModal');
+        var previewImg = document.getElementById('adminPreviewImg');
+        var designInput = document.getElementById('adminDesignNumberInput');
+        var nameLabel = document.getElementById('adminPreviewProductName');
+        
+        if (previewImg) previewImg.src = photo.webPath;
+        if (designInput) designInput.value = defaultDesignId;
+        
+        // Grab product name dynamically if not passed cleanly
+        var detailTitle = document.getElementById('detailTitle');
+        if (nameLabel) {
+            nameLabel.innerText = (detailTitle && detailTitle.innerText) ? detailTitle.innerText : productName;
+        }
+        
+        if (modal) modal.style.display = 'flex';
+        
+    } catch (e) {
+        window.logAppError('Camera Trigger', e.message);
+    }
+};
+
+window.retakeAdminPhoto = function() {
+    var modal = document.getElementById('adminCameraPreviewModal');
+    if (modal) modal.style.display = 'none';
+    window.triggerAdminCamera(window.tempCamDocId, window.tempCamPid);
+};
+
+window.confirmAdminUpload = async function() {
+    var modal = document.getElementById('adminCameraPreviewModal');
+    var designInput = document.getElementById('adminDesignNumberInput');
+    var finalDesignId = (designInput && designInput.value) ? designInput.value.trim().toUpperCase() : "02";
+    
+    if (modal) modal.style.display = 'none';
+    
+    try {
+        var outboxId = await window.saveToOutbox(window.tempCamDocId, finalDesignId, window.tempCamPhotoPath);
         if (outboxId) {
             var toastId = 'undoToast_' + Date.now();
             var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:12px 20px; border-radius:4px; font-size:14px; box-shadow:0 3px 10px rgba(0,0,0,0.3); z-index:9999; display:flex; align-items:center; gap:15px;">
@@ -4397,7 +4467,7 @@ window.triggerAdminCamera = async function(docId, pid) {
             }, 5000);
         }
     } catch (e) {
-        window.logAppError('Camera Trigger', e.message);
+        window.logAppError('Confirm Upload', e.message);
     }
 };
 

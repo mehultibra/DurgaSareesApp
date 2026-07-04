@@ -3,6 +3,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
     const admin = require('firebase-admin');
     const cloudinary = require('cloudinary').v2;
     const axios = require('axios');
+    const piexif = require('piexifjs');
 
     // Lazy Initialization of Firebase Admin to prevent deployment timeouts
     if (admin.apps.length === 0) {
@@ -66,8 +67,9 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             const uploadStream = cloudinary.uploader.upload_stream({
                 folder: 'DurgaSareesTemp',
                 eager: [
-                    { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60 }, { width: 300, crop: 'fill', format: 'webp' }] },
-                    { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60 }, { width: 1024, crop: 'limit', format: 'webp' }] }
+                    { transformation: [ { width: 360, height: 450, crop: 'fill', gravity: 'auto', effect: 'auto_color', format: 'webp' } ] },
+                    { transformation: [ { width: 1080, height: 1350, crop: 'fill', gravity: 'auto', effect: 'auto_color', format: 'webp' } ] },
+                    { transformation: [ { effect: 'auto_color' }, { effect: 'improve' }, { format: 'jpg' } ] }
                 ],
                 eager_async: false // Wait for transformations to complete
             }, (error, result) => {
@@ -77,17 +79,41 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             uploadStream.end(buffer);
         });
 
-        // Download BOTH VERSIONS from Cloudinary
+        if (!uploadResult.eager || uploadResult.eager.length < 3) {
+            console.error(`Cloudinary eager transformations failed or returned incomplete for ${filename}`);
+            return null; // Exit gracefully to prevent Firebase crash and broken URLs
+        }
+
+        // Download ALL VERSIONS from Cloudinary
         const gridUrlCloudinary = uploadResult.eager[0].secure_url;
         const zoomUrlCloudinary = uploadResult.eager[1].secure_url;
+        const masterUrlCloudinary = uploadResult.eager[2].secure_url;
 
-        const [gridResponse, zoomResponse] = await Promise.all([
+        const [gridResponse, zoomResponse, masterResponse] = await Promise.all([
             axios.get(gridUrlCloudinary, { responseType: 'arraybuffer' }),
-            axios.get(zoomUrlCloudinary, { responseType: 'arraybuffer' })
+            axios.get(zoomUrlCloudinary, { responseType: 'arraybuffer' }),
+            axios.get(masterUrlCloudinary, { responseType: 'arraybuffer' })
         ]);
 
         const gridBuffer = Buffer.from(gridResponse.data, 'binary');
         const zoomBuffer = Buffer.from(zoomResponse.data, 'binary');
+        let masterBuffer = Buffer.from(masterResponse.data, 'binary');
+
+        // Apply EXIF Tagging for NAS Backup
+        try {
+            const masterBase64 = masterBuffer.toString('binary');
+            const exifObj = {
+                "0th": {
+                    [piexif.ImageIFD.Software]: "Tablet_Pipeline"
+                }
+            };
+            const exifBytes = piexif.dump(exifObj);
+            const taggedMasterBase64 = piexif.insert(exifBytes, masterBase64);
+            masterBuffer = Buffer.from(taggedMasterBase64, 'binary');
+        } catch (exifErr) {
+            console.error("EXIF Tagging failed for master backup:", exifErr);
+            // Non-fatal, continue with untagged masterBuffer
+        }
 
         // THE STORAGE OVERWRITE COLLISION LOGIC
         if (!finalZoomUrl || finalZoomUrl.toLowerCase() === 'none' || finalZoomUrl === finalGridUrl) {
@@ -108,7 +134,15 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         // Save Zoom Buffer to Firebase
         await bucket.file(`${finalZoomUrl}${destFileName}`).save(zoomBuffer, { metadata: { contentType: 'image/webp' } });
 
-        console.log(`Success: Generated ${destFileName} at ${finalGridUrl} and ${finalZoomUrl}`);
+        // Calculate Category and Save Master Buffer to NAS input path
+        const categoryParts = finalGridUrl.split('/').filter(Boolean);
+        const category = categoryParts.length > 0 ? categoryParts[categoryParts.length - 1] : 'Uncategorized';
+        
+        const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
+        const masterInputPath = `input/${category}/${masterDestName}`;
+        await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg' } });
+
+        console.log(`Success: Generated ${destFileName} at ${finalGridUrl} and ${finalZoomUrl}. Master saved to ${masterInputPath}`);
 
         // Delete the original raw upload to keep storage optimized
         await file.delete();

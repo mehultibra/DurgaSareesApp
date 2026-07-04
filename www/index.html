@@ -409,6 +409,19 @@
   <script src="./capacitor-bundle.js?v=2"></script>
   <script src="./app.js?v=5"></script>
 
+  <div id="adminCameraPreviewModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:9999; flex-direction:column; align-items:center; justify-content:center; padding: 20px;">
+    <div id="aspectRatioCropBox" style="aspect-ratio: 4/5; overflow: hidden; position: relative; width: 100%; max-width: 400px; margin: 0 auto; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); background: #222;">
+      <div id="adminPreviewProductName" style="position: absolute; top: 0; left: 0; width: 100%; background: rgba(0,0,0,0.6); color: white; padding: 10px; font-weight: bold; text-align: center; z-index: 2; text-shadow: 0 2px 4px rgba(0,0,0,0.8);"></div>
+      <img id="adminPreviewImg" style="width: 100%; height: 100%; object-fit: cover; z-index: 1;">
+      <input type="text" id="adminDesignNumberInput" placeholder="Design No." style="position: absolute; bottom: 15px; right: 15px; background: rgba(0,0,0,0.75); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 8px 12px; font-size: 18px; font-weight: bold; width: 140px; text-align: center; border-radius: 4px; z-index: 2; text-transform: uppercase; box-shadow: 0 4px 12px rgba(0,0,0,0.5);" onblur="this.value = this.value.toUpperCase()">
+    </div>
+    
+    <div style="display: flex; gap: 15px; margin-top: 30px; width: 100%; max-width: 400px;">
+      <button onclick="window.retakeAdminPhoto()" style="flex: 1; padding: 15px; border-radius: 8px; border: none; background: #555; color: white; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3);"><i class="fas fa-redo-alt" style="margin-right:8px;"></i> Retake</button>
+      <button onclick="window.confirmAdminUpload()" style="flex: 2; padding: 15px; border-radius: 8px; border: none; background: var(--myntra-pink); color: white; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 10px rgba(255, 63, 108, 0.4);"><i class="fas fa-cloud-upload-alt" style="margin-right:8px;"></i> Confirm</button>
+    </div>
+  </div>
+
   <script src="./pdf_engine.js"></script>
 </body>
 
