@@ -4352,6 +4352,10 @@ window.showGlobalErrorLogs = function() {
     }
 
     var html = '<div style="margin-bottom:10px; font-weight:bold; color:#d32f2f;">System Error Logs (Latest First)</div>';
+    html += '<div style="margin-bottom:15px; display:flex; gap:10px;">';
+    html += '<button onclick="window.globalErrorLog=[]; localStorage.setItem(\'dsGlobalErrors\',\'[]\'); window.showGlobalErrorLogs();" style="flex:1; background:#e53935; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Clear Logs</button>';
+    html += '<button onclick="if(window.runSyncReport) { document.getElementById(\'syncReportModal\').style.display=\'none\'; window.runSyncReport(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Retry Resync / Check Again</button>';
+    html += '</div>';
     
     // Reverse loop to show the newest errors at the top
     for (var i = logs.length - 1; i >= 0; i--) {
