@@ -22,7 +22,7 @@ window.dsMissingImage = "data:image/svg+xml;utf8," + encodeURIComponent(`
 
 // --- ERROR LOGGING ---
 window.globalErrorLog = JSON.parse(localStorage.getItem('dsGlobalErrors') || '[]');
-window.logAppError = function(context, message) {
+window.logAppError = function (context, message) {
     window.globalErrorLog.push({ ts: new Date().getTime(), src: context, msg: message });
     if (window.globalErrorLog.length > 50) window.globalErrorLog.shift();
     setTimeout(() => localStorage.setItem('dsGlobalErrors', JSON.stringify(window.globalErrorLog)), 0);
@@ -47,28 +47,28 @@ window.logAppError = function(context, message) {
 
 // Initialize Web Firebase Fallback Config
 const firebaseConfig = {
-  apiKey: "AIzaSyA3Za-dZ8OWWF7ZJdneKGd7A2t8xm_7IZQ",
-  authDomain: window.location.hostname.includes("durga-sarees") ? window.location.hostname : "durga-sarees.firebaseapp.com",
-  projectId: "durga-sarees"
+    apiKey: "AIzaSyA3Za-dZ8OWWF7ZJdneKGd7A2t8xm_7IZQ",
+    authDomain: window.location.hostname.includes("durga-sarees") ? window.location.hostname : "durga-sarees.firebaseapp.com",
+    projectId: "durga-sarees"
 };
 var webConfirmationResult = null;
 
 function initFirebaseWebFallback() {
     if (window.Capacitor && window.Capacitor.isNativePlatform()) return;
     if (typeof firebase !== 'undefined') return;
-    
+
     var s1 = document.createElement('script');
     s1.src = "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js";
-    s1.onload = function() {
+    s1.onload = function () {
         var s2 = document.createElement('script');
         s2.src = "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js";
-        s2.onload = function() {
+        s2.onload = function () {
             firebase.initializeApp(firebaseConfig);
             try {
                 window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
                     'size': 'invisible'
                 });
-            } catch(e) { console.error(e); }
+            } catch (e) { console.error(e); }
         };
         document.head.appendChild(s2);
     };
@@ -142,9 +142,9 @@ window.addEventListener('DOMContentLoaded', function () {
             try {
                 window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
                 window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#ffffff' });
-            } catch(e) {}
+            } catch (e) { }
         }
-        
+
         try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
         try { cart = JSON.parse(localStorage.getItem("dsCart")) || {}; } catch (e) { }
         try { favorites = JSON.parse(localStorage.getItem("dsFavs")) || {}; } catch (e) { }
@@ -155,7 +155,7 @@ window.addEventListener('DOMContentLoaded', function () {
         var logoImg = document.getElementById('appLogoImg');
         if (logoImg) {
             var tapTimeout = null;
-            logoImg.addEventListener('click', function() {
+            logoImg.addEventListener('click', function () {
                 window.adminTapCount++;
                 clearTimeout(tapTimeout);
                 tapTimeout = setTimeout(() => { window.adminTapCount = 0; }, 1500);
@@ -188,7 +188,7 @@ window.addEventListener('DOMContentLoaded', function () {
                 initFirebaseWebFallback();
             }
         }
-        
+
         if (window.Capacitor && window.Capacitor.isNativePlatform()) {
             if (window.CapacitorFirebaseAuthentication) {
                 window.CapacitorFirebaseAuthentication.addListener('authStateChange', (user) => {
@@ -217,8 +217,8 @@ window.addEventListener('DOMContentLoaded', function () {
                         var inputPhone = document.getElementById('lPhone').value.trim();
                         var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
                         var phoneStr = user.phoneNumber || (inputPhone.startsWith('+') ? inputPhone : countryCode + inputPhone);
-                        
-                        checkUserInFirestore(phoneStr).then(function(exists) {
+
+                        checkUserInFirestore(phoneStr).then(function (exists) {
                             if (exists) {
                                 completeLogin(phoneStr);
                             } else {
@@ -245,12 +245,12 @@ window.addEventListener('DOMContentLoaded', function () {
 
         setupEditableFields();
         setupFsGestures();
-        
+
         // 🚀 Initialize Capgo OTA Updater
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
-            try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch(e) {}
+            try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
         }
-        
+
         // Check for updates on ALL platforms (Native & Web)
         setTimeout(checkForOTAUpdates, 2000);
     } catch (err) { console.error("Init error:", err); }
@@ -282,7 +282,7 @@ async function checkForOTAUpdates() {
                 location.reload(true);
             }
         }
-    } catch(e) {
+    } catch (e) {
         console.log("OTA check skipped:", e.message);
     }
 }
@@ -297,7 +297,7 @@ async function sendOtp() {
     var phone = phoneEl.value.trim();
     var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
     if (!phone) { if (errEl) errEl.innerText = "Enter phone number"; return; }
-    
+
     if (!phone.startsWith('+')) {
         phone = countryCode + phone;
     }
@@ -351,12 +351,12 @@ async function verifyOtp() {
             if (!webConfirmationResult) throw new Error("No OTP requested");
             await webConfirmationResult.confirm(code);
         }
-        
+
         var inputPhone = document.getElementById('lPhone').value.trim();
         var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
         phoneStr = inputPhone.startsWith('+') ? inputPhone : countryCode + inputPhone;
-        
-        checkUserInFirestore(phoneStr).then(function(exists) {
+
+        checkUserInFirestore(phoneStr).then(function (exists) {
             if (exists) {
                 completeLogin(phoneStr);
             } else {
@@ -379,7 +379,7 @@ async function checkUserInFirestore(phone) {
         }
         var headers = {};
         if (token) headers['Authorization'] = 'Bearer ' + token;
-        
+
         var query = {
             structuredQuery: {
                 from: [{ collectionId: "Users" }],
@@ -403,7 +403,7 @@ async function checkUserInFirestore(phone) {
             return true;
         }
         return false;
-    } catch(e) {
+    } catch (e) {
         console.error(e);
         return false;
     }
@@ -415,7 +415,7 @@ async function saveProfile() {
     var stateEl = document.getElementById('rState');
     var firm = document.getElementById('rFirm').value.trim();
     var err = document.getElementById('rErr');
-    
+
     var name = nameEl.value.trim();
     var station = stationEl.value.trim();
     var state = stateEl.value.trim();
@@ -448,12 +448,12 @@ async function saveProfile() {
         stateEl.classList.remove("error");
         stateEl.placeholder = "State *";
     }
-    
+
     if (hasErr) {
-        if(err) err.innerText = "";
+        if (err) err.innerText = "";
         return;
     }
-    
+
     var phone = window.pendingUserPhone;
     var doc = {
         fields: {
@@ -465,7 +465,7 @@ async function saveProfile() {
             createdAt: { timestampValue: new Date().toISOString() }
         }
     };
-    
+
     document.getElementById('btnSaveProfile').innerText = "Saving...";
     try {
         var token = "";
@@ -474,7 +474,7 @@ async function saveProfile() {
         }
         var headers = {};
         if (token) headers['Authorization'] = 'Bearer ' + token;
-        
+
         var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
             method: "POST",
             headers: headers,
@@ -486,7 +486,7 @@ async function saveProfile() {
             err.innerText = "Error saving profile.";
             document.getElementById('btnSaveProfile').innerText = "SAVE & CONTINUE";
         }
-    } catch(e) {
+    } catch (e) {
         err.innerText = "Network error.";
         document.getElementById('btnSaveProfile').innerText = "SAVE & CONTINUE";
     }
@@ -545,98 +545,98 @@ function initApp() {
     if (bootScreen) bootScreen.style.display = 'flex';
     if (typeof window.processCameraOutbox === 'function') window.processCameraOutbox();
 
-function processProducts(docs) {
-    var validCounter = 0;
-    allProducts = [];
-    var edited = {};
-    try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
+    function processProducts(docs) {
+        var validCounter = 0;
+        allProducts = [];
+        var edited = {};
+        try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
 
-    docs.forEach(d => {
-        var f = d.fields || {};
-        var name = f.name ? f.name.stringValue : "";
-        var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
+        docs.forEach(d => {
+            var f = d.fields || {};
+            var name = f.name ? f.name.stringValue : "";
+            var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
 
-        if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !isWix) {
-            var finalPrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
-            var finalPacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
+            if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !isWix) {
+                var finalPrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
+                var finalPacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
 
-            if (edited[name]) {
-                if (edited[name].price !== undefined) finalPrice = edited[name].price;
-                if (edited[name].packing !== undefined) finalPacking = edited[name].packing;
+                if (edited[name]) {
+                    if (edited[name].price !== undefined) finalPrice = edited[name].price;
+                    if (edited[name].packing !== undefined) finalPacking = edited[name].packing;
+                }
+
+                // --- ADMIN & INVENTORY PARSING ---
+                var actualDocId = d.name ? d.name.split('/').pop() : "";
+                var stockMap = {};
+                if (f.stock && f.stock.mapValue && f.stock.mapValue.fields) {
+                    for (var k in f.stock.mapValue.fields) {
+                        var vObj = f.stock.mapValue.fields[k];
+                        stockMap[k] = parseInt(vObj.integerValue || vObj.doubleValue || vObj.stringValue || 0);
+                    }
+                }
+                var tStock = 999;
+                if (f.stock) {
+                    var designKeys = Object.keys(stockMap).filter(k => k !== 'FULLY_PACKED');
+                    var designSum = designKeys.reduce((a, k) => a + stockMap[k], 0);
+
+                    if (designKeys.length > 0) {
+                        tStock = designSum > 0 ? designSum : 0;
+                    } else {
+                        tStock = stockMap['FULLY_PACKED'] === 1 ? 0 : 999;
+                    }
+                }
+
+                allProducts.push({
+                    docId: actualDocId,
+                    stock: stockMap,
+                    totalStock: tStock,
+                    id: "p_" + validCounter,
+                    name: name,
+                    sku: f.sku ? f.sku.stringValue : "",
+                    price: finalPrice,
+                    cat: f.cat ? f.cat.stringValue : "Uncategorized",
+                    gridUrl: f.gridUrl ? f.gridUrl.stringValue : "",
+                    zoomUrl: f.zoomUrl ? f.zoomUrl.stringValue : "",
+                    mrp: f.mrp ? (f.mrp.doubleValue || f.mrp.integerValue || 0) : 0,
+                    fabric: f.fabric ? f.fabric.stringValue : "",
+                    packing: finalPacking,
+                    mult: f.mult ? (f.mult.integerValue || 8) : 8,
+                    ready: f.ready ? f.ready.stringValue : "",
+                    jari: f.jari ? f.jari.stringValue : "",
+                    border: f.border ? f.border.stringValue : "",
+                    cut: f.cut ? f.cut.stringValue : "",
+                    pallu: f.pallu ? f.pallu.stringValue : "",
+                    blouse: f.blouse ? f.blouse.stringValue : ""
+                });
+                validCounter++;
             }
+        });
 
-            // --- ADMIN & INVENTORY PARSING ---
-            var actualDocId = d.name ? d.name.split('/').pop() : "";
-            var stockMap = {};
-            if (f.stock && f.stock.mapValue && f.stock.mapValue.fields) {
-                for (var k in f.stock.mapValue.fields) {
-                    var vObj = f.stock.mapValue.fields[k];
-                    stockMap[k] = parseInt(vObj.integerValue || vObj.doubleValue || vObj.stringValue || 0);
+        displayList = [...allProducts];
+
+        try {
+            var updatedCart = {};
+            for (var k in cart) {
+                var c = cart[k];
+                if (c && c.p) {
+                    var match = allProducts.find(x => (c.p.sku && x.sku === c.p.sku) || (x.name === c.p.name));
+                    if (match) {
+                        c.p = match;
+                        var newKey = match.id + '_' + c.design;
+                        updatedCart[newKey] = c;
+                    } else {
+                        updatedCart[k] = c;
+                    }
                 }
             }
-            var tStock = 999;
-            if (f.stock) {
-                var designKeys = Object.keys(stockMap).filter(k => k !== 'FULLY_PACKED');
-                var designSum = designKeys.reduce((a, k) => a + stockMap[k], 0);
+            cart = updatedCart;
+            localStorage.setItem("dsCart", JSON.stringify(cart));
+        } catch (e) { console.error("Cart sync error:", e); }
 
-                if (designKeys.length > 0) {
-                    tStock = designSum > 0 ? designSum : 0;
-                } else {
-                    tStock = stockMap['FULLY_PACKED'] === 1 ? 0 : 999;
-                }
-            }
-
-            allProducts.push({
-                docId: actualDocId,
-                stock: stockMap,
-                totalStock: tStock,
-                id: "p_" + validCounter,
-                name: name,
-                sku: f.sku ? f.sku.stringValue : "",
-                price: finalPrice,
-                cat: f.cat ? f.cat.stringValue : "Uncategorized",
-                gridUrl: f.gridUrl ? f.gridUrl.stringValue : "",
-                zoomUrl: f.zoomUrl ? f.zoomUrl.stringValue : "",
-                mrp: f.mrp ? (f.mrp.doubleValue || f.mrp.integerValue || 0) : 0,
-                fabric: f.fabric ? f.fabric.stringValue : "",
-                packing: finalPacking,
-                mult: f.mult ? (f.mult.integerValue || 8) : 8,
-                ready: f.ready ? f.ready.stringValue : "",
-                jari: f.jari ? f.jari.stringValue : "",
-                border: f.border ? f.border.stringValue : "",
-                cut: f.cut ? f.cut.stringValue : "",
-                pallu: f.pallu ? f.pallu.stringValue : "",
-                blouse: f.blouse ? f.blouse.stringValue : ""
-            });
-            validCounter++;
-        }
-    });
-
-    displayList = [...allProducts];
-
-    try {
-        var updatedCart = {};
-        for (var k in cart) {
-            var c = cart[k];
-            if (c && c.p) {
-                var match = allProducts.find(x => (c.p.sku && x.sku === c.p.sku) || (x.name === c.p.name));
-                if (match) {
-                    c.p = match;
-                    var newKey = match.id + '_' + c.design;
-                    updatedCart[newKey] = c;
-                } else {
-                    updatedCart[k] = c;
-                }
-            }
-        }
-        cart = updatedCart;
-        localStorage.setItem("dsCart", JSON.stringify(cart));
-    } catch (e) { console.error("Cart sync error:", e); }
-
-    if (typeof populateCategories === "function") populateCategories();
-    renderProductGrid(displayList);
-    updateCartHeader();
-}
+        if (typeof populateCategories === "function") populateCategories();
+        renderProductGrid(displayList);
+        updateCartHeader();
+    }
 
     window.fetchWithRetry(FIRESTORE_PRODUCTS_URL)
         .then(res => res.json())
@@ -646,7 +646,7 @@ function processProducts(docs) {
                 name: d.fields?.name?.stringValue,
                 packing: d.fields?.packing
             })));
-            try { localStorage.setItem("dsOfflineProducts", JSON.stringify(docs)); } catch(e) {}
+            try { localStorage.setItem("dsOfflineProducts", JSON.stringify(docs)); } catch (e) { }
             var bootScreen = document.getElementById('boot');
             if (bootScreen) bootScreen.style.display = 'none';
             processProducts(docs);
@@ -663,7 +663,7 @@ function processProducts(docs) {
                     setTimeout(() => syncImages(true), 2000);
                     return;
                 }
-            } catch(e) {}
+            } catch (e) { }
             var bootScreen = document.getElementById('boot');
             if (bootScreen) bootScreen.style.display = 'none';
             processProducts([]);
@@ -711,7 +711,7 @@ function saveImageToDB(key, blob) {
     if (window.sessionImageCache.size > 80) {
         window.sessionImageCache.delete(window.sessionImageCache.keys().next().value);
     }
-    
+
     if (window.designKeyPrefixCache && typeof key === 'string' && key.includes('%2F')) {
         var prefix = key.substring(0, key.lastIndexOf('%2F') + 3);
         if (window.designKeyPrefixCache[prefix]) delete window.designKeyPrefixCache[prefix];
@@ -732,7 +732,7 @@ function saveImageToDB(key, blob) {
 
 function deleteImageFromDB(key) {
     window.sessionImageCache.delete(key);
-    
+
     if (window.designKeyPrefixCache && typeof key === 'string' && key.includes('%2F')) {
         var prefix = key.substring(0, key.lastIndexOf('%2F') + 3);
         if (window.designKeyPrefixCache[prefix]) delete window.designKeyPrefixCache[prefix];
@@ -758,7 +758,7 @@ function listDBKeysForPrefix(prefix) {
             // OPTIMIZATION: Use IDBKeyRange to instantly jump to prefix, preventing full DB scan
             var range = IDBKeyRange.bound(prefix, prefix + '\uffff');
             var req = store.openKeyCursor(range);
-            req.onsuccess = function(e) {
+            req.onsuccess = function (e) {
                 var cursor = e.target.result;
                 if (cursor) {
                     keys.push(cursor.key);
@@ -775,14 +775,14 @@ function listDBKeysForPrefix(prefix) {
 async function manageProductHDCache(product, action) {
     if (!product) return;
     var zoomUrl = (product.zoomUrl && product.zoomUrl.toLowerCase() !== "none") ? product.zoomUrl : product.gridUrl;
-    
+
     if (action === 'CACHE') {
         try {
             var bucket = "durga-sarees.firebasestorage.app";
             var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
             var encPath = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/');
             var listUrl = fbBase + "?prefix=" + encPath + "/&delimiter=/";
-            
+
             window.fetchWithRetry(listUrl).then(res => res.json()).then(data => {
                 if (data && data.items) {
                     async function processCache() {
@@ -817,12 +817,12 @@ async function manageProductHDCache(product, action) {
                                             if (typeof fsDesignId !== 'undefined') {
                                                 var isCoverMatch = (fsDesignId === 'DIRECT' || fsDesignId === 'Cover') && /^(01|1|cover)$/i.test(dName);
                                                 if (fsDesignId === dName || isCoverMatch) {
-                                                    fsImg.src = URL.createObjectURL(newBlob); 
+                                                    fsImg.src = URL.createObjectURL(newBlob);
                                                 }
                                             }
                                         }
                                     }
-                                } catch(e) { console.warn("Background fetch skipped:", e); }
+                                } catch (e) { console.warn("Background fetch skipped:", e); }
                             }
                         }
                     }
@@ -837,15 +837,15 @@ async function manageProductHDCache(product, action) {
             if (k.startsWith(product.id + '_')) totalQty += cart[k].qty;
         }
         if (totalQty > 0) return;
-        
+
         if (!product.zoomUrl || product.zoomUrl === product.gridUrl || product.zoomUrl.toLowerCase() === "none") return;
-        
+
         var cleanZoom = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
         var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
         var bucket = "durga-sarees.firebasestorage.app";
         var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
         var prefix = fbBase + encZoomPath + "%2F";
-        
+
         var keys = await listDBKeysForPrefix(prefix);
         for (var i = 0; i < keys.length; i++) {
             await deleteImageFromDB(keys[i]);
@@ -855,35 +855,35 @@ async function manageProductHDCache(product, action) {
 
 // 🧠 CORE FIX: Resolves the exact IndexedDB cache key for a given design label
 // It ignores file extensions (.jpg vs .webp) and padding (2 vs 02) to guarantee a match
-window.findDesignKeyInCache = async function(gridUrl, designLabel) {
+window.findDesignKeyInCache = async function (gridUrl, designLabel) {
     if (!gridUrl || gridUrl.startsWith('http')) return null;
     if (designLabel === 'DIRECT' || designLabel === 'Cover') return gridUrl;
-    
+
     var cleanGrid = gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
     var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
     var prefix = fbBase + encGridPath + "%2F";
-    
+
     if (!window.designKeyPrefixCache) window.designKeyPrefixCache = {};
     if (!window.designKeyPrefixCache[prefix]) {
         window.designKeyPrefixCache[prefix] = await listDBKeysForPrefix(prefix);
     }
     var keys = window.designKeyPrefixCache[prefix];
     if (!keys || keys.length === 0) return null;
-    
+
     var targetNum = parseInt(String(designLabel).replace(/\D/g, ''));
     var bestKey = null;
-    
+
     for (var k of keys) {
         var filenameEnc = k.replace(prefix, '').split('?')[0];
         var filename = decodeURIComponent(filenameEnc).toLowerCase();
         var nameWithoutExt = filename.substring(0, filename.lastIndexOf('.'));
         if (!nameWithoutExt) nameWithoutExt = filename;
-        
+
         // 1. Exact Name Match (e.g. "Red")
         if (nameWithoutExt === String(designLabel).toLowerCase()) return k;
-        
+
         // 2. Numeric Match (e.g. "2" == "02")
         if (!isNaN(targetNum)) {
             var fileNum = parseInt(nameWithoutExt.replace(/\D/g, ''));
@@ -892,7 +892,7 @@ window.findDesignKeyInCache = async function(gridUrl, designLabel) {
             }
         }
     }
-    
+
     return bestKey;
 };
 function getImageFromDB(key) {
@@ -989,42 +989,42 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         tryFolderListFallback();
     }
 
-        // 🔄 LAST RESORT: Call Firebase list API to discover actual filenames
-        function tryFolderListFallback() {
-            // Check if we already cached the fallback filename
-            if (dsFallbackMap[gridPath]) {
-                var cachedFile = dsFallbackMap[gridPath];
-                imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(cachedFile) + "?alt=media";
-                imgElement.onerror = function () { showPlaceholder(new Error("Cached fallback onerror triggered")); };
-                return;
-            }
-
-            var listPrefix = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-            var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
-
-            window.fetchWithRetry(listUrl)
-                .then(function (res) { return res.json(); })
-                .then(function (data) {
-                    var files = (data.items || [])
-                        .map(function (item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
-                        .filter(function (f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
-
-                    if (files.length > 0) {
-                        files.sort(function (a, b) {
-                            return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
-                        });
-                        var firstFile = files[0];
-                        dsFallbackMap[gridPath] = firstFile;
-                        saveFallbackMap();
-                        imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(firstFile) + "?alt=media";
-                        imgElement.onload = function () { coverExistsMap[gridPath] = true; saveCoverExistsMap(); };
-                        imgElement.onerror = function () { showPlaceholder(new Error("Image element onload onerror triggered")); };
-                    } else {
-                        showPlaceholder(new Error("Folder list empty"));
-                    }
-                })
-                .catch(function (err) { showPlaceholder(err); });
+    // 🔄 LAST RESORT: Call Firebase list API to discover actual filenames
+    function tryFolderListFallback() {
+        // Check if we already cached the fallback filename
+        if (dsFallbackMap[gridPath]) {
+            var cachedFile = dsFallbackMap[gridPath];
+            imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(cachedFile) + "?alt=media";
+            imgElement.onerror = function () { showPlaceholder(new Error("Cached fallback onerror triggered")); };
+            return;
         }
+
+        var listPrefix = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+        var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
+
+        window.fetchWithRetry(listUrl)
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                var files = (data.items || [])
+                    .map(function (item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
+                    .filter(function (f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
+
+                if (files.length > 0) {
+                    files.sort(function (a, b) {
+                        return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                    });
+                    var firstFile = files[0];
+                    dsFallbackMap[gridPath] = firstFile;
+                    saveFallbackMap();
+                    imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(firstFile) + "?alt=media";
+                    imgElement.onload = function () { coverExistsMap[gridPath] = true; saveCoverExistsMap(); };
+                    imgElement.onerror = function () { showPlaceholder(new Error("Image element onload onerror triggered")); };
+                } else {
+                    showPlaceholder(new Error("Folder list empty"));
+                }
+            })
+            .catch(function (err) { showPlaceholder(err); });
+    }
 
 
     function loadFromNetwork() {
@@ -1034,7 +1034,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         fallbackQueue.push("cover1.webp", "01.webp", "1.webp");
 
         var queueIndex = fallbackQueue.indexOf(fileToFetch) !== -1 ? fallbackQueue.indexOf(fileToFetch) : 0;
-        
+
         async function fetchImageSecurely(targetUrl) {
             try {
                 var res = await window.fetchWithRetry(targetUrl);
@@ -1045,7 +1045,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                     var objUrl = URL.createObjectURL(blob);
                     imgElement.dataset.tempBlobUrl = objUrl;
                     imgElement.src = objUrl;
-                    
+
                     if ((fileToFetch === "cover.webp" || fileToFetch === "01.webp") && coverExistsMap[gridPath] !== true) {
                         coverExistsMap[gridPath] = true;
                         saveCoverExistsMap();
@@ -1074,7 +1074,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                             saveCoverExistsMap();
                             tryToLoadLatestReadyDesign();
                         }
-                    } catch(e) {
+                    } catch (e) {
                         coverExistsMap[gridPath] = false;
                         saveCoverExistsMap();
                         tryToLoadLatestReadyDesign();
@@ -1108,11 +1108,11 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         var highResUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
 
         // Check if already in IndexedDB before fetching
-        getImageFromDB(highResUrl).then(function(existingBlob) {
+        getImageFromDB(highResUrl).then(function (existingBlob) {
             if (!existingBlob) {
                 fetch(highResUrl)
-                    .then(function(res) { return res.ok ? res.blob() : null; })
-                    .then(function(blob) {
+                    .then(function (res) { return res.ok ? res.blob() : null; })
+                    .then(function (blob) {
                         if (blob) {
                             if (imgElement.dataset.tempBlobUrl) {
                                 URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
@@ -1122,7 +1122,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                             imgElement.src = objUrl;
                         }
                     })
-                    .catch(function() {});
+                    .catch(function () { });
             } else {
                 if (imgElement.dataset.tempBlobUrl) {
                     URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
@@ -1131,7 +1131,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 imgElement.dataset.tempBlobUrl = objUrl;
                 imgElement.src = objUrl;
             }
-        }).catch(function() {
+        }).catch(function () {
             var hdImage = new Image();
             hdImage.onload = function () { imgElement.src = highResUrl; };
             hdImage.src = highResUrl;
@@ -1218,7 +1218,7 @@ function renderProductGrid(products) {
         // --- ADMIN & INVENTORY: OUT OF STOCK TO BOTTOM ---
         if (a.totalStock === 0 && b.totalStock > 0) return 1;
         if (b.totalStock === 0 && a.totalStock > 0) return -1;
-        
+
         // --- BROKEN IMAGES: JUST ABOVE OUT OF STOCK ---
         window.brokenImagesMap = window.brokenImagesMap || {};
         var aNoImg = (!a.gridUrl || String(a.gridUrl).trim() === "" || String(a.gridUrl).toLowerCase() === "none");
@@ -1288,7 +1288,7 @@ function chgMainRow(pid, dir) {
 
     try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
     refreshCardUI(pid);
-    
+
     var totalQty = 0;
     for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
     manageProductHDCache(p, totalQty > 0 ? 'CACHE' : 'DELETE');
@@ -1299,7 +1299,7 @@ function toggleFav(pid, event) {
     if (favorites[pid]) delete favorites[pid]; else favorites[pid] = true;
     try { localStorage.setItem("dsFavs", JSON.stringify(favorites)); } catch (err) { }
     refreshCardUI(pid);
-    
+
     var p = allProducts.find(x => x.id === pid);
     if (p) manageProductHDCache(p, favorites[pid] ? 'CACHE' : 'DELETE');
 }
@@ -1333,7 +1333,7 @@ var missingDesignSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
 
 function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName, folderPath, isCover, zoomFolderPath, isInStock) {
     if (imgEl.getAttribute('data-loaded-zoom') === 'true') return;
-    setTimeout(async function() {
+    setTimeout(async function () {
         try {
             // STEP 1: IDB direct hit for zoom (Fastest)
             var zoomBlob = await getImageFromDB(url);
@@ -1414,7 +1414,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                             imgEl.dataset.loadedZoom = 'true';
                         }
                     } else {
-                        var errText = await r2.text().catch(()=>"No text");
+                        var errText = await r2.text().catch(() => "No text");
                         if (typeof window.logAppError === 'function') {
                             window.logAppError('AUDITOR: Fallback Failed', `HTTP ${r2.status} on fallback | ${errText.substring(0, 100)}`);
                         }
@@ -1422,14 +1422,14 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                     }
                 }
             } else {
-                var errTextOrig = await r.text().catch(()=>"No text");
+                var errTextOrig = await r.text().catch(() => "No text");
                 if (typeof window.logAppError === 'function') {
                     window.logAppError('AUDITOR: Zoom Fetch Error', `HTTP ${r.status} | ${errTextOrig.substring(0, 100)}`);
                 }
                 imgEl.dataset.loadedZoom = 'true';
             }
-        } catch(e) { 
-            console.error('[ZOOM] Error for', fileName, ':', e.message); 
+        } catch (e) {
+            console.error('[ZOOM] Error for', fileName, ':', e.message);
             var prod = window.allProducts && window.allProducts.find(x => x.id === productId);
             var pName = prod ? prod.name : productId;
             if (typeof window.logAppError === 'function') {
@@ -1442,7 +1442,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
 function fetchZoomNatively(zoomUrl, imgEl) {
     if (!zoomUrl) return;
     var tempImg = new Image();
-    tempImg.onload = function() {
+    tempImg.onload = function () {
         if (imgEl.dataset.loadedZoom !== 'true') {
             if (imgEl.dataset.tempBlobUrl) {
                 URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
@@ -1452,7 +1452,7 @@ function fetchZoomNatively(zoomUrl, imgEl) {
             imgEl.dataset.loadedZoom = "true";
         }
     };
-    tempImg.onerror = function() {
+    tempImg.onerror = function () {
         if (imgEl.dataset.loadedZoom === "true") return;
         var newZoomUrl = null;
         var lowerUrl = zoomUrl.toLowerCase();
@@ -1471,7 +1471,7 @@ function fetchZoomNatively(zoomUrl, imgEl) {
 
         if (newZoomUrl) {
             var fallbackImg = new Image();
-            fallbackImg.onload = function() {
+            fallbackImg.onload = function () {
                 if (imgEl.dataset.loadedZoom !== 'true') {
                     if (imgEl.dataset.tempBlobUrl) {
                         URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
@@ -1481,7 +1481,7 @@ function fetchZoomNatively(zoomUrl, imgEl) {
                     imgEl.dataset.loadedZoom = "true";
                 }
             };
-            fallbackImg.onerror = function() {
+            fallbackImg.onerror = function () {
                 if (typeof window.logAppError === 'function') {
                     var newFilename = newZoomUrl.match(/\/([^/?]+)\?alt=media/i);
                     newFilename = newFilename ? newFilename[1] : newZoomUrl;
@@ -1560,6 +1560,11 @@ function openDetail(productId, skipShow, keepSearchShown) {
     var gridPath = p.gridUrl;
     var zoomPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
 
+    if (window.brokenImagesMap) {
+        delete window.brokenImagesMap[gridPath];
+        delete window.brokenImagesMap[zoomPath];
+    }
+
     var cleanGridPath = gridPath ? String(gridPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : "";
     var cleanZoomPath = zoomPath && zoomPath !== "None" ? String(zoomPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : cleanGridPath;
 
@@ -1579,7 +1584,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
     // 1. Render immediately if cached, otherwise wait for network
     window.lastRenderedDesignNames = "";
-    
+
     // 2. Fetch actual folder files in background to update/upgrade the swipe deck
     function processFolderItems(items) {
         // Sync cover exists state from the actual directory items
@@ -1711,31 +1716,39 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
     if (window.dsFolderCache && window.dsFolderCache[listUrl]) {
         processFolderItems(window.dsFolderCache[listUrl]);
-    } else {
-        fetch(listUrl)
-            .then(res => {
-                if (!res.ok) throw new Error("HTTP error " + res.status);
-                return res.json();
-            })
-            .then(data => {
-                var items = data.items || [];
-                if (!window.dsFolderCache) window.dsFolderCache = {};
-                window.dsFolderCache[listUrl] = items;
-                try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
+    }
+    
+    // ALWAYS fetch from network to sync any newly uploaded admin images
+    fetch(listUrl)
+        .then(res => {
+            if (!res.ok) throw new Error("HTTP error " + res.status);
+            return res.json();
+        })
+        .then(data => {
+            var items = data.items || [];
+            if (!window.dsFolderCache) window.dsFolderCache = {};
+            
+            var oldItemsStr = JSON.stringify(window.dsFolderCache[listUrl] || []);
+            var newItemsStr = JSON.stringify(items);
+            
+            window.dsFolderCache[listUrl] = items;
+            try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
+            
+            if (oldItemsStr !== newItemsStr) {
                 processFolderItems(items);
-            })
-            .catch(err => {
-                console.warn("Background folder list load failed", err);
-                // 🛡️ OFFLINE FALLBACK: Generate dummy array from p.designs
+            }
+        })
+        .catch(err => {
+            console.warn("Background folder list load failed", err);
+            if (!window.dsFolderCache || !window.dsFolderCache[listUrl]) {
                 var fallbackItems = [];
-                for (var i = 1; i <= totalCards; i++) {
-                    var n = String(i);
-                    if (n.length === 1) n = "0" + n;
-                    fallbackItems.push({ name: listPrefix + n + ".webp" });
+                for (var i = 1; i <= 5; i++) {
+                    var n = String(i).padStart(2, '0');
+                    fallbackItems.push({ name: cleanGridPath + '/' + n + ".webp" });
                 }
                 processFolderItems(fallbackItems);
-            });
-    }
+            }
+        });
 
     async function renderSwipeDeck(files) {
         renderedFilesJson = JSON.stringify(files);
@@ -1748,7 +1761,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             await Promise.all(files.map(async (file, idx) => {
                 if (!file.isVideo) {
                     var isCover = /^(cover|cover1)$/i.test(file.name);
-                    
+
                     // 1. Try HD Zoom First
                     var targetBlob = await getImageFromDB(file.url);
                     if (targetBlob) {
@@ -1764,7 +1777,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
                             targetBlob = await getImageFromDB(p.gridUrl);
                         }
                     }
-                    
+
                     if (targetBlob) file.cachedObjectUrl = URL.createObjectURL(targetBlob);
                 }
             }));
@@ -1776,7 +1789,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         files.forEach((file, idx) => {
             var dKey = p.id + '_' + file.name;
             var curStock = p.stock && p.stock[file.name] !== undefined ? p.stock[file.name] : 999;
-            
+
             var qtyHtml = '';
             if (window.isAdminMode) {
                 qtyHtml = `<input type="number" class="admin-stock-input" value="${curStock}" onblur="window.updateAdminStock(this, '${p.docId}', '${p.id}', '${file.name}')" onkeyup="if(event.key === 'Enter') this.blur();" style="width: 60px; text-align: center; border: 1px solid #ccc; border-radius: 4px;">`;
@@ -1866,11 +1879,11 @@ window.changeQty = function (pid, designId, amount) {
     refreshCardUI(pid);
     updateLiveDetailHeader(); // Updates the total Master Qty at bottom!
     updateBottomQtyFromActiveDesign(); // 🛡️ Keep bottom row selection updated
-    
+
     var totalQty = 0;
     for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
     manageProductHDCache(p, totalQty > 0 ? 'CACHE' : 'DELETE');
-    
+
     // 3. Update Cart Live if it's open in the background!
     var cartPanel = document.getElementById('cartPanel');
     if (cartPanel && cartPanel.classList.contains('open')) {
@@ -1884,12 +1897,12 @@ window.changeQty = function (pid, designId, amount) {
     }
 };
 
-window.setExactQty = function(pid, designId, value) {
+window.setExactQty = function (pid, designId, value) {
     var p = allProducts.find(x => x.id === pid); if (!p) return;
     var key = pid + '_' + designId;
     var newQ = parseInt(value) || 0;
     if (newQ < 0) newQ = 0;
-    
+
     var mult = p.mult || 1;
     if (newQ % mult !== 0) {
         newQ = Math.round(newQ / mult) * mult;
@@ -1900,7 +1913,7 @@ window.setExactQty = function(pid, designId, value) {
 
     var input = document.getElementById('qty_' + pid + '_' + designId);
     if (input) input.value = newQ;
-    
+
     if (designId === 'DIRECT') {
         var topInput = document.getElementById('dtQtyDirect');
         if (topInput) topInput.value = newQ;
@@ -1913,13 +1926,13 @@ window.setExactQty = function(pid, designId, value) {
 
     try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
     refreshCardUI(pid);
-    updateLiveDetailHeader(); 
-    updateBottomQtyFromActiveDesign(); 
-    
+    updateLiveDetailHeader();
+    updateBottomQtyFromActiveDesign();
+
     var totalQty = 0;
     for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
     manageProductHDCache(p, totalQty > 0 ? 'CACHE' : 'DELETE');
-    
+
     var cartPanel = document.getElementById('cartPanel');
     if (cartPanel && cartPanel.classList.contains('open')) {
         var isEditingAny = false;
@@ -1984,7 +1997,7 @@ function updateLiveDetailHeader() {
 }
 
 function closeDetail() {
-    var fab = document.getElementById('adminCamFab'); if(fab) fab.remove();
+    var fab = document.getElementById('adminCamFab'); if (fab) fab.remove();
     var panel = document.getElementById('detailPanel');
     if (panel) {
         panel.classList.remove('open');
@@ -2204,23 +2217,23 @@ function openFs(arg1, arg2, arg3, arg4) {
     if (cartImgSrc) {
         window.fsIsStandalone = false; // THE FIX: Allow swiping from Cart!
         fsDesignId = dId;
-        
+
         var fsModal = document.getElementById('fsModal');
         var fsImg = document.getElementById('fsImg');
         var fsVideo = document.getElementById('fsVideo');
         if (fsVideo) fsVideo.style.display = 'none';
-        
+
         fsImg.style.display = 'block';
         fsImg.src = cartImgSrc;
         fsImg.style.transition = '';
         fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
         fsScale = 1; fsTranslateX = 0; fsTranslateY = 0;
-        
+
         var pItem = allProducts.find(x => x.id === pId);
         document.getElementById('fsTitle').innerText = (pItem ? pItem.name : pId) + " - " + (dId === 'DIRECT' ? "Cover" : dId);
-        
+
         var keyCart = pId + '_' + dId;
-        
+
         var curStock = pItem && pItem.stock && pItem.stock[dId] !== undefined ? pItem.stock[dId] : 999;
         var fsControls = document.querySelector('.fs-controls');
         if (fsControls) {
@@ -2230,9 +2243,9 @@ function openFs(arg1, arg2, arg3, arg4) {
                 fsControls.innerHTML = '<button onclick="fsChg(-1)">−</button><span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">' + (cart[keyCart] ? cart[keyCart].qty : 0) + '</span><button onclick="fsChg(1)">+</button>';
             }
         }
-        
+
         document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'none');
-        
+
         fsModal.style.display = 'flex';
         pushHistoryState('fs');
         return;
@@ -2309,7 +2322,7 @@ function openFs(arg1, arg2, arg3, arg4) {
             fsScale = 1;
             fsTranslateX = 0;
             fsTranslateY = 0;
-            
+
             var chosenSrc = imgEl ? imgEl.src : '';
             // If the swipe card is still showing the missing SVG placeholder, use the cart image
             if (chosenSrc.includes("data:image/svg+xml") && cartImgSrc) {
@@ -2320,7 +2333,7 @@ function openFs(arg1, arg2, arg3, arg4) {
     }
 
     var key = pId + '_' + fsDesignId;
-    
+
     var curStock = window.curProduct && window.curProduct.stock && window.curProduct.stock[fsDesignId] !== undefined ? window.curProduct.stock[fsDesignId] : 999;
     var fsControls = document.querySelector('.fs-controls');
     if (fsControls) {
@@ -2402,11 +2415,11 @@ function openCart() {
             cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">');
             cHtml.push('<div style="' + (!isEditing ? 'cursor:pointer;' : '') + ' flex:1;" ' + (!isEditing ? 'onclick="closeCart(true); setTimeout(()=>{openDetail(\'' + g.p.id + '\');},100);"' : '') + '>');
             cHtml.push('<div style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></div>');
-            
+
             if (isEditing) {
-                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + 
-                           ' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
-                           ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;"></div>');
+                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) +
+                    ' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
+                    ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;"></div>');
                 cHtml.push('</div>');
                 cHtml.push('<div style="display:flex; gap:8px; padding:10px; align-items:center;">');
                 cHtml.push('<i class="fas fa-trash" onclick="deleteCartProduct(\'' + g.p.id + '\')" style="cursor:pointer; color:red; font-size:18px;" title="Delete Product"></i>');
@@ -2417,7 +2430,7 @@ function openCart() {
                 cHtml.push('</div>');
                 cHtml.push('<i class="fas fa-edit" onclick="toggleCartInlineEdit(\'' + g.p.id + '\')" style="cursor:pointer; color:var(--myntra-pink); font-size:18px; padding: 10px;"></i>');
             }
-            
+
             cHtml.push('</div><div style="display:flex; flex-wrap:wrap; gap:10px; padding:10px;">');
 
             g.items.forEach(function (item) {
@@ -2425,14 +2438,14 @@ function openCart() {
                 var dLabel = safeDesignLabel === 'DIRECT' ? 'Cover' : safeDesignLabel;
                 var imgId = "cart_img_" + g.p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
 
-                var onClickAction = safeDesignLabel === 'DIRECT' ? 
-                    "closeCart(true); setTimeout(()=>{openDetail('" + g.p.id + "');},100);" : 
+                var onClickAction = safeDesignLabel === 'DIRECT' ?
+                    "closeCart(true); setTimeout(()=>{openDetail('" + g.p.id + "');},100);" :
                     "openCartFsFromCache('" + g.p.id + "', '" + safeDesignLabel + "', '" + g.p.gridUrl + "')";
 
                 cHtml.push('<div style="width: 80px; text-align: center;" ' + (!isEditing ? 'onclick="' + onClickAction + '"' : '') + '>');
                 cHtml.push('<img id="' + imgId + '" src="' + window.dsMissingImage + '" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); ' + (!isEditing ? 'cursor: pointer;' : '') + '">');
                 cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + dLabel + '</div>');
-                
+
                 if (isEditing) {
                     cHtml.push('<input type="number" id="ie_qty_' + g.p.id + '_' + safeDesignLabel + '" value="' + (item.qty || 0) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:4px; border:1px solid var(--myntra-pink); border-radius:4px; text-align:center; font-size:12px; font-weight:bold; color:var(--text-main); margin-top:2px;">');
                 } else {
@@ -2454,7 +2467,7 @@ function openCart() {
                 var bucket = "durga-sarees.firebasestorage.app";
                 var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
                 for (var r in grouped) {
-                    (function(group) {
+                    (function (group) {
                         group.items.forEach(function (item) {
                             var safeDesignLabel = item.design || 'DIRECT';
                             var imgId = "cart_img_" + group.p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
@@ -2464,7 +2477,7 @@ function openCart() {
                             var cleanGrid = group.p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                             var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
 
-                            window.findDesignKeyInCache(group.p.gridUrl, safeDesignLabel).then(function(cacheKey) {
+                            window.findDesignKeyInCache(group.p.gridUrl, safeDesignLabel).then(function (cacheKey) {
                                 var fallbackSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
 
                                 if (!cacheKey) {
@@ -2473,26 +2486,26 @@ function openCart() {
                                     if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
                                     if (!cleanNum2) cleanNum2 = safeDesignLabel;
                                     var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
-                                    
-                                    fetch(fallbackUrl).then(function(res) {
+
+                                    fetch(fallbackUrl).then(function (res) {
                                         if (res.ok) return res.blob();
                                         throw new Error('Network failed');
-                                    }).then(function(blob) {
+                                    }).then(function (blob) {
                                         imgEl.src = URL.createObjectURL(blob);
                                         saveImageToDB(fallbackUrl, blob); // Cache it for future!
-                                    }).catch(function() {
+                                    }).catch(function () {
                                         imgEl.src = fallbackSVG;
                                     });
                                     return;
                                 }
 
-                                getImageFromDB(cacheKey).then(function(blob) {
+                                getImageFromDB(cacheKey).then(function (blob) {
                                     if (blob) {
                                         imgEl.src = URL.createObjectURL(blob);
                                     } else {
                                         imgEl.src = fallbackSVG;
                                     }
-                                }).catch(function() {
+                                }).catch(function () {
                                     imgEl.src = fallbackSVG;
                                 });
                             });
@@ -2607,7 +2620,7 @@ function getExactFirebaseUrl(folderPath, dId) {
             var fMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
             if (fMap[folderPath]) fileName = fMap[folderPath];
         }
-    } catch(e) {}
+    } catch (e) { }
     if (dId !== 'DIRECT' && dId !== 'Cover') {
         if (/\.(webp|jpg|jpeg|png)$/i.test(dId)) {
             fileName = dId;
@@ -2632,17 +2645,17 @@ function askShareTypeAsync() {
         overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
         overlay.style.zIndex = '10000';
         overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
-        
+
         var box = document.createElement('div');
         box.style.backgroundColor = '#fff'; box.style.padding = '20px'; box.style.borderRadius = '12px';
         box.style.width = '300px'; box.style.textAlign = 'center';
-        
+
         var title = document.createElement('h3');
         title.innerText = 'Select Share Type';
         title.style.marginTop = '0'; title.style.color = '#333';
-        
+
         var resolved = false;
-        var onPopState = function() {
+        var onPopState = function () {
             if (!resolved) {
                 resolved = true;
                 if (document.body.contains(overlay)) document.body.removeChild(overlay);
@@ -2652,7 +2665,7 @@ function askShareTypeAsync() {
         };
         window.addEventListener('popstate', onPopState);
 
-        var close = function(val) {
+        var close = function (val) {
             if (!resolved) {
                 resolved = true;
                 if (document.body.contains(overlay)) document.body.removeChild(overlay);
@@ -2667,22 +2680,22 @@ function askShareTypeAsync() {
         btnCover.style.width = '100%'; btnCover.style.padding = '12px'; btnCover.style.marginBottom = '10px';
         btnCover.style.backgroundColor = 'var(--myntra-pink)'; btnCover.style.color = '#fff';
         btnCover.style.border = 'none'; btnCover.style.borderRadius = '6px'; btnCover.style.fontSize = '14px';
-        btnCover.onclick = function() { close('cover'); };
-        
+        btnCover.onclick = function () { close('cover'); };
+
         var btnReady = document.createElement('button');
         btnReady.innerText = 'With Ready Designs';
         btnReady.style.width = '100%'; btnReady.style.padding = '12px'; btnReady.style.marginBottom = '10px';
         btnReady.style.backgroundColor = '#333'; btnReady.style.color = '#fff';
         btnReady.style.border = 'none'; btnReady.style.borderRadius = '6px'; btnReady.style.fontSize = '14px';
-        btnReady.onclick = function() { close('full'); };
-        
+        btnReady.onclick = function () { close('full'); };
+
         var btnCancel = document.createElement('button');
         btnCancel.innerText = 'Cancel';
         btnCancel.style.width = '100%'; btnCancel.style.padding = '12px';
         btnCancel.style.backgroundColor = '#eee'; btnCancel.style.color = '#333';
         btnCancel.style.border = 'none'; btnCancel.style.borderRadius = '6px'; btnCancel.style.fontSize = '14px';
-        btnCancel.onclick = function() { close(null); };
-        
+        btnCancel.onclick = function () { close(null); };
+
         box.appendChild(title); box.appendChild(btnCover); box.appendChild(btnReady); box.appendChild(btnCancel);
         overlay.appendChild(box);
         document.body.appendChild(overlay);
@@ -2722,7 +2735,7 @@ window.triggerShare = async function (action) {
         for (var i = 0; i < favProducts.length; i++) {
             var fp = favProducts[i];
             var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
-            
+
             var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
             if (dArr.length > 0) {
                 for (var j = 0; j < dArr.length; j++) {
@@ -2733,13 +2746,13 @@ window.triggerShare = async function (action) {
                 var fallbackFile = dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
                 var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
                 var coverDesignId = 'DIRECT';
-                
+
                 if (fallbackFile) {
                     coverDesignId = fallbackFile;
                 } else if (readyDesigns.length > 0) {
                     coverDesignId = readyDesigns[0];
                 }
-                
+
                 allHighResUrls.push(getExactFirebaseUrl(folderPath, coverDesignId));
             }
         }
@@ -2769,7 +2782,7 @@ window.triggerShare = async function (action) {
     var highResUrls = [];
     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
     var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
-    
+
     if (dArr.length > 0) {
         for (var j = 0; j < dArr.length; j++) {
             highResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
@@ -2780,13 +2793,13 @@ window.triggerShare = async function (action) {
         var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
         var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
         var coverDesignId = 'DIRECT';
-        
+
         if (fallbackFile) {
             coverDesignId = fallbackFile;
         } else if (readyDesigns.length > 0) {
             coverDesignId = readyDesigns[0];
         }
-        
+
         highResUrls.push(getExactFirebaseUrl(folderPath, coverDesignId));
     }
 
@@ -2812,10 +2825,10 @@ window.triggerShare = async function (action) {
 
 window.openCartFs = function (productId, designId, cartImgSrc) {
     var actualProductId = curProduct ? curProduct.id : productId;
-    
+
     // THE FIX: Pre-load the swipe deck in the background so swiping works correctly!
     openDetail(actualProductId, true, true);
-    
+
     // Open full screen viewer instantly with the clicked cart image
     openFs(actualProductId, 0, designId, cartImgSrc);
 };
@@ -2845,14 +2858,14 @@ window.openCartFsFromCache = function (productId, designId, gridUrl) {
         document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'none');
         fsModal.style.display = 'flex';
         pushHistoryState('fs');
-        
+
         // THE FIX: Sync design ID and preload product images so they can SWIPE!
         fsDesignId = designId;
         window.fsIsStandalone = false;
         openDetail(productId, true, true);
     }
 
-    window.findDesignKeyInCache(gridUrl, designId).then(async function(gridCacheKey) {
+    window.findDesignKeyInCache(gridUrl, designId).then(async function (gridCacheKey) {
         var blobToUse = null;
 
         // Try Zoom cache first
@@ -2891,7 +2904,7 @@ window.goToHome = function () {
     if (cart && cart.classList.contains('open')) { cart.classList.remove('open'); history.back(); }
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
 };
-window.fetchWithRetry = async function(url, options = {}, retries = 3) {
+window.fetchWithRetry = async function (url, options = {}, retries = 3) {
     if (typeof url === 'string' && (url.includes('firebasestorage.googleapis.com') || url.includes('firestore.googleapis.com'))) {
         try {
             var token = "";
@@ -2905,7 +2918,7 @@ window.fetchWithRetry = async function(url, options = {}, retries = 3) {
                 options.headers = options.headers || {};
                 if (!options.headers['Authorization']) options.headers['Authorization'] = 'Bearer ' + token;
             }
-        } catch(e) {}
+        } catch (e) { }
     }
     for (let i = 0; i < retries; i++) {
         try {
@@ -2955,7 +2968,7 @@ async function syncImages(silent = false) {
         var productsToSync = [];
         docs.forEach(d => {
             var f = d.fields || {};
-            var name    = f.name    ? f.name.stringValue    : "";
+            var name = f.name ? f.name.stringValue : "";
             var gridUrl = f.gridUrl ? f.gridUrl.stringValue : "";
             var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
             if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed"
@@ -2973,12 +2986,12 @@ async function syncImages(silent = false) {
             return;
         }
 
-        var total    = productsToSync.length;
-        var count    = 0;
-        var failed   = 0;
+        var total = productsToSync.length;
+        var count = 0;
+        var failed = 0;
         var failedList = [];
-        var bucket   = "durga-sarees.firebasestorage.app";
-        var fbBase   = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+        var bucket = "durga-sarees.firebasestorage.app";
+        var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
 
         if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
@@ -2988,10 +3001,10 @@ async function syncImages(silent = false) {
         for (var i = 0; i < productsToSync.length; i += batchSize) {
             var batch = productsToSync.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
-                var cleanGrid  = p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                var cleanGrid = p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                 var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
-                var listPrefix  = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
-                var listUrl     = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
+                var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
+                var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
                 var lastFailReason = "";
                 var downloaded = false;
 
@@ -3000,24 +3013,24 @@ async function syncImages(silent = false) {
                 var listSuccess = false;
                 try {
                     const ctrl = new AbortController();
-                    const tid  = setTimeout(() => ctrl.abort(), 30000);
+                    const tid = setTimeout(() => ctrl.abort(), 30000);
                     // ðŸ›¡ï¸ CRITICAL FIX: Bulletproof retry for "failed to fetch"
                     var listRes = await window.fetchWithRetry(listUrl, { signal: ctrl.signal }, 3);
                     clearTimeout(tid);
                     if (listRes.ok) {
-                        var listData  = await listRes.json();
+                        var listData = await listRes.json();
                         if (!window.dsFolderCache) window.dsFolderCache = {};
                         window.dsFolderCache[listUrl] = listData.items || [];
                         try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
-                        
-                        folderFiles   = (listData.items || [])
+
+                        folderFiles = (listData.items || [])
                             .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
-                            .filter(f  => /\.(webp|jpg|jpeg|png)$/i.test(f));
+                            .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
                         listSuccess = true;
                     } else {
                         lastFailReason = "List HTTP " + listRes.status;
                     }
-                } catch(e) {
+                } catch (e) {
                     lastFailReason = "List failed: " + (e.name === 'AbortError' ? 'Timeout (15s)' : e.message);
                     window.logAppError('syncImages List', lastFailReason + " | " + p.name);
                 }
@@ -3036,13 +3049,13 @@ async function syncImages(silent = false) {
                 } else {
                     // Sort files: 01.webp first, then 02, 03...
                     folderFiles.sort((a, b) =>
-                        (parseInt(a.replace(/\D/g,'')) || 999) - (parseInt(b.replace(/\D/g,'')) || 999));
+                        (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
 
                     // Build the full Firebase URL keys that should exist in DB
                     // Cover = first file, key stored as gridUrl (bare folder path)
                     // Designs = each file, key stored as full Firebase URL
-                    var coverFile  = folderFiles[0];
-                    var coverUrl   = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
+                    var coverFile = folderFiles[0];
+                    var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
                     var designKeys = {}; // key â†’ url map for all files
                     folderFiles.forEach(f => {
                         var key = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
@@ -3052,7 +3065,7 @@ async function syncImages(silent = false) {
                     // â”€â”€ 2. Cleanup: Delete from DB keys NOT in Firebase anymore â”€â”€
                     // Scan DB for all keys that belong to this product's folder
                     var dbKeyPrefix = fbBase + encGridPath + "%2F";
-                    var cachedKeys  = await listDBKeysForPrefix(dbKeyPrefix);
+                    var cachedKeys = await listDBKeysForPrefix(dbKeyPrefix);
                     for (var ck of cachedKeys) {
                         if (!designKeys[ck]) {
                             await deleteImageFromDB(ck);
@@ -3061,7 +3074,7 @@ async function syncImages(silent = false) {
                     }
 
                     // â”€â”€ 3. Download the COVER file â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                    var coverUrl   = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
+                    var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
                     var existingCover = await checkImageInDB(p.gridUrl);
 
                     if (existingCover) {
@@ -3069,7 +3082,7 @@ async function syncImages(silent = false) {
                     } else {
                         try {
                             const ctrl2 = new AbortController();
-                            const tid2  = setTimeout(() => ctrl2.abort(), 30000);
+                            const tid2 = setTimeout(() => ctrl2.abort(), 30000);
                             // 🛡️ CRITICAL FIX: Bulletproof retry for cover image
                             var coverRes = await window.fetchWithRetry(coverUrl, { signal: ctrl2.signal }, 3);
                             clearTimeout(tid2);
@@ -3082,7 +3095,7 @@ async function syncImages(silent = false) {
                             } else {
                                 lastFailReason = "Cover HTTP " + coverRes.status;
                             }
-                        } catch(e) {
+                        } catch (e) {
                             lastFailReason = "Cover fetch: " + (e.name === 'AbortError' ? 'Timeout (30s)' : e.message);
                         }
                     }
@@ -3095,11 +3108,11 @@ async function syncImages(silent = false) {
                             var fBatch = remainingFiles.slice(fIdx, fIdx + innerBatchSize);
                             await Promise.all(fBatch.map(async (fname) => {
                                 var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                                var existing  = await checkImageInDB(designUrl);
+                                var existing = await checkImageInDB(designUrl);
                                 if (existing) return; // already in cache
                                 try {
                                     const ctrl3 = new AbortController();
-                                    const tid3  = setTimeout(() => ctrl3.abort(), 30000);
+                                    const tid3 = setTimeout(() => ctrl3.abort(), 30000);
                                     // 🛡️ CRITICAL FIX: Bulletproof retry for inner images
                                     var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
                                     clearTimeout(tid3);
@@ -3108,7 +3121,7 @@ async function syncImages(silent = false) {
                                     } else {
                                         window.logAppError('AUDITOR: Sync Engine Failure', `Missing File: HTTP ${dRes.status} | ${fname} | ${p.name}`);
                                     }
-                                } catch(e) {
+                                } catch (e) {
                                     console.warn("[SYNC] Fast design fetch failed:", fname, e.message); if (typeof window.logAppError === 'function') window.logAppError('Sync Inner Image', e.message + " | " + p.name);
                                 }
                             }));
@@ -3123,9 +3136,9 @@ async function syncImages(silent = false) {
                     console.error("âŒ SYNC FAILED:", p.name, "|", lastFailReason);
                     if (!window.syncReportResults) window.syncReportResults = [];
                     var syncErrKey = p.gridUrl;
-                    var existing2  = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
+                    var existing2 = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
                     if (existing2) {
-                        existing2.error  = "Sync Failed: " + lastFailReason;
+                        existing2.error = "Sync Failed: " + lastFailReason;
                         existing2.status = 'error';
                     } else {
                         window.syncReportResults.push({
@@ -3661,8 +3674,8 @@ function toggleHdrMenu(event) {
     }
 }
 
-['click', 'touchstart'].forEach(evt => 
-    document.addEventListener(evt, function(e) {
+['click', 'touchstart'].forEach(evt =>
+    document.addEventListener(evt, function (e) {
         var menu = document.getElementById('hdrMenu');
         if (menu && menu.style.display === 'block') {
             if (!menu.contains(e.target) && (!e.target.closest || !e.target.closest('.fa-ellipsis-v'))) {
@@ -3712,7 +3725,7 @@ async function fetchCustomerDetailsFromDB() {
         }
         var headers = {};
         if (token) headers['Authorization'] = 'Bearer ' + token;
-        
+
         var query = {
             structuredQuery: {
                 from: [{ collectionId: "Users" }],
@@ -3745,20 +3758,20 @@ async function fetchCustomerDetailsFromDB() {
             localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
             return d;
         }
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
     return null;
 }
 
 function loadCartCustomerDetails() {
     var detailsBody = document.getElementById('cartCustomerDetailsBody');
     if (!detailsBody) return;
-    
+
     var stored = localStorage.getItem("dsCustomerDetails");
     if (stored) {
         try {
             var d = JSON.parse(stored);
             renderCustomerDetails(d, detailsBody);
-        } catch(e) {}
+        } catch (e) { }
     } else {
         detailsBody.innerText = "Fetching details...";
         fetchCustomerDetailsFromDB().then(d => {
@@ -3772,7 +3785,7 @@ function loadCartCustomerDetails() {
 }
 
 function renderCustomerDetails(d, container) {
-    if(!container) return;
+    if (!container) return;
     var primaryName = d.firm ? d.firm : d.name;
     var html = esc(primaryName) + (d.station ? ", " + esc(d.station) : "");
     container.innerHTML = html;
@@ -3782,19 +3795,19 @@ async function openCustomerDetailsModal() {
     var d = null;
     var stored = localStorage.getItem("dsCustomerDetails");
     if (stored) {
-        try { d = JSON.parse(stored); } catch(e) {}
+        try { d = JSON.parse(stored); } catch (e) { }
     }
     if (!d) {
         d = await fetchCustomerDetailsFromDB();
     }
-    
+
     document.getElementById('cdName').value = d ? d.name : "";
     document.getElementById('cdFirm').value = d ? d.firm : "";
     document.getElementById('cdPhone').value = (d && d.phone) ? d.phone : (activeUser || "");
     document.getElementById('cdStation').value = d ? d.station : "";
     document.getElementById('cdState').value = d ? d.state : "";
     document.getElementById('cdErr').innerText = "";
-    
+
     openModal('customerDetailsModal');
 }
 
@@ -3806,25 +3819,25 @@ async function saveCustomerDetails() {
     var phone = document.getElementById('cdPhone').value.trim() || activeUser;
     var station = document.getElementById('cdStation').value.trim();
     var state = document.getElementById('cdState').value.trim();
-    
-    if(!name || !station || !state) {
+
+    if (!name || !station || !state) {
         err.innerText = "Please fill all required fields.";
         return;
     }
-    
+
     btn.innerText = "Saving...";
     var d = { name: name, firm: firm, phone: phone, station: station, state: state };
     var stored = localStorage.getItem("dsCustomerDetails");
     var docId = null;
     if (stored) {
-        try { docId = JSON.parse(stored).docId; } catch(e) {}
+        try { docId = JSON.parse(stored).docId; } catch (e) { }
     }
-    if(docId) d.docId = docId;
-    
+    if (docId) d.docId = docId;
+
     // Save locally immediately for fast UI
     localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
     loadCartCustomerDetails();
-    
+
     // Save to Firestore
     try {
         var token = "";
@@ -3833,7 +3846,7 @@ async function saveCustomerDetails() {
         }
         var headers = {};
         if (token) headers['Authorization'] = 'Bearer ' + token;
-        
+
         var doc = {
             fields: {
                 name: { stringValue: name },
@@ -3843,7 +3856,7 @@ async function saveCustomerDetails() {
                 phone: { stringValue: phone }
             }
         };
-        
+
         if (docId) {
             // Update existing
             await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + docId + "?updateMask.fieldPaths=name&updateMask.fieldPaths=firm&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=phone", {
@@ -3860,13 +3873,13 @@ async function saveCustomerDetails() {
                 body: JSON.stringify(doc)
             });
             var data = await res.json();
-            if(data.name) {
+            if (data.name) {
                 d.docId = data.name.split('/').pop();
                 localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
             }
         }
-    } catch(e) { console.error("Firestore save err", e); }
-    
+    } catch (e) { console.error("Firestore save err", e); }
+
     btn.innerText = "SAVE DETAILS";
     closeModals();
 }
@@ -3880,17 +3893,17 @@ function toggleCartInlineEdit(productId) {
 function saveCartInlineEdit(productId, closeEdit = true) {
     var rateInput = document.getElementById('ie_rate_' + productId);
     var packInput = document.getElementById('ie_pack_' + productId);
-    
+
     var newRate = rateInput ? parseInt(rateInput.value) || 0 : 0;
     var newPacking = packInput ? packInput.value.trim() || "1" : "1";
-    
+
     var items = [];
     for (var k in cart) {
         if (cart[k].p && cart[k].p.id === productId) {
             items.push(cart[k]);
         }
     }
-    
+
     items.forEach(item => {
         var safeDesignLabel = item.design || 'DIRECT';
         var qtyInput = document.getElementById('ie_qty_' + productId + '_' + safeDesignLabel);
@@ -3906,29 +3919,29 @@ function saveCartInlineEdit(productId, closeEdit = true) {
             }
         }
     });
-    
+
     // Save to edited memory so changes persist across cart wipes?
     if (items.length > 0) {
         var edited = {};
-        try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch(e){}
+        try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
         edited[items[0].p.name] = { price: newRate, packing: newPacking };
         localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
     }
-    
+
     var matchP = allProducts.find(x => x.id === productId);
-    if(matchP) {
+    if (matchP) {
         matchP.price = newRate;
         matchP.packing = newPacking;
     }
-    
+
     localStorage.setItem("dsCart", JSON.stringify(cart));
-    
+
     if (closeEdit) window.cartEditingMap[productId] = false;
     updateCartHeader();
     openCart(); // Re-render to show updated static text
 }
 
-window.deleteCartProduct = function(productId) {
+window.deleteCartProduct = function (productId) {
     var deletedAny = false;
     for (var k in cart) {
         if (cart[k].p && cart[k].p.id === productId) {
@@ -3939,7 +3952,7 @@ window.deleteCartProduct = function(productId) {
     if (deletedAny) {
         var p = allProducts.find(x => x.id === productId);
         if (p) manageProductHDCache(p, 'DELETE');
-        
+
         if (window.cartEditingMap) delete window.cartEditingMap[productId];
         updateCartHeader();
         localStorage.setItem("dsCart", JSON.stringify(cart));
@@ -3979,7 +3992,7 @@ function openSyncReportModal() {
     } else {
         // Resolve any entries whose id was null (sync happened before allProducts loaded)
         if (window.allProducts && window.allProducts.length > 0) {
-            window.syncReportResults.forEach(function(r) {
+            window.syncReportResults.forEach(function (r) {
                 if (!r.id && r._gridUrl) {
                     var pMatch = window.allProducts.find(x => x.gridUrl === r._gridUrl);
                     if (pMatch) {
@@ -4004,32 +4017,32 @@ async function runSyncReport() {
     var status = document.getElementById('syncReportStatus');
     var bar = document.getElementById('syncReportBar');
     var progress = document.getElementById('syncReportProgress');
-    
+
     btn.disabled = true;
     progress.style.display = 'block';
     bar.style.width = '0%';
     window.syncReportResults = [];
-    
+
     var productsToScan = window.allProducts.filter(p => {
         var isWix = JSON.stringify(p).toLowerCase().includes("wix import");
         return p.name && p.name.toLowerCase() !== "temp" && p.name.toLowerCase() !== "unnamed" && !isWix;
     });
     var total = productsToScan.length;
-    
+
     if (total === 0) {
         status.innerText = "No products found to scan.";
         btn.disabled = false;
         return;
     }
-    
+
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=";
-    
+
     for (var i = 0; i < total; i++) {
         var p = productsToScan[i];
         bar.style.width = ((i / total) * 100) + '%';
-        status.innerText = "Scanning " + (i+1) + " of " + total + ": " + p.name;
-        
+        status.innerText = "Scanning " + (i + 1) + " of " + total + ": " + p.name;
+
         var result = {
             id: p.id,
             name: p.name,
@@ -4046,18 +4059,18 @@ async function runSyncReport() {
             renderSyncReportPartial();
             continue;
         }
-        
+
         var cleanGridPath = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-        
+
         var listUrl = fbBase + cleanGridPath + "&delimiter=/";
-        
+
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000);
             // ðŸ›¡ï¸ Bulletproof Retry applied to Sync Report
             var res = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
             clearTimeout(timeoutId);
-            
+
             if (!res.ok) {
                 result.error = "HTTP Error " + res.status;
                 result.status = 'error';
@@ -4071,11 +4084,11 @@ async function runSyncReport() {
                     result.status = 'error';
                 }
             }
-        } catch(e) {
+        } catch (e) {
             result.error = "Failed: " + (e.name === 'AbortError' ? 'Connection Timeout (15s)' : e.message);
             result.status = 'error';
         }
-        
+
         // Ensure grid image is in memory
         try {
             var isGridInMemory = await getImageFromDB(p.gridUrl);
@@ -4087,12 +4100,12 @@ async function runSyncReport() {
                     result.error += " | Grid missing";
                 }
             }
-        } catch(e) {}
-        
+        } catch (e) { }
+
         window.syncReportResults.push(result);
         renderSyncReportPartial();
     }
-    
+
     bar.style.width = '100%';
     var errCount = window.syncReportResults.filter(r => r.status === 'error').length;
     status.innerText = "Scan complete! Found " + errCount + " errors.";
@@ -4104,16 +4117,16 @@ async function runSyncReport() {
 function renderSyncReportPartial() {
     var showCompleted = document.getElementById('chkShowCompletedSync').checked;
     var container = document.getElementById('syncReportBody');
-    
+
     var html = '';
     var errorCount = 0;
-    
+
     // Category Wise Tally
     var catTotals = {};
     for (var i = 0; i < window.syncReportResults.length; i++) {
         var r = window.syncReportResults[i];
         if (r.status === 'error') errorCount++;
-        
+
         var pMatch = window.allProducts.find(p => p.id === r.id);
         var cat = (pMatch && pMatch.cat) ? pMatch.cat : 'Uncategorized';
         if (!catTotals[cat]) catTotals[cat] = { total: 0, error: 0, ok: 0, images: 0 };
@@ -4124,10 +4137,10 @@ function renderSyncReportPartial() {
             catTotals[cat].images += (r.imageCount || 0);
         }
     }
-    
+
     var summaryHtml = '<div style="margin-bottom:15px; padding:10px; background:#e3f2fd; border:1px solid #bbdefb; border-radius:6px;">';
     summaryHtml += '<div style="font-weight:bold; color:#1565c0; margin-bottom:8px; font-size:14px;">Category Wise Tally</div>';
-    for(var c in catTotals) {
+    for (var c in catTotals) {
         summaryHtml += `<div style="font-size:12px; color:#0d47a1; display:flex; justify-content:space-between; margin-bottom:4px; padding-bottom:4px; border-bottom:1px dashed #bbdefb;">
             <span><b>${c}</b></span>
             <span>Total: ${catTotals[c].total} | OK: ${catTotals[c].ok} | Err: ${catTotals[c].error} | Imgs: ${catTotals[c].images}</span>
@@ -4135,17 +4148,17 @@ function renderSyncReportPartial() {
     }
     summaryHtml += '</div>';
     html += summaryHtml;
-    
+
     for (var i = 0; i < window.syncReportResults.length; i++) {
         var r = window.syncReportResults[i];
-        
+
         if (r.status === 'completed' && !showCompleted) continue;
-        
+
         var bg = r.status === 'error' ? '#fff3f3' : '#f5fbf5';
         var border = r.status === 'error' ? '#ffcdd2' : '#c8e6c9';
         var iconColor = r.status === 'error' ? '#e53935' : '#4caf50';
         var iconCls = r.status === 'error' ? 'fa-exclamation-triangle' : 'fa-check-circle';
-        
+
         html += `
         <div style="background:${bg}; border:1px solid ${border}; border-radius:6px; padding:10px; display:flex; align-items:flex-start; gap:10px;">
             <i class="fas ${iconCls}" style="color:${iconColor}; margin-top:2px;"></i>
@@ -4157,11 +4170,11 @@ function renderSyncReportPartial() {
         </div>
         `;
     }
-    
+
     if (html === '' && window.syncReportResults.length > 0) {
         html = '<div style="text-align:center; padding:20px; color:var(--text-light); font-size:13px;">No errors to show!</div>';
     }
-    
+
     container.innerHTML = html;
 }
 
@@ -4173,95 +4186,95 @@ window.filterSyncReport = renderSyncReportPartial;
 async function resyncFailedProducts() {
     var errProducts = window.syncReportResults.filter(r => r.status === 'error');
     if (errProducts.length === 0) return;
-    
+
     var btn = document.getElementById('btnRunSyncReport');
     var btnResync = document.getElementById('btnResyncErrors');
     var status = document.getElementById('syncReportStatus');
     var bar = document.getElementById('syncReportBar');
     var progress = document.getElementById('syncReportProgress');
-    
+
     btn.disabled = true;
     btnResync.disabled = true;
     progress.style.display = 'block';
     bar.style.width = '0%';
-    
+
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    
+
     for (var i = 0; i < errProducts.length; i++) {
         var result = errProducts[i];
         bar.style.width = ((i / errProducts.length) * 100) + '%';
-        status.innerText = "Resyncing " + (i+1) + " of " + errProducts.length + ": " + result.name;
-        
+        status.innerText = "Resyncing " + (i + 1) + " of " + errProducts.length + ": " + result.name;
+
         var p = window.allProducts.find(x => x.id === result.id);
         if (!p || !p.gridUrl || p.gridUrl === "None") {
             result.error = "Detailed: Product deleted or has no Grid Folder.";
             continue;
         }
-        
+
         var cleanGridPath = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-        
+
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000);
-            
+
             // 1. Fetch directory listing first
             var prefix = cleanGridPath + "/";
             var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix + "&delimiter=/";
             // ðŸ›¡ï¸ Bulletproof Retry applied to Resync
             var listRes = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
-            
+
             if (!listRes.ok) {
                 clearTimeout(timeoutId);
                 result.error = "Detailed: List HTTP " + listRes.status + " (" + listRes.statusText + ")";
                 continue;
             }
-            
+
             var listData = await listRes.json();
             var folderFiles = (listData.items || [])
                 .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
                 .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
-                
+
             if (folderFiles.length === 0) {
                 clearTimeout(timeoutId);
                 result.error = "Detailed: No images found in Grid folder.";
                 continue;
             }
-            
-            folderFiles.sort((a, b) => (parseInt(a.replace(/\D/g,'')) || 999) - (parseInt(b.replace(/\D/g,'')) || 999));
+
+            folderFiles.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
             var coverFile = folderFiles[0];
             var gridImgUrl = fbBase + cleanGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-            
+
             // 2. Fetch the actual cover image
             var res = await window.fetchWithRetry(gridImgUrl, { signal: controller.signal }, 3);
             clearTimeout(timeoutId);
-            
+
             if (res.ok) {
                 var blob = await res.blob();
                 await saveImageToDB(gridImgUrl, blob);
                 await saveImageToDB(p.gridUrl, blob); // ðŸ›¡ï¸ CRITICAL: Save using folder path key!
-                
+
                 // Update local cache mappings
                 window.coverExistsMap = window.coverExistsMap || {};
                 window.coverExistsMap[p.gridUrl] = true;
                 saveCoverExistsMap();
-                
+
                 result.status = 'completed';
                 result.error = "Resynced successfully (" + coverFile + ").";
                 result.imageCount = 1;
             } else {
                 result.error = "Detailed: HTTP " + res.status + " (" + res.statusText + ") for " + coverFile;
             }
-        } catch(e) {
+        } catch (e) {
             result.error = "Detailed: " + (e.name === 'AbortError' ? 'Connection Timeout' : e.message);
         }
-        
+
         renderSyncReportPartial();
-        
+
         // Small delay to prevent connection overload
         await new Promise(resolve => setTimeout(resolve, 300));
     }
-    
+
     bar.style.width = '100%';
     var remainingErrCount = window.syncReportResults.filter(r => r.status === 'error').length;
     status.innerText = "Resync complete! " + remainingErrCount + " still failed.";
@@ -4271,7 +4284,7 @@ async function resyncFailedProducts() {
 }
 
 
-window.updateAdminStock = async function(element, docId, pid, dId, overrideVal = null) {
+window.updateAdminStock = async function (element, docId, pid, dId, overrideVal = null) {
     if (element) element.style.backgroundColor = '#fff9c4'; // Yellow (Saving)
     try {
         var newVal = overrideVal !== null ? overrideVal : (parseInt(element.value) || 0);
@@ -4298,7 +4311,7 @@ window.updateAdminStock = async function(element, docId, pid, dId, overrideVal =
             if (p) {
                 if (!p.stock) p.stock = {};
                 p.stock[dId] = newVal;
-                
+
                 var designKeys = Object.keys(p.stock).filter(k => k !== 'FULLY_PACKED');
                 var designSum = designKeys.reduce((a, k) => a + p.stock[k], 0);
 
@@ -4322,12 +4335,12 @@ window.updateAdminStock = async function(element, docId, pid, dId, overrideVal =
 };
 
 
-window.toggleAllBulkCheckboxes = function(checked) {
+window.toggleAllBulkCheckboxes = function (checked) {
     var boxes = document.querySelectorAll('.admin-bulk-check');
     boxes.forEach(box => box.checked = checked);
 };
 
-window.applyBulkAdminStock = async function() {
+window.applyBulkAdminStock = async function () {
     var qtyInput = document.getElementById('adminBulkQtyInput');
     var boxes = document.querySelectorAll('.admin-bulk-check:checked');
     if (boxes.length === 0) { alert('No designs selected.'); return; }
@@ -4346,7 +4359,7 @@ window.applyBulkAdminStock = async function() {
         var did = box.getAttribute('data-did');
         var pid = box.getAttribute('data-pid');
         var docid = box.getAttribute('data-docid');
-        
+
         // Find the input element associated with this design to pass to updateAdminStock
         // The input is right next to it in the DOM
         var stockInput = box.closest('.swipe-card').querySelector('.admin-stock-input');
@@ -4375,7 +4388,7 @@ window.applyBulkAdminStock = async function() {
     qtyInput.value = '';
 };
 
-window.showGlobalErrorLogs = function() {
+window.showGlobalErrorLogs = function () {
     var container = document.getElementById('syncReportBody');
     if (!container) return;
 
@@ -4391,7 +4404,7 @@ window.showGlobalErrorLogs = function() {
     html += '<button onclick="window.globalErrorLog=[]; localStorage.setItem(\'dsGlobalErrors\',\'[]\'); window.showGlobalErrorLogs();" style="flex:1; background:#e53935; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Clear Logs</button>';
     html += '<button onclick="if(typeof resyncFailedProducts === \'function\') { document.getElementById(\'syncReportModal\').style.display=\'none\'; resyncFailedProducts(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Log Resync Only</button>';
     html += '</div>';
-    
+
     // Reverse loop to show the newest errors at the top
     for (var i = logs.length - 1; i >= 0; i--) {
         var log = logs[i];
@@ -4401,12 +4414,12 @@ window.showGlobalErrorLogs = function() {
         html += '<div style="color:#333; word-wrap:break-word;">' + (log.msg || log.message || JSON.stringify(log)) + '</div>';
         html += '</div>';
     }
-    
+
     container.innerHTML = html;
 };
 
 // --- OUTBOX SYSTEM ---
-window.saveToOutbox = function(docId, designId, fileUri) {
+window.saveToOutbox = function (docId, designId, fileUri) {
     return getDB().then(db => {
         return new Promise((resolve) => {
             var tx = db.transaction("outbox", "readwrite");
@@ -4417,7 +4430,7 @@ window.saveToOutbox = function(docId, designId, fileUri) {
     });
 };
 
-window.getOutboxItems = function() {
+window.getOutboxItems = function () {
     return getDB().then(db => {
         return new Promise((resolve) => {
             var tx = db.transaction("outbox", "readonly");
@@ -4427,7 +4440,7 @@ window.getOutboxItems = function() {
     });
 };
 
-window.deleteFromOutbox = function(keyId) {
+window.deleteFromOutbox = function (keyId) {
     return getDB().then(db => {
         return new Promise((resolve) => {
             var tx = db.transaction("outbox", "readwrite");
@@ -4441,7 +4454,7 @@ window.tempCamDocId = null;
 window.tempCamPhotoPath = null;
 window.tempCamPid = null;
 
-window.triggerAdminCamera = async function(docId, pid, productName = "Product Preview") {
+window.triggerAdminCamera = async function (docId, pid, productName = "Product Preview") {
     var defaultDesignId = "02";
     if (window.lastRenderedDesignNames) {
         var names = window.lastRenderedDesignNames.split(',');
@@ -4454,49 +4467,49 @@ window.triggerAdminCamera = async function(docId, pid, productName = "Product Pr
         });
         defaultDesignId = (maxNum + 1).toString().padStart(2, '0');
     }
-    
+
     try {
         // High Quality Native Camera
         var photo = await Capacitor.Plugins.Camera.getPhoto({ quality: 100, allowEditing: false, resultType: 'uri', source: 'CAMERA' });
-        
+
         window.tempCamDocId = docId;
         window.tempCamPid = pid;
         window.tempCamPhotoPath = photo.path || photo.webPath;
-        
+
         var modal = document.getElementById('adminCameraPreviewModal');
         var previewImg = document.getElementById('adminPreviewImg');
         var designInput = document.getElementById('adminDesignNumberInput');
         var nameLabel = document.getElementById('adminPreviewProductName');
-        
+
         if (previewImg) previewImg.src = photo.webPath;
         if (designInput) designInput.value = defaultDesignId;
-        
+
         // Grab product name dynamically if not passed cleanly
         var detailTitle = document.getElementById('detailTitle');
         if (nameLabel) {
             nameLabel.innerText = (detailTitle && detailTitle.innerText) ? detailTitle.innerText : productName;
         }
-        
+
         if (modal) modal.style.display = 'flex';
-        
+
     } catch (e) {
         window.logAppError('Camera Trigger', e.message);
     }
 };
 
-window.retakeAdminPhoto = function() {
+window.retakeAdminPhoto = function () {
     var modal = document.getElementById('adminCameraPreviewModal');
     if (modal) modal.style.display = 'none';
     window.triggerAdminCamera(window.tempCamDocId, window.tempCamPid);
 };
 
-window.confirmAdminUpload = async function() {
+window.confirmAdminUpload = async function () {
     var modal = document.getElementById('adminCameraPreviewModal');
     var designInput = document.getElementById('adminDesignNumberInput');
     var finalDesignId = (designInput && designInput.value) ? designInput.value.trim().toUpperCase() : "02";
-    
+
     if (modal) modal.style.display = 'none';
-    
+
     try {
         var outboxId = await window.saveToOutbox(window.tempCamDocId, finalDesignId, window.tempCamPhotoPath);
         if (outboxId) {
@@ -4506,7 +4519,7 @@ window.confirmAdminUpload = async function() {
                 <strong style="color:#ff4081; cursor:pointer;" onclick="window.undoOutbox(${outboxId}, '${toastId}')">UNDO</strong>
             </div>`;
             document.body.insertAdjacentHTML('beforeend', toastHtml);
-            
+
             setTimeout(() => {
                 var toastEl = document.getElementById(toastId);
                 if (toastEl) toastEl.remove();
@@ -4518,7 +4531,7 @@ window.confirmAdminUpload = async function() {
     }
 };
 
-window.undoOutbox = async function(outboxId, toastId) {
+window.undoOutbox = async function (outboxId, toastId) {
     await window.deleteFromOutbox(outboxId);
     var toastEl = document.getElementById(toastId);
     if (toastEl) toastEl.remove();
@@ -4530,7 +4543,7 @@ window.undoOutbox = async function(outboxId, toastId) {
     }, 2000);
 };
 
-window.processCameraOutbox = async function() {
+window.processCameraOutbox = async function () {
     if (window.isOutboxSyncing) return;
     window.isOutboxSyncing = true;
     var hasSkippedItems = false;
@@ -4538,28 +4551,28 @@ window.processCameraOutbox = async function() {
         var items = await window.getOutboxItems();
         for (var i = 0; i < items.length; i++) {
             var item = items[i];
-            
+
             // Time-lock check: skip if still within the 5-second UNDO window
             if (item.processAfter && Date.now() < item.processAfter) {
                 hasSkippedItems = true;
                 continue;
             }
-            
+
             var filename = `${item.docId}___${item.designId}_${item.ts}.jpg`;
             try {
                 var uploadStartTime = Date.now();
                 var fileData = await Capacitor.Plugins.Filesystem.readFile({ path: item.fileUri });
                 var res = await fetch(`data:image/jpeg;base64,${fileData.data}`);
                 var blob = await res.blob();
-                
+
                 var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
-                
+
                 var uploadRes = await window.fetchWithRetry(uploadUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'image/jpeg' },
                     body: blob
                 }, 1);
-                
+
                 if (uploadRes.ok) {
                     await window.deleteFromOutbox(item.id);
                     var uploadDuration = ((Date.now() - uploadStartTime) / 1000).toFixed(2);

@@ -67,9 +67,9 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             const uploadStream = cloudinary.uploader.upload_stream({
                 folder: 'DurgaSareesTemp',
                 eager: [
-                    { transformation: [ { effect: 'auto_color' }, { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60, fetch_format: 'webp' } ] },
-                    { transformation: [ { effect: 'auto_color' }, { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60, fetch_format: 'webp' } ] },
-                    { transformation: [ { effect: 'auto_color' }, { effect: 'improve' }, { fetch_format: 'jpg' } ] }
+                    { transformation: [{ effect: 'auto_color' }, { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60, fetch_format: 'webp' }] },
+                    { transformation: [{ effect: 'auto_color' }, { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60, fetch_format: 'webp' }] },
+                    { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { fetch_format: 'jpg' }] }
                 ],
                 eager_async: false // Wait for transformations to complete
             }, (error, result) => {
@@ -137,7 +137,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         // Calculate Category and Save Master Buffer to NAS input path
         const categoryParts = finalGridUrl.split('/').filter(Boolean);
         const category = categoryParts.length > 0 ? categoryParts[categoryParts.length - 1] : 'Uncategorized';
-        
+
         const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
         const masterInputPath = `${finalGridUrl}${masterDestName}`;
         await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg' } });
@@ -151,7 +151,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
 
     } catch (error) {
         console.error(`Fatal Pipeline Error processing ${filename}:`, error);
-        
+
         // Move to Errors folder so it can be retried later, instead of deleting it!
         try {
             await file.move(`Uploads/Errors/${filename}`);
