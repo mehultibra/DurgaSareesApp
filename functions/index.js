@@ -74,20 +74,28 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
                     { transformation: [
                         { effect: 'auto_color' }, 
                         { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, 
-                        { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.15, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white' },
-                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'white' },
+                        { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.19, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white', effect: 'shadow:40' },
+                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'white', effect: 'shadow:40' },
                         { fetch_format: 'webp' }
                     ] },
                     { transformation: [
                         { effect: 'auto_color' }, 
                         { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, 
-                        { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.15, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white' },
-                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'white' },
+                        { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.19, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white', effect: 'shadow:40' },
+                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'white', effect: 'shadow:40' },
                         { fetch_format: 'webp' }
                     ] },
-                    { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { fetch_format: 'jpg' }] }
+                    { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { fetch_format: 'jpg' }] },
+                    { transformation: [
+                        { effect: 'auto_color' }, 
+                        { width: 1024, crop: 'scale' }, 
+                        { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.19, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white', effect: 'shadow:40' },
+                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'white', effect: 'shadow:40' },
+                        { fetch_format: 'jpg' }
+                    ] }
                 ],
                 eager_async: false // Wait for transformations to complete
             }, (error, result) => {
@@ -97,13 +105,13 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             uploadStream.end(buffer);
         });
 
-        if (!uploadResult.eager || uploadResult.eager.length < 3) {
+        if (!uploadResult.eager || uploadResult.eager.length < 4) {
             console.error(`Cloudinary eager transformations failed or returned incomplete for ${filename}. Result:`, JSON.stringify(uploadResult.eager));
             return null; // Exit gracefully to prevent Firebase crash and broken URLs
         }
 
         // Check if secure_url exists (in case eager failed internally)
-        if (!uploadResult.eager[0].secure_url || !uploadResult.eager[1].secure_url || !uploadResult.eager[2].secure_url) {
+        if (!uploadResult.eager[0].secure_url || !uploadResult.eager[1].secure_url || !uploadResult.eager[2].secure_url || !uploadResult.eager[3].secure_url) {
             console.error(`Cloudinary eager transformations returned errors for ${filename}. Result:`, JSON.stringify(uploadResult.eager));
             return null;
         }
@@ -112,16 +120,19 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         const gridUrlCloudinary = uploadResult.eager[0].secure_url;
         const zoomUrlCloudinary = uploadResult.eager[1].secure_url;
         const masterUrlCloudinary = uploadResult.eager[2].secure_url;
+        const shareUrlCloudinary = uploadResult.eager[3].secure_url;
 
-        const [gridResponse, zoomResponse, masterResponse] = await Promise.all([
+        const [gridResponse, zoomResponse, masterResponse, shareResponse] = await Promise.all([
             axios.get(gridUrlCloudinary, { responseType: 'arraybuffer' }),
             axios.get(zoomUrlCloudinary, { responseType: 'arraybuffer' }),
-            axios.get(masterUrlCloudinary, { responseType: 'arraybuffer' })
+            axios.get(masterUrlCloudinary, { responseType: 'arraybuffer' }),
+            axios.get(shareUrlCloudinary, { responseType: 'arraybuffer' })
         ]);
 
         const gridBuffer = Buffer.from(gridResponse.data, 'binary');
         const zoomBuffer = Buffer.from(zoomResponse.data, 'binary');
         let masterBuffer = Buffer.from(masterResponse.data, 'binary');
+        const shareBuffer = Buffer.from(shareResponse.data, 'binary');
 
         // Apply EXIF Tagging for NAS Backup
         try {
@@ -157,6 +168,10 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
 
         // Save Zoom Buffer to Firebase
         await bucket.file(`${finalZoomUrl}${destFileName}`).save(zoomBuffer, { metadata: { contentType: 'image/webp', metadata: { source: '888' } } });
+
+        // Save Share JPG Buffer to Firebase alongside Grid
+        const shareDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
+        await bucket.file(`${finalGridUrl}${shareDestName}`).save(shareBuffer, { metadata: { contentType: 'image/jpeg', metadata: { source: '888' } } });
 
         // Save Master Buffer to NAS input path mirroring Grid path
         const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
