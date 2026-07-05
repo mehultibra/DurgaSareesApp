@@ -1598,6 +1598,14 @@ function openDetail(productId, skipShow, keepSearchShown) {
         coverExistsMap[gridPath] = coverFound;
         saveCoverExistsMap();
 
+        if (coverFound) {
+            var mainGridImg = document.getElementById("img_" + p.id);
+            if (mainGridImg) {
+                delete window.brokenImagesMap[gridPath];
+                window.renderWebpFromFolder(mainGridImg, p.gridUrl, null, "01.webp");
+            }
+        }
+
         var validFiles = [];
 
         items.forEach(item => {
@@ -4085,7 +4093,8 @@ async function runSyncReport() {
 }
 
 function renderSyncReportPartial() {
-    var showCompleted = document.getElementById('chkShowCompletedSync').checked;
+    var chkElement = document.getElementById('chkShowCompletedSync');
+    var showCompleted = chkElement ? chkElement.checked : false;
     var container = document.getElementById('syncReportBody');
 
     var html = '';
@@ -4486,7 +4495,6 @@ window.confirmAdminUpload = async function () {
             var toastId = 'undoToast_' + Date.now();
             var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:12px 20px; border-radius:4px; font-size:14px; box-shadow:0 3px 10px rgba(0,0,0,0.3); z-index:9999; display:flex; align-items:center; gap:15px;">
                 <span>Photo Saved to Outbox.</span>
-                <strong style="color:#ff4081; cursor:pointer;" onclick="window.undoOutbox(${outboxId}, '${toastId}')">UNDO</strong>
             </div>`;
             document.body.insertAdjacentHTML('beforeend', toastHtml);
 

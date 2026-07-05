@@ -74,7 +74,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
                     { transformation: [
                         { effect: 'auto_color' }, 
                         { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, 
-                        { overlay: 'logo_transparent', width: 0.10, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                        { overlay: 'logo', width: 0.10, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
                         { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white' },
                         { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 120, color: 'white' },
                         { fetch_format: 'webp' }
@@ -82,7 +82,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
                     { transformation: [
                         { effect: 'auto_color' }, 
                         { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, 
-                        { overlay: 'logo_transparent', width: 0.10, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                        { overlay: 'logo', width: 0.10, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
                         { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white' },
                         { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 120, color: 'white' },
                         { fetch_format: 'webp' }

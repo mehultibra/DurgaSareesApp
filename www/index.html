@@ -7,7 +7,7 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="./style.css?v=3">
+  <link rel="stylesheet" href="./style.css?v=4">
 
   <!-- PWA Meta Tags & Cache Busting -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -257,30 +257,7 @@
         <i class="fas fa-times" style="cursor:pointer; color:var(--text-light); font-size:16px;"
           onclick="closeModals()"></i>
       </div>
-      <div style="padding: 16px; border-bottom: 1px solid var(--border); background: #f9f9fa;">
-        <div
-          style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; gap:8px; flex-wrap:wrap;">
-          <button id="btnRunSyncReport" onclick="runSyncReport()"
-            style="background:var(--myntra-pink); color:#fff; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Run
-            Report</button>
 
-          <button id="btnResyncErrors" onclick="resyncFailedProducts()"
-            style="display:none; background:#ff9800; color:#fff; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Resync
-            Errors</button>
-          <label
-            style="font-size:13px; color:var(--text-main); display:flex; align-items:center; gap:6px; flex:1; justify-content:flex-end;">
-            <input type="checkbox" id="chkShowCompletedSync" onchange="filterSyncReport()"
-              style="accent-color:var(--myntra-pink);"> Show Completed
-          </label>
-        </div>
-        <div id="syncReportProgress"
-          style="display:none; width:100%; height:8px; background:#e0e0e0; border-radius:4px; overflow:hidden;">
-          <div id="syncReportBar" style="width:0%; height:100%; background:var(--myntra-pink); transition:width 0.2s;">
-          </div>
-        </div>
-        <div id="syncReportStatus" style="font-size:12px; color:var(--text-light); margin-top:6px; text-align:center;">
-          Ready to scan.</div>
-      </div>
       <div id="syncReportBody"
         style="flex:1; overflow-y:auto; padding: 16px; display:flex; flex-direction:column; gap:8px;">
         <!-- Results inject here -->
@@ -465,28 +442,22 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=2"></script>
-  <script src="./app.js?v=5"></script>
+  <script src="./app.js?v=7"></script>
 
   <div id="adminCameraPreviewModal"
-    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:9999; flex-direction:column; align-items:center; justify-content:center; padding: 20px;">
-    <div id="aspectRatioCropBox"
-      style="aspect-ratio: 4/5; overflow: hidden; position: relative; width: 100%; max-width: 400px; margin: 0 auto; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); background: #222;">
-      <div id="adminPreviewProductName"
-        style="position: absolute; top: 0; left: 0; width: 100%; background: rgba(0,0,0,0.6); color: white; padding: 10px; font-weight: bold; text-align: center; z-index: 2; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">
-      </div>
-      <img id="adminPreviewImg" style="width: 100%; height: 100%; object-fit: cover; z-index: 1;">
+    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; align-items:center; justify-content:center; padding: 20px;">
+    <div style="width: 100%; max-width: 320px; background: #333; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center;">
+      <div id="adminPreviewProductName" style="color: white; font-weight: bold; font-size: 18px; margin-bottom: 20px; text-align: center;"></div>
+      <label style="color: #aaa; font-size: 14px; margin-bottom: 8px; align-self: flex-start;">Enter Volume / Design Number:</label>
       <input type="text" id="adminDesignNumberInput" placeholder="Design No."
-        style="position: absolute; bottom: 15px; right: 15px; background: rgba(0,0,0,0.75); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 8px 12px; font-size: 18px; font-weight: bold; width: 140px; text-align: center; border-radius: 4px; z-index: 2; text-transform: uppercase; box-shadow: 0 4px 12px rgba(0,0,0,0.5);"
+        style="width: 100%; background: #222; color: white; border: 1px solid #555; padding: 12px; font-size: 20px; font-weight: bold; text-align: center; border-radius: 6px; margin-bottom: 25px; text-transform: uppercase;"
         onblur="this.value = this.value.toUpperCase()">
-    </div>
-
-    <div style="display: flex; gap: 15px; margin-top: 30px; width: 100%; max-width: 400px;">
-      <button onclick="window.retakeAdminPhoto()"
-        style="flex: 1; padding: 15px; border-radius: 8px; border: none; background: #555; color: white; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3);"><i
-          class="fas fa-redo-alt" style="margin-right:8px;"></i> Retake</button>
-      <button onclick="window.confirmAdminUpload()"
-        style="flex: 2; padding: 15px; border-radius: 8px; border: none; background: var(--myntra-pink); color: white; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 10px rgba(255, 63, 108, 0.4);"><i
-          class="fas fa-cloud-upload-alt" style="margin-right:8px;"></i> Confirm</button>
+      <div style="display: flex; gap: 10px; width: 100%;">
+        <button onclick="window.retakeAdminPhoto()"
+          style="flex: 1; padding: 12px; border-radius: 6px; border: none; background: #555; color: white; font-weight: bold; font-size: 15px; cursor: pointer;"><i class="fas fa-times" style="margin-right:6px;"></i> Cancel</button>
+        <button onclick="window.confirmAdminUpload()"
+          style="flex: 2; padding: 12px; border-radius: 6px; border: none; background: var(--myntra-pink); color: white; font-weight: bold; font-size: 15px; cursor: pointer;"><i class="fas fa-cloud-upload-alt" style="margin-right:6px;"></i> Upload</button>
+      </div>
     </div>
   </div>
 
