@@ -19,8 +19,8 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
     const filePath = object.name;
     const bucketName = object.bucket;
 
-    // Trigger strictly for files in Uploads/Temp_Staging/
-    if (!filePath || !filePath.startsWith('Uploads/Temp_Staging/')) {
+    // Trigger strictly for files in Uploads/Temp_Staging/ or Uploads/Raw/
+    if (!filePath || (!filePath.startsWith('Uploads/Temp_Staging/') && !filePath.startsWith('Uploads/Raw/'))) {
         return null;
     }
 
@@ -59,6 +59,10 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             return null;
         }
 
+        const productName = product.name || 'Durga Sarees';
+        const dsNum = parseInt(designId.replace(/\D/g, ''));
+        const formattedDesignId = 'Vol-' + (isNaN(dsNum) ? designId : String(dsNum).padStart(2, '0'));
+
         // Upload raw buffer to Cloudinary to apply Chained Eager Transformations
         const file = bucket.file(filePath);
         const [buffer] = await file.download();
@@ -67,8 +71,22 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             const uploadStream = cloudinary.uploader.upload_stream({
                 folder: 'DurgaSareesTemp',
                 eager: [
-                    { transformation: [{ effect: 'auto_color' }, { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60, fetch_format: 'webp' }] },
-                    { transformation: [{ effect: 'auto_color' }, { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, { overlay: 'durga_watermark', gravity: 'south_east', x: 20, y: 20, opacity: 60, fetch_format: 'webp' }] },
+                    { transformation: [
+                        { effect: 'auto_color' }, 
+                        { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, 
+                        { overlay: 'durga_watermark', effect: 'make_transparent:10', gravity: 'north_west', x: 20, y: 20 },
+                        { overlay: { font_family: 'Arial', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 20, color: 'white' },
+                        { overlay: { font_family: 'Arial', font_size: 40, text: formattedDesignId }, gravity: 'north', y: 80, color: 'white' },
+                        { fetch_format: 'webp' }
+                    ] },
+                    { transformation: [
+                        { effect: 'auto_color' }, 
+                        { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, 
+                        { overlay: 'durga_watermark', effect: 'make_transparent:10', gravity: 'north_west', x: 20, y: 20 },
+                        { overlay: { font_family: 'Arial', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 20, color: 'white' },
+                        { overlay: { font_family: 'Arial', font_size: 40, text: formattedDesignId }, gravity: 'north', y: 80, color: 'white' },
+                        { fetch_format: 'webp' }
+                    ] },
                     { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { fetch_format: 'jpg' }] }
                 ],
                 eager_async: false // Wait for transformations to complete
