@@ -1213,8 +1213,10 @@ function renderProductGrid(products) {
         
         // --- BROKEN IMAGES: JUST ABOVE OUT OF STOCK ---
         window.brokenImagesMap = window.brokenImagesMap || {};
-        var aBroken = window.brokenImagesMap[a.gridUrl] === true;
-        var bBroken = window.brokenImagesMap[b.gridUrl] === true;
+        var aNoImg = (!a.gridUrl || String(a.gridUrl).trim() === "" || String(a.gridUrl).toLowerCase() === "none");
+        var bNoImg = (!b.gridUrl || String(b.gridUrl).trim() === "" || String(b.gridUrl).toLowerCase() === "none");
+        var aBroken = window.brokenImagesMap[a.gridUrl] === true || aNoImg;
+        var bBroken = window.brokenImagesMap[b.gridUrl] === true || bNoImg;
         if (aBroken && !bBroken) return 1;
         if (!aBroken && bBroken) return -1;
 
@@ -4000,7 +4002,10 @@ async function runSyncReport() {
     bar.style.width = '0%';
     window.syncReportResults = [];
     
-    var productsToScan = window.allProducts.filter(p => p.gridUrl && p.gridUrl !== "None");
+    var productsToScan = window.allProducts.filter(p => {
+        var isWix = JSON.stringify(p).toLowerCase().includes("wix import");
+        return p.name && p.name.toLowerCase() !== "temp" && p.name.toLowerCase() !== "unnamed" && !isWix;
+    });
     var total = productsToScan.length;
     
     if (total === 0) {
@@ -4017,9 +4022,6 @@ async function runSyncReport() {
         bar.style.width = ((i / total) * 100) + '%';
         status.innerText = "Scanning " + (i+1) + " of " + total + ": " + p.name;
         
-        var cleanGridPath = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-        var listUrl = fbBase + cleanGridPath + "&delimiter=/";
-        
         var result = {
             id: p.id,
             name: p.name,
@@ -4028,6 +4030,18 @@ async function runSyncReport() {
             imageCount: 0,
             status: 'completed'
         };
+
+        if (!p.gridUrl || String(p.gridUrl).trim() === "" || String(p.gridUrl).toLowerCase() === "none") {
+            result.error = "No Grid Folder assigned";
+            result.status = 'error';
+            window.syncReportResults.push(result);
+            renderSyncReportPartial();
+            continue;
+        }
+        
+        var cleanGridPath = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+        
+        var listUrl = fbBase + cleanGridPath + "&delimiter=/";
         
         try {
             const controller = new AbortController();
@@ -4367,7 +4381,7 @@ window.showGlobalErrorLogs = function() {
     var html = '<div style="margin-bottom:10px; font-weight:bold; color:#d32f2f;">System Error Logs (Latest First)</div>';
     html += '<div style="margin-bottom:15px; display:flex; gap:10px;">';
     html += '<button onclick="window.globalErrorLog=[]; localStorage.setItem(\'dsGlobalErrors\',\'[]\'); window.showGlobalErrorLogs();" style="flex:1; background:#e53935; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Clear Logs</button>';
-    html += '<button onclick="if(window.resyncFailedProducts) { document.getElementById(\'syncReportModal\').style.display=\'none\'; window.resyncFailedProducts(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Retry Resync / Check Again</button>';
+    html += '<button onclick="if(window.resyncFailedProducts) { document.getElementById(\'syncReportModal\').style.display=\'none\'; window.resyncFailedProducts(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Log Resync Only</button>';
     html += '</div>';
     
     // Reverse loop to show the newest errors at the top
