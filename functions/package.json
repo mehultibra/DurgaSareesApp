@@ -6,6 +6,7 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
+    "deploy:win": "set FUNCTIONS_DISCOVERY_TIMEOUT=30000 && firebase deploy --only functions",
     "logs": "firebase functions:log"
   },
   "engines": {
