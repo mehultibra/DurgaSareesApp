@@ -153,18 +153,15 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         const destFileName = designId.toLowerCase() === 'cover' ? 'cover.webp' : `${designId}.webp`;
 
         // Save Grid Buffer to Firebase
-        await bucket.file(`${finalGridUrl}${destFileName}`).save(gridBuffer, { metadata: { contentType: 'image/webp' } });
+        await bucket.file(`${finalGridUrl}${destFileName}`).save(gridBuffer, { metadata: { contentType: 'image/webp', metadata: { source: '888' } } });
 
         // Save Zoom Buffer to Firebase
-        await bucket.file(`${finalZoomUrl}${destFileName}`).save(zoomBuffer, { metadata: { contentType: 'image/webp' } });
+        await bucket.file(`${finalZoomUrl}${destFileName}`).save(zoomBuffer, { metadata: { contentType: 'image/webp', metadata: { source: '888' } } });
 
-        // Calculate Category and Save Master Buffer to NAS input path
-        const categoryParts = finalGridUrl.split('/').filter(Boolean);
-        const category = categoryParts.length > 0 ? categoryParts[categoryParts.length - 1] : 'Uncategorized';
-
+        // Save Master Buffer to NAS input path mirroring Grid path
         const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
-        const masterInputPath = `input/${category}/${masterDestName}`;
-        await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg' } });
+        const masterInputPath = finalGridUrl.replace(/^(Grid|Zoom)\//i, 'Input/') + masterDestName;
+        await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg', metadata: { source: '888' } } });
 
         console.log(`Success: Generated ${destFileName} at ${finalGridUrl} and ${finalZoomUrl}. Master saved to ${masterInputPath}`);
         // Delete the staging file since processing succeeded
