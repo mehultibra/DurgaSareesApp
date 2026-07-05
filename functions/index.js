@@ -33,9 +33,19 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         return null;
     }
 
-    const docId = parts[0];
-    const designIdAndTimestamp = parts[1].split('_');
-    const designId = designIdAndTimestamp[0];
+    let docId = parts[0];
+    let designId;
+    let customName = null;
+
+    if (parts.length >= 4) {
+        designId = parts[1];
+        if (parts[2] && parts[2] !== 'NA') {
+            customName = decodeURIComponent(parts[2]);
+        }
+    } else {
+        const designIdAndTimestamp = parts[1].split('_');
+        designId = designIdAndTimestamp[0];
+    }
 
     const bucket = admin.storage().bucket(bucketName);
     const db = admin.firestore();
@@ -59,7 +69,10 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             return null;
         }
 
-        const productName = product.name || 'Durga Sarees';
+        const productName = customName || product.name || 'Durga Sarees';
+        if (customName && product.name !== customName) {
+            await productRef.update({ name: customName }).catch(e => console.error("Failed to update product name:", e));
+        }
         const dsNum = parseInt(designId.replace(/\D/g, ''));
         const formattedDesignId = (isNaN(dsNum) ? designId : String(dsNum).padStart(2, '0'));
 
@@ -75,16 +88,16 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
                         { effect: 'auto_color' }, 
                         { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, 
                         { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white', border: '3px_solid_navy' },
-                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'white', border: '3px_solid_navy' },
+                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F', border: '3px_solid_navy', effect: 'outline' },
+                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F', border: '3px_solid_navy', effect: 'outline' },
                         { fetch_format: 'webp' }
                     ] },
                     { transformation: [
                         { effect: 'auto_color' }, 
                         { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, 
                         { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white', border: '3px_solid_navy' },
-                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'white', border: '3px_solid_navy' },
+                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F', border: '3px_solid_navy', effect: 'outline' },
+                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F', border: '3px_solid_navy', effect: 'outline' },
                         { fetch_format: 'webp' }
                     ] },
                     { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { fetch_format: 'jpg' }] },
@@ -92,8 +105,8 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
                         { effect: 'auto_color' }, 
                         { width: 1024, crop: 'scale' }, 
                         { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white', border: '3px_solid_navy' },
-                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'white', border: '3px_solid_navy' },
+                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F', border: '3px_solid_navy', effect: 'outline' },
+                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F', border: '3px_solid_navy', effect: 'outline' },
                         { fetch_format: 'jpg' }
                     ] }
                 ],

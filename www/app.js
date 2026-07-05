@@ -4398,11 +4398,11 @@ window.showGlobalErrorLogs = function () {
 };
 
 // --- OUTBOX SYSTEM ---
-window.saveToOutbox = function (docId, designId, fileUri) {
+window.saveToOutbox = function (docId, designId, fileUri, productName) {
     return getDB().then(db => {
         return new Promise((resolve) => {
             var tx = db.transaction("outbox", "readwrite");
-            var req = tx.objectStore("outbox").put({ docId, designId, fileUri, ts: Date.now(), processAfter: Date.now() + 5000 });
+            var req = tx.objectStore("outbox").put({ docId, designId, fileUri, productName, ts: Date.now(), processAfter: Date.now() + 5000 });
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => resolve(null);
         });
@@ -4466,7 +4466,7 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
         // Grab product name dynamically if not passed cleanly
         var detailTitle = document.getElementById('detailTitle');
         if (nameLabel) {
-            nameLabel.innerText = (detailTitle && detailTitle.innerText) ? detailTitle.innerText : productName;
+            nameLabel.value = (detailTitle && detailTitle.innerText) ? detailTitle.innerText : productName;
         }
 
         if (modal) modal.style.display = 'flex';
@@ -4536,7 +4536,8 @@ window.processCameraOutbox = async function () {
                 continue;
             }
 
-            var filename = `${item.docId}___${item.designId}_${item.ts}.jpg`;
+            var safeName = item.productName ? encodeURIComponent(item.productName) : "NA";
+            var filename = `${item.docId}___${item.designId}___${safeName}___${item.ts}.jpg`;
             try {
                 var uploadStartTime = Date.now();
                 var fileData = await Capacitor.Plugins.Filesystem.readFile({ path: item.fileUri });
