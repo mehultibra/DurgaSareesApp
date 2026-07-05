@@ -61,7 +61,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
 
         const productName = product.name || 'Durga Sarees';
         const dsNum = parseInt(designId.replace(/\D/g, ''));
-        const formattedDesignId = 'Vol-' + (isNaN(dsNum) ? designId : String(dsNum).padStart(2, '0'));
+        const formattedDesignId = (isNaN(dsNum) ? designId : String(dsNum).padStart(2, '0'));
 
         // Upload raw buffer to Cloudinary to apply Chained Eager Transformations
         const file = bucket.file(filePath);
@@ -74,17 +74,17 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
                     { transformation: [
                         { effect: 'auto_color' }, 
                         { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, 
-                        { overlay: 'durga_watermark', effect: 'make_transparent:10', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Arial', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 20, color: 'white' },
-                        { overlay: { font_family: 'Arial', font_size: 40, text: formattedDesignId }, gravity: 'north', y: 80, color: 'white' },
+                        { overlay: 'logo_transparent', width: 0.15, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white' },
+                        { overlay: { font_family: 'Arial', font_size: 40, text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 120, color: 'white' },
                         { fetch_format: 'webp' }
                     ] },
                     { transformation: [
                         { effect: 'auto_color' }, 
                         { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, 
-                        { overlay: 'durga_watermark', effect: 'make_transparent:10', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Arial', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 20, color: 'white' },
-                        { overlay: { font_family: 'Arial', font_size: 40, text: formattedDesignId }, gravity: 'north', y: 80, color: 'white' },
+                        { overlay: 'logo_transparent', width: 0.15, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'white' },
+                        { overlay: { font_family: 'Arial', font_size: 40, text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 120, color: 'white' },
                         { fetch_format: 'webp' }
                     ] },
                     { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { fetch_format: 'jpg' }] }
@@ -157,7 +157,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         const category = categoryParts.length > 0 ? categoryParts[categoryParts.length - 1] : 'Uncategorized';
 
         const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
-        const masterInputPath = `${finalGridUrl}${masterDestName}`;
+        const masterInputPath = `input/${category}/${masterDestName}`;
         await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg' } });
 
         console.log(`Success: Generated ${destFileName} at ${finalGridUrl} and ${finalZoomUrl}. Master saved to ${masterInputPath}`);
