@@ -98,8 +98,14 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         });
 
         if (!uploadResult.eager || uploadResult.eager.length < 3) {
-            console.error(`Cloudinary eager transformations failed or returned incomplete for ${filename}`);
+            console.error(`Cloudinary eager transformations failed or returned incomplete for ${filename}. Result:`, JSON.stringify(uploadResult.eager));
             return null; // Exit gracefully to prevent Firebase crash and broken URLs
+        }
+
+        // Check if secure_url exists (in case eager failed internally)
+        if (!uploadResult.eager[0].secure_url || !uploadResult.eager[1].secure_url || !uploadResult.eager[2].secure_url) {
+            console.error(`Cloudinary eager transformations returned errors for ${filename}. Result:`, JSON.stringify(uploadResult.eager));
+            return null;
         }
 
         // Download ALL VERSIONS from Cloudinary
