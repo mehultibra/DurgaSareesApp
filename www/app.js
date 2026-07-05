@@ -3977,40 +3977,10 @@ function printCartPdf() {
 function openSyncReportModal() {
     closeModals();
     openModal('syncReportModal');
-    var btnResync = document.getElementById('btnResyncErrors');
-    if (btnResync && !document.getElementById('btnViewLogs')) {
-        btnResync.insertAdjacentHTML('afterend', '<button id="btnViewLogs" onclick="window.showGlobalErrorLogs()" style="background:#424242; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer; margin-left: 8px;">View Logs</button>');
-    }
-    if (!window.syncReportResults || window.syncReportResults.length === 0) {
-        document.getElementById('syncReportBody').innerHTML = '';
-        document.getElementById('syncReportStatus').innerText = 'Ready to scan.';
-        document.getElementById('syncReportProgress').style.display = 'none';
-        document.getElementById('btnRunSyncReport').disabled = false;
-        document.getElementById('chkShowCompletedSync').checked = false;
-        var btnResync = document.getElementById('btnResyncErrors');
-        if (btnResync) btnResync.style.display = 'none';
-    } else {
-        // Resolve any entries whose id was null (sync happened before allProducts loaded)
-        if (window.allProducts && window.allProducts.length > 0) {
-            window.syncReportResults.forEach(function (r) {
-                if (!r.id && r._gridUrl) {
-                    var pMatch = window.allProducts.find(x => x.gridUrl === r._gridUrl);
-                    if (pMatch) {
-                        r.id = pMatch.id;
-                        r.sku = pMatch.sku || '-';
-                    }
-                }
-            });
-        }
-        var errCount = window.syncReportResults.filter(r => r.status === 'error').length;
-        document.getElementById('syncReportStatus').innerText = 'Showing last sync errors (' + errCount + ' errors). Run report for full scan.';
-        var btnResync = document.getElementById('btnResyncErrors');
-        if (btnResync) btnResync.style.display = errCount > 0 ? 'inline-block' : 'none';
-        renderSyncReportPartial();
-    }
+    window.showGlobalErrorLogs();
 }
 
-window.syncReportResults = [];
+    window.syncReportResults = [];
 
 async function runSyncReport() {
     var btn = document.getElementById('btnRunSyncReport');
@@ -4402,7 +4372,7 @@ window.showGlobalErrorLogs = function () {
     var html = '<div style="margin-bottom:10px; font-weight:bold; color:#d32f2f;">System Error Logs (Latest First)</div>';
     html += '<div style="margin-bottom:15px; display:flex; gap:10px;">';
     html += '<button onclick="window.globalErrorLog=[]; localStorage.setItem(\'dsGlobalErrors\',\'[]\'); window.showGlobalErrorLogs();" style="flex:1; background:#e53935; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Clear Logs</button>';
-    html += '<button onclick="if(typeof resyncFailedProducts === \'function\') { document.getElementById(\'syncReportModal\').style.display=\'none\'; resyncFailedProducts(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Log Resync Only</button>';
+    html += '<button onclick="if(typeof resyncFailedProducts === \'function\') { resyncFailedProducts(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Log Resync Only</button>';
     html += '</div>';
 
     // Reverse loop to show the newest errors at the top
