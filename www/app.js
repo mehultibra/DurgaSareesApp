@@ -965,9 +965,15 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     var lowResUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
 
-    function showPlaceholder() {
+    function showPlaceholder(err) {
         imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
         imgElement.onerror = null;
+        window.brokenImagesMap = window.brokenImagesMap || {};
+        window.brokenImagesMap[gridPath] = true;
+        var reason = (err && err.message) ? err.message : 'Unknown HTTP/Network Error';
+        if (typeof window.logAppError === 'function') {
+            window.logAppError('Image Load Failed', 'Grid: ' + gridPath + ' | Reason: ' + reason);
+        }
     }
 
     // Strip Excel 'ready' logic - always discover files from Firebase folder listing
@@ -981,7 +987,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
             if (dsFallbackMap[gridPath]) {
                 var cachedFile = dsFallbackMap[gridPath];
                 imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(cachedFile) + "?alt=media";
-                imgElement.onerror = function () { showPlaceholder(); };
+                imgElement.onerror = function () { showPlaceholder(new Error("Cached fallback onerror triggered")); };
                 return;
             }
 
@@ -1004,12 +1010,12 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                         saveFallbackMap();
                         imgElement.src = fbBase + encGridPath + "%2F" + encodeURIComponent(firstFile) + "?alt=media";
                         imgElement.onload = function () { coverExistsMap[gridPath] = true; saveCoverExistsMap(); };
-                        imgElement.onerror = function () { showPlaceholder(); };
+                        imgElement.onerror = function () { showPlaceholder(new Error("Image element onload onerror triggered")); };
                     } else {
-                        showPlaceholder();
+                        showPlaceholder(new Error("Folder list empty"));
                     }
                 })
-                .catch(function () { showPlaceholder(); });
+                .catch(function (err) { showPlaceholder(err); });
         }
 
 
@@ -1204,6 +1210,13 @@ function renderProductGrid(products) {
         // --- ADMIN & INVENTORY: OUT OF STOCK TO BOTTOM ---
         if (a.totalStock === 0 && b.totalStock > 0) return 1;
         if (b.totalStock === 0 && a.totalStock > 0) return -1;
+        
+        // --- BROKEN IMAGES: JUST ABOVE OUT OF STOCK ---
+        window.brokenImagesMap = window.brokenImagesMap || {};
+        var aBroken = window.brokenImagesMap[a.gridUrl] === true;
+        var bBroken = window.brokenImagesMap[b.gridUrl] === true;
+        if (aBroken && !bBroken) return 1;
+        if (!aBroken && bBroken) return -1;
 
         var catA = (a.cat || "Uncategorized").toLowerCase();
         var catB = (b.cat || "Uncategorized").toLowerCase();
@@ -2961,7 +2974,7 @@ async function syncImages(silent = false) {
 
         // ðŸ›¡ï¸ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
         // This guarantees we never hit Samsung/Android OS TCP socket connection limits (ERR_INSUFFICIENT_RESOURCES).
-        var batchSize = 1;
+        var batchSize = 15;
         for (var i = 0; i < productsToSync.length; i += batchSize) {
             var batch = productsToSync.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
@@ -2977,7 +2990,7 @@ async function syncImages(silent = false) {
                 var listSuccess = false;
                 try {
                     const ctrl = new AbortController();
-                    const tid  = setTimeout(() => ctrl.abort(), 15000);
+                    const tid  = setTimeout(() => ctrl.abort(), 30000);
                     // ðŸ›¡ï¸ CRITICAL FIX: Bulletproof retry for "failed to fetch"
                     var listRes = await window.fetchWithRetry(listUrl, { signal: ctrl.signal }, 3);
                     clearTimeout(tid);
@@ -3066,7 +3079,7 @@ async function syncImages(silent = false) {
 
                     // â”€â”€ 4. Download remaining design files (FAST PARALLEL BATCHING) â”€â”€
                     if (downloaded) {
-                        var innerBatchSize = 5; // Download 5 inner images concurrently!
+                        var innerBatchSize = 2; // Download 2 inner images concurrently!
                         var remainingFiles = folderFiles.filter(f => f !== coverFile);
                         for (var fIdx = 0; fIdx < remainingFiles.length; fIdx += innerBatchSize) {
                             var fBatch = remainingFiles.slice(fIdx, fIdx + innerBatchSize);
@@ -3076,7 +3089,7 @@ async function syncImages(silent = false) {
                                 if (existing) return; // already in cache
                                 try {
                                     const ctrl3 = new AbortController();
-                                    const tid3  = setTimeout(() => ctrl3.abort(), 15000);
+                                    const tid3  = setTimeout(() => ctrl3.abort(), 30000);
                                     // 🛡️ CRITICAL FIX: Bulletproof retry for inner images
                                     var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
                                     clearTimeout(tid3);
@@ -4018,7 +4031,7 @@ async function runSyncReport() {
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
             // ðŸ›¡ï¸ Bulletproof Retry applied to Sync Report
             var res = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
             clearTimeout(timeoutId);
@@ -4168,7 +4181,7 @@ async function resyncFailedProducts() {
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
             
             // 1. Fetch directory listing first
             var prefix = cleanGridPath + "/";
@@ -4354,7 +4367,7 @@ window.showGlobalErrorLogs = function() {
     var html = '<div style="margin-bottom:10px; font-weight:bold; color:#d32f2f;">System Error Logs (Latest First)</div>';
     html += '<div style="margin-bottom:15px; display:flex; gap:10px;">';
     html += '<button onclick="window.globalErrorLog=[]; localStorage.setItem(\'dsGlobalErrors\',\'[]\'); window.showGlobalErrorLogs();" style="flex:1; background:#e53935; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Clear Logs</button>';
-    html += '<button onclick="if(window.runSyncReport) { document.getElementById(\'syncReportModal\').style.display=\'none\'; window.runSyncReport(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Retry Resync / Check Again</button>';
+    html += '<button onclick="if(window.resyncFailedProducts) { document.getElementById(\'syncReportModal\').style.display=\'none\'; window.resyncFailedProducts(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Retry Resync / Check Again</button>';
     html += '</div>';
     
     // Reverse loop to show the newest errors at the top
@@ -4512,11 +4525,12 @@ window.processCameraOutbox = async function() {
             
             var filename = `${item.docId}___${item.designId}_${item.ts}.jpg`;
             try {
+                var uploadStartTime = Date.now();
                 var fileData = await Capacitor.Plugins.Filesystem.readFile({ path: item.fileUri });
                 var res = await fetch(`data:image/jpeg;base64,${fileData.data}`);
                 var blob = await res.blob();
                 
-                var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FTemp_Staging%2F` + encodeURIComponent(filename);
+                var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
                 
                 var uploadRes = await window.fetchWithRetry(uploadUrl, {
                     method: 'POST',
@@ -4526,7 +4540,10 @@ window.processCameraOutbox = async function() {
                 
                 if (uploadRes.ok) {
                     await window.deleteFromOutbox(item.id);
-                    console.log(`Successfully uploaded: ${filename}`);
+                    var uploadDuration = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
+                    var totalJourney = ((Date.now() - item.ts) / 1000).toFixed(2);
+                    window.logAppError('Upload Success', `File: ${filename} | Net Time: ${uploadDuration}s | Total Journey: ${totalJourney}s`);
+                    console.log(`✅ Successfully uploaded: ${filename} in ${uploadDuration}s`);
                 } else {
                     throw new Error(`Status ${uploadRes.status}`);
                 }
