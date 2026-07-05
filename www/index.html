@@ -445,19 +445,23 @@
   <script src="./app.js?v=7"></script>
 
   <div id="adminCameraPreviewModal"
-    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; align-items:center; justify-content:center; padding: 20px;">
-    <div style="width: 100%; max-width: 320px; background: #333; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center;">
-      <div id="adminPreviewProductName" style="color: white; font-weight: bold; font-size: 18px; margin-bottom: 20px; text-align: center;"></div>
-      <label style="color: #aaa; font-size: 14px; margin-bottom: 8px; align-self: flex-start;">Enter Volume / Design Number:</label>
-      <input type="text" id="adminDesignNumberInput" placeholder="Design No."
-        style="width: 100%; background: #222; color: white; border: 1px solid #555; padding: 12px; font-size: 20px; font-weight: bold; text-align: center; border-radius: 6px; margin-bottom: 25px; text-transform: uppercase;"
-        onblur="this.value = this.value.toUpperCase()">
-      <div style="display: flex; gap: 10px; width: 100%;">
-        <button onclick="window.retakeAdminPhoto()"
-          style="flex: 1; padding: 12px; border-radius: 6px; border: none; background: #555; color: white; font-weight: bold; font-size: 15px; cursor: pointer;"><i class="fas fa-times" style="margin-right:6px;"></i> Cancel</button>
-        <button onclick="window.confirmAdminUpload()"
-          style="flex: 2; padding: 12px; border-radius: 6px; border: none; background: var(--myntra-pink); color: white; font-weight: bold; font-size: 15px; cursor: pointer;"><i class="fas fa-cloud-upload-alt" style="margin-right:6px;"></i> Upload</button>
-      </div>
+    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
+    
+    <img id="adminPreviewImg" style="width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0; z-index: 1;">
+    
+    <div id="adminPreviewProductName"
+      style="position: absolute; top: 0; left: 0; width: 100%; background: linear-gradient(rgba(0,0,0,0.8), transparent); color: white; padding: 20px 10px; font-weight: bold; font-size: 20px; text-align: center; z-index: 2; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">
+    </div>
+    
+    <input type="text" id="adminDesignNumberInput" placeholder="Design No."
+      style="position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%); background: transparent; color: white; border: none; border-bottom: 2px dashed rgba(255,255,255,0.5); padding: 5px; font-size: 40px; font-weight: bold; width: 80%; text-align: center; z-index: 2; text-transform: uppercase; text-shadow: 0 4px 12px rgba(0,0,0,0.9); outline: none;"
+      onblur="this.value = this.value.toUpperCase()">
+
+    <div style="position: absolute; bottom: 30px; left: 0; width: 100%; display: flex; justify-content: space-evenly; z-index: 2; padding: 0 20px;">
+      <button onclick="window.retakeAdminPhoto()"
+        style="width: 65px; height: 65px; border-radius: 50%; border: none; background: rgba(255,255,255,0.25); color: white; font-size: 26px; cursor: pointer; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.3);"><i class="fas fa-times"></i></button>
+      <button onclick="window.confirmAdminUpload()"
+        style="width: 65px; height: 65px; border-radius: 50%; border: none; background: var(--myntra-pink); color: white; font-size: 26px; cursor: pointer; box-shadow: 0 6px 15px rgba(255,63,108,0.6);"><i class="fas fa-check"></i></button>
     </div>
   </div>
 
