@@ -12,6 +12,14 @@ window.isAdminMode = false;
 window.adminTapCount = 0;
 window.isSuperAdmin = localStorage.getItem('dsIsAdmin') === 'true';
 
+window.dsMissingImage = "data:image/svg+xml;utf8," + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800">
+    <rect width="100%" height="100%" fill="#f5f5f6"/>
+    <text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="bold" fill="#6c757d">Image Error</text>
+    <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#adb5bd">Network or 404</text>
+</svg>
+`);
+
 // --- ERROR LOGGING ---
 window.globalErrorLog = JSON.parse(localStorage.getItem('dsGlobalErrors') || '[]');
 window.logAppError = function(context, message) {
@@ -945,7 +953,7 @@ function getCachedImageBlob(url) {
 // 🛡️ THE FIX: Loads the low-res Grid image instantly, then quietly upgrades to Zoom!
 window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFile) {
     if (!gridPath || gridPath.trim() === "" || gridPath.toLowerCase() === "none") {
-        imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
+        imgElement.src = window.dsMissingImage;
         return;
     }
 
@@ -966,7 +974,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var lowResUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
 
     function showPlaceholder(err) {
-        imgElement.src = "https://placehold.co/300x300/f0f0f0/a0a0a0?text=No+Image";
+        imgElement.src = window.dsMissingImage;
         imgElement.onerror = null;
         window.brokenImagesMap = window.brokenImagesMap || {};
         window.brokenImagesMap[gridPath] = true;
@@ -1556,7 +1564,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
     var cleanZoomPath = zoomPath && zoomPath !== "None" ? String(zoomPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : cleanGridPath;
 
     if (!cleanGridPath || cleanGridPath === "" || cleanGridPath.toLowerCase() === "none") {
-        deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="https://placehold.co/600x800/f0f0f0/a0a0a0?text=No+Image"></div>';
+        deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="' + window.dsMissingImage + '"></div>';
         return;
     }
 
@@ -1685,7 +1693,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
             deck.innerHTML = `
             <div class="swipe-card" data-design="DIRECT" onclick="openFs('${p.id}', 0, 'Cover')" style="position:relative;">
                 ${adminCheckboxHtml}
-                <img id="design_img_${p.id}_DIRECT" src="${coverSrc || ''}" data-loaded-zoom="false" style="width: 100%; object-fit: cover;" onerror="if(typeof window.logAppError === 'function') window.logAppError('Image Load Error', 'Fallback Cover Image Missing (404) | ${p.name}'); this.onerror=null; this.src='https://placehold.co/600x800/f0f0f0/a0a0a0?text=No+Image';">
+                <img id="design_img_${p.id}_DIRECT" src="${coverSrc || ''}" data-loaded-zoom="false" style="width: 100%; object-fit: cover;" onerror="if(typeof window.logAppError === 'function') window.logAppError('Image Load Error', 'Fallback Cover Image Missing (404) | ${p.name}'); this.onerror=null; this.src=window.dsMissingImage;">
                 <div class="swipe-card-bot" onclick="event.stopPropagation()">
                     <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Cover</div>
                     ${qtyHtml}
@@ -1733,7 +1741,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         renderedFilesJson = JSON.stringify(files);
         window.lastRenderedDesignNames = files.map(f => String(f.name).toLowerCase()).join(',');
 
-        var placeholderSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#f9f9fa"/></svg>');
+        var placeholderSVG = window.dsMissingImage;
 
         // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
         try {
@@ -2422,7 +2430,7 @@ function openCart() {
                     "openCartFsFromCache('" + g.p.id + "', '" + safeDesignLabel + "', '" + g.p.gridUrl + "')";
 
                 cHtml.push('<div style="width: 80px; text-align: center;" ' + (!isEditing ? 'onclick="' + onClickAction + '"' : '') + '>');
-                cHtml.push('<img id="' + imgId + '" src="https://placehold.co/300x300/f0f0f0/a0a0a0?text=..." style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); ' + (!isEditing ? 'cursor: pointer;' : '') + '">');
+                cHtml.push('<img id="' + imgId + '" src="' + window.dsMissingImage + '" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); ' + (!isEditing ? 'cursor: pointer;' : '') + '">');
                 cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + dLabel + '</div>');
                 
                 if (isEditing) {
@@ -2867,7 +2875,7 @@ window.openCartFsFromCache = function (productId, designId, gridUrl) {
                 window.logAppError('AUDITOR: Cart Cache Miss', `CRITICAL: Cart item missing from storage. | Product: ${pItem ? pItem.name : productId} - Design: ${designId}`);
             }
             // Professional visual fallback for the user:
-            showInFullscreen("https://placehold.co/600x800/eeeeee/888888?text=Image+Unavailable+Offline");
+            showInFullscreen(window.dsMissingImage);
         }
     });
 };
@@ -2937,7 +2945,7 @@ async function syncImages(silent = false) {
     try { localStorage.removeItem("dsFolderCache"); } catch (e) { }
     window.syncReportResults = [];
 
-    if (bootMsg && !silent) bootMsg.innerText = "Fetching latest product list...";
+    if (bootMsg) bootMsg.innerText = "Fetching latest product list...";
 
     try {
         const res = await window.fetchWithRetry(FIRESTORE_PRODUCTS_URL);
@@ -2972,7 +2980,7 @@ async function syncImages(silent = false) {
         var bucket   = "durga-sarees.firebasestorage.app";
         var fbBase   = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
 
-        if (bootMsg && !silent) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
+        if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
         // ðŸ›¡ï¸ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
         // This guarantees we never hit Samsung/Android OS TCP socket connection limits (ERR_INSUFFICIENT_RESOURCES).
@@ -3132,7 +3140,7 @@ async function syncImages(silent = false) {
                 count++;
             }));
 
-            if (bootMsg && !silent) bootMsg.innerText = "Smart syncing " + count + " / " + total + "...";
+            if (bootMsg) bootMsg.innerText = "Smart syncing " + count + " / " + total + "...";
 
             if (silent) {
                 await new Promise(resolve => setTimeout(resolve, 350));
@@ -4381,7 +4389,7 @@ window.showGlobalErrorLogs = function() {
     var html = '<div style="margin-bottom:10px; font-weight:bold; color:#d32f2f;">System Error Logs (Latest First)</div>';
     html += '<div style="margin-bottom:15px; display:flex; gap:10px;">';
     html += '<button onclick="window.globalErrorLog=[]; localStorage.setItem(\'dsGlobalErrors\',\'[]\'); window.showGlobalErrorLogs();" style="flex:1; background:#e53935; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Clear Logs</button>';
-    html += '<button onclick="if(window.resyncFailedProducts) { document.getElementById(\'syncReportModal\').style.display=\'none\'; window.resyncFailedProducts(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Log Resync Only</button>';
+    html += '<button onclick="if(typeof resyncFailedProducts === \'function\') { document.getElementById(\'syncReportModal\').style.display=\'none\'; resyncFailedProducts(); } else { alert(\'Sync report not available.\'); }" style="flex:2; background:#1976d2; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Log Resync Only</button>';
     html += '</div>';
     
     // Reverse loop to show the newest errors at the top
