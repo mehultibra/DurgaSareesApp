@@ -1744,7 +1744,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
     }
     
     // ALWAYS fetch from network to sync any newly uploaded admin images
-    fetch(listUrl)
+    fetch(listUrl + "&_t=" + new Date().getTime(), { cache: 'no-store' })
         .then(res => {
             if (!res.ok) throw new Error("HTTP error " + res.status);
             return res.json();
