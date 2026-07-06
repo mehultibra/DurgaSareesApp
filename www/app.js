@@ -1536,6 +1536,29 @@ function openDetail(productId, skipShow, keepSearchShown) {
     document.getElementById('dtPriceBot').innerText = p.price || '0';
     document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
 
+    // 🚀 NEW: LIVE SYNC FETCH WHEN OPENING PRODUCT PAGE
+    if (p.docId) {
+        var docUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId;
+        window.fetchWithRetry(docUrl, { method: 'GET' }, 1)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (data && data.fields) {
+                    var f = data.fields;
+                    var livePrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
+                    var livePacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
+                    
+                    p.price = livePrice;
+                    p.packing = livePacking;
+                    
+                    if (curProduct && curProduct.id === p.id) {
+                        document.getElementById('dtPriceBot').innerText = p.price || '0';
+                        document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
+                    }
+                    refreshCardUI(p.id);
+                }
+            }).catch(e => {});
+    }
+
     var deck = document.getElementById('dtDesigns');
     if (deck) deck.innerHTML = '';
 
