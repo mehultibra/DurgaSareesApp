@@ -549,8 +549,6 @@ function initApp() {
     function processProducts(docs) {
         var validCounter = 0;
         allProducts = [];
-        var edited = {};
-        try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
 
         docs.forEach(d => {
             var f = d.fields || {};
@@ -560,11 +558,6 @@ function initApp() {
             if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !isWix) {
                 var finalPrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
                 var finalPacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
-
-                if (edited[name]) {
-                    if (edited[name].price !== undefined) finalPrice = edited[name].price;
-                    if (edited[name].packing !== undefined) finalPacking = edited[name].packing;
-                }
 
                 // --- ADMIN & INVENTORY PARSING ---
                 var actualDocId = d.name ? d.name.split('/').pop() : "";
@@ -3253,13 +3246,6 @@ function saveProductEdit(p) {
         return;
     }
     try {
-        var edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {};
-        edited[p.name] = {
-            price: p.price,
-            packing: p.packing
-        };
-        localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
-
         // 🚀 NEW: 2-WAY SYNC FROM PRODUCT PAGE - FIREBASE & EXCEL WEBHOOK
         if (p && p.docId) {
             showDevLog("Syncing Page: " + p.name + " -> Rate: " + p.price + " Pack: " + p.packing, false);
