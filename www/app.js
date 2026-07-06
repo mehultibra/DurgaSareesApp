@@ -3236,6 +3236,17 @@ function pushHistoryState(modal) {
     updateAndroidBackState();
 }
 
+function showDevLog(msg, isErr) {
+    var d = document.createElement('div');
+    d.style.position = 'fixed'; d.style.bottom = '20px'; d.style.left = '10px'; d.style.right = '10px';
+    d.style.background = isErr ? '#c62828' : '#2e7d32'; d.style.color = '#fff';
+    d.style.padding = '12px'; d.style.borderRadius = '8px'; d.style.zIndex = '999999';
+    d.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)'; d.style.fontSize = '14px';
+    d.innerText = msg;
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 7000);
+}
+
 function saveProductEdit(p) {
     try {
         var edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {};
@@ -3244,6 +3255,48 @@ function saveProductEdit(p) {
             packing: p.packing
         };
         localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
+
+        // 🚀 NEW: 2-WAY SYNC FROM PRODUCT PAGE - FIREBASE & EXCEL WEBHOOK
+        if (p && p.docId) {
+            showDevLog("Syncing Page: " + p.name + " -> Rate: " + p.price + " Pack: " + p.packing, false);
+            
+            var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
+            var payload = {
+                fields: {
+                    price: { integerValue: p.price },
+                    packing: { stringValue: p.packing }
+                }
+            };
+
+            window.fetchWithRetry(fbUpdateUrl, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }, 1).then(res => {
+                if (res.ok) showDevLog("✅ Firebase Updated: " + p.name, false);
+                else showDevLog("❌ FB Err " + res.status + " - No Admin Perms?", true);
+            }).catch(err => showDevLog("FB Net Err: " + err.message, true));
+
+            if (window.DS_APP_SCRIPT_URL) {
+                fetch(window.DS_APP_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'updateProductDetails',
+                        productName: p.name,
+                        price: p.price,
+                        packing: p.packing
+                    })
+                }).then(r => r.json())
+                  .then(data => {
+                     if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
+                     else showDevLog("✅ Excel Updated: " + p.name, false);
+                  }).catch(e => showDevLog("Excel Net Err: " + e.message, true));
+            } else {
+                showDevLog("❌ DS_APP_SCRIPT_URL is missing!", true);
+            }
+        } else {
+            showDevLog("❌ p or docId missing for " + (p ? p.name : "unknown"), true);
+        }
     } catch (e) { console.error("Error saving product edit:", e); }
 }
 
@@ -3952,17 +4005,6 @@ function saveCartInlineEdit(productId, closeEdit = true) {
     openCart(); // Re-render to show updated static text
 
     // 🚀 NEW: 2-WAY SYNC - FIREBASE & EXCEL WEBHOOK
-    function showDevLog(msg, isErr) {
-        var d = document.createElement('div');
-        d.style.position = 'fixed'; d.style.bottom = '20px'; d.style.left = '10px'; d.style.right = '10px';
-        d.style.background = isErr ? '#c62828' : '#2e7d32'; d.style.color = '#fff';
-        d.style.padding = '12px'; d.style.borderRadius = '8px'; d.style.zIndex = '999999';
-        d.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)'; d.style.fontSize = '14px';
-        d.innerText = msg;
-        document.body.appendChild(d);
-        setTimeout(() => d.remove(), 7000);
-    }
-
     if (matchP && matchP.docId) {
         showDevLog("Syncing: " + matchP.name + " -> Rate: " + newRate + " Pack: " + newPacking, false);
         // Firebase Live DB Update
