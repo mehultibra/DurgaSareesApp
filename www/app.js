@@ -4837,7 +4837,11 @@ function confirmPrint() {
                     });
             })
             .catch(function(err) {
-                alert("Printer connection failed. Is IP correct? " + err.message);
+                var reset = confirm("Printer connection failed! Is the IP correct? (" + PRINTER_IP + ")\n\nError: " + err.message + "\n\nDo you want to reset the saved IP address?");
+                if (reset) {
+                    if (window.currentPrintType === 'barcode') localStorage.removeItem("dsBarcodePrinterIp");
+                    else localStorage.removeItem("dsTagPrinterIp");
+                }
                 btn.innerText = "PRINT"; btn.disabled = false;
             });
     } else {
