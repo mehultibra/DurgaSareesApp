@@ -3968,8 +3968,8 @@ function saveCartInlineEdit(productId, closeEdit = true) {
             body: JSON.stringify(payload)
         }, 1).then(res => {
             if (res.ok) console.log("✅ Live Database Updated Successfully for " + matchP.name);
-            else console.error("❌ Live Database Update Failed: " + res.status);
-        }).catch(err => console.error("Database sync error:", err));
+            else alert("❌ Firebase Error: " + res.status + ". You might not have Admin write permissions on Firestore.");
+        }).catch(err => alert("Firebase Network Error: " + err.message));
 
         // Excel Webhook Sync via Apps Script
         if (window.DS_APP_SCRIPT_URL) {
@@ -3981,7 +3981,11 @@ function saveCartInlineEdit(productId, closeEdit = true) {
                     price: newRate,
                     packing: newPacking
                 })
-            }).catch(e => console.error("Excel Webhook error:", e));
+            }).then(r => r.json())
+              .then(data => {
+                 if (!data.success) alert("❌ Excel Error: " + data.msg);
+              })
+              .catch(e => alert("Excel Webhook Error: Did you deploy the New Version in Apps Script?"));
         }
     }
 }
