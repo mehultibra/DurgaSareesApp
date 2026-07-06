@@ -3952,7 +3952,19 @@ function saveCartInlineEdit(productId, closeEdit = true) {
     openCart(); // Re-render to show updated static text
 
     // 🚀 NEW: 2-WAY SYNC - FIREBASE & EXCEL WEBHOOK
+    function showDevLog(msg, isErr) {
+        var d = document.createElement('div');
+        d.style.position = 'fixed'; d.style.bottom = '20px'; d.style.left = '10px'; d.style.right = '10px';
+        d.style.background = isErr ? '#c62828' : '#2e7d32'; d.style.color = '#fff';
+        d.style.padding = '12px'; d.style.borderRadius = '8px'; d.style.zIndex = '999999';
+        d.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)'; d.style.fontSize = '14px';
+        d.innerText = msg;
+        document.body.appendChild(d);
+        setTimeout(() => d.remove(), 7000);
+    }
+
     if (matchP && matchP.docId) {
+        showDevLog("Syncing: " + matchP.name + " -> Rate: " + newRate + " Pack: " + newPacking, false);
         // Firebase Live DB Update
         var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
         var payload = {
@@ -3967,9 +3979,9 @@ function saveCartInlineEdit(productId, closeEdit = true) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         }, 1).then(res => {
-            if (res.ok) console.log("✅ Live Database Updated Successfully for " + matchP.name);
-            else alert("❌ Firebase Error: " + res.status + ". You might not have Admin write permissions on Firestore.");
-        }).catch(err => alert("Firebase Network Error: " + err.message));
+            if (res.ok) showDevLog("✅ Firebase Updated: " + matchP.name, false);
+            else showDevLog("❌ FB Err " + res.status + " - No Admin Perms?", true);
+        }).catch(err => showDevLog("FB Net Err: " + err.message, true));
 
         // Excel Webhook Sync via Apps Script
         if (window.DS_APP_SCRIPT_URL) {
@@ -3983,10 +3995,15 @@ function saveCartInlineEdit(productId, closeEdit = true) {
                 })
             }).then(r => r.json())
               .then(data => {
-                 if (!data.success) alert("❌ Excel Error: " + data.msg);
+                 if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
+                 else showDevLog("✅ Excel Updated: " + matchP.name, false);
               })
-              .catch(e => alert("Excel Webhook Error: Did you deploy the New Version in Apps Script?"));
+              .catch(e => showDevLog("Excel Net Err: " + e.message, true));
+        } else {
+             showDevLog("❌ DS_APP_SCRIPT_URL is missing!", true);
         }
+    } else {
+        showDevLog("❌ matchP or docId missing for " + productId, true);
     }
 }
 
