@@ -4711,3 +4711,205 @@ window.processCameraOutbox = async function () {
 
 
 
+
+// ==========================================
+// 🖨️ NAS PRINT RELAY: HTML-TO-BITMAP TSPL ENGINE
+// ==========================================
+
+window.currentPrintType = null;
+window.currentPrintCanvas = null;
+
+function previewLabel(type) {
+    if (!curProduct) return;
+    window.currentPrintType = type;
+    document.getElementById('printTypeSpan').innerText = type === 'barcode' ? '(Barcode)' : '(Tag)';
+    
+    var tplId = type === 'barcode' ? 'tpl_barcode' : 'tpl_tag';
+    var tpl = document.getElementById(tplId);
+    
+    // Inject Data
+    var cdObj = JSON.parse(localStorage.getItem("dsCustomerDetails") || "{}");
+    var firmName = cdObj.firm || "DURGA SAREES";
+    
+    if (type === 'barcode') {
+        document.getElementById('lbl_bc_firm').innerText = firmName;
+        document.getElementById('lbl_bc_name').innerText = curProduct.name;
+        document.getElementById('lbl_bc_price').innerText = curProduct.price || '0';
+        document.getElementById('lbl_bc_pack').innerText = curProduct.packing || '1';
+        
+        // Auto-scale name
+        var nameEl = document.getElementById('lbl_bc_name');
+        nameEl.style.fontSize = '40px'; // Reset
+        if (curProduct.name.length > 20) nameEl.style.fontSize = '30px';
+        if (curProduct.name.length > 30) nameEl.style.fontSize = '24px';
+        
+        // Generate Barcode
+        JsBarcode("#lbl_bc_barcode", curProduct.sku || "00000", {
+            format: "CODE128",
+            width: 3,
+            height: 100,
+            displayValue: true,
+            fontSize: 24,
+            margin: 0
+        });
+    } else {
+        document.getElementById('lbl_tag_firm').innerText = firmName;
+        document.getElementById('lbl_tag_name').innerText = curProduct.name;
+        document.getElementById('lbl_tag_mrp').innerText = curProduct.price ? Math.round(curProduct.price * 1.5) : '0'; // Fake MRP
+        document.getElementById('lbl_tag_sku').innerText = curProduct.sku || "-";
+        
+        var nameEl = document.getElementById('lbl_tag_name');
+        nameEl.style.fontSize = '48px'; // Reset
+        if (curProduct.name.length > 20) nameEl.style.fontSize = '36px';
+        if (curProduct.name.length > 30) nameEl.style.fontSize = '28px';
+
+        JsBarcode("#lbl_tag_barcode", curProduct.sku || "00000", {
+            format: "CODE128",
+            width: 4,
+            height: 120,
+            displayValue: true,
+            fontSize: 30,
+            margin: 0
+        });
+    }
+
+    // Render with html2canvas
+    var container = document.getElementById('printPreviewCanvasContainer');
+    container.innerHTML = 'Rendering...';
+    openModal('printPreviewModal');
+
+    setTimeout(() => {
+        html2canvas(tpl, { scale: 1 }).then(canvas => {
+            window.currentPrintCanvas = canvas;
+            // Display scaled-down preview for the phone screen
+            var displayCanvas = document.createElement('canvas');
+            var ctx = displayCanvas.getContext('2d');
+            displayCanvas.width = canvas.width / 2;
+            displayCanvas.height = canvas.height / 2;
+            ctx.drawImage(canvas, 0, 0, displayCanvas.width, displayCanvas.height);
+            displayCanvas.style.maxWidth = '100%';
+            
+            container.innerHTML = '';
+            container.appendChild(displayCanvas);
+        });
+    }, 100);
+}
+
+function confirmPrint() {
+    if (!window.currentPrintCanvas) return;
+    
+    // Printer IPs
+    var PRINTER_IP = window.currentPrintType === 'barcode' ? 
+        (localStorage.getItem("dsBarcodePrinterIp") || prompt("Enter Barcode Printer IP (e.g. 192.168.1.101):")) :
+        (localStorage.getItem("dsTagPrinterIp") || prompt("Enter Tag Printer IP (e.g. 192.168.1.102):"));
+    
+    if (!PRINTER_IP) return;
+    if (window.currentPrintType === 'barcode') localStorage.setItem("dsBarcodePrinterIp", PRINTER_IP);
+    else localStorage.setItem("dsTagPrinterIp", PRINTER_IP);
+
+    var btn = document.getElementById('btnPrintConfirm');
+    btn.innerText = "Connecting...";
+    btn.disabled = true;
+
+    // Convert Canvas to TSPL payload
+    var tsplPayload = generateTSPL(window.currentPrintCanvas, window.currentPrintType);
+    var base64Payload = uint8ToBase64(tsplPayload);
+
+    // DIRECT NATIVE TCP PRINTING (No NAS Required)
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TcpSocket) {
+        var TcpSocket = window.Capacitor.Plugins.TcpSocket;
+        
+        TcpSocket.connect({ address: PRINTER_IP, port: 9100 })
+            .then(function(res) {
+                btn.innerText = "Sending...";
+                // Depending on the exact plugin version, we might need res.connectionId
+                // But most standard TCP plugins support this standard format:
+                TcpSocket.send({ data: base64Payload })
+                    .then(function() {
+                        TcpSocket.disconnect();
+                        btn.innerText = "Sent ✅";
+                        setTimeout(() => { closeModals(); btn.innerText = "PRINT"; btn.disabled = false; }, 1500);
+                    })
+                    .catch(function(err) {
+                        alert("Print send failed: " + err.message);
+                        TcpSocket.disconnect();
+                        btn.innerText = "PRINT"; btn.disabled = false;
+                    });
+            })
+            .catch(function(err) {
+                alert("Printer connection failed. Is IP correct? " + err.message);
+                btn.innerText = "PRINT"; btn.disabled = false;
+            });
+    } else {
+        alert("TCP Plugin not installed! Please run 'npm install capacitor-tcp-socket' and rebuild your APK.");
+        btn.innerText = "PRINT"; btn.disabled = false;
+    }
+}
+
+function generateTSPL(canvas, type) {
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width;
+    var h = canvas.height;
+    var imgData = ctx.getImageData(0, 0, w, h).data;
+
+    var widthBytes = Math.ceil(w / 8);
+    var bitmapLength = widthBytes * h;
+    var bitmapData = new Uint8Array(bitmapLength);
+
+    // Floyd-Steinberg or simple thresholding to 1-bit monochrome
+    for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+            var i = (y * w + x) * 4;
+            // RGB to Grayscale
+            var gray = (imgData[i] * 0.299 + imgData[i+1] * 0.587 + imgData[i+2] * 0.114);
+            var isBlack = gray < 128; // Simple threshold
+            
+            if (isBlack) {
+                var byteIndex = (y * widthBytes) + Math.floor(x / 8);
+                var bitIndex = 7 - (x % 8);
+                bitmapData[byteIndex] |= (1 << bitIndex);
+            }
+        }
+    }
+
+    // TSPL Commands
+    var headerStr = "";
+    if (type === 'barcode') {
+        headerStr += "SIZE 72 mm, 48 mm\r\n";
+        headerStr += "GAP 3 mm, 0 mm\r\n";
+    } else {
+        headerStr += "SIZE 78 mm, 57 mm\r\n";
+        headerStr += "GAP 0 mm, 0 mm\r\n"; // Continuous tearable
+    }
+    headerStr += "DIRECTION 1\r\n";
+    headerStr += "CLS\r\n";
+    
+    // BITMAP X,Y,width_bytes,height,mode,bitmap_data
+    var bitmapCmdStr = "BITMAP 0,0," + widthBytes + "," + h + ",0,";
+    
+    var footerStr = "\r\nPRINT 1\r\n";
+
+    var headerBytes = new TextEncoder().encode(headerStr + bitmapCmdStr);
+    var footerBytes = new TextEncoder().encode(footerStr);
+
+    var finalPayload = new Uint8Array(headerBytes.length + bitmapData.length + footerBytes.length);
+    finalPayload.set(headerBytes, 0);
+    finalPayload.set(bitmapData, headerBytes.length);
+    finalPayload.set(footerBytes, headerBytes.length + bitmapData.length);
+
+    return finalPayload;
+}
+
+function uint8ToBase64(u8Arr) {
+    var CHUNK_SIZE = 0x8000;
+    var index = 0;
+    var length = u8Arr.length;
+    var result = '';
+    var slice;
+    while (index < length) {
+        slice = u8Arr.subarray(index, Math.min(index + CHUNK_SIZE, length));
+        result += String.fromCharCode.apply(null, slice);
+        index += CHUNK_SIZE;
+    }
+    return btoa(result);
+}

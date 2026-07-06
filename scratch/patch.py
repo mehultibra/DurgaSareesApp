@@ -1,32 +1,19 @@
-const fs = require('fs');
-let content = fs.readFileSync('www/app.js', 'utf8');
+import re
 
-const targetStr =     var matchP = allProducts.find(x => x.id === productId);
-    if (matchP) {
-        matchP.price = newRate;
-        matchP.packing = newPacking;
-    }
+handle = open('www/app.js', 'r', encoding='utf-8')
+content = handle.read()
+handle.close()
 
-    localStorage.setItem("dsCart", JSON.stringify(cart));
-
-    if (closeEdit) window.cartEditingMap[productId] = false;
+target = """    if (closeEdit) window.cartEditingMap[productId] = false;
     updateCartHeader();
     openCart(); // Re-render to show updated static text
-};
+}"""
 
-const replacementStr =     var matchP = allProducts.find(x => x.id === productId);
-    if (matchP) {
-        matchP.price = newRate;
-        matchP.packing = newPacking;
-    }
-
-    localStorage.setItem("dsCart", JSON.stringify(cart));
-
-    if (closeEdit) window.cartEditingMap[productId] = false;
+replacement = """    if (closeEdit) window.cartEditingMap[productId] = false;
     updateCartHeader();
     openCart(); // Re-render to show updated static text
 
-    // ?? NEW: 2-WAY SYNC - FIREBASE & EXCEL WEBHOOK
+    // 🚀 NEW: 2-WAY SYNC - FIREBASE & EXCEL WEBHOOK
     if (matchP && matchP.docId) {
         // Firebase Live DB Update
         var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
@@ -42,8 +29,8 @@ const replacementStr =     var matchP = allProducts.find(x => x.id === productId
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         }, 1).then(res => {
-            if (res.ok) console.log("? Live Database Updated Successfully for " + matchP.name);
-            else console.error("? Live Database Update Failed: " + res.status);
+            if (res.ok) console.log("✅ Live Database Updated Successfully for " + matchP.name);
+            else console.error("❍ Live Database Update Failed: " + res.status);
         }).catch(err => console.error("Database sync error:", err));
 
         // Excel Webhook Sync via Apps Script
@@ -59,12 +46,13 @@ const replacementStr =     var matchP = allProducts.find(x => x.id === productId
             }).catch(e => console.error("Excel Webhook error:", e));
         }
     }
-};
+}"""
 
-if (content.includes(targetStr)) {
-    content = content.replace(targetStr, replacementStr);
-    fs.writeFileSync('www/app.js', content, 'utf8');
-    console.log('Replaced successfully!');
-} else {
-    console.log('Could not find target string! Line endings issue?');
-}
+if target in content:
+    content = content.replace(target, replacement)
+    handle = open('www/app.js', 'w', encoding='utf-8')
+    handle.write(content)
+    handle.close()
+    print("Replaced successfully!")
+else:
+    print("Target not found!")

@@ -412,6 +412,21 @@
           </div>
           <div style="font-size: 11px; color: var(--text-light);">WhatsApp<br>PDF</div>
         </div>
+        <!-- Admin Only Print Buttons -->
+        <div id="adminPrintBarcodeBtn" onclick="previewLabel('barcode')" style="cursor: pointer;">
+          <div
+            style="background: #444; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
+            <i class="fas fa-barcode"></i>
+          </div>
+          <div style="font-size: 11px; color: var(--text-light);">Print<br>Barcode</div>
+        </div>
+        <div id="adminPrintTagBtn" onclick="previewLabel('tag')" style="cursor: pointer;">
+          <div
+            style="background: #444; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
+            <i class="fas fa-tags"></i>
+          </div>
+          <div style="font-size: 11px; color: var(--text-light);">Print<br>Tag</div>
+        </div>
         <div onclick="closeModals()" style="cursor: pointer;">
           <div
             style="background: #e0e0e0; color: #333; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
@@ -464,7 +479,50 @@
     </div>
   </div>
 
+  <!-- Print Preview Modal -->
+  <div id="printPreviewModal" class="action-modal" style="display:none; z-index: 5000;" onclick="closeModals()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="display: flex; flex-direction: column; align-items: center; background: #e0e0e0;">
+      <div class="modal-title" style="width: 100%; text-align: left;">Print Preview <span id="printTypeSpan"></span><i class="fas fa-times" onclick="closeModals()"></i></div>
+      
+      <!-- Preview Container where html2canvas output goes -->
+      <div id="printPreviewCanvasContainer" style="margin: 20px 0; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 10px;">
+          <!-- Live Preview Canvas will be injected here -->
+      </div>
+      
+      <div style="display:flex; width: 100%; gap: 10px; margin-top: 10px;">
+        <button onclick="closeModals()" style="flex:1; padding: 12px; border-radius:4px; border:1px solid #aaa; background:#fff; font-weight:bold;">Cancel</button>
+        <button id="btnPrintConfirm" onclick="confirmPrint()" style="flex:1; padding: 12px; border-radius:4px; border:none; background:var(--myntra-pink); color:white; font-weight:bold; box-shadow: 0 4px 10px rgba(255,63,108,0.4);"><i class="fas fa-print"></i> PRINT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Label Templates (Rendered at 203 DPI) -->
+  <div id="hiddenLabelTemplates" style="position: absolute; top: -9999px; left: -9999px;">
+      <!-- Barcode Sticker: 72mm x 48mm @ 203DPI = 576 x 384 pixels -->
+      <div id="tpl_barcode" style="width: 576px; height: 384px; background: white; color: black; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box; font-family: sans-serif;">
+          <div id="lbl_bc_firm" style="font-size: 24px; font-weight: bold; margin-bottom: 5px;">DURGA SAREES</div>
+          <div id="lbl_bc_name" style="font-size: 40px; font-weight: 900; text-align: center; line-height: 1.1; margin-bottom: 15px; width: 100%;">PRODUCT NAME</div>
+          <svg id="lbl_bc_barcode"></svg>
+          <div style="display: flex; justify-content: space-between; width: 90%; margin-top: 15px; align-items: baseline;">
+              <div style="font-size: 28px; font-weight: bold;">₹ <span id="lbl_bc_price">0</span></div>
+              <div style="font-size: 20px;">Pack: <span id="lbl_bc_pack" style="font-weight:bold;">1</span></div>
+          </div>
+      </div>
+
+      <!-- Tag Sticker: 78mm x 57mm @ 203DPI = 624 x 456 pixels -->
+      <div id="tpl_tag" style="width: 624px; height: 456px; background: white; color: black; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; box-sizing: border-box; font-family: sans-serif; border: 2px dashed #000;">
+          <div id="lbl_tag_firm" style="font-size: 30px; font-weight: bold; margin-bottom: 10px; letter-spacing: 2px;">DURGA SAREES</div>
+          <div id="lbl_tag_name" style="font-size: 48px; font-weight: 900; text-align: center; line-height: 1.1; margin-bottom: 20px; width: 100%;">PRODUCT NAME</div>
+          <svg id="lbl_tag_barcode"></svg>
+          <div style="font-size: 36px; font-weight: bold; margin-top: 20px;">MRP: ₹ <span id="lbl_tag_mrp">0</span></div>
+          <div style="font-size: 24px; margin-top: 10px;">SKU: <span id="lbl_tag_sku" style="font-weight:bold;">-</span></div>
+      </div>
+  </div>
+
   <script src="./pdf_engine.js"></script>
+  <!-- Barcode & HTML-to-Image Libraries for NAS Printing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </body>
 
 </html>
