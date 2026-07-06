@@ -485,8 +485,30 @@
       <div class="modal-title" style="width: 100%; text-align: left;">Print Preview <span id="printTypeSpan"></span><i class="fas fa-times" onclick="closeModals()"></i></div>
       
       <!-- Preview Container where html2canvas output goes -->
-      <div id="printPreviewCanvasContainer" style="margin: 20px 0; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 10px;">
+      <div id="printPreviewCanvasContainer" style="margin: 15px 0; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 10px;">
           <!-- Live Preview Canvas will be injected here -->
+      </div>
+      
+      <!-- Multi-Printer Manager -->
+      <div style="width: 100%; margin-top: 5px; background: #fff; padding: 10px; border-radius: 8px; box-sizing: border-box;">
+          <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #444;">Select Printer</div>
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <select id="printerSelect" onchange="onPrinterSelectChange()" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;">
+                <option value="">-- Add New Printer --</option>
+            </select>
+            <button onclick="deletePrinter()" style="padding: 8px; background: #ff3f6c; color: white; border: none; border-radius: 4px;"><i class="fas fa-trash"></i></button>
+          </div>
+          <div style="display: flex; gap: 8px;">
+              <input type="text" id="printerNameInput" placeholder="Name (e.g. Shop)" style="flex: 1; min-width: 0; padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;" />
+              <input type="text" id="printerIpInput" placeholder="IP (10.10...)" style="flex: 1; min-width: 0; padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;" />
+              <button onclick="savePrinter()" style="padding: 8px 12px; background: #25D366; color: white; border: none; border-radius: 4px; font-weight: bold;">Save</button>
+          </div>
+      </div>
+
+      <!-- Quantity -->
+      <div style="width: 100%; margin-top: 10px; background: #fff; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box;">
+          <div style="font-size: 14px; font-weight: bold; color: #444;">Print Quantity:</div>
+          <input type="number" id="printQtyInput" value="1" min="1" style="width: 80px; padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 16px; text-align: center; font-weight: bold;" />
       </div>
       
       <div style="display:flex; width: 100%; gap: 10px; margin-top: 10px;">

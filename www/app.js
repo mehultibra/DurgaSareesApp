@@ -4776,6 +4776,10 @@ function previewLabel(type) {
     // Render with html2canvas
     var container = document.getElementById('printPreviewCanvasContainer');
     container.innerHTML = 'Rendering...';
+    
+    // Load Printers UI
+    loadPrinters();
+    
     openModal('printPreviewModal');
 
     setTimeout(() => {
@@ -4798,16 +4802,13 @@ function previewLabel(type) {
 function confirmPrint() {
     if (!window.currentPrintCanvas) return;
     
-    // Printer IPs
-    var PRINTER_IP = window.currentPrintType === 'barcode' ? 
-        (localStorage.getItem("dsBarcodePrinterIp") || prompt("Enter Barcode Printer IP (e.g. 192.168.1.101):")) :
-        (localStorage.getItem("dsTagPrinterIp") || prompt("Enter Tag Printer IP (e.g. 192.168.1.102):"));
+    var PRINTER_IP = document.getElementById('printerIpInput').value.trim();
+    if (!PRINTER_IP) {
+        alert("Please enter a Printer IP!");
+        return;
+    }
     
-    if (!PRINTER_IP) return;
-    if (window.currentPrintType === 'barcode') localStorage.setItem("dsBarcodePrinterIp", PRINTER_IP);
-    else localStorage.setItem("dsTagPrinterIp", PRINTER_IP);
-
-    var qty = prompt("Enter quantity to print:", "1");
+    var qty = document.getElementById('printQtyInput').value;
     if (!qty || isNaN(qty) || parseInt(qty) < 1) return;
 
     var btn = document.getElementById('btnPrintConfirm');
@@ -4845,17 +4846,105 @@ function confirmPrint() {
                 });
             })
             .catch(function(err) {
-                var newIp = prompt("Printer connection failed!\nError: " + err.message + "\n\nEdit IP address to save and try again:", PRINTER_IP);
-                if (newIp !== null && newIp.trim() !== "") {
-                    if (window.currentPrintType === 'barcode') localStorage.setItem("dsBarcodePrinterIp", newIp.trim());
-                    else localStorage.setItem("dsTagPrinterIp", newIp.trim());
-                }
+                alert("Printer connection failed!\nError: " + err.message + "\n\nPlease check the IP address and make sure you are on the same Wi-Fi.");
                 btn.innerText = "PRINT"; btn.disabled = false;
             });
     } else {
         alert("TCP Plugin not installed! Please run 'npm install capacitor-tcp-socket' and rebuild your APK.");
         btn.innerText = "PRINT"; btn.disabled = false;
     }
+}
+
+// ==========================================
+// MULTI-PRINTER UI LOGIC
+// ==========================================
+function loadPrinters() {
+    var printers = JSON.parse(localStorage.getItem('dsPrinters') || "[]");
+    var sel = document.getElementById('printerSelect');
+    sel.innerHTML = '<option value="">-- Add New Printer --</option>';
+    
+    printers.forEach((p, i) => {
+        var opt = document.createElement('option');
+        opt.value = i;
+        opt.innerText = p.name + " (" + p.ip + ")";
+        sel.appendChild(opt);
+    });
+
+    // Auto-select the last used IP for this type
+    var lastIp = window.currentPrintType === 'barcode' ? localStorage.getItem("dsBarcodePrinterIp") : localStorage.getItem("dsTagPrinterIp");
+    
+    if (lastIp) {
+        var foundIdx = printers.findIndex(p => p.ip === lastIp);
+        if (foundIdx !== -1) {
+            sel.value = foundIdx;
+            document.getElementById('printerNameInput').value = printers[foundIdx].name;
+            document.getElementById('printerIpInput').value = printers[foundIdx].ip;
+        } else {
+            sel.value = "";
+            document.getElementById('printerNameInput').value = "";
+            document.getElementById('printerIpInput').value = lastIp;
+        }
+    } else {
+        sel.value = "";
+        document.getElementById('printerNameInput').value = "";
+        document.getElementById('printerIpInput').value = "";
+    }
+}
+
+function onPrinterSelectChange() {
+    var sel = document.getElementById('printerSelect');
+    var printers = JSON.parse(localStorage.getItem('dsPrinters') || "[]");
+    
+    if (sel.value === "") {
+        document.getElementById('printerNameInput').value = "";
+        document.getElementById('printerIpInput').value = "";
+    } else {
+        var p = printers[sel.value];
+        document.getElementById('printerNameInput').value = p.name;
+        document.getElementById('printerIpInput').value = p.ip;
+    }
+}
+
+function savePrinter() {
+    var name = document.getElementById('printerNameInput').value.trim();
+    var ip = document.getElementById('printerIpInput').value.trim();
+    
+    if (!name || !ip) {
+        alert("Please enter both Name and IP Address!");
+        return;
+    }
+    
+    var printers = JSON.parse(localStorage.getItem('dsPrinters') || "[]");
+    var sel = document.getElementById('printerSelect');
+    
+    if (sel.value === "") {
+        // Add new
+        printers.push({ name: name, ip: ip });
+    } else {
+        // Update existing
+        printers[sel.value] = { name: name, ip: ip };
+    }
+    
+    localStorage.setItem('dsPrinters', JSON.stringify(printers));
+    
+    // Set as default for this type
+    if (window.currentPrintType === 'barcode') localStorage.setItem("dsBarcodePrinterIp", ip);
+    else localStorage.setItem("dsTagPrinterIp", ip);
+    
+    loadPrinters();
+    alert("Printer saved!");
+}
+
+function deletePrinter() {
+    var sel = document.getElementById('printerSelect');
+    if (sel.value === "") return;
+    
+    if (!confirm("Delete this printer?")) return;
+    
+    var printers = JSON.parse(localStorage.getItem('dsPrinters') || "[]");
+    printers.splice(sel.value, 1);
+    localStorage.setItem('dsPrinters', JSON.stringify(printers));
+    loadPrinters();
 }
 
 function generateTSPL(canvas, type, qty) {
