@@ -3248,6 +3248,10 @@ function showDevLog(msg, isErr) {
 }
 
 function saveProductEdit(p) {
+    if (!window.isSuperAdmin) {
+        console.warn("Unauthorized edit attempt blocked.");
+        return;
+    }
     try {
         var edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {};
         edited[p.name] = {
@@ -3303,6 +3307,13 @@ function saveProductEdit(p) {
 function setupEditableFields() {
     var priceBot = document.getElementById('dtPriceBot');
     var packBot = document.getElementById('dtPackBot');
+
+    // SECURITY: Remove contenteditable for non-admins
+    if (!window.isSuperAdmin) {
+        if (priceBot) priceBot.removeAttribute('contenteditable');
+        if (packBot) packBot.removeAttribute('contenteditable');
+        return;
+    }
 
     if (priceBot) {
         priceBot.addEventListener('keydown', function (e) {
@@ -3953,6 +3964,11 @@ function toggleCartInlineEdit(productId) {
 }
 
 function saveCartInlineEdit(productId, closeEdit = true) {
+    if (!window.isSuperAdmin) {
+        console.warn("Unauthorized cart edit attempt blocked.");
+        return;
+    }
+    
     var rateInput = document.getElementById('ie_rate_' + productId);
     var packInput = document.getElementById('ie_pack_' + productId);
 
