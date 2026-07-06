@@ -212,3 +212,49 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         return null;
     }
 });
+
+exports.syncFromExcel = functions.https.onRequest(async (req, res) => {
+    // Enable CORS
+    res.set('Access-Control-Allow-Origin', '*');
+    if (req.method === 'OPTIONS') {
+        res.set('Access-Control-Allow-Methods', 'POST');
+        res.set('Access-Control-Allow-Headers', 'Content-Type');
+        res.status(204).send('');
+        return;
+    }
+
+    if (req.method !== 'POST') {
+        return res.status(405).send('Method Not Allowed');
+    }
+
+    try {
+        const admin = require('firebase-admin');
+        if (admin.apps.length === 0) admin.initializeApp();
+
+        const data = req.body;
+        if (!data || !data.productName) {
+            return res.status(400).json({ error: 'Missing productName' });
+        }
+
+        const db = admin.firestore();
+        const snapshot = await db.collection('Products').where('name', '==', data.productName).get();
+        
+        if (snapshot.empty) {
+            return res.status(404).json({ error: 'Product not found' });
+        }
+
+        const doc = snapshot.docs[0];
+        const updates = {};
+        if (data.price !== undefined) updates.price = parseInt(data.price) || 0;
+        if (data.packing !== undefined) updates.packing = String(data.packing);
+        
+        if (Object.keys(updates).length > 0) {
+            await doc.ref.update(updates);
+        }
+
+        res.json({ success: true, docId: doc.id, updates });
+    } catch (err) {
+        console.error('syncFromExcel Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
