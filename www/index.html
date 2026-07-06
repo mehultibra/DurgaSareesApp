@@ -489,6 +489,14 @@
           <!-- Live Preview Canvas will be injected here -->
       </div>
       
+      <!-- Label Details Editor -->
+      <div id="tagEditorContainer" style="display: none; width: 100%; margin-top: 5px; background: #fff; padding: 10px; border-radius: 8px; box-sizing: border-box;">
+          <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #444;">Edit Label Details</div>
+          <input type="text" id="editTagDesc1" placeholder="Line 1 (e.g. 5*2 Marshmallow Padding)" onkeyup="updateLiveLabel()" style="width: 100%; padding: 6px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 13px;" />
+          <input type="text" id="editTagDesc2" placeholder="Line 2 (e.g. Self Pattern Border)" onkeyup="updateLiveLabel()" style="width: 100%; padding: 6px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 13px;" />
+          <input type="text" id="editTagCut" placeholder="Cut details (e.g. CUT 6 MTR...)" onkeyup="updateLiveLabel()" style="width: 100%; padding: 6px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 13px;" />
+      </div>
+      
       <!-- Multi-Printer Manager -->
       <div style="width: 100%; margin-top: 5px; background: #fff; padding: 10px; border-radius: 8px; box-sizing: border-box;">
           <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #444;">Select Printer</div>
@@ -532,12 +540,20 @@
       </div>
 
       <!-- Tag Sticker: 78mm x 57mm @ 203DPI = 624 x 456 pixels -->
-      <div id="tpl_tag" style="width: 624px; height: 456px; background: white; color: black; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; box-sizing: border-box; font-family: sans-serif; border: 2px dashed #000;">
-          <div id="lbl_tag_firm" style="font-size: 30px; font-weight: bold; margin-bottom: 10px; letter-spacing: 2px;">DURGA SAREES</div>
-          <div id="lbl_tag_name" style="font-size: 48px; font-weight: 900; text-align: center; line-height: 1.1; margin-bottom: 20px; width: 100%;">PRODUCT NAME</div>
-          <svg id="lbl_tag_barcode"></svg>
-          <div style="font-size: 36px; font-weight: bold; margin-top: 20px;">MRP: ₹ <span id="lbl_tag_mrp">0</span></div>
-          <div style="font-size: 24px; margin-top: 10px;">SKU: <span id="lbl_tag_sku" style="font-weight:bold;">-</span></div>
+      <div id="tpl_tag" style="width: 624px; height: 456px; background: white; padding: 20px 40px; box-sizing: border-box; text-align: center; color: black; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Times New Roman', serif;">
+          
+          <div id="lbl_tag_name" style="font-size: 52px; font-weight: bold; text-transform: uppercase; white-space: nowrap; overflow: hidden; width: 100%; letter-spacing: 2px;">MARSMALLOW JAQRD</div>
+          
+          <div style="width: 90%; height: 4px; background: black; margin: 12px 0;"></div>
+          
+          <div id="lbl_tag_desc1" style="font-size: 34px; margin-bottom: 8px;">5*2 Marshmallow Padding Jaquard</div>
+          <div id="lbl_tag_desc2" style="font-size: 34px; margin-bottom: 12px;">Self Pattern Border</div>
+          <div id="lbl_tag_cut" style="font-size: 38px; font-weight: bold; margin-bottom: 15px;">CUT 6 MTR + WTH BLOUSE</div>
+          
+          <div style="font-size: 36px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+              DNO : <span id="lbl_tag_sku" style="font-weight: bold;">475</span>
+          </div>
+          
       </div>
   </div>
 

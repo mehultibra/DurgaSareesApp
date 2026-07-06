@@ -4732,6 +4732,8 @@ function previewLabel(type) {
     var firmName = cdObj.firm || "DURGA SAREES";
     
     if (type === 'barcode') {
+        document.getElementById('tagEditorContainer').style.display = 'none';
+        
         document.getElementById('lbl_bc_firm').innerText = firmName;
         document.getElementById('lbl_bc_name').innerText = curProduct.name;
         document.getElementById('lbl_bc_price').innerText = curProduct.price || '0';
@@ -4753,24 +4755,25 @@ function previewLabel(type) {
             margin: 0
         });
     } else {
-        document.getElementById('lbl_tag_firm').innerText = firmName;
+        document.getElementById('tagEditorContainer').style.display = 'block';
+        
+        // Pre-fill inputs from localStorage memory to avoid typing repeatedly
+        document.getElementById('editTagDesc1').value = localStorage.getItem("dsTagDesc1") || "";
+        document.getElementById('editTagDesc2').value = localStorage.getItem("dsTagDesc2") || "";
+        document.getElementById('editTagCut').value = localStorage.getItem("dsTagCut") || "CUT 6 MTR + WTH BLOUSE";
+        
+        // Set the hidden template values
         document.getElementById('lbl_tag_name').innerText = curProduct.name;
-        document.getElementById('lbl_tag_mrp').innerText = curProduct.price ? Math.round(curProduct.price * 1.5) : '0'; // Fake MRP
+        document.getElementById('lbl_tag_desc1').innerText = document.getElementById('editTagDesc1').value;
+        document.getElementById('lbl_tag_desc2').innerText = document.getElementById('editTagDesc2').value;
+        document.getElementById('lbl_tag_cut').innerText = document.getElementById('editTagCut').value;
         document.getElementById('lbl_tag_sku').innerText = curProduct.sku || "-";
         
+        // Scale product name if very long
         var nameEl = document.getElementById('lbl_tag_name');
-        nameEl.style.fontSize = '48px'; // Reset
-        if (curProduct.name.length > 20) nameEl.style.fontSize = '36px';
-        if (curProduct.name.length > 30) nameEl.style.fontSize = '28px';
-
-        JsBarcode("#lbl_tag_barcode", curProduct.sku || "00000", {
-            format: "CODE128",
-            width: 4,
-            height: 120,
-            displayValue: true,
-            fontSize: 30,
-            margin: 0
-        });
+        nameEl.style.fontSize = '52px'; // Reset
+        if (curProduct.name.length > 15) nameEl.style.fontSize = '42px';
+        if (curProduct.name.length > 22) nameEl.style.fontSize = '34px';
     }
 
     // Render with html2canvas
@@ -4797,6 +4800,41 @@ function previewLabel(type) {
             container.appendChild(displayCanvas);
         });
     }, 100);
+}
+
+// Called when typing in the editor inputs to live-update the canvas
+function updateLiveLabel() {
+    if (window.currentPrintType !== 'tag') return;
+    
+    var desc1 = document.getElementById('editTagDesc1').value;
+    var desc2 = document.getElementById('editTagDesc2').value;
+    var cut = document.getElementById('editTagCut').value;
+    
+    // Save defaults
+    localStorage.setItem("dsTagDesc1", desc1);
+    localStorage.setItem("dsTagDesc2", desc2);
+    localStorage.setItem("dsTagCut", cut);
+    
+    // Update hidden HTML template
+    document.getElementById('lbl_tag_desc1').innerText = desc1;
+    document.getElementById('lbl_tag_desc2').innerText = desc2;
+    document.getElementById('lbl_tag_cut').innerText = cut;
+    
+    // Re-render canvas
+    var tpl = document.getElementById('tpl_tag');
+    var container = document.getElementById('printPreviewCanvasContainer');
+    
+    html2canvas(tpl, { scale: 1 }).then(canvas => {
+        window.currentPrintCanvas = canvas;
+        var displayCanvas = document.createElement('canvas');
+        var ctx = displayCanvas.getContext('2d');
+        displayCanvas.width = canvas.width / 2;
+        displayCanvas.height = canvas.height / 2;
+        ctx.drawImage(canvas, 0, 0, displayCanvas.width, displayCanvas.height);
+        displayCanvas.style.maxWidth = '100%';
+        container.innerHTML = '';
+        container.appendChild(displayCanvas);
+    });
 }
 
 function confirmPrint() {
@@ -4961,8 +4999,19 @@ function generateTSPL(canvas, type, qty) {
     for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
             var i = (y * w + x) * 4;
+            
+            var r = imgData[i];
+            var g = imgData[i+1];
+            var b = imgData[i+2];
+            var a = imgData[i+3];
+            
+            // Treat transparent pixels as white (background)
+            if (a < 128) {
+                r = 255; g = 255; b = 255;
+            }
+            
             // RGB to Grayscale
-            var gray = (imgData[i] * 0.299 + imgData[i+1] * 0.587 + imgData[i+2] * 0.114);
+            var gray = (r * 0.299 + g * 0.587 + b * 0.114);
             var isBlack = gray < 128; // Simple threshold
             
             if (isBlack) {
@@ -4982,7 +5031,7 @@ function generateTSPL(canvas, type, qty) {
         headerStr += "SIZE 78 mm, 57 mm\r\n";
         headerStr += "GAP 0 mm, 0 mm\r\n"; // Continuous tearable
     }
-    headerStr += "DIRECTION 1\r\n";
+    headerStr += "DIRECTION 0\r\n";
     headerStr += "CLS\r\n";
     
     // BITMAP X,Y,width_bytes,height,mode,bitmap_data
