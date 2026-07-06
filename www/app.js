@@ -3912,6 +3912,8 @@ function saveCartInlineEdit(productId, closeEdit = true) {
         }
     }
 
+    var productName = items.length > 0 ? items[0].p.name : "";
+
     items.forEach(item => {
         var safeDesignLabel = item.design || 'DIRECT';
         var qtyInput = document.getElementById('ie_qty_' + productId + '_' + safeDesignLabel);
@@ -3928,7 +3930,7 @@ function saveCartInlineEdit(productId, closeEdit = true) {
         }
     });
 
-    // Save to edited memory so changes persist across cart wipes?
+    // Save to edited memory so changes persist across cart wipes
     if (items.length > 0) {
         var edited = {};
         try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
