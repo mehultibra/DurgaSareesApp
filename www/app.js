@@ -4807,12 +4807,15 @@ function confirmPrint() {
     if (window.currentPrintType === 'barcode') localStorage.setItem("dsBarcodePrinterIp", PRINTER_IP);
     else localStorage.setItem("dsTagPrinterIp", PRINTER_IP);
 
+    var qty = prompt("Enter quantity to print:", "1");
+    if (!qty || isNaN(qty) || parseInt(qty) < 1) return;
+
     var btn = document.getElementById('btnPrintConfirm');
     btn.innerText = "Connecting...";
     btn.disabled = true;
 
     // Convert Canvas to TSPL payload
-    var tsplPayload = generateTSPL(window.currentPrintCanvas, window.currentPrintType);
+    var tsplPayload = generateTSPL(window.currentPrintCanvas, window.currentPrintType, parseInt(qty));
     var base64Payload = uint8ToBase64(tsplPayload);
 
     // DIRECT NATIVE TCP PRINTING (No NAS Required)
@@ -4830,8 +4833,9 @@ function confirmPrint() {
                     encoding: 'base64' 
                 })
                 .then(function() {
-                    TcpSocket.disconnect({ client: clientId });
                     btn.innerText = "Sent ✅";
+                    // Delay disconnect slightly to ensure OS flushes the TCP buffer to the printer
+                    setTimeout(() => { TcpSocket.disconnect({ client: clientId }); }, 500);
                     setTimeout(() => { closeModals(); btn.innerText = "PRINT"; btn.disabled = false; }, 1500);
                 })
                 .catch(function(err) {
@@ -4841,10 +4845,10 @@ function confirmPrint() {
                 });
             })
             .catch(function(err) {
-                var reset = confirm("Printer connection failed! Is the IP correct? (" + PRINTER_IP + ")\n\nError: " + err.message + "\n\nDo you want to reset the saved IP address?");
-                if (reset) {
-                    if (window.currentPrintType === 'barcode') localStorage.removeItem("dsBarcodePrinterIp");
-                    else localStorage.removeItem("dsTagPrinterIp");
+                var newIp = prompt("Printer connection failed!\nError: " + err.message + "\n\nEdit IP address to save and try again:", PRINTER_IP);
+                if (newIp !== null && newIp.trim() !== "") {
+                    if (window.currentPrintType === 'barcode') localStorage.setItem("dsBarcodePrinterIp", newIp.trim());
+                    else localStorage.setItem("dsTagPrinterIp", newIp.trim());
                 }
                 btn.innerText = "PRINT"; btn.disabled = false;
             });
@@ -4854,7 +4858,7 @@ function confirmPrint() {
     }
 }
 
-function generateTSPL(canvas, type) {
+function generateTSPL(canvas, type, qty) {
     var ctx = canvas.getContext('2d');
     var w = canvas.width;
     var h = canvas.height;
@@ -4895,7 +4899,7 @@ function generateTSPL(canvas, type) {
     // BITMAP X,Y,width_bytes,height,mode,bitmap_data
     var bitmapCmdStr = "BITMAP 0,0," + widthBytes + "," + h + ",0,";
     
-    var footerStr = "\r\nPRINT 1\r\n";
+    var footerStr = "\r\nPRINT " + (qty || 1) + "\r\n";
 
     var headerBytes = new TextEncoder().encode(headerStr + bitmapCmdStr);
     var footerBytes = new TextEncoder().encode(footerStr);
