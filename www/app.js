@@ -4819,22 +4819,26 @@ function confirmPrint() {
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TcpSocket) {
         var TcpSocket = window.Capacitor.Plugins.TcpSocket;
         
-        TcpSocket.connect({ address: PRINTER_IP, port: 9100 })
+        TcpSocket.connect({ ipAddress: PRINTER_IP, port: 9100 })
             .then(function(res) {
                 btn.innerText = "Sending...";
-                // Depending on the exact plugin version, we might need res.connectionId
-                // But most standard TCP plugins support this standard format:
-                TcpSocket.send({ data: base64Payload })
-                    .then(function() {
-                        TcpSocket.disconnect();
-                        btn.innerText = "Sent ✅";
-                        setTimeout(() => { closeModals(); btn.innerText = "PRINT"; btn.disabled = false; }, 1500);
-                    })
-                    .catch(function(err) {
-                        alert("Print send failed: " + err.message);
-                        TcpSocket.disconnect();
-                        btn.innerText = "PRINT"; btn.disabled = false;
-                    });
+                var clientId = res.client;
+                
+                TcpSocket.send({ 
+                    client: clientId, 
+                    data: base64Payload, 
+                    encoding: 'base64' 
+                })
+                .then(function() {
+                    TcpSocket.disconnect({ client: clientId });
+                    btn.innerText = "Sent ✅";
+                    setTimeout(() => { closeModals(); btn.innerText = "PRINT"; btn.disabled = false; }, 1500);
+                })
+                .catch(function(err) {
+                    alert("Print send failed: " + err.message);
+                    TcpSocket.disconnect({ client: clientId });
+                    btn.innerText = "PRINT"; btn.disabled = false;
+                });
             })
             .catch(function(err) {
                 var reset = confirm("Printer connection failed! Is the IP correct? (" + PRINTER_IP + ")\n\nError: " + err.message + "\n\nDo you want to reset the saved IP address?");
