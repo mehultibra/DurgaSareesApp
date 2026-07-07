@@ -3139,7 +3139,7 @@ async function syncImages(silent = false) {
                                 var coverBlob = await coverRes.blob();
                                 if (coverBlob.size === 0) {
                                     lastFailReason = "Cover image is 0 bytes (corrupted)";
-                                    if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', p.name + " | " + coverFile);
+                                    if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', coverFile + " | " + p.name);
                                     downloaded = false;
                                 } else {
                                     await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
@@ -3173,7 +3173,7 @@ async function syncImages(silent = false) {
                                     if (dRes.ok) {
                                         var dBlob = await dRes.blob();
                                         if (dBlob.size === 0) {
-                                            if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', p.name + " | " + fname);
+                                            if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', fname + " | " + p.name);
                                             downloaded = false;
                                             lastFailReason = (lastFailReason ? lastFailReason + ", " : "Corrupted: ") + fname;
                                         } else {
