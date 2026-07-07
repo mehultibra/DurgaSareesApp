@@ -481,54 +481,49 @@
 
   <!-- Print Preview Modal -->
   <div id="printPreviewModal" class="action-modal" style="display:none; z-index: 5000;" onclick="closeModals()">
-    <div class="modal-content" onclick="event.stopPropagation()" style="display: flex; flex-direction: column; align-items: center; background: #e0e0e0;">
+    <div class="modal-content" onclick="event.stopPropagation()" style="display: flex; flex-direction: column; align-items: center; background: #e0e0e0; max-height: 90vh; overflow-y: auto;">
       <div class="modal-title" style="width: 100%; text-align: left;">Print Preview <span id="printTypeSpan"></span><i class="fas fa-times" onclick="closeModals()"></i></div>
       
-      <!-- Preview Container where html2canvas output goes -->
-      <div id="printPreviewCanvasContainer" style="margin: 15px 0; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 10px;">
-          <!-- Live Preview Canvas will be injected here -->
-      </div>
-      
-      <!-- Label Details Editor -->
-      <div id="tagEditorContainer" style="display: none; width: 100%; margin-top: 5px; background: #fff; padding: 10px; border-radius: 8px; box-sizing: border-box;">
-          <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #444;">Edit Label Details</div>
-          <input type="text" id="editTagDesc1" placeholder="Line 1 (e.g. 5*2 Marshmallow Padding)" onkeyup="updateLiveLabel()" style="width: 100%; padding: 6px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 13px;" />
-          <input type="text" id="editTagDesc2" placeholder="Line 2 (e.g. Self Pattern Border)" onkeyup="updateLiveLabel()" style="width: 100%; padding: 6px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 13px;" />
-          <input type="text" id="editTagCut" placeholder="Cut details (e.g. CUT 6 MTR...)" onkeyup="updateLiveLabel()" style="width: 100%; padding: 6px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 13px;" />
-      </div>
-      
-      <!-- Multi-Printer Manager -->
-      <div style="width: 100%; margin-top: 5px; background: #fff; padding: 10px; border-radius: 8px; box-sizing: border-box;">
-          <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #444;">Select Printer</div>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <select id="printerSelect" onchange="onPrinterSelectChange()" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;">
-                <option value="">-- Add New Printer --</option>
-            </select>
-            <button onclick="deletePrinter()" style="padding: 8px; background: #ff3f6c; color: white; border: none; border-radius: 4px;"><i class="fas fa-trash"></i></button>
+      <!-- PRINTER CONFIG UI -->
+      <div style="width: 100%; background: #fff; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 12px;">
+          <div style="font-weight:bold; margin-bottom: 5px;">Select Printer:</div>
+          <select id="printerSelect" onchange="onPrinterSelectChange()" style="width:100%; padding: 8px; margin-bottom: 8px; border: 1px solid #ccc; border-radius: 4px;"></select>
+          <div style="display:flex; gap: 5px; margin-bottom: 8px;">
+              <input type="text" id="printerNameInput" placeholder="Name (e.g. Barcode Printer)" style="flex:1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+              <input type="text" id="printerIpInput" placeholder="IP (e.g. 192.168.1.100)" style="flex:1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
           </div>
-          <div style="display: flex; gap: 8px;">
-              <input type="text" id="printerNameInput" placeholder="Name (e.g. Shop)" style="flex: 1; min-width: 0; padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;" />
-              <input type="text" id="printerIpInput" placeholder="IP (10.10...)" style="flex: 1; min-width: 0; padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;" />
-              <button onclick="savePrinter()" style="padding: 8px 12px; background: #25D366; color: white; border: none; border-radius: 4px; font-weight: bold;">Save</button>
+          <div style="display:flex; gap: 5px;">
+              <button onclick="savePrinter()" style="flex:1; padding: 6px; background: #4caf50; color: white; border: none; border-radius: 4px;">Save</button>
+              <button onclick="deletePrinter()" style="flex:1; padding: 6px; background: #f44336; color: white; border: none; border-radius: 4px;">Delete</button>
           </div>
       </div>
 
-      <!-- Quantity -->
-      <div style="width: 100%; margin-top: 10px; background: #fff; padding: 10px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box;">
-          <div style="font-size: 14px; font-weight: bold; color: #444;">Print Quantity:</div>
-          <input type="number" id="printQtyInput" value="1" min="1" style="width: 80px; padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 16px; text-align: center; font-weight: bold;" />
+      <!-- TAG EDITOR UI -->
+      <div id="tagEditorContainer" style="width: 100%; background: #fff; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 12px; display: none;">
+          <div style="font-weight:bold; margin-bottom: 5px;">Edit Tag Details:</div>
+          <input type="text" id="editTagDesc1" placeholder="Description Line 1" onkeyup="updateLiveLabel()" style="width:100%; padding: 8px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
+          <input type="text" id="editTagDesc2" placeholder="Description Line 2" onkeyup="updateLiveLabel()" style="width:100%; padding: 8px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
+          <input type="text" id="editTagCut" placeholder="Cut Info (e.g. CUT 6 MTR)" onkeyup="updateLiveLabel()" style="width:100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
       </div>
       
-      <div style="display:flex; width: 100%; gap: 10px; margin-top: 10px;">
+      <!-- Preview Container -->
+      <div id="printPreviewCanvasContainer" style="margin: 15px 0; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 10px;">
+      </div>
+
+      <div style="display:flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; background: #fff; padding: 10px; border-radius: 6px;">
+          <div style="font-weight:bold;">Copies:</div>
+          <input type="number" id="printQtyInput" value="1" min="1" max="100" style="width: 60px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; text-align: center; font-weight: bold;">
+      </div>
+      
+      <div style="display:flex; width: 100%; gap: 10px; margin-top: 15px;">
         <button onclick="closeModals()" style="flex:1; padding: 12px; border-radius:4px; border:1px solid #aaa; background:#fff; font-weight:bold;">Cancel</button>
         <button id="btnPrintConfirm" onclick="confirmPrint()" style="flex:1; padding: 12px; border-radius:4px; border:none; background:var(--myntra-pink); color:white; font-weight:bold; box-shadow: 0 4px 10px rgba(255,63,108,0.4);"><i class="fas fa-print"></i> PRINT</button>
       </div>
     </div>
   </div>
 
-  <!-- Hidden Label Templates (Rendered at 203 DPI) -->
+  <!-- Hidden Label Templates -->
   <div id="hiddenLabelTemplates" style="position: absolute; top: -9999px; left: -9999px;">
-      <!-- Barcode Sticker: 72mm x 48mm @ 203DPI = 576 x 384 pixels -->
       <div id="tpl_barcode" style="width: 576px; height: 384px; background: white; color: black; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box; font-family: sans-serif;">
           <div id="lbl_bc_firm" style="font-size: 24px; font-weight: bold; margin-bottom: 5px;">DURGA SAREES</div>
           <div id="lbl_bc_name" style="font-size: 40px; font-weight: 900; text-align: center; line-height: 1.1; margin-bottom: 15px; width: 100%;">PRODUCT NAME</div>
@@ -539,25 +534,19 @@
           </div>
       </div>
 
-      <!-- Tag Sticker: 78mm x 57mm @ 203DPI = 624 x 456 pixels -->
-      <div id="tpl_tag" style="width: 624px; height: 456px; background: white; padding: 20px 40px; box-sizing: border-box; text-align: center; color: black; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Times New Roman', serif;">
-          
-          <div id="lbl_tag_name" style="font-size: 52px; font-weight: bold; text-transform: uppercase; white-space: nowrap; overflow: hidden; width: 100%; letter-spacing: 2px;">MARSMALLOW JAQRD</div>
-          
-          <div style="width: 90%; height: 4px; background: black; margin: 12px 0;"></div>
-          
-          <div id="lbl_tag_desc1" style="font-size: 34px; margin-bottom: 8px;">5*2 Marshmallow Padding Jaquard</div>
-          <div id="lbl_tag_desc2" style="font-size: 34px; margin-bottom: 12px;">Self Pattern Border</div>
-          <div id="lbl_tag_cut" style="font-size: 38px; font-weight: bold; margin-bottom: 15px;">CUT 6 MTR + WTH BLOUSE</div>
-          
-          <div style="font-size: 36px; display: flex; align-items: center; justify-content: center; gap: 10px;">
-              DNO : <span id="lbl_tag_sku" style="font-weight: bold;">475</span>
-          </div>
-          
+      <div id="tpl_tag" style="width: 624px; height: 456px; background: white; color: black; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; box-sizing: border-box; font-family: sans-serif; border: 2px dashed #000;">
+          <div id="lbl_tag_firm" style="font-size: 30px; font-weight: bold; margin-bottom: 10px; letter-spacing: 2px;">DURGA SAREES</div>
+          <div id="lbl_tag_name" style="font-size: 48px; font-weight: 900; text-align: center; line-height: 1.1; margin-bottom: 10px; width: 100%;">PRODUCT NAME</div>
+          <div id="lbl_tag_desc1" style="font-size: 24px; font-weight: bold; text-align: center; width: 100%;"></div>
+          <div id="lbl_tag_desc2" style="font-size: 24px; font-weight: bold; text-align: center; width: 100%; margin-bottom: 10px;"></div>
+          <div id="lbl_tag_cut" style="font-size: 22px; font-weight: normal; text-align: center; width: 100%; margin-bottom: 15px;"></div>
+          <svg id="lbl_tag_barcode"></svg>
+          <div style="font-size: 36px; font-weight: bold; margin-top: 15px;">MRP: ₹ <span id="lbl_tag_mrp">0</span></div>
+          <div style="font-size: 24px; margin-top: 5px;">SKU: <span id="lbl_tag_sku" style="font-weight:bold;">-</span></div>
       </div>
   </div>
 
-  <script src="./pdf_engine.js"></script>
+
   <!-- Barcode & HTML-to-Image Libraries for NAS Printing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>

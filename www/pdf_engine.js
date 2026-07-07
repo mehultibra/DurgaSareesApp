@@ -1077,6 +1077,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                 // Fetch all base64 images concurrently for instant performance
                 var base64Results = await Promise.all(imageUrlsArray.map(url => getBase64FromCache(url)));
                 
+                var failedUrls = [];
                 var uriArray = [];
                 for (var i = 0; i < base64Results.length; i++) {
                     var base64Img = base64Results[i];
@@ -1089,6 +1090,20 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                             directory: "CACHE"
                         });
                         uriArray.push(writeResult.uri);
+                    } else {
+                        failedUrls.push(imageUrlsArray[i]);
+                    }
+                }
+
+                if (failedUrls.length > 0) {
+                    var errMsg = "Failed to fetch " + failedUrls.length + " images. URLs: " + failedUrls.join(', ');
+                    console.error("Share Images Error:", errMsg);
+                    if (typeof window.logAppError === 'function') window.logAppError("Share Images", errMsg);
+                    
+                    var confirmMsg = "⚠️ " + failedUrls.length + " image(s) could not be downloaded and will be skipped.\n\nContinue sharing the rest?";
+                    if (!confirm(confirmMsg)) {
+                        if (bootScreen) bootScreen.style.display = 'none';
+                        return;
                     }
                 }
 
@@ -1112,12 +1127,27 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
         if (!nativeSuccess) {
             // Fetch all base64 images concurrently for web fallback
             var base64Results = await Promise.all(imageUrlsArray.map(url => getBase64FromCache(url)));
+            var failedUrls = [];
             var filesArray = [];
             for (var i = 0; i < base64Results.length; i++) {
                 var base64Img = base64Results[i];
                 if (base64Img) {
                     var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
                     filesArray.push(base64ToFile(base64Img, fileName));
+                } else {
+                    failedUrls.push(imageUrlsArray[i]);
+                }
+            }
+
+            if (failedUrls.length > 0) {
+                var errMsg = "Failed to fetch " + failedUrls.length + " images. URLs: " + failedUrls.join(', ');
+                console.error("Share Images Error:", errMsg);
+                if (typeof window.logAppError === 'function') window.logAppError("Share Images Web", errMsg);
+                
+                var confirmMsg = "⚠️ " + failedUrls.length + " image(s) could not be downloaded and will be skipped.\n\nContinue sharing the rest?";
+                if (!confirm(confirmMsg)) {
+                    if (bootScreen) bootScreen.style.display = 'none';
+                    return;
                 }
             }
 

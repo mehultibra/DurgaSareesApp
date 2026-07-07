@@ -2930,6 +2930,9 @@ window.goToHome = function () {
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
 };
 window.fetchWithRetry = async function (url, options = {}, retries = 3) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        throw new Error("Device is offline");
+    }
     if (typeof url === 'string' && (url.includes('firebasestorage.googleapis.com') || url.includes('firestore.googleapis.com'))) {
         try {
             var token = "";
