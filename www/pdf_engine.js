@@ -36,42 +36,73 @@ function blobToBase64Direct(blob) {
 
 function getBase64FromCache(cacheKey) {
     function networkFallback(url) {
-        if (url && url.startsWith('http')) {
-            return fetch(url)
-                .then(function(res) { return res.ok ? res.blob() : null; })
-                .then(function(netBlob) { 
-                    if (netBlob) return blobToBase64Direct(netBlob);
-                    
-                    // If cover.webp fails, try 01.webp as a last resort (since it's a common fallback)
-                    if (url.includes('cover.webp')) {
-                        var altUrl = url.replace('cover.webp', '01.webp');
-                        return fetch(altUrl)
-                            .then(function(r) { return r.ok ? r.blob() : null; })
-                            .then(function(nb) { return nb ? blobToBase64Direct(nb) : null; })
-                            .catch(function() { return null; });
-                    }
-                    return null;
-                })
-                .catch(function() { return null; }); // gracefully fail to null if offline
+        if (!url || !url.startsWith('http')) return Promise.resolve(null);
+        
+        var fallbacks = [url];
+        if (url.includes('cover.webp')) {
+            fallbacks.push(url.replace('cover.webp', 'cover1.webp'));
+            fallbacks.push(url.replace('cover.webp', '01.webp'));
+            fallbacks.push(url.replace('cover.webp', '1.webp'));
         }
-        return Promise.resolve(null);
+
+        function tryNext(index) {
+            if (index >= fallbacks.length) {
+                // Ultimate Fallback: Query Firebase folder for ANY image
+                if (url.includes('cover.webp')) {
+                    try {
+                        var bucket = "durga-sarees.firebasestorage.app";
+                        var urlObj = new URL(url);
+                        var pathName = decodeURIComponent(urlObj.pathname.split('/o/')[1]); 
+                        var fwdPath = pathName.substring(0, pathName.lastIndexOf('/'));
+                        var listPrefix = fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('/') + '/';
+                        var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
+                        
+                        return fetch(listUrl)
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                var files = (data.items || [])
+                                    .map(function(item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
+                                    .filter(function(f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
+                                if (files.length > 0) {
+                                    files.sort(function(a, b) { return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999); });
+                                    var finalUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('%2F') + "%2F" + encodeURIComponent(files[0]) + "?alt=media";
+                                    return fetch(finalUrl).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? blobToBase64Direct(b) : null; });
+                                }
+                                return null;
+                            }).catch(function() { return null; });
+                    } catch (e) { return Promise.resolve(null); }
+                }
+                return Promise.resolve(null);
+            }
+            return fetch(fallbacks[index])
+                .then(function(res) { 
+                    if (res.ok) return res.blob();
+                    throw new Error("HTTP " + res.status);
+                })
+                .then(function(netBlob) { return blobToBase64Direct(netBlob); })
+                .catch(function() { return tryNext(index + 1); });
+        }
+        
+        return tryNext(0);
     }
 
     return getImageFromDB(cacheKey).then(function(blob) {
         if (blob) return blobToBase64Direct(blob);
         
-        // Also check if it was cached under gridPath (because of 01.webp logic in app.js)
         if (cacheKey && cacheKey.includes('cover.webp')) {
             try {
                 var urlObj = new URL(cacheKey);
                 var pathName = decodeURIComponent(urlObj.pathname.split('/o/')[1]);
-                var gridPath = pathName.substring(0, pathName.lastIndexOf('/'));
-                if (gridPath) {
-                    return getImageFromDB(gridPath).then(function(gridBlob) {
-                        if (gridBlob) return blobToBase64Direct(gridBlob);
+                var fwdPath = pathName.substring(0, pathName.lastIndexOf('/'));
+                var backPath = fwdPath.replace(/\//g, '\\');
+                
+                return getImageFromDB(fwdPath).then(function(b1) {
+                    if (b1) return blobToBase64Direct(b1);
+                    return getImageFromDB(backPath).then(function(b2) {
+                        if (b2) return blobToBase64Direct(b2);
                         return networkFallback(cacheKey);
-                    }).catch(function() { return networkFallback(cacheKey); });
-                }
+                    });
+                }).catch(function() { return networkFallback(cacheKey); });
             } catch (e) { }
         }
         
