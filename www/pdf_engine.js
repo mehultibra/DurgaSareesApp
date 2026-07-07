@@ -35,20 +35,29 @@ function blobToBase64Direct(blob) {
 }
 
 function getBase64FromCache(cacheKey) {
+    var isCoverOrGarbage = false;
+    if (cacheKey) {
+        if (cacheKey.includes('cover.webp')) isCoverOrGarbage = true;
+        if (/\/[0-9]{5,}\.webp\?alt=media/.test(cacheKey)) isCoverOrGarbage = true;
+    }
+
     function networkFallback(url) {
         if (!url || !url.startsWith('http')) return Promise.resolve(null);
         
         var fallbacks = [url];
-        if (url.includes('cover.webp')) {
-            fallbacks.push(url.replace('cover.webp', 'cover1.webp'));
-            fallbacks.push(url.replace('cover.webp', '01.webp'));
-            fallbacks.push(url.replace('cover.webp', '1.webp'));
+        if (isCoverOrGarbage) {
+            var c1 = url.replace(/\/[^\/]+\.webp\?alt=media/, '/cover1.webp?alt=media');
+            var c2 = url.replace(/\/[^\/]+\.webp\?alt=media/, '/01.webp?alt=media');
+            var c3 = url.replace(/\/[^\/]+\.webp\?alt=media/, '/1.webp?alt=media');
+            if (fallbacks.indexOf(c1) === -1) fallbacks.push(c1);
+            if (fallbacks.indexOf(c2) === -1) fallbacks.push(c2);
+            if (fallbacks.indexOf(c3) === -1) fallbacks.push(c3);
         }
 
         function tryNext(index) {
             if (index >= fallbacks.length) {
                 // Ultimate Fallback: Query Firebase folder for ANY image
-                if (url.includes('cover.webp')) {
+                if (isCoverOrGarbage) {
                     try {
                         var bucket = "durga-sarees.firebasestorage.app";
                         var urlObj = new URL(url);
@@ -89,7 +98,7 @@ function getBase64FromCache(cacheKey) {
     return getImageFromDB(cacheKey).then(function(blob) {
         if (blob) return blobToBase64Direct(blob);
         
-        if (cacheKey && cacheKey.includes('cover.webp')) {
+        if (isCoverOrGarbage) {
             try {
                 var urlObj = new URL(cacheKey);
                 var pathName = decodeURIComponent(urlObj.pathname.split('/o/')[1]);
