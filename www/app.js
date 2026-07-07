@@ -3043,9 +3043,9 @@ async function syncImages(silent = false) {
 
         if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
-        // ðŸ›¡ï¸ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
+        // ðŸ›¡ï¸  BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
         // This guarantees we never hit Samsung/Android OS TCP socket connection limits (ERR_INSUFFICIENT_RESOURCES).
-        var batchSize = 15;
+        var batchSize = 40;
         for (var i = 0; i < productsToSync.length; i += batchSize) {
             var batch = productsToSync.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
