@@ -38,7 +38,7 @@ function getBase64FromCache(cacheKey) {
     var isCoverOrGarbage = false;
     if (cacheKey) {
         if (cacheKey.includes('cover.webp')) isCoverOrGarbage = true;
-        if (/\/[0-9]{5,}\.webp\?alt=media/.test(cacheKey)) isCoverOrGarbage = true;
+        if (/(%2F|\/)[0-9]{5,}\.webp\?alt=media/i.test(cacheKey)) isCoverOrGarbage = true;
     }
 
     function networkFallback(url) {
@@ -46,12 +46,19 @@ function getBase64FromCache(cacheKey) {
         
         var fallbacks = [url];
         if (isCoverOrGarbage) {
-            var c1 = url.replace(/\/[^\/]+\.webp\?alt=media/, '/cover1.webp?alt=media');
-            var c2 = url.replace(/\/[^\/]+\.webp\?alt=media/, '/01.webp?alt=media');
-            var c3 = url.replace(/\/[^\/]+\.webp\?alt=media/, '/1.webp?alt=media');
-            if (fallbacks.indexOf(c1) === -1) fallbacks.push(c1);
-            if (fallbacks.indexOf(c2) === -1) fallbacks.push(c2);
-            if (fallbacks.indexOf(c3) === -1) fallbacks.push(c3);
+            var extIndex = url.indexOf('.webp?alt=media');
+            if (extIndex > -1) {
+                var lastSlash = Math.max(url.lastIndexOf('%2F'), url.lastIndexOf('/'));
+                if (lastSlash > -1 && lastSlash < extIndex) {
+                    var folderUrl = url.substring(0, lastSlash + (url.charAt(lastSlash) === '%' ? 3 : 1));
+                    var c1 = folderUrl + 'cover1.webp?alt=media';
+                    var c2 = folderUrl + '01.webp?alt=media';
+                    var c3 = folderUrl + '1.webp?alt=media';
+                    if (fallbacks.indexOf(c1) === -1) fallbacks.push(c1);
+                    if (fallbacks.indexOf(c2) === -1) fallbacks.push(c2);
+                    if (fallbacks.indexOf(c3) === -1) fallbacks.push(c3);
+                }
+            }
         }
 
         function tryNext(index) {
