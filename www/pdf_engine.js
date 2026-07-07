@@ -43,6 +43,7 @@ function getBase64FromCache(cacheKey) {
 
     function networkFallback(url) {
         if (!url || !url.startsWith('http')) return Promise.resolve(null);
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return Promise.resolve(null);
         
         var fallbacks = [url];
         if (isCoverOrGarbage) {
@@ -73,7 +74,7 @@ function getBase64FromCache(cacheKey) {
                         var listPrefix = fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('/') + '/';
                         var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
                         
-                        return window.fetchWithRetry(listUrl)
+                        return window.fetchWithRetry(listUrl, {}, 0) // ZERO retries for faster offline failure
                             .then(function(r) { return r.json(); })
                             .then(function(data) {
                                 var files = (data.items || [])
@@ -82,7 +83,7 @@ function getBase64FromCache(cacheKey) {
                                 if (files.length > 0) {
                                     files.sort(function(a, b) { return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999); });
                                     var finalUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('%2F') + "%2F" + encodeURIComponent(files[0]) + "?alt=media";
-                                    return window.fetchWithRetry(finalUrl).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? blobToBase64Direct(b) : null; });
+                                    return window.fetchWithRetry(finalUrl, {}, 0).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? blobToBase64Direct(b) : null; });
                                 }
                                 return null;
                             }).catch(function() { return null; });
@@ -90,13 +91,19 @@ function getBase64FromCache(cacheKey) {
                 }
                 return Promise.resolve(null);
             }
-            return window.fetchWithRetry(fallbacks[index])
+            return window.fetchWithRetry(fallbacks[index], {}, 0) // ZERO retries to prevent 6s loop
                 .then(function(res) { 
                     if (res.ok) return res.blob();
                     throw new Error("HTTP " + res.status);
                 })
                 .then(function(netBlob) { return blobToBase64Direct(netBlob); })
-                .catch(function() { return tryNext(index + 1); });
+                .catch(function(err) {
+                    if (err && err.message && !err.message.includes("HTTP")) {
+                        // Network error (offline or CORS). Abort fallbacks instantly!
+                        return Promise.resolve(null);
+                    }
+                    return tryNext(index + 1); 
+                });
         }
         
         return tryNext(0);
