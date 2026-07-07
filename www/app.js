@@ -3103,7 +3103,7 @@ async function syncImages(silent = false) {
                         }
                     }
 
-                    // â”€â”€ 3. Download the COVER file â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ——— 3. Download the COVER file —————————————————————————————————
                     var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
                     var existingCover = await checkImageInDB(p.gridUrl);
 
@@ -3119,9 +3119,15 @@ async function syncImages(silent = false) {
 
                             if (coverRes.ok) {
                                 var coverBlob = await coverRes.blob();
-                                await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
-                                await saveImageToDB(coverUrl, coverBlob);  // 🛡️ CRITICAL: Also save under its full URL!
-                                downloaded = true;
+                                if (coverBlob.size === 0) {
+                                    lastFailReason = "Cover image is 0 bytes (corrupted)";
+                                    if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', p.name + " | " + coverFile);
+                                    downloaded = false;
+                                } else {
+                                    await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
+                                    await saveImageToDB(coverUrl, coverBlob);  // 🛡️ CRITICAL: Also save under its full URL!
+                                    downloaded = true;
+                                }
                             } else {
                                 lastFailReason = "Cover HTTP " + coverRes.status;
                             }
@@ -3130,7 +3136,7 @@ async function syncImages(silent = false) {
                         }
                     }
 
-                    // â”€â”€ 4. Download remaining design files (FAST PARALLEL BATCHING) â”€â”€
+                    // ——— 4. Download remaining design files (FAST PARALLEL BATCHING) ——————————————————
                     if (downloaded) {
                         var innerBatchSize = 2; // Download 2 inner images concurrently!
                         var remainingFiles = folderFiles.filter(f => f !== coverFile);
@@ -3147,7 +3153,14 @@ async function syncImages(silent = false) {
                                     var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
                                     clearTimeout(tid3);
                                     if (dRes.ok) {
-                                        await saveImageToDB(designUrl, await dRes.blob());
+                                        var dBlob = await dRes.blob();
+                                        if (dBlob.size === 0) {
+                                            if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', p.name + " | " + fname);
+                                            downloaded = false;
+                                            lastFailReason = (lastFailReason ? lastFailReason + ", " : "Corrupted: ") + fname;
+                                        } else {
+                                            await saveImageToDB(designUrl, dBlob);
+                                        }
                                     } else {
                                         window.logAppError('AUDITOR: Sync Engine Failure', `Missing File: HTTP ${dRes.status} | ${fname} | ${p.name}`);
                                     }
