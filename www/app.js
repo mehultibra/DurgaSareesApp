@@ -889,21 +889,28 @@ window.findDesignKeyInCache = async function (gridUrl, designLabel) {
 
     return bestKey;
 };
+
 function getImageFromDB(key) {
     if (window.sessionImageCache.has(key)) return Promise.resolve(window.sessionImageCache.get(key));
     return getDB().then(db => {
         return new Promise((resolve, reject) => {
-            var tx = db.transaction(storeName, "readonly");
+            var tx = db.transaction(storeName, "readwrite");
             var store = tx.objectStore(storeName);
             var req = store.get(key);
             req.onsuccess = () => {
-                if (req.result) {
-                    window.sessionImageCache.set(key, req.result);
+                var blob = req.result;
+                if (blob) {
+                    if (blob.size === 0) {
+                        store.delete(key);
+                        resolve(null);
+                        return;
+                    }
+                    window.sessionImageCache.set(key, blob);
                     if (window.sessionImageCache.size > 80) {
                         window.sessionImageCache.delete(window.sessionImageCache.keys().next().value);
                     }
                 }
-                resolve(req.result);
+                resolve(blob);
             };
             req.onerror = () => reject(req.error);
         });
@@ -917,11 +924,22 @@ function checkImageInDB(key) {
     if (window.sessionImageCache.has(key)) return Promise.resolve(true);
     return getDB().then(db => {
         return new Promise((resolve) => {
-            var tx = db.transaction(storeName, "readonly");
+            var tx = db.transaction(storeName, "readwrite");
             var store = tx.objectStore(storeName);
-            // Use getKey instead of get to avoid reading the massive Blob into RAM!
-            var req = store.getKey(key);
-            req.onsuccess = () => resolve(!!req.result);
+            var req = store.get(key);
+            req.onsuccess = () => {
+                var blob = req.result;
+                if (blob) {
+                    if (blob.size === 0) {
+                        store.delete(key);
+                        resolve(false);
+                    } else {
+                        resolve(true);
+                    }
+                } else {
+                    resolve(false);
+                }
+            };
             req.onerror = () => resolve(false);
         });
     }).catch(e => {
