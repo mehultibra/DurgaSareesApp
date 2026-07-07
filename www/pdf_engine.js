@@ -34,27 +34,49 @@ function blobToBase64Direct(blob) {
     });
 }
 
-// Get base64 image from IndexedDB cache key — no network, no canvas
-// coverKey: the gridUrl (folder path string) for DIRECT/Cover
-// designKey: full Firebase URL for named designs
 function getBase64FromCache(cacheKey) {
-    return getImageFromDB(cacheKey).then(function(blob) {
-        if (blob) return blobToBase64Direct(blob);
-        
-        // Fallback to network if missing from cache
-        if (cacheKey && cacheKey.startsWith('http')) {
-            return fetch(cacheKey)
+    function networkFallback(url) {
+        if (url && url.startsWith('http')) {
+            return fetch(url)
                 .then(function(res) { return res.ok ? res.blob() : null; })
                 .then(function(netBlob) { 
-                    if (netBlob) {
-                        return blobToBase64Direct(netBlob);
+                    if (netBlob) return blobToBase64Direct(netBlob);
+                    
+                    // If cover.webp fails, try 01.webp as a last resort (since it's a common fallback)
+                    if (url.includes('cover.webp')) {
+                        var altUrl = url.replace('cover.webp', '01.webp');
+                        return fetch(altUrl)
+                            .then(function(r) { return r.ok ? r.blob() : null; })
+                            .then(function(nb) { return nb ? blobToBase64Direct(nb) : null; })
+                            .catch(function() { return null; });
                     }
                     return null;
                 })
                 .catch(function() { return null; }); // gracefully fail to null if offline
         }
-        return null;
-    }).catch(function() { return null; });
+        return Promise.resolve(null);
+    }
+
+    return getImageFromDB(cacheKey).then(function(blob) {
+        if (blob) return blobToBase64Direct(blob);
+        
+        // Also check if it was cached under gridPath (because of 01.webp logic in app.js)
+        if (cacheKey && cacheKey.includes('cover.webp')) {
+            try {
+                var urlObj = new URL(cacheKey);
+                var pathName = decodeURIComponent(urlObj.pathname.split('/o/')[1]);
+                var gridPath = pathName.substring(0, pathName.lastIndexOf('/'));
+                if (gridPath) {
+                    return getImageFromDB(gridPath).then(function(gridBlob) {
+                        if (gridBlob) return blobToBase64Direct(gridBlob);
+                        return networkFallback(cacheKey);
+                    }).catch(function() { return networkFallback(cacheKey); });
+                }
+            } catch (e) { }
+        }
+        
+        return networkFallback(cacheKey);
+    }).catch(function() { return networkFallback(cacheKey); });
 }
 
 
