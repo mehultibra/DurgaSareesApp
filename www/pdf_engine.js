@@ -57,7 +57,7 @@ function getBase64FromCache(cacheKey) {
                         var listPrefix = fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('/') + '/';
                         var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
                         
-                        return fetch(listUrl)
+                        return window.fetchWithRetry(listUrl)
                             .then(function(r) { return r.json(); })
                             .then(function(data) {
                                 var files = (data.items || [])
@@ -66,7 +66,7 @@ function getBase64FromCache(cacheKey) {
                                 if (files.length > 0) {
                                     files.sort(function(a, b) { return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999); });
                                     var finalUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('%2F') + "%2F" + encodeURIComponent(files[0]) + "?alt=media";
-                                    return fetch(finalUrl).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? blobToBase64Direct(b) : null; });
+                                    return window.fetchWithRetry(finalUrl).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? blobToBase64Direct(b) : null; });
                                 }
                                 return null;
                             }).catch(function() { return null; });
@@ -74,7 +74,7 @@ function getBase64FromCache(cacheKey) {
                 }
                 return Promise.resolve(null);
             }
-            return fetch(fallbacks[index])
+            return window.fetchWithRetry(fallbacks[index])
                 .then(function(res) { 
                     if (res.ok) return res.blob();
                     throw new Error("HTTP " + res.status);
