@@ -1059,6 +1059,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                         var zRes = await window.fetchWithRetry(finalZoomUrl);
                         if (zRes.ok) {
                             var zBlob = await zRes.blob();
+                            if (zBlob.size === 0) throw new Error("Zero byte cover");
                             if (imgElement.dataset.tempBlobUrl) URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
                             var zObj = URL.createObjectURL(zBlob);
                             imgElement.dataset.tempBlobUrl = zObj;
@@ -1107,7 +1108,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 fetch(highResUrl)
                     .then(function (res) { return res.ok ? res.blob() : null; })
                     .then(function (blob) {
-                        if (blob) {
+                        if (blob && blob.size > 0) {
                             if (imgElement.dataset.tempBlobUrl) {
                                 URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
                             }
@@ -1366,6 +1367,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
             var r = await window.fetchWithRetry(url);
             if (r.ok) {
                 var blob = await r.blob();
+                if (blob.size === 0) throw new Error("Zero byte blob");
                 if (isInStock) {
                     saveImageToDB(url, blob);
                     console.log('[ZOOM] Persisted to IDB Storage:', fileName);

@@ -96,9 +96,12 @@ function getBase64FromCache(cacheKey) {
                     if (res.ok) return res.blob();
                     throw new Error("HTTP " + res.status);
                 })
-                .then(function(netBlob) { return blobToBase64Direct(netBlob); })
+                .then(function(netBlob) { 
+                    if (netBlob.size === 0) throw new Error("Zero byte file");
+                    return blobToBase64Direct(netBlob); 
+                })
                 .catch(function(err) {
-                    if (err && err.message && !err.message.includes("HTTP")) {
+                    if (err && err.message && !err.message.includes("HTTP") && !err.message.includes("Zero byte")) {
                         // Network error (offline or CORS). Abort fallbacks instantly!
                         return Promise.resolve(null);
                     }
