@@ -413,7 +413,13 @@
           <div style="font-size: 11px; color: var(--text-light);">WhatsApp<br>PDF</div>
         </div>
         <!-- Admin Only Print Buttons -->
-        <div id="adminPrintBarcodeBtn" onclick="previewLabel('barcode')" style="cursor: pointer;">
+        <div id="adminPrintStickerBtn" onclick="previewLabel('sticker')" style="cursor: pointer;">
+        <div style="width:48px; height:48px; border-radius:10px; background:linear-gradient(135deg,#ff6b35,#f7931e); display:flex; align-items:center; justify-content:center; margin:0 auto 4px;">
+          <i class="fas fa-tag" style="color:white; font-size:20px;"></i>
+        </div>
+        <div style="font-size: 11px; color: var(--text-light);">Print<br>Sticker</div>
+      </div>
+      <div id="adminPrintBarcodeBtn" onclick="previewLabel('barcode')" style="cursor: pointer;">
           <div
             style="background: #444; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
             <i class="fas fa-barcode"></i>
@@ -506,7 +512,21 @@
           <input type="text" id="editTagCut" placeholder="Cut Info (e.g. CUT 6 MTR)" onkeyup="updateLiveLabel()" style="width:100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
       </div>
       
-      <!-- Preview Container -->
+      <!-- Live Sticker Preview (visible, editable) -->
+      <div id="stickerPreviewContainer" style="display:none; margin: 15px 0;">
+        <div style="font-size: 11px; color: #888; text-align:center; margin-bottom: 6px;">Tap any field to edit before printing</div>
+        <div id="stickerTemplate" style="width: 100%; max-width: 400px; aspect-ratio: 2/1; background: white; color: black; font-family: Arial, sans-serif; display: flex; align-items: center; justify-content: space-between; padding: 15px; box-sizing: border-box; border: 2px dashed #ccc; margin: 0 auto; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+          <div style="display: flex; flex-direction: column; justify-content: center; flex: 1; min-width: 0; padding-right: 10px;">
+            <div style="font-size: 18px; font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">DURGA SAREES</div>
+            <div id="stkProduct" contenteditable="true" style="font-size: 15px; color: #333; outline: none; border-bottom: 1px dashed transparent; cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" onfocus="this.style.borderBottom='1px dashed #e91e8c'" onblur="this.style.borderBottom='1px dashed transparent'">Product Name</div>
+            <div id="stkPrice" contenteditable="true" style="font-size: 13px; color: #333; margin-top: 4px; outline: none; border-bottom: 1px dashed transparent; cursor: text;" onfocus="this.style.borderBottom='1px dashed #e91e8c'" onblur="this.style.borderBottom='1px dashed transparent'">₹000</div>
+            <div id="stkDesign" contenteditable="true" style="font-size: 48px; font-weight: 900; line-height: 1; margin-top: 4px; outline: none; border-bottom: 1px dashed transparent; cursor: text; color: #111;" onfocus="this.style.borderBottom='1px dashed #e91e8c'" onblur="this.style.borderBottom='1px dashed transparent'">00</div>
+          </div>
+          <div id="stkQRCode" style="width: 100px; height: 100px; flex-shrink: 0;"></div>
+        </div>
+      </div>
+
+      <!-- Canvas Preview Container (barcode / tag) -->
       <div id="printPreviewCanvasContainer" style="margin: 15px 0; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 10px;">
       </div>
 
@@ -551,6 +571,7 @@
   <!-- Barcode & HTML-to-Image Libraries for NAS Printing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </body>
 
 </html>
