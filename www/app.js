@@ -4772,82 +4772,103 @@ window.currentPrintCanvas = null;
 function previewLabel(type) {
     if (!curProduct) return;
     window.currentPrintType = type;
-    document.getElementById('printTypeSpan').innerText = type === 'barcode' ? '(Barcode)' : '(Tag)';
-    
-    var tplId = type === 'barcode' ? 'tpl_barcode' : 'tpl_tag';
-    var tpl = document.getElementById(tplId);
-    
-    // Inject Data
+
+    var typeLabels = { barcode: '(Barcode)', tag: '(Tag)', sticker: '(Sticker)' };
+    document.getElementById('printTypeSpan').innerText = typeLabels[type] || '';
+
+    var stickerContainer = document.getElementById('stickerPreviewContainer');
+    var canvasContainer = document.getElementById('printPreviewCanvasContainer');
+    var tagEditor = document.getElementById('tagEditorContainer');
+
+    // Reset visibility
+    stickerContainer.style.display = 'none';
+    canvasContainer.style.display = 'block';
+    tagEditor.style.display = 'none';
+    window.currentPrintCanvas = null;
+
     var cdObj = JSON.parse(localStorage.getItem("dsCustomerDetails") || "{}");
     var firmName = cdObj.firm || "DURGA SAREES";
-    
+
+    if (type === 'sticker') {
+        // ── LIVE EDITABLE STICKER MODE ─────────────────────────────────────
+        stickerContainer.style.display = 'block';
+        canvasContainer.style.display = 'none';
+
+        // Pre-fill the editable fields with current product data
+        document.getElementById('stkProduct').innerText = curProduct.name || 'Product Name';
+        document.getElementById('stkPrice').innerText = '\u20b9' + (curProduct.price || '0');
+        document.getElementById('stkDesign').innerText = '00';
+
+        // Generate QR code (encodes SKU so it can be scanned)
+        var qrEl = document.getElementById('stkQRCode');
+        qrEl.innerHTML = '';
+        if (window.QRCode) {
+            new QRCode(qrEl, {
+                text: curProduct.sku || curProduct.name || 'DS',
+                width: 100,
+                height: 100,
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        }
+
+        loadPrinters();
+        openModal('printPreviewModal');
+        return;
+    }
+
     if (type === 'barcode') {
-        document.getElementById('tagEditorContainer').style.display = 'none';
-        
         document.getElementById('lbl_bc_firm').innerText = firmName;
         document.getElementById('lbl_bc_name').innerText = curProduct.name;
         document.getElementById('lbl_bc_price').innerText = curProduct.price || '0';
         document.getElementById('lbl_bc_pack').innerText = curProduct.packing || '1';
-        
-        // Auto-scale name
+
         var nameEl = document.getElementById('lbl_bc_name');
-        nameEl.style.fontSize = '40px'; // Reset
+        nameEl.style.fontSize = '40px';
         if (curProduct.name.length > 20) nameEl.style.fontSize = '30px';
         if (curProduct.name.length > 30) nameEl.style.fontSize = '24px';
-        
-        // Generate Barcode
+
         JsBarcode("#lbl_bc_barcode", curProduct.sku || "00000", {
-            format: "CODE128",
-            width: 3,
-            height: 100,
-            displayValue: true,
-            fontSize: 24,
-            margin: 0
+            format: "CODE128", width: 3, height: 100,
+            displayValue: true, fontSize: 24, margin: 0
         });
     } else {
-        document.getElementById('tagEditorContainer').style.display = 'block';
-        
-        // Pre-fill inputs from localStorage memory to avoid typing repeatedly
+        tagEditor.style.display = 'block';
+
         document.getElementById('editTagDesc1').value = localStorage.getItem("dsTagDesc1") || "";
         document.getElementById('editTagDesc2').value = localStorage.getItem("dsTagDesc2") || "";
         document.getElementById('editTagCut').value = localStorage.getItem("dsTagCut") || "CUT 6 MTR + WTH BLOUSE";
-        
-        // Set the hidden template values
+
         document.getElementById('lbl_tag_name').innerText = curProduct.name;
         document.getElementById('lbl_tag_desc1').innerText = document.getElementById('editTagDesc1').value;
         document.getElementById('lbl_tag_desc2').innerText = document.getElementById('editTagDesc2').value;
         document.getElementById('lbl_tag_cut').innerText = document.getElementById('editTagCut').value;
         document.getElementById('lbl_tag_sku').innerText = curProduct.sku || "-";
-        
-        // Scale product name if very long
+
         var nameEl = document.getElementById('lbl_tag_name');
-        nameEl.style.fontSize = '52px'; // Reset
+        nameEl.style.fontSize = '52px';
         if (curProduct.name.length > 15) nameEl.style.fontSize = '42px';
         if (curProduct.name.length > 22) nameEl.style.fontSize = '34px';
     }
 
-    // Render with html2canvas
-    var container = document.getElementById('printPreviewCanvasContainer');
-    container.innerHTML = 'Rendering...';
-    
-    // Load Printers UI
+    // Render barcode/tag via html2canvas
+    var tplId = type === 'barcode' ? 'tpl_barcode' : 'tpl_tag';
+    var tpl = document.getElementById(tplId);
+    canvasContainer.innerHTML = 'Rendering...';
+
     loadPrinters();
-    
     openModal('printPreviewModal');
 
     setTimeout(() => {
         html2canvas(tpl, { scale: 1 }).then(canvas => {
             window.currentPrintCanvas = canvas;
-            // Display scaled-down preview for the phone screen
             var displayCanvas = document.createElement('canvas');
             var ctx = displayCanvas.getContext('2d');
             displayCanvas.width = canvas.width / 2;
             displayCanvas.height = canvas.height / 2;
             ctx.drawImage(canvas, 0, 0, displayCanvas.width, displayCanvas.height);
             displayCanvas.style.maxWidth = '100%';
-            
-            container.innerHTML = '';
-            container.appendChild(displayCanvas);
+            canvasContainer.innerHTML = '';
+            canvasContainer.appendChild(displayCanvas);
         });
     }, 100);
 }
@@ -4888,58 +4909,85 @@ function updateLiveLabel() {
 }
 
 function confirmPrint() {
-    if (!window.currentPrintCanvas) return;
-    
     var PRINTER_IP = document.getElementById('printerIpInput').value.trim();
-    if (!PRINTER_IP) {
-        alert("Please enter a Printer IP!");
-        return;
-    }
-    
+    if (!PRINTER_IP) { alert("Please enter a Printer IP!"); return; }
+
     var qty = document.getElementById('printQtyInput').value;
     if (!qty || isNaN(qty) || parseInt(qty) < 1) return;
 
     var btn = document.getElementById('btnPrintConfirm');
-    btn.innerText = "Connecting...";
+    btn.innerText = "Rendering...";
     btn.disabled = true;
 
-    // Convert Canvas to TSPL payload
-    var tsplPayload = generateTSPL(window.currentPrintCanvas, window.currentPrintType, parseInt(qty));
-    var base64Payload = uint8ToBase64(tsplPayload);
+    var doSendCanvas = function(canvas) {
+        var tsplPayload = generateTSPL(canvas, window.currentPrintType, parseInt(qty));
+        var base64Payload = uint8ToBase64(tsplPayload);
 
-    // DIRECT NATIVE TCP PRINTING (No NAS Required)
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TcpSocket) {
-        var TcpSocket = window.Capacitor.Plugins.TcpSocket;
-        
-        TcpSocket.connect({ ipAddress: PRINTER_IP, port: 9100 })
-            .then(function(res) {
-                btn.innerText = "Sending...";
-                var clientId = res.client;
-                
-                TcpSocket.send({ 
-                    client: clientId, 
-                    data: base64Payload, 
-                    encoding: 'base64' 
-                })
-                .then(function() {
-                    btn.innerText = "Sent ✅";
-                    // Delay disconnect slightly to ensure OS flushes the TCP buffer to the printer
-                    setTimeout(() => { TcpSocket.disconnect({ client: clientId }); }, 500);
-                    setTimeout(() => { closeModals(); btn.innerText = "PRINT"; btn.disabled = false; }, 1500);
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TcpSocket) {
+            var TcpSocket = window.Capacitor.Plugins.TcpSocket;
+            btn.innerText = "Connecting...";
+            TcpSocket.connect({ ipAddress: PRINTER_IP, port: 9100 })
+                .then(function(res) {
+                    btn.innerText = "Sending...";
+                    var clientId = res.client;
+                    TcpSocket.send({ client: clientId, data: base64Payload, encoding: 'base64' })
+                        .then(function() {
+                            btn.innerText = "Sent ✅";
+                            setTimeout(() => { TcpSocket.disconnect({ client: clientId }); }, 500);
+                            setTimeout(() => { closeModals(); btn.innerText = "PRINT"; btn.disabled = false; }, 1500);
+                        })
+                        .catch(function(err) {
+                            btn.innerText = "Send Error";
+                            btn.disabled = false;
+                            alert("Send failed: " + err.message);
+                        });
                 })
                 .catch(function(err) {
-                    alert("Print send failed: " + err.message);
-                    TcpSocket.disconnect({ client: clientId });
-                    btn.innerText = "PRINT"; btn.disabled = false;
+                    btn.innerText = "Connect Error";
+                    btn.disabled = false;
+                    alert("TCP connect failed: " + err.message);
                 });
-            })
-            .catch(function(err) {
-                alert("Printer connection failed!\nError: " + err.message + "\n\nPlease check the IP address and make sure you are on the same Wi-Fi.");
-                btn.innerText = "PRINT"; btn.disabled = false;
+        } else {
+            btn.innerText = "No Printer Plugin";
+            btn.disabled = false;
+            alert("TcpSocket plugin not available.");
+        }
+    };
+
+    if (window.currentPrintType === 'sticker') {
+        // ── STICKER: render the live contenteditable template ─────────────
+        var tpl = document.getElementById('stickerTemplate');
+
+        // Temporarily hide the dashed preview border and focus indicators
+        var origBorder = tpl.style.border;
+        var origBoxShadow = tpl.style.boxShadow;
+        tpl.style.border = 'none';
+        tpl.style.boxShadow = 'none';
+        // Also hide any active focus underlines on contenteditable fields
+        ['stkProduct', 'stkPrice', 'stkDesign'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.style.borderBottom = 'none';
+        });
+
+        setTimeout(function() {
+            html2canvas(tpl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(function(canvas) {
+                // Restore the preview styling
+                tpl.style.border = origBorder;
+                tpl.style.boxShadow = origBoxShadow;
+                window.currentPrintCanvas = canvas;
+                doSendCanvas(canvas);
+            }).catch(function(err) {
+                tpl.style.border = origBorder;
+                tpl.style.boxShadow = origBoxShadow;
+                btn.innerText = "Render Error";
+                btn.disabled = false;
+                alert("Could not render sticker: " + err.message);
             });
+        }, 50);
     } else {
-        alert("TCP Plugin not installed! Please run 'npm install capacitor-tcp-socket' and rebuild your APK.");
-        btn.innerText = "PRINT"; btn.disabled = false;
+        // ── BARCODE / TAG: use the pre-rendered canvas ─────────────────────
+        if (!window.currentPrintCanvas) { btn.innerText = "PRINT"; btn.disabled = false; return; }
+        doSendCanvas(window.currentPrintCanvas);
     }
 }
 
