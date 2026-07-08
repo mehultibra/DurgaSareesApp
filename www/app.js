@@ -984,19 +984,16 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     var encZoomPath = (zoomPath && zoomPath !== "None") ? zoomPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
 
-    var fileToFetch = targetFile ? targetFile : null; // null = use folder listing
+    var fileToFetch = targetFile ? targetFile : "cover.webp"; // Main grid: always try cover.webp first
 
-    // If cache indicates missing, jump to fallback map
-    if (!fileToFetch && coverExistsMap[gridPath] === false) {
+    // If cache confirms cover is missing, jump straight to fallback map
+    if ((fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") && coverExistsMap[gridPath] === false) {
         if (dsFallbackMap[gridPath]) {
             fileToFetch = dsFallbackMap[gridPath];
+        } else {
+            tryFolderListFallback();
+            return;
         }
-    }
-
-    // If no specific file and no fallback cached — go straight to folder listing
-    if (!fileToFetch) {
-        tryFolderListFallback();
-        return;
     }
 
     var lowResUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
@@ -1074,8 +1071,11 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
 
     function loadFromNetwork() {
+        // Priority queue: try cover.webp first, then cover1.webp, then fall back to folder listing
         var fallbackQueue = [];
-        if (targetFile) fallbackQueue.push(targetFile);
+        if (targetFile && targetFile !== "cover.webp" && targetFile !== "cover1.webp") fallbackQueue.push(targetFile);
+        if (!fallbackQueue.includes("cover.webp")) fallbackQueue.push("cover.webp");
+        if (!fallbackQueue.includes("cover1.webp")) fallbackQueue.push("cover1.webp");
 
         var queueIndex = fallbackQueue.indexOf(fileToFetch) !== -1 ? fallbackQueue.indexOf(fileToFetch) : 0;
 
@@ -1126,7 +1126,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         fetchImageSecurely(lowResUrl);
     }
 
-    var cacheKey = lowResUrl;
+    var cacheKey = (fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") ? gridPath : lowResUrl;
 
     // ALWAYS check IndexedDB cache first for ALL images (Cover, Fallback, and Specific Cart Designs)
     getImageFromDB(cacheKey).then(function (blob) {
@@ -1695,7 +1695,11 @@ function openDetail(productId, skipShow, keepSearchShown) {
             }
         });
 
-        // All images are equal — show all of them without filtering any as 'cover'
+        // Hide cover/cover1 images from product page — they are only used for the main grid thumbnail
+        var hasOtherDesigns = validFiles.some(f => !f.isCoverImg);
+        if (hasOtherDesigns) {
+            validFiles = validFiles.filter(f => !f.isCoverImg);
+        }
 
         // 🛡️ SORT LATEST DESIGNS FIRST (DESCENDING NUMERICAL) WITH HIGHEST STOCK FIRST
         validFiles.sort((a, b) => {
