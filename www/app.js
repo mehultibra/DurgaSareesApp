@@ -543,7 +543,6 @@ function backToPhone() {
 
 function initApp() {
     var bootScreen = document.getElementById('boot');
-    if (bootScreen) bootScreen.style.display = 'flex';
     if (typeof window.processCameraOutbox === 'function') window.processCameraOutbox();
 
     function processProducts(docs) {
@@ -632,35 +631,53 @@ function initApp() {
         updateCartHeader();
     }
 
-    window.fetchWithRetry(FIRESTORE_PRODUCTS_URL)
+    // ── STEP 1: Instantly render from cache (zero wait time) ──────────────
+    var loadedFromCache = false;
+    try {
+        var cachedDocs = JSON.parse(localStorage.getItem("dsOfflineProducts"));
+        if (cachedDocs && cachedDocs.length > 0) {
+            if (bootScreen) bootScreen.style.display = 'none';
+            processProducts(cachedDocs);
+            loadedFromCache = true;
+        }
+    } catch (e) {}
+
+    // Show boot screen only if we have nothing cached
+    if (!loadedFromCache && bootScreen) bootScreen.style.display = 'flex';
+
+    // ── STEP 2: Fetch fresh data in background with 5s timeout ────────────
+    var fetchPromise = window.fetchWithRetry(FIRESTORE_PRODUCTS_URL, {}, 2);
+    var timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Boot timeout")), 5000));
+
+    Promise.race([fetchPromise, timeoutPromise])
         .then(res => res.json())
         .then(data => {
             var docs = data.documents || [];
-            console.log("DATABASE PRODUCTS SAMPLE:", docs.slice(0, 20).map(d => ({
-                name: d.fields?.name?.stringValue,
-                packing: d.fields?.packing
-            })));
-            try { localStorage.setItem("dsOfflineProducts", JSON.stringify(docs)); } catch (e) { }
-            var bootScreen = document.getElementById('boot');
+            if (docs.length > 0) {
+                // Only save to cache if we got valid data
+                try { localStorage.setItem("dsOfflineProducts", JSON.stringify(docs)); } catch (e) {}
+            }
             if (bootScreen) bootScreen.style.display = 'none';
-            processProducts(docs);
+            // Only re-render if we did NOT already render from cache (avoid double render)
+            if (!loadedFromCache) {
+                processProducts(docs);
+            }
             setTimeout(() => syncImages(true), 2000);
         })
         .catch(err => {
-            console.log("Offline or fetch failed, loading from cache...", err);
-            try {
-                var cachedDocs = JSON.parse(localStorage.getItem("dsOfflineProducts"));
-                if (cachedDocs && cachedDocs.length > 0) {
-                    var bootScreen = document.getElementById('boot');
-                    if (bootScreen) bootScreen.style.display = 'none';
-                    processProducts(cachedDocs);
-                    setTimeout(() => syncImages(true), 2000);
-                    return;
-                }
-            } catch (e) { }
-            var bootScreen = document.getElementById('boot');
+            console.log("Offline or fetch failed:", err);
             if (bootScreen) bootScreen.style.display = 'none';
-            processProducts([]);
+            // If we already rendered from cache, do nothing - grid is already showing
+            if (!loadedFromCache) {
+                try {
+                    var cachedDocs2 = JSON.parse(localStorage.getItem("dsOfflineProducts"));
+                    if (cachedDocs2 && cachedDocs2.length > 0) {
+                        processProducts(cachedDocs2);
+                        return;
+                    }
+                } catch (e) {}
+                processProducts([]);
+            }
         });
 }
 
@@ -702,7 +719,7 @@ function getDB() {
 
 function saveImageToDB(key, blob) {
     window.sessionImageCache.set(key, blob);
-    if (window.sessionImageCache.size > 80) {
+    if (window.sessionImageCache.size > 300) {
         window.sessionImageCache.delete(window.sessionImageCache.keys().next().value);
     }
 
@@ -894,23 +911,22 @@ function getImageFromDB(key) {
     if (window.sessionImageCache.has(key)) return Promise.resolve(window.sessionImageCache.get(key));
     return getDB().then(db => {
         return new Promise((resolve, reject) => {
-            var tx = db.transaction(storeName, "readwrite");
+            var tx = db.transaction(storeName, "readonly");
             var store = tx.objectStore(storeName);
             var req = store.get(key);
             req.onsuccess = () => {
                 var blob = req.result;
                 if (blob) {
                     if (blob.size === 0) {
-                        store.delete(key);
                         resolve(null);
                         return;
                     }
                     window.sessionImageCache.set(key, blob);
-                    if (window.sessionImageCache.size > 80) {
+                    if (window.sessionImageCache.size > 300) {
                         window.sessionImageCache.delete(window.sessionImageCache.keys().next().value);
                     }
                 }
-                resolve(blob);
+                resolve(blob || null);
             };
             req.onerror = () => reject(req.error);
         });
@@ -924,18 +940,13 @@ function checkImageInDB(key) {
     if (window.sessionImageCache.has(key)) return Promise.resolve(true);
     return getDB().then(db => {
         return new Promise((resolve) => {
-            var tx = db.transaction(storeName, "readwrite");
+            var tx = db.transaction(storeName, "readonly");
             var store = tx.objectStore(storeName);
             var req = store.get(key);
             req.onsuccess = () => {
                 var blob = req.result;
-                if (blob) {
-                    if (blob.size === 0) {
-                        store.delete(key);
-                        resolve(false);
-                    } else {
-                        resolve(true);
-                    }
+                if (blob && blob.size > 0) {
+                    resolve(true);
                 } else {
                     resolve(false);
                 }

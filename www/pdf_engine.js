@@ -27,6 +27,11 @@ function buildWixProductUrl(product) {
 function blobToBase64Direct(blob) {
     return new Promise(function(resolve) {
         if (!blob) { resolve(null); return; }
+        if (blob.size === 0) {
+            if (typeof window.logAppError === 'function') window.logAppError('Zero Byte Corrupt Image', 'PDF Engine Blob | Unknown');
+            resolve(null);
+            return;
+        }
         var fr = new FileReader();
         fr.onload = function() { resolve(fr.result); };
         fr.onerror = function() { resolve(null); };
@@ -97,7 +102,10 @@ function getBase64FromCache(cacheKey) {
                     throw new Error("HTTP " + res.status);
                 })
                 .then(function(netBlob) { 
-                    if (netBlob.size === 0) throw new Error("Zero byte file");
+                    if (netBlob.size === 0) {
+                        if (typeof window.logAppError === 'function') window.logAppError('Zero Byte Corrupt Image', fallbacks[index] + ' | PDF Generation');
+                        throw new Error("Zero byte file");
+                    }
                     return blobToBase64Direct(netBlob); 
                 })
                 .catch(function(err) {
