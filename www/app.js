@@ -148,6 +148,22 @@ window.addEventListener('DOMContentLoaded', function () {
             } catch (e) { }
         }
 
+        // Header scroll effect
+        var gridWrap = document.getElementById('gridWrapper');
+        if (gridWrap) {
+            gridWrap.addEventListener('scroll', function () {
+                var hdr = document.querySelector('.hdr');
+                if (!hdr) return;
+                if (this.scrollTop > 20) {
+                    hdr.style.backgroundColor = '#ffffff';
+                    hdr.style.borderBottom = '1px solid #eee';
+                } else {
+                    hdr.style.backgroundColor = 'transparent';
+                    hdr.style.borderBottom = 'none';
+                }
+            });
+        }
+
         try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
         try { cart = JSON.parse(localStorage.getItem("dsCart")) || {}; } catch (e) { }
         try { favorites = JSON.parse(localStorage.getItem("dsFavs")) || {}; } catch (e) { }
@@ -1199,7 +1215,7 @@ function buildCardDetails(p) {
 
     var h = [];
     h.push('<div style="display:flex; align-items:center; width:100%; gap:4px; overflow:hidden;">');
-    h.push('<div class="ci-brand" style="flex:1 1 0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0;">' + esc(p.name) + '</div>');
+    h.push('<div class="ci-brand" style="flex:1 1 0; min-width:0; margin:0; line-height:1.2;">' + esc(p.name) + '</div>');
 
     var packLen = String(p.packing || "1").length;
     var displayLen = Math.min(packLen, 8);
@@ -1208,7 +1224,7 @@ function buildCardDetails(p) {
     h.push('</div>');
 
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
-    h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px; width:100%;">');
+    h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:0; width:100%;">');
     h.push('<div style="display:flex; align-items:baseline; gap:0; overflow:hidden;">');
     if (displayMrp > 0) h.push('<span class="mrp" style="font-size:11px; margin-right:4px;">₹' + displayMrp + '</span>');
     h.push('<span style="font-weight:bold; font-size:13px; display:flex; align-items:center;">₹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
