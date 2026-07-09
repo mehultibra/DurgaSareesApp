@@ -192,12 +192,15 @@ html {
 
 .thumb img {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center top;
+    object-position: center;
     display: block;
+    margin: 0;
+    padding: 0;
 }
 
 .item-qty-badge {
@@ -215,7 +218,7 @@ html {
 }
 
 .ci {
-    padding: 4px 6px;
+    padding: 3px 5px 3px 5px;
     display: flex;
     flex-direction: column;
     gap: 0px;
@@ -740,12 +743,9 @@ html {
     display: none !important;
 }
 
-/* 🚨 THE FREEZE FIX: Forces headers to the very top layer so they are always clickable */
-.hdr,
+/* THE FREEZE FIX: Forces detail header to top layer so it is always clickable */
 .sl-hdr {
-    position: relative !important;
     z-index: 9999 !important;
-    background: transparent !important;
 }
 
 #searchContainerMain,
@@ -762,7 +762,7 @@ html {
     box-sizing: border-box !important;
     position: fixed !important;
     top: 0; left: 0; right: 0;
-    z-index: 100 !important;
+    z-index: 10000 !important;
     background: #ffffff !important;
     border-bottom: 1px solid #eeeeee;
     padding-top: max(10px, env(safe-area-inset-top, 10px)) !important;
@@ -770,6 +770,14 @@ html {
     height: calc(40px + max(10px, env(safe-area-inset-top, 10px))) !important;
     display: flex !important;
     align-items: flex-end !important;
+}
+
+.hdr img {
+    height: 40px !important;
+    object-fit: contain !important;
+    width: auto !important;
+    max-width: 100% !important;
+    flex-shrink: 0 !important;
 }
 
 .hdr img {
