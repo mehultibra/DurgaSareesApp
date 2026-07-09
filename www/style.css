@@ -35,6 +35,9 @@ html {
     height: 100vh;
     display: flex;
     flex-direction: column;
+    background-color: #ffffff;
+    background-image: linear-gradient(to bottom, #dcfce7 0%, #ffffff 220px);
+    background-repeat: no-repeat;
 }
 
 /* 🚀 BOOT LOADER */
@@ -67,9 +70,8 @@ html {
 
 /* 🚀 HEADER & SEARCH */
 .hdr {
-    background-color: #ff3f6c !important;
-    background-image: -webkit-linear-gradient(top, #990026 0%, #ff3f6c 100%) !important;
-    background-image: linear-gradient(to bottom, #990026 0%, #ff3f6c 100%) !important;
+    background-color: transparent !important;
+    background-image: none !important;
     padding-top: 24px !important;
     padding-top: calc(env(safe-area-inset-top, 20px) + 12px) !important;
     padding-bottom: 12px !important;
@@ -79,15 +81,15 @@ html {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between;
-    color: white !important;
+    color: var(--text-main) !important;
     z-index: 200;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    box-shadow: none !important;
     width: 100%;
     flex-shrink: 0;
-    border-bottom: none;
+    border-bottom: none !important;
 }
 .hdr i, .hdr-icons i {
-    color: white !important;
+    color: var(--text-main) !important;
 }
 
 .hdr img {
@@ -149,7 +151,7 @@ html {
     flex: 1;
     overflow-y: auto;
     padding-bottom: 70px;
-    background: #ffffff;
+    background: transparent;
     -webkit-overflow-scrolling: touch;
 }
 
