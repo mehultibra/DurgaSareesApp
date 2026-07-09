@@ -36,7 +36,7 @@ html {
     display: flex;
     flex-direction: column;
     background-color: #ffffff;
-    background-image: linear-gradient(to bottom, #dcfce7 0%, #ffffff 220px);
+    background-image: linear-gradient(to bottom, #f0fdf4 0%, #a7f3d0 260px, #ffffff 265px);
     background-repeat: no-repeat;
 }
 
@@ -733,12 +733,12 @@ html {
     display: none !important;
 }
 
-/* 🛡️ THE FREEZE FIX: Forces headers to the very top layer so they are always clickable */
+/* 🚨 THE FREEZE FIX: Forces headers to the very top layer so they are always clickable */
 .hdr,
 .sl-hdr {
-    position: relative !important;
-    z-index: 9999 !important;
-    background: #ffffff !important;
+      position: relative !important;
+      z-index: 9999 !important;
+      background: transparent !important;
 }
 
 #searchContainerMain,
@@ -752,15 +752,15 @@ html {
 ========================================== */
 /* Layer 100: Main Page */
 .hdr { 
-    box-sizing: border-box !important;
-    position: relative !important; 
-    z-index: 100 !important; 
-    background: #fff !important; 
-    padding-top: max(10px, env(safe-area-inset-top, 10px)) !important; 
-    padding-bottom: 6px !important;
-    height: calc(40px + max(10px, env(safe-area-inset-top, 10px))) !important; 
-    display: flex !important;
-    align-items: flex-end !important;
+      box-sizing: border-box !important;
+      position: relative !important; 
+      z-index: 100 !important; 
+      background: transparent !important; 
+      padding-top: max(10px, env(safe-area-inset-top, 10px)) !important; 
+      padding-bottom: 6px !important;
+      height: calc(40px + max(10px, env(safe-area-inset-top, 10px))) !important; 
+      display: flex !important;
+      align-items: flex-end !important;
 }
 
 .hdr img {
