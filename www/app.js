@@ -1227,9 +1227,9 @@ function buildCardDetails(p) {
 
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
     h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:0; width:100%;">');
-    h.push('<div style="display:flex; align-items:baseline; gap:0; overflow:hidden;">');
+    h.push('<div style="display:flex; align-items:baseline; gap:4px; overflow:hidden;">');
     h.push('<span style="font-weight:bold; font-size:13px; display:flex; align-items:center;">₹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
-    if (displayMrp > 0) h.push('<span class="mrp" style="font-size:11px; margin-left:4px; margin-right:4px;">₹' + displayMrp + '</span>');
+    if (displayMrp > 0) h.push('<span class="mrp" style="font-size:11px;">₹' + displayMrp + '</span>');
     if (offPercent > 0) h.push('<span class="discount" style="font-size:10px; color:#ff905a; font-weight:bold; white-space:nowrap;">' + offPercent + '% OFF</span>');
     h.push('</div>');
 
