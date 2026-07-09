@@ -151,8 +151,6 @@ html {
     flex: 1;
     overflow-y: auto;
     padding-bottom: 70px;
-    padding-top: 58px !important;
-    padding-top: calc(48px + env(safe-area-inset-top, 10px)) !important;
     padding-top: 94px !important;
     padding-top: calc(64px + env(safe-area-inset-top, 30px)) !important;
     padding-top: calc(64px + max(10px, env(safe-area-inset-top, 10px))) !important;
@@ -229,7 +227,7 @@ html {
 }
 
 .ci-brand {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: bold;
     color: var(--text-main);
     white-space: nowrap;
@@ -242,7 +240,7 @@ html {
 }
 
 .ci-fabric {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-light);
     white-space: nowrap;
     overflow-x: auto;
@@ -780,6 +778,16 @@ html {
 /* ==========================================
    🛡️ STRICT LAYERING & NOTCH FIX (V4)
 ========================================== */
+.ds-status-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: #dcfce7;
+    z-index: 10005;
+    height: 30px;
+    height: env(safe-area-inset-top, 30px);
+    height: max(10px, env(safe-area-inset-top, 10px));
+}
+
 /* Layer 100: Main Page */
 .hdr {
     box-sizing: border-box !important;
@@ -789,11 +797,10 @@ html {
     background: #ffffff !important;
     border-bottom: 1px solid #eeeeee;
     
-    border-top: 30px solid #dcfce7 !important;
-    border-top: env(safe-area-inset-top, 30px) solid #dcfce7 !important;
-    border-top: max(10px, env(safe-area-inset-top, 10px)) solid #dcfce7 !important;
+    padding-top: 40px !important; /* 10 + 30 notch fallback */
+    padding-top: calc(10px + env(safe-area-inset-top, 30px)) !important;
+    padding-top: calc(10px + max(10px, env(safe-area-inset-top, 10px))) !important;
     
-    padding-top: 10px !important;
     padding-bottom: 6px !important;
     
     height: 86px !important;
