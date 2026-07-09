@@ -67,26 +67,31 @@ html {
 
 /* 🚀 HEADER & SEARCH */
 .hdr {
-    background-color: #ffffff !important;
-    background-image: none !important;
-    padding: 0 14px !important;
-    height: 52px !important;
+    background-color: #ff3f6c !important;
+    background-image: -webkit-linear-gradient(top, #990026 0%, #ff3f6c 100%) !important;
+    background-image: linear-gradient(to bottom, #990026 0%, #ff3f6c 100%) !important;
+    padding-top: 24px !important;
+    padding-top: calc(env(safe-area-inset-top, 20px) + 12px) !important;
+    padding-bottom: 12px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    height: auto !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between;
-    color: var(--text-main) !important;
+    color: white !important;
     z-index: 200;
-    border-bottom: 2px solid var(--myntra-pink);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     width: 100%;
     flex-shrink: 0;
+    border-bottom: none;
 }
 .hdr i, .hdr-icons i {
-    color: var(--text-main) !important;
+    color: white !important;
 }
 
 .hdr img {
-    height: 38px !important;
+    height: 40px !important;
     object-fit: contain;
     mix-blend-mode: multiply;
 }

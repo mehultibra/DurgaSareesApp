@@ -141,10 +141,10 @@ window.addEventListener('DOMContentLoaded', function () {
     try {
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
             try {
-                // White header — use dark status bar icons
-                window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: false });
-                window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#ffffff' });
-                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'DARK' });
+                // Enable transparent status bar (overlaps webview)
+                window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true });
+                // Use light icons for the pink/red gradient background
+                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
             } catch (e) { }
         }
 
@@ -1208,7 +1208,7 @@ function buildCardDetails(p) {
     h.push('</div>');
 
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
-    h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; width:100%;">');
+    h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px; width:100%;">');
     h.push('<div style="display:flex; align-items:baseline; gap:0; overflow:hidden;">');
     if (displayMrp > 0) h.push('<span class="mrp" style="font-size:11px; margin-right:4px;">₹' + displayMrp + '</span>');
     h.push('<span style="font-weight:bold; font-size:13px; display:flex; align-items:center;">₹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
@@ -1301,7 +1301,7 @@ function renderProductGrid(products) {
                 ${bHtml}
                 <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
-            <div class="ci" id="detail-wrap-${p.id}" style="padding: 8px 0 0 0;">
+            <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
             </div>
         </div>
