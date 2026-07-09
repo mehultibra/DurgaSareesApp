@@ -141,9 +141,9 @@ window.addEventListener('DOMContentLoaded', function () {
     try {
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
             try {
-                // Enable transparent status bar (overlaps webview)
-                window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true });
-                // Use light icons for the pink/red gradient background
+                // White header — use dark status bar icons
+                window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: false });
+                window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#ffffff' });
                 window.Capacitor.Plugins.StatusBar.setStyle({ style: 'DARK' });
             } catch (e) { }
         }
