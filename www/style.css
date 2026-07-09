@@ -183,6 +183,7 @@ html {
 
 .thumb {
     width: 100%;
+    aspect-ratio: 3/4;
     background: #f5f5f6;
     position: relative;
     cursor: pointer;
@@ -190,8 +191,8 @@ html {
 
 .thumb img {
     width: 100%;
-    height: auto;
-    object-fit: contain;
+    height: 100%;
+    object-fit: cover;
     object-position: center;
     display: block;
 }
@@ -756,7 +757,7 @@ html {
 /* Layer 100: Main Page */
 .hdr {
     box-sizing: border-box !important;
-    position: absolute !important;
+    position: fixed !important;
     top: 0; left: 0; right: 0;
     z-index: 100 !important;
     background: transparent !important;
