@@ -306,14 +306,14 @@ html {
     font-weight: bold;
     color: var(--myntra-pink);
     cursor: pointer;
-    padding: 10px 16px;
-    margin: -10px -8px;
+    padding: 6px 8px;
+    margin: 0;
     outline: none;
 }
 
 .qty-clean input {
     border: none;
-    width: 26px;
+    width: 22px;
     text-align: center;
     font-weight: bold;
     font-size: 13px;

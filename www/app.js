@@ -1226,9 +1226,16 @@ function buildCardDetails(p) {
     h.push('</div>');
 
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
-    h.push('<div style="display:flex; flex-direction:column; margin-top:0; width:100%; gap:0;">');
-    h.push('<div style="display:flex; justify-content:space-between; align-items:baseline; width:100%; gap:4px;">');
+    h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:0; width:100%; gap:2px;">');
+    
+    // Left side: Price, MRP, OFF
+    h.push('<div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; overflow:hidden; white-space:nowrap;">');
     h.push('<span style="font-weight:700; font-size:14px; color:#282c3f;">₹' + parsedPrice + '</span>');
+    if (displayMrp > 0) h.push('<span style="font-size:10px; color:#94969f; text-decoration:line-through; flex-shrink:1; text-overflow:ellipsis; overflow:hidden;">₹' + displayMrp + '</span>');
+    if (offPercent > 0) h.push('<span style="font-size:10px; color:#ff905a; font-weight:700; flex-shrink:0;">' + offPercent + '% OFF</span>');
+    h.push('</div>');
+    
+    // Right side: ADD / QTY
     h.push('<div style="flex-shrink:0;">');
     if (!window.isAdminMode && p.totalStock === 0) {
         h.push('<div style="background: red; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">PACKED</div>');
@@ -1241,11 +1248,7 @@ function buildCardDetails(p) {
         h.push('<button onclick="chgMainRow(\'' + p.id + '\', 1)">+</button>');
         h.push('</div>');
     }
-    h.push('</div></div>');
-        h.push('<div style="display:flex; align-items:center; gap:3px;">');
-        h.push('<span style="font-size:10px; color:#94969f; text-decoration:line-through;">₹' + displayMrp + '</span>');
-        if (offPercent > 0) h.push('<span style="font-size:10px; color:#ff905a; font-weight:700;">' + offPercent + '% OFF</span>');
-        h.push('</div>');
+    h.push('</div>');
     h.push('</div>');
     return h.join('');
 }
