@@ -148,21 +148,7 @@ window.addEventListener('DOMContentLoaded', function () {
             } catch (e) { }
         }
 
-        // Header scroll effect
-        var gridWrap = document.getElementById('gridWrapper');
-        if (gridWrap) {
-            gridWrap.addEventListener('scroll', function () {
-                var hdr = document.querySelector('.hdr');
-                if (!hdr) return;
-                if (this.scrollTop > 20) {
-                    hdr.style.backgroundColor = '#ffffff';
-                    hdr.style.borderBottom = '1px solid #eee';
-                } else {
-                    hdr.style.backgroundColor = 'transparent';
-                    hdr.style.borderBottom = 'none';
-                }
-            });
-        }
+
 
         try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
         try { cart = JSON.parse(localStorage.getItem("dsCart")) || {}; } catch (e) { }
