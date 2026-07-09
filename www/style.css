@@ -196,7 +196,6 @@ html {
     object-fit: cover;
     object-position: center;
     display: block;
-    transform: scale(1.15);
 }
 
 .item-qty-badge {
