@@ -67,7 +67,10 @@ html {
 
 /* 🚀 HEADER & SEARCH */
 .hdr {
-    background: linear-gradient(to bottom, #990026 0%, #ff3f6c 100%) !important;
+    background-color: #ff3f6c !important;
+    background-image: -webkit-linear-gradient(top, #990026 0%, #ff3f6c 100%) !important;
+    background-image: linear-gradient(to bottom, #990026 0%, #ff3f6c 100%) !important;
+    padding-top: 24px !important;
     padding-top: calc(env(safe-area-inset-top, 20px) + 12px) !important;
     padding-bottom: 12px !important;
     padding-left: 12px !important;
