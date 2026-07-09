@@ -153,9 +153,9 @@ html {
     padding-bottom: 70px;
     padding-top: 58px !important;
     padding-top: calc(48px + env(safe-area-inset-top, 10px)) !important;
-    padding-top: 58px !important;
-    padding-top: calc(48px + env(safe-area-inset-top, 10px)) !important;
-    padding-top: calc(40px + max(10px, env(safe-area-inset-top, 10px)) + 8px) !important;
+    padding-top: 94px !important;
+    padding-top: calc(64px + env(safe-area-inset-top, 30px)) !important;
+    padding-top: calc(64px + max(10px, env(safe-area-inset-top, 10px))) !important;
     background-color: #ffffff;
     background-image: linear-gradient(to bottom, #dcfce7 0%, #ffffff 250px);
     background-repeat: no-repeat;
@@ -788,12 +788,17 @@ html {
     z-index: 10000 !important;
     background: #ffffff !important;
     border-bottom: 1px solid #eeeeee;
+    
+    border-top: 30px solid #dcfce7 !important;
+    border-top: env(safe-area-inset-top, 30px) solid #dcfce7 !important;
+    border-top: max(10px, env(safe-area-inset-top, 10px)) solid #dcfce7 !important;
+    
     padding-top: 10px !important;
-    padding-top: max(10px, env(safe-area-inset-top, 10px)) !important;
     padding-bottom: 6px !important;
-    height: 56px !important;
-    height: calc(46px + env(safe-area-inset-top, 10px)) !important;
-    height: calc(40px + max(10px, env(safe-area-inset-top, 10px))) !important;
+    
+    height: 86px !important;
+    height: calc(56px + env(safe-area-inset-top, 30px)) !important;
+    height: calc(56px + max(10px, env(safe-area-inset-top, 10px))) !important;
     display: flex !important;
     align-items: flex-end !important;
 }
