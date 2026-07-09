@@ -1226,13 +1226,9 @@ function buildCardDetails(p) {
     h.push('</div>');
 
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
-    h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:0; width:100%; overflow:visible;">');
-    h.push('<div style="display:flex; align-items:center; gap:3px; overflow:visible; flex-shrink:1; min-width:0;">');
-    h.push('<span style="font-weight:700; font-size:14px; color:#282c3f; display:inline-flex; align-items:center; white-space:nowrap; flex-shrink:0;">₹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
-    if (displayMrp > 0) h.push('<span style="font-size:10px; color:#94969f; text-decoration:line-through; white-space:nowrap; flex-shrink:0;">₹' + displayMrp + '</span>');
-    if (offPercent > 0) h.push('<span style="font-size:10px; color:#ff905a; font-weight:700; white-space:nowrap; flex-shrink:0;">' + offPercent + '% OFF</span>');
-    h.push('</div>');
-
+    h.push('<div style="display:flex; flex-direction:column; margin-top:0; width:100%; gap:0;">');
+    h.push('<div style="display:flex; justify-content:space-between; align-items:baseline; width:100%; gap:4px;">');
+    h.push('<span style="font-weight:700; font-size:14px; color:#282c3f;">₹' + parsedPrice + '</span>');
     h.push('<div style="flex-shrink:0;">');
     if (!window.isAdminMode && p.totalStock === 0) {
         h.push('<div style="background: red; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">PACKED</div>');
@@ -1246,6 +1242,11 @@ function buildCardDetails(p) {
         h.push('</div>');
     }
     h.push('</div></div>');
+        h.push('<div style="display:flex; align-items:center; gap:3px;">');
+        h.push('<span style="font-size:10px; color:#94969f; text-decoration:line-through;">₹' + displayMrp + '</span>');
+        if (offPercent > 0) h.push('<span style="font-size:10px; color:#ff905a; font-weight:700;">' + offPercent + '% OFF</span>');
+        h.push('</div>');
+    h.push('</div>');
     return h.join('');
 }
 
@@ -1317,7 +1318,7 @@ function renderProductGrid(products) {
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
+                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}" style="object-position: top center;">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
@@ -2522,7 +2523,7 @@ function openCart() {
                     "openCartFsFromCache('" + g.p.id + "', '" + safeDesignLabel + "', '" + g.p.gridUrl + "')";
 
                 cHtml.push('<div style="width: 80px; text-align: center;" ' + (!isEditing ? 'onclick="' + onClickAction + '"' : '') + '>');
-                cHtml.push('<img id="' + imgId + '" src="' + window.dsMissingImage + '" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); ' + (!isEditing ? 'cursor: pointer;' : '') + '">');
+                cHtml.push('<img id="' + imgId + '" src="' + window.dsMissingImage + '" style="width: 80px; height: 80px; object-fit: cover; object-position: top center; border: 1px solid var(--border); ' + (!isEditing ? 'cursor: pointer;' : '') + '">');
                 cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + dLabel + '</div>');
 
                 if (isEditing) {
