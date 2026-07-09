@@ -151,7 +151,7 @@ html {
     flex: 1;
     overflow-y: auto;
     padding-bottom: 70px;
-    padding-top: calc(40px + max(10px, env(safe-area-inset-top, 10px))) !important;
+    padding-top: calc(40px + max(10px, env(safe-area-inset-top, 10px)) + 8px) !important;
     background-color: #ffffff;
     background-image: linear-gradient(to bottom, #dcfce7 0%, #ffffff 250px);
     background-repeat: no-repeat;
@@ -261,10 +261,12 @@ html {
     font-size: 13px;
     font-weight: bold;
     color: var(--text-main);
-    width: 45px;
+    width: 55px;
     text-align: left;
     outline: none;
     padding: 0;
+    display: inline-block;
+    vertical-align: middle;
 }
 
 .mrp {
@@ -772,13 +774,6 @@ html {
     align-items: flex-end !important;
 }
 
-.hdr img {
-    height: 40px !important;
-    object-fit: contain !important;
-    width: auto !important;
-    max-width: 100% !important;
-    flex-shrink: 0 !important;
-}
 
 .hdr img {
     height: 40px !important;

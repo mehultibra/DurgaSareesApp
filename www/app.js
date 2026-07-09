@@ -1226,11 +1226,11 @@ function buildCardDetails(p) {
     h.push('</div>');
 
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
-    h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:0; width:100%;">');
-    h.push('<div style="display:flex; align-items:center; gap:4px; overflow:hidden; flex-wrap:nowrap;">');
-    h.push('<span style="font-weight:700; font-size:14px; color:#282c3f; display:inline-flex; align-items:center; white-space:nowrap;">₹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
-    if (displayMrp > 0) h.push('<span style="font-size:11px; color:#94969f; text-decoration:line-through; white-space:nowrap;">₹' + displayMrp + '</span>');
-    if (offPercent > 0) h.push('<span style="font-size:11px; color:#ff905a; font-weight:700; white-space:nowrap;">' + offPercent + '% OFF</span>');
+    h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:0; width:100%; overflow:visible;">');
+    h.push('<div style="display:flex; align-items:center; gap:3px; overflow:visible; flex-shrink:1; min-width:0;">');
+    h.push('<span style="font-weight:700; font-size:14px; color:#282c3f; display:inline-flex; align-items:center; white-space:nowrap; flex-shrink:0;">₹<input type="number" class="price-input-inline" value="' + parsedPrice + '" readonly onclick="event.stopPropagation()"></span>');
+    if (displayMrp > 0) h.push('<span style="font-size:10px; color:#94969f; text-decoration:line-through; white-space:nowrap; flex-shrink:0;">₹' + displayMrp + '</span>');
+    if (offPercent > 0) h.push('<span style="font-size:10px; color:#ff905a; font-weight:700; white-space:nowrap; flex-shrink:0;">' + offPercent + '% OFF</span>');
     h.push('</div>');
 
     h.push('<div style="flex-shrink:0;">');
