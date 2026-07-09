@@ -4798,6 +4798,13 @@ function previewLabel(type) {
         document.getElementById('stkProduct').innerText = curProduct.name || 'Product Name';
         document.getElementById('stkPrice').innerText = '\u20b9' + (curProduct.price || '0');
         document.getElementById('stkDesign').innerText = '00';
+        document.getElementById('stkFabric').innerText = curProduct.fabric || 'Standard Fabric';
+        document.getElementById('stkCut').innerText = curProduct.cut || '6.30 Mtr';
+
+        var prodImg = document.getElementById('img_' + curProduct.id);
+        if (prodImg && prodImg.src) {
+            document.getElementById('stkProductImg').src = prodImg.src;
+        }
 
         // Generate QR code (encodes SKU so it can be scanned)
         var qrEl = document.getElementById('stkQRCode');
@@ -4964,7 +4971,7 @@ function confirmPrint() {
         tpl.style.border = 'none';
         tpl.style.boxShadow = 'none';
         // Also hide any active focus underlines on contenteditable fields
-        ['stkProduct', 'stkPrice', 'stkDesign'].forEach(function(id) {
+        ['stkProduct', 'stkPrice', 'stkDesign', 'stkFabric', 'stkCut'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.style.borderBottom = 'none';
         });
