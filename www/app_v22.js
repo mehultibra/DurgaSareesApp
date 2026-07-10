@@ -157,10 +157,8 @@ window.addEventListener('DOMContentLoaded', function () {
                 var hdr = document.querySelector('.hdr');
                 if (!hdr) return;
                 if (this.scrollTop > 20) {
-                    hdr.style.backgroundColor = '#ffffff';
                     hdr.style.borderBottom = '1px solid #eee';
                 } else {
-                    hdr.style.backgroundColor = 'transparent';
                     hdr.style.borderBottom = 'none';
                 }
             });
