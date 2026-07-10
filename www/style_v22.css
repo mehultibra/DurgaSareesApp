@@ -782,9 +782,8 @@ html {
     position: fixed;
     top: 0; left: 0; right: 0;
     background: #dcfce7;
-    z-index: 90;
-    height: 30px;
-    height: env(safe-area-inset-top, 30px);
+    z-index: 105;
+    height: max(30px, env(safe-area-inset-top, 30px));
 }
 
 /* Layer 100: Main Page */
@@ -796,7 +795,7 @@ html {
     background: #ffffff !important;
     border-bottom: 1px solid #eeeeee;
     
-    padding-top: calc(15px + env(safe-area-inset-top, 10px)) !important;
+    padding-top: calc(max(30px, env(safe-area-inset-top, 30px)) + 10px) !important;
     padding-bottom: 10px !important;
     padding-left: 12px !important;
     padding-right: 12px !important;
