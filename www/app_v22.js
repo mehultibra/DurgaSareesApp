@@ -155,11 +155,16 @@ window.addEventListener('DOMContentLoaded', function () {
         if (gridWrap) {
             gridWrap.addEventListener('scroll', function () {
                 var hdr = document.querySelector('.hdr');
+                var metaTheme = document.querySelector('meta[name="theme-color"]');
                 if (!hdr) return;
                 if (this.scrollTop > 20) {
+                    hdr.style.backgroundColor = '#ffffff';
                     hdr.style.borderBottom = '1px solid #eee';
+                    if (metaTheme) metaTheme.setAttribute('content', '#ffffff');
                 } else {
+                    hdr.style.backgroundColor = '#dcfce7';
                     hdr.style.borderBottom = 'none';
+                    if (metaTheme) metaTheme.setAttribute('content', '#dcfce7');
                 }
             });
         }

@@ -788,17 +788,18 @@ html {
     position: fixed !important;
     top: 0; left: 0; right: 0;
     z-index: 100 !important;
-    background: #dcfce7 !important;
+    background-color: #dcfce7;
     border-bottom: 1px solid #eeeeee;
+    transition: background-color 0.3s ease;
     
-    padding-top: 30px !important;
-    padding-top: max(30px, env(safe-area-inset-top, 30px)) !important;
-    padding-bottom: 0px !important;
+    padding-top: 40px !important;
+    padding-top: calc(10px + max(30px, env(safe-area-inset-top, 30px))) !important;
+    padding-bottom: 10px !important;
     padding-left: 12px !important;
     padding-right: 12px !important;
     
-    height: 80px !important;
-    height: calc(50px + max(30px, env(safe-area-inset-top, 30px))) !important;
+    height: 90px !important;
+    height: calc(50px + max(40px, env(safe-area-inset-top, 40px))) !important;
     display: flex !important;
     align-items: center !important;
 }
