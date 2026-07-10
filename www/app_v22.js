@@ -1324,9 +1324,7 @@ function renderProductGrid(products) {
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: top center; background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');">
-                    <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}" style="opacity: 0; width: 100%; height: 100%; position: absolute; z-index: -1;" onload="this.parentElement.style.backgroundImage = 'url(&quot;' + this.src + '&quot;)'">
-                </div>
+                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
