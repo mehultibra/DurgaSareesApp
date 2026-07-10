@@ -86,15 +86,16 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
                 eager: [
                     { transformation: [
                         { effect: 'auto_color' }, 
-                        { width: 360, height: 450, crop: 'fill', gravity: 'auto' }, 
+                        { width: 1080, crop: 'scale' }, 
                         { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
                         { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
                         { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
+                        { width: 360, crop: 'scale' },
                         { fetch_format: 'webp' }
                     ] },
                     { transformation: [
                         { effect: 'auto_color' }, 
-                        { width: 1080, height: 1350, crop: 'fill', gravity: 'auto' }, 
+                        { width: 1080, crop: 'scale' }, 
                         { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
                         { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
                         { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
@@ -103,10 +104,11 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
                     { transformation: [{ effect: 'auto_color' }, { effect: 'improve' }, { fetch_format: 'jpg' }] },
                     { transformation: [
                         { effect: 'auto_color' }, 
-                        { width: 1024, crop: 'scale' }, 
+                        { width: 1080, crop: 'scale' }, 
                         { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
                         { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
                         { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
+                        { width: 1024, crop: 'scale' },
                         { fetch_format: 'jpg' }
                     ] }
                 ],
