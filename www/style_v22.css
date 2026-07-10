@@ -182,15 +182,20 @@ html {
 
 .thumb {
     width: 100%;
+    position: relative;
+    height: 0 !important;
+    padding-bottom: 166.666% !important;
     background: #f5f5f6;
     cursor: pointer;
     overflow: hidden;
 }
 
 .thumb img {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100% !important;
-    height: auto !important;
-    aspect-ratio: 3/5 !important;
+    height: 100% !important;
     object-fit: cover !important;
     object-position: top !important;
     display: block;
