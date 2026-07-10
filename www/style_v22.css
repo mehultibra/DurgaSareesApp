@@ -772,7 +772,7 @@ html {
 #searchContainerMain,
 #searchContainerDetail {
     position: relative !important;
-    z-index: 9998 !important;
+    z-index: 99 !important;
 }
 
 /* ==========================================
@@ -782,7 +782,7 @@ html {
     position: fixed;
     top: 0; left: 0; right: 0;
     background: #dcfce7;
-    z-index: 10005;
+    z-index: 105;
     height: 30px;
     height: env(safe-area-inset-top, 30px);
     height: max(10px, env(safe-area-inset-top, 10px));
@@ -793,7 +793,7 @@ html {
     box-sizing: border-box !important;
     position: fixed !important;
     top: 0; left: 0; right: 0;
-    z-index: 10000 !important;
+    z-index: 100 !important;
     background: #ffffff !important;
     border-bottom: 1px solid #eeeeee;
     
