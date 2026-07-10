@@ -92,7 +92,7 @@ html {
 }
 
 .hdr img {
-    height: 35px !important;
+    height: 40px !important;
     object-fit: contain;
     mix-blend-mode: multiply;
 }
@@ -799,7 +799,7 @@ html {
 
 
 .hdr img {
-    height: 35px !important;
+    height: 40px !important;
     object-fit: contain !important;
     width: auto !important;
     max-width: 100% !important;
