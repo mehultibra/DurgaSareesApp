@@ -196,8 +196,8 @@ html {
     left: 0;
     width: 100% !important;
     height: 100% !important;
-    object-fit: cover !important;
-    object-position: top !important;
+    object-fit: fill !important;
+    object-position: center !important;
     display: block;
     margin: 0;
     padding: 0;
