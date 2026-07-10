@@ -927,9 +927,6 @@ html {
     width: 100%;
     z-index: 5010 !important;
     padding-top: calc(15px + env(safe-area-inset-top)) !important;
-    position: absolute;
-    top: 0;
-    left: 0;
 }
 
 .fs-img-container {
