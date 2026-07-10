@@ -162,7 +162,7 @@ window.addEventListener('DOMContentLoaded', function () {
                     hdr.style.borderBottom = '1px solid #eee';
                     if (metaTheme) metaTheme.setAttribute('content', '#ffffff');
                 } else {
-                    hdr.style.backgroundColor = '#dcfce7';
+                    hdr.style.backgroundColor = 'transparent';
                     hdr.style.borderBottom = 'none';
                     if (metaTheme) metaTheme.setAttribute('content', '#dcfce7');
                 }
