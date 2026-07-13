@@ -198,10 +198,12 @@ html {
     height: 100% !important;
     object-fit: cover !important;
     object-position: top center !important;
-    transform: scale(1.15) !important;
+    transform: scale(1.15);
+    transform-origin: top center;
     display: block;
     margin: 0;
     padding: 0;
+    transition: opacity 0.2s ease;
 }
 
 .item-qty-badge {

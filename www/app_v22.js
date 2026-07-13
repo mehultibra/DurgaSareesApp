@@ -1324,9 +1324,7 @@ function renderProductGrid(products) {
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: top center; transform: scale(1.15); background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');">
-                    <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}" style="opacity: 0; width: 100%; height: 100%; position: absolute; z-index: -1;" onload="this.parentElement.style.backgroundImage = 'url(&quot;' + this.src + '&quot;)'">
-                </div>
+                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
@@ -2302,43 +2300,6 @@ function openFs(arg1, arg2, arg3, arg4) {
         pId = arg1; index = arg2; dId = arg3;
     }
 
-    if (cartImgSrc) {
-        window.fsIsStandalone = false; // THE FIX: Allow swiping from Cart!
-        fsDesignId = dId;
-
-        var fsModal = document.getElementById('fsModal');
-        var fsImg = document.getElementById('fsImg');
-        var fsVideo = document.getElementById('fsVideo');
-        if (fsVideo) fsVideo.style.display = 'none';
-
-        fsImg.style.display = 'block';
-        fsImg.src = cartImgSrc;
-        fsImg.style.transition = '';
-        fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
-        fsScale = 1; fsTranslateX = 0; fsTranslateY = 0;
-
-        var pItem = allProducts.find(x => x.id === pId);
-        document.getElementById('fsTitle').innerText = (pItem ? pItem.name : pId) + " - " + (dId === 'DIRECT' ? "Cover" : dId);
-
-        var keyCart = pId + '_' + dId;
-
-        var curStock = pItem && pItem.stock && pItem.stock[dId] !== undefined ? pItem.stock[dId] : 999;
-        var fsControls = document.querySelector('.fs-controls');
-        if (fsControls) {
-            if (!window.isAdminMode && curStock === 0) {
-                fsControls.innerHTML = '<span style="background: red; color: white; padding: 6px 16px; border-radius: 4px; font-weight: bold; font-size: 16px;">PACKED</span>';
-            } else {
-                fsControls.innerHTML = '<button onclick="fsChg(-1)">−</button><span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">' + (cart[keyCart] ? cart[keyCart].qty : 0) + '</span><button onclick="fsChg(1)">+</button>';
-            }
-        }
-
-        document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'none');
-
-        fsModal.style.display = 'flex';
-        pushHistoryState('fs');
-        return;
-    }
-
     window.fsIsStandalone = false;
     document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'block');
 
@@ -2457,6 +2418,26 @@ function fsChg(amt) {
 // ====================================
 // 🛒 CART MODAL
 // ====================================
+
+window.openCartFsFromCache = function(pId, dId, gridUrl) {
+    var pItem = allProducts.find(x => x.id === pId);
+    if (!pItem) return;
+    
+    // 1. Populate detail panel silently to generate the swipe-cards without showing it
+    openDetail(pId, true);
+    
+    // 2. Wait for DOM to parse
+    setTimeout(function() {
+        // Try to get cartImgSrc from the clicked cart element for immediate fallback
+        var cartImgId = "cart_img_" + pId + "_" + (dId === 'DIRECT' ? 'DIRECT' : dId.replace(/[^a-zA-Z0-9]/g, ''));
+        var cartImgEl = document.getElementById(cartImgId);
+        var cartImgSrc = cartImgEl ? cartImgEl.src : null;
+        
+        // 3. Open Fullscreen normally with full swiping enabled
+        openFs(pId, 0, dId, cartImgSrc);
+    }, 100);
+};
+
 function openCart() {
     cameFromDetail = false;
     try {
