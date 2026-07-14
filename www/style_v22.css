@@ -205,7 +205,8 @@ html {
     margin: 0;
     padding: 0;
     transition: opacity 0.2s ease, transform 0.2s ease;
-    transform-origin: center center;
+    transform: scale(1.15);
+    transform-origin: top center;
 }
 
 .item-qty-badge {
