@@ -1324,7 +1324,7 @@ function renderProductGrid(products) {
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" onload="if(this.naturalWidth && this.naturalHeight) { var ratio = this.naturalWidth / this.naturalHeight; var z = 1.0; if(ratio > 1.2) z = 1.25; else if (ratio > 0.9) z = 1.15; this.style.setProperty('width', (z*100)+'%', 'important'); this.style.setProperty('height', (z*100)+'%', 'important'); this.style.setProperty('top', '-' + ((z-1)*50) + '%', 'important'); this.style.setProperty('left', '-' + ((z-1)*50) + '%', 'important'); }" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
+                <img id="${imgElementId}" onload="this.style.setProperty('width', '100%', 'important'); this.style.setProperty('height', '100%', 'important'); this.style.setProperty('top', '0', 'important'); this.style.setProperty('left', '0', 'important');" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
