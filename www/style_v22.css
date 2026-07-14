@@ -200,8 +200,6 @@ html {
     height: 100% !important;
     object-fit: cover !important;
     object-position: center center !important;
-    transform: scale(1.25);
-    transform-origin: center center;
     display: block;
     margin: 0;
     padding: 0;
