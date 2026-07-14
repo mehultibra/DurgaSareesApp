@@ -410,7 +410,7 @@ html {
     position: fixed;
     inset: 0;
     background: #fff;
-    z-index: 1500;
+    z-index: 3100;
     flex-direction: column;
 }
 

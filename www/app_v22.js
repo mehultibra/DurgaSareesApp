@@ -2482,7 +2482,7 @@ function openCart() {
 
             cHtml.push('<div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden;">');
             cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">');
-            cHtml.push('<div style="' + (!isEditing ? 'cursor:pointer;' : '') + ' flex:1;" ' + (!isEditing ? 'onclick="closeCart(true); openDetail(\'' + g.p.id + '\');"' : '') + '>');
+            cHtml.push('<div style="' + (!isEditing ? 'cursor:pointer;' : '') + ' flex:1;" ' + (!isEditing ? 'onclick="openDetail(\'' + g.p.id + '\');"' : '') + '>');
             cHtml.push('<div style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></div>');
 
             if (isEditing) {
@@ -2508,7 +2508,7 @@ function openCart() {
                 var imgId = "cart_img_" + g.p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
 
                 var onClickAction = safeDesignLabel === 'DIRECT' ?
-                    "closeCart(true); openDetail('" + g.p.id + "');" :
+                    "openDetail('" + g.p.id + "');" :
                     "openCartFsFromCache('" + g.p.id + "', '" + safeDesignLabel + "', '" + g.p.gridUrl + "');";
 
                 cHtml.push('<div style="width: 80px; text-align: center;" ' + (!isEditing ? 'onclick="' + onClickAction + '"' : '') + '>');
