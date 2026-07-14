@@ -1324,7 +1324,7 @@ function renderProductGrid(products) {
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
+                <img id="${imgElementId}" onload="if(this.naturalWidth && this.naturalHeight) { if(this.naturalWidth/this.naturalHeight > 1.15) { this.style.transform='scale(1.35)'; } else { this.style.transform='none'; } }" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
