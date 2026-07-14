@@ -188,6 +188,8 @@ html {
     position: relative;
     aspect-ratio: 3 / 4;
     background: #ffffff;
+    border: 1px solid #eaeaec;
+    border-radius: 4px;
     cursor: pointer;
     overflow: hidden;
 }
@@ -198,7 +200,7 @@ html {
     left: 0;
     width: 100% !important;
     height: 100% !important;
-    object-fit: cover !important;
+    object-fit: contain !important;
     object-position: center center !important;
     display: block;
     margin: 0;
