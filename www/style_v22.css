@@ -200,6 +200,7 @@ html {
     height: 100% !important;
     object-fit: cover !important;
     object-position: center center !important;
+    mix-blend-mode: multiply;
     display: block;
     margin: 0;
     padding: 0;
