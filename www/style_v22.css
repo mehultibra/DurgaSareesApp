@@ -199,9 +199,9 @@ html {
     width: 100% !important;
     height: 100% !important;
     object-fit: cover !important;
-    object-position: top center !important;
-    transform: scale(1.15);
-    transform-origin: top center;
+    object-position: center center !important;
+    transform: scale(1.25);
+    transform-origin: center center;
     display: block;
     margin: 0;
     padding: 0;
