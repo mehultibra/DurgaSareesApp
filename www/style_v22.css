@@ -178,6 +178,9 @@ html {
     border-radius: 6px;
     border: none;
     overflow: hidden;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
 }
 
 .thumb {
@@ -224,6 +227,9 @@ html {
     display: flex;
     flex-direction: column;
     gap: 0px;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
 }
 
 .ci-brand {
@@ -829,7 +835,7 @@ html {
     position: fixed;
     inset: 0;
     background: #fff;
-    z-index: 200 !important;
+    z-index: 310 !important;
     flex-direction: column;
 }
 
@@ -841,7 +847,7 @@ html {
     box-sizing: border-box !important;
     flex-shrink: 0;
     position: relative !important;
-    z-index: 210 !important;
+    z-index: 320 !important;
     background: #fff;
     padding-top: max(10px, env(safe-area-inset-top, 10px)) !important;
     padding-bottom: 6px !important;
@@ -866,7 +872,7 @@ html {
     right: 0;
     background: #fff;
     border-top: none;
-    z-index: 220 !important;
+    z-index: 330 !important;
     padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)) !important;
     height: calc(40px + max(6px, env(safe-area-inset-bottom, 0px))) !important;
     display: flex;
