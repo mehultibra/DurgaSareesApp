@@ -1324,7 +1324,7 @@ function renderProductGrid(products) {
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" onload="if(this.naturalWidth && this.naturalHeight) { if(this.naturalWidth/this.naturalHeight > 0.9) { this.style.setProperty('width', '135%', 'important'); this.style.setProperty('height', '135%', 'important'); this.style.setProperty('top', '-17.5%', 'important'); this.style.setProperty('left', '-17.5%', 'important'); } else { this.style.setProperty('width', '100%', 'important'); this.style.setProperty('height', '100%', 'important'); this.style.setProperty('top', '0', 'important'); this.style.setProperty('left', '0', 'important'); } }" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
+                <img id="${imgElementId}" onload="this.style.setProperty('width', '100%', 'important'); this.style.setProperty('height', '100%', 'important'); this.style.setProperty('top', '0', 'important'); this.style.setProperty('left', '0', 'important');" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
