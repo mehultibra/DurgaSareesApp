@@ -200,13 +200,13 @@ html {
     width: 100% !important;
     height: 100% !important;
     object-fit: cover !important;
-    object-position: top center !important;
+    object-position: center center !important;
     display: block;
     margin: 0;
     padding: 0;
     transition: opacity 0.2s ease, transform 0.2s ease;
-    transform: scale(1.15);
-    transform-origin: top center;
+    transform: scale(1.25);
+    transform-origin: center center;
 }
 
 .item-qty-badge {
