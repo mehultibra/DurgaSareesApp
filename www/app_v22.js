@@ -663,7 +663,7 @@ function initApp() {
             processProducts(cachedDocs);
             loadedFromCache = true;
         }
-    } catch (e) {}
+    } catch (e) { }
 
     // Show boot screen only if we have nothing cached
     if (!loadedFromCache && bootScreen) bootScreen.style.display = 'flex';
@@ -678,7 +678,7 @@ function initApp() {
             var docs = data.documents || [];
             if (docs.length > 0) {
                 // Only save to cache if we got valid data
-                try { localStorage.setItem("dsOfflineProducts", JSON.stringify(docs)); } catch (e) {}
+                try { localStorage.setItem("dsOfflineProducts", JSON.stringify(docs)); } catch (e) { }
             }
             if (bootScreen) bootScreen.style.display = 'none';
             // Only re-render if we did NOT already render from cache (avoid double render)
@@ -698,7 +698,7 @@ function initApp() {
                         processProducts(cachedDocs2);
                         return;
                     }
-                } catch (e) {}
+                } catch (e) { }
                 processProducts([]);
             }
         });
@@ -1043,7 +1043,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         if (dsFallbackMap[gridPath]) {
             var cachedFile = dsFallbackMap[gridPath];
             var cachedUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cachedFile) + "?alt=media";
-            getImageFromDB(cachedUrl).then(function(blob) {
+            getImageFromDB(cachedUrl).then(function (blob) {
                 if (blob) {
                     var objUrl = URL.createObjectURL(blob);
                     imgElement.src = objUrl;
@@ -1075,7 +1075,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                     saveFallbackMap();
                     var firstUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(firstFile) + "?alt=media";
                     // Try IDB first, then network
-                    getImageFromDB(firstUrl).then(function(blob) {
+                    getImageFromDB(firstUrl).then(function (blob) {
                         if (blob) {
                             var objUrl = URL.createObjectURL(blob);
                             imgElement.src = objUrl;
@@ -1230,14 +1230,14 @@ function buildCardDetails(p) {
 
     h.push('<div class="ci-fabric" style="margin-top:0;">' + esc(p.fabric) + '</div>');
     h.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-top:0; width:100%; gap:2px;">');
-    
+
     // Left side: Price, MRP, OFF
     h.push('<div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; overflow:hidden; white-space:nowrap;">');
     h.push('<span style="font-weight:700; font-size:14px; color:#282c3f;">₹' + parsedPrice + '</span>');
     if (displayMrp > 0) h.push('<span style="font-size:10px; color:#94969f; text-decoration:line-through; flex-shrink:1; text-overflow:ellipsis; overflow:hidden;">₹' + displayMrp + '</span>');
     if (offPercent > 0) h.push('<span style="font-size:10px; color:#ff905a; font-weight:700; flex-shrink:0;">' + offPercent + '% OFF</span>');
     h.push('</div>');
-    
+
     // Right side: ADD / QTY
     h.push('<div style="flex-shrink:0;">');
     if (!window.isAdminMode && p.totalStock === 0) {
@@ -1324,7 +1324,7 @@ function renderProductGrid(products) {
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" onload="if(this.naturalWidth && this.naturalHeight) { if(this.naturalWidth/this.naturalHeight > 0.9) { this.style.transform='scale(1.35)'; } else { this.style.transform='scale(1)'; } }" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
+                <img id="${imgElementId}" onload="if(this.naturalWidth && this.naturalHeight) { if(this.naturalWidth/this.naturalHeight > 0.9) { this.style.setProperty('width', '135%', 'important'); this.style.setProperty('height', '135%', 'important'); this.style.setProperty('top', '-17.5%', 'important'); this.style.setProperty('left', '-17.5%', 'important'); } else { this.style.setProperty('width', '100%', 'important'); this.style.setProperty('height', '100%', 'important'); this.style.setProperty('top', '0', 'important'); this.style.setProperty('left', '0', 'important'); } }" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
@@ -1619,17 +1619,17 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     var f = data.fields;
                     var livePrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
                     var livePacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
-                    
+
                     p.price = livePrice;
                     p.packing = livePacking;
-                    
+
                     if (curProduct && curProduct.id === p.id) {
                         document.getElementById('dtPriceBot').innerText = p.price || '0';
                         document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
                     }
                     refreshCardUI(p.id);
                 }
-            }).catch(e => {});
+            }).catch(e => { });
     }
 
     var deck = document.getElementById('dtDesigns');
@@ -1806,7 +1806,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
     if (window.dsFolderCache && window.dsFolderCache[listUrl]) {
         processFolderItems(window.dsFolderCache[listUrl]);
     }
-    
+
     // ALWAYS fetch from network to sync any newly uploaded admin images
     fetch(listUrl + "&_t=" + new Date().getTime(), { cache: 'no-store' })
         .then(res => {
@@ -1816,13 +1816,13 @@ function openDetail(productId, skipShow, keepSearchShown) {
         .then(data => {
             var items = data.items || [];
             if (!window.dsFolderCache) window.dsFolderCache = {};
-            
+
             var oldItemsStr = JSON.stringify(window.dsFolderCache[listUrl] || []);
             var newItemsStr = JSON.stringify(items);
-            
+
             window.dsFolderCache[listUrl] = items;
             try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
-            
+
             if (oldItemsStr !== newItemsStr) {
                 processFolderItems(items);
             }
@@ -2419,20 +2419,20 @@ function fsChg(amt) {
 // 🛒 CART MODAL
 // ====================================
 
-window.openCartFsFromCache = function(pId, dId, gridUrl) {
+window.openCartFsFromCache = function (pId, dId, gridUrl) {
     var pItem = allProducts.find(x => x.id === pId);
     if (!pItem) return;
-    
+
     // 1. Populate detail panel silently to generate the swipe-cards without showing it
     openDetail(pId, true);
-    
+
     // 2. Wait for DOM to parse
-    setTimeout(function() {
+    setTimeout(function () {
         // Try to get cartImgSrc from the clicked cart element for immediate fallback
         var cartImgId = "cart_img_" + pId + "_" + (dId === 'DIRECT' ? 'DIRECT' : dId.replace(/[^a-zA-Z0-9]/g, ''));
         var cartImgEl = document.getElementById(cartImgId);
         var cartImgSrc = cartImgEl ? cartImgEl.src : null;
-        
+
         // 3. Open Fullscreen normally with full swiping enabled
         openFs(pId, 0, dId, cartImgSrc);
     }, 100);
@@ -3332,7 +3332,7 @@ function saveProductEdit(p) {
         // 🚀 NEW: 2-WAY SYNC FROM PRODUCT PAGE - FIREBASE & EXCEL WEBHOOK
         if (p && p.docId) {
             showDevLog("Syncing Page: " + p.name + " -> Rate: " + p.price + " Pack: " + p.packing, false);
-            
+
             var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
             var payload = {
                 fields: {
@@ -3360,10 +3360,10 @@ function saveProductEdit(p) {
                         packing: p.packing
                     })
                 }).then(r => r.json())
-                  .then(data => {
-                     if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
-                     else showDevLog("✅ Excel Updated: " + p.name, false);
-                  }).catch(e => showDevLog("Excel Net Err: " + e.message, true));
+                    .then(data => {
+                        if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
+                        else showDevLog("✅ Excel Updated: " + p.name, false);
+                    }).catch(e => showDevLog("Excel Net Err: " + e.message, true));
             } else {
                 showDevLog("❌ DS_APP_SCRIPT_URL is missing!", true);
             }
@@ -4037,7 +4037,7 @@ function saveCartInlineEdit(productId, closeEdit = true) {
         console.warn("Unauthorized cart edit attempt blocked.");
         return;
     }
-    
+
     var rateInput = document.getElementById('ie_rate_' + productId);
     var packInput = document.getElementById('ie_pack_' + productId);
 
@@ -4121,13 +4121,13 @@ function saveCartInlineEdit(productId, closeEdit = true) {
                     packing: newPacking
                 })
             }).then(r => r.json())
-              .then(data => {
-                 if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
-                 else showDevLog("✅ Excel Updated: " + matchP.name, false);
-              })
-              .catch(e => showDevLog("Excel Net Err: " + e.message, true));
+                .then(data => {
+                    if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
+                    else showDevLog("✅ Excel Updated: " + matchP.name, false);
+                })
+                .catch(e => showDevLog("Excel Net Err: " + e.message, true));
         } else {
-             showDevLog("❌ DS_APP_SCRIPT_URL is missing!", true);
+            showDevLog("❌ DS_APP_SCRIPT_URL is missing!", true);
         }
     } else {
         showDevLog("❌ matchP or docId missing for " + productId, true);
@@ -4173,7 +4173,7 @@ function openSyncReportModal() {
     window.showGlobalErrorLogs();
 }
 
-    window.syncReportResults = [];
+window.syncReportResults = [];
 
 async function runSyncReport() {
     var btn = document.getElementById('btnRunSyncReport');
@@ -4893,25 +4893,25 @@ function previewLabel(type) {
 // Called when typing in the editor inputs to live-update the canvas
 function updateLiveLabel() {
     if (window.currentPrintType !== 'tag') return;
-    
+
     var desc1 = document.getElementById('editTagDesc1').value;
     var desc2 = document.getElementById('editTagDesc2').value;
     var cut = document.getElementById('editTagCut').value;
-    
+
     // Save defaults
     localStorage.setItem("dsTagDesc1", desc1);
     localStorage.setItem("dsTagDesc2", desc2);
     localStorage.setItem("dsTagCut", cut);
-    
+
     // Update hidden HTML template
     document.getElementById('lbl_tag_desc1').innerText = desc1;
     document.getElementById('lbl_tag_desc2').innerText = desc2;
     document.getElementById('lbl_tag_cut').innerText = cut;
-    
+
     // Re-render canvas
     var tpl = document.getElementById('tpl_tag');
     var container = document.getElementById('printPreviewCanvasContainer');
-    
+
     html2canvas(tpl, { scale: 1 }).then(canvas => {
         window.currentPrintCanvas = canvas;
         var displayCanvas = document.createElement('canvas');
@@ -4936,7 +4936,7 @@ function confirmPrint() {
     btn.innerText = "Rendering...";
     btn.disabled = true;
 
-    var doSendCanvas = function(canvas) {
+    var doSendCanvas = function (canvas) {
         var tsplPayload = generateTSPL(canvas, window.currentPrintType, parseInt(qty));
         var base64Payload = uint8ToBase64(tsplPayload);
 
@@ -4944,22 +4944,22 @@ function confirmPrint() {
             var TcpSocket = window.Capacitor.Plugins.TcpSocket;
             btn.innerText = "Connecting...";
             TcpSocket.connect({ ipAddress: PRINTER_IP, port: 9100 })
-                .then(function(res) {
+                .then(function (res) {
                     btn.innerText = "Sending...";
                     var clientId = res.client;
                     TcpSocket.send({ client: clientId, data: base64Payload, encoding: 'base64' })
-                        .then(function() {
+                        .then(function () {
                             btn.innerText = "Sent ✅";
                             setTimeout(() => { TcpSocket.disconnect({ client: clientId }); }, 500);
                             setTimeout(() => { closeModals(); btn.innerText = "PRINT"; btn.disabled = false; }, 1500);
                         })
-                        .catch(function(err) {
+                        .catch(function (err) {
                             btn.innerText = "Send Error";
                             btn.disabled = false;
                             alert("Send failed: " + err.message);
                         });
                 })
-                .catch(function(err) {
+                .catch(function (err) {
                     btn.innerText = "Connect Error";
                     btn.disabled = false;
                     alert("TCP connect failed: " + err.message);
@@ -4981,19 +4981,19 @@ function confirmPrint() {
         tpl.style.border = 'none';
         tpl.style.boxShadow = 'none';
         // Also hide any active focus underlines on contenteditable fields
-        ['stkProduct', 'stkPrice', 'stkDesign', 'stkFabric', 'stkCut'].forEach(function(id) {
+        ['stkProduct', 'stkPrice', 'stkDesign', 'stkFabric', 'stkCut'].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) el.style.borderBottom = 'none';
         });
 
-        setTimeout(function() {
-            html2canvas(tpl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(function(canvas) {
+        setTimeout(function () {
+            html2canvas(tpl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(function (canvas) {
                 // Restore the preview styling
                 tpl.style.border = origBorder;
                 tpl.style.boxShadow = origBoxShadow;
                 window.currentPrintCanvas = canvas;
                 doSendCanvas(canvas);
-            }).catch(function(err) {
+            }).catch(function (err) {
                 tpl.style.border = origBorder;
                 tpl.style.boxShadow = origBoxShadow;
                 btn.innerText = "Render Error";
@@ -5015,7 +5015,7 @@ function loadPrinters() {
     var printers = JSON.parse(localStorage.getItem('dsPrinters') || "[]");
     var sel = document.getElementById('printerSelect');
     sel.innerHTML = '<option value="">-- Add New Printer --</option>';
-    
+
     printers.forEach((p, i) => {
         var opt = document.createElement('option');
         opt.value = i;
@@ -5025,7 +5025,7 @@ function loadPrinters() {
 
     // Auto-select the last used IP for this type
     var lastIp = window.currentPrintType === 'barcode' ? localStorage.getItem("dsBarcodePrinterIp") : localStorage.getItem("dsTagPrinterIp");
-    
+
     if (lastIp) {
         var foundIdx = printers.findIndex(p => p.ip === lastIp);
         if (foundIdx !== -1) {
@@ -5047,7 +5047,7 @@ function loadPrinters() {
 function onPrinterSelectChange() {
     var sel = document.getElementById('printerSelect');
     var printers = JSON.parse(localStorage.getItem('dsPrinters') || "[]");
-    
+
     if (sel.value === "") {
         document.getElementById('printerNameInput').value = "";
         document.getElementById('printerIpInput').value = "";
@@ -5061,15 +5061,15 @@ function onPrinterSelectChange() {
 function savePrinter() {
     var name = document.getElementById('printerNameInput').value.trim();
     var ip = document.getElementById('printerIpInput').value.trim();
-    
+
     if (!name || !ip) {
         alert("Please enter both Name and IP Address!");
         return;
     }
-    
+
     var printers = JSON.parse(localStorage.getItem('dsPrinters') || "[]");
     var sel = document.getElementById('printerSelect');
-    
+
     if (sel.value === "") {
         // Add new
         printers.push({ name: name, ip: ip });
@@ -5077,13 +5077,13 @@ function savePrinter() {
         // Update existing
         printers[sel.value] = { name: name, ip: ip };
     }
-    
+
     localStorage.setItem('dsPrinters', JSON.stringify(printers));
-    
+
     // Set as default for this type
     if (window.currentPrintType === 'barcode') localStorage.setItem("dsBarcodePrinterIp", ip);
     else localStorage.setItem("dsTagPrinterIp", ip);
-    
+
     loadPrinters();
     alert("Printer saved!");
 }
@@ -5091,9 +5091,9 @@ function savePrinter() {
 function deletePrinter() {
     var sel = document.getElementById('printerSelect');
     if (sel.value === "") return;
-    
+
     if (!confirm("Delete this printer?")) return;
-    
+
     var printers = JSON.parse(localStorage.getItem('dsPrinters') || "[]");
     printers.splice(sel.value, 1);
     localStorage.setItem('dsPrinters', JSON.stringify(printers));
@@ -5114,21 +5114,21 @@ function generateTSPL(canvas, type, qty) {
     for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
             var i = (y * w + x) * 4;
-            
+
             var r = imgData[i];
-            var g = imgData[i+1];
-            var b = imgData[i+2];
-            var a = imgData[i+3];
-            
+            var g = imgData[i + 1];
+            var b = imgData[i + 2];
+            var a = imgData[i + 3];
+
             // Treat transparent pixels as white (background)
             if (a < 128) {
                 r = 255; g = 255; b = 255;
             }
-            
+
             // RGB to Grayscale
             var gray = (r * 0.299 + g * 0.587 + b * 0.114);
             var isBlack = gray < 128; // Simple threshold
-            
+
             if (isBlack) {
                 var byteIndex = (y * widthBytes) + Math.floor(x / 8);
                 var bitIndex = 7 - (x % 8);
@@ -5148,10 +5148,10 @@ function generateTSPL(canvas, type, qty) {
     }
     headerStr += "DIRECTION 0\r\n";
     headerStr += "CLS\r\n";
-    
+
     // BITMAP X,Y,width_bytes,height,mode,bitmap_data
     var bitmapCmdStr = "BITMAP 0,0," + widthBytes + "," + h + ",0,";
-    
+
     var footerStr = "\r\nPRINT " + (qty || 1) + "\r\n";
 
     var headerBytes = new TextEncoder().encode(headerStr + bitmapCmdStr);
