@@ -1320,26 +1320,11 @@ function renderProductGrid(products) {
         for (var k in cart) { if (cart[k].p.id === p.id) totalQty += parseInt(cart[k].qty) || 0; }
         var bHtml = totalQty > 0 ? `<div class="item-qty-badge" id="badge-${p.id}">${totalQty} in cart</div>` : `<div class="item-qty-badge" id="badge-${p.id}" style="display:none;"></div>`;
 
-        // Smart zoom function specifically designed to crop white bedsheets from square/landscape images without over-zooming
-        window.applySmartZoom = function(img) {
-            if (!img.naturalWidth || !img.naturalHeight) return;
-            var ratio = img.naturalWidth / img.naturalHeight;
-            // Only apply extra zoom to square or landscape photos (ratio > 0.85) to crop their white bedsheets
-            if (ratio > 0.85) {
-                // 15% zoom is usually the perfect amount to push the bedsheets out of frame
-                img.style.transform = 'scale(1.15)';
-                img.style.transformOrigin = 'center center';
-            } else {
-                // Portrait photos are already a perfect fit, so no extra zoom needed
-                img.style.transform = 'scale(1)';
-            }
-        };
-
         htmlBuffer.push(`
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" onload="window.applySmartZoom(this)" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
+                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
