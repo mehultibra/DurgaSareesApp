@@ -471,7 +471,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=2"></script>
-  <script src="./app_v22.js?v=30"></script>
+  <script src="./app_v22.js?v=31"></script>
 
   <div id="adminCameraPreviewModal"
     style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
@@ -482,8 +482,12 @@
       style="position: absolute; top: 0; left: 0; width: 100%; background: linear-gradient(rgba(0,0,0,0.8), transparent); color: white; padding: 20px 10px; font-weight: bold; font-size: 20px; text-align: center; z-index: 2; text-shadow: 0 2px 4px rgba(0,0,0,0.8); border: none; outline: none;">
     
     <input type="text" id="adminDesignNumberInput" placeholder="Design No."
-      style="position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%); background: transparent; color: white; border: none; border-bottom: 2px dashed rgba(255,255,255,0.5); padding: 5px; font-size: 40px; font-weight: bold; width: 80%; text-align: center; z-index: 2; text-transform: uppercase; text-shadow: 0 4px 12px rgba(0,0,0,0.9); outline: none;"
+      style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); background: transparent; color: white; border: none; border-bottom: 2px dashed rgba(255,255,255,0.5); padding: 5px; font-size: 40px; font-weight: bold; width: 80%; text-align: center; z-index: 2; text-transform: uppercase; text-shadow: 0 4px 12px rgba(0,0,0,0.9); outline: none;"
       onblur="this.value = this.value.toUpperCase()">
+
+    <label style="position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); color: white; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 4px; font-size: 14px; z-index: 2; display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="adminBypassCloudinary" style="transform: scale(1.2);"> Already Edited (Skip Logo)
+    </label>
 
     <div style="position: absolute; bottom: 30px; left: 0; width: 100%; display: flex; justify-content: space-evenly; z-index: 2; padding: 0 20px;">
       <button onclick="window.retakeAdminPhoto()"

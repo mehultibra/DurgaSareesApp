@@ -4671,11 +4671,11 @@ window.showGlobalErrorLogs = function () {
 };
 
 // --- OUTBOX SYSTEM ---
-window.saveToOutbox = function (docId, designId, fileUri, productName) {
+window.saveToOutbox = function (docId, designId, fileUri, productName, bypass = false) {
     return getDB().then(db => {
         return new Promise((resolve) => {
             var tx = db.transaction("outbox", "readwrite");
-            var req = tx.objectStore("outbox").put({ docId, designId, fileUri, productName, ts: Date.now(), processAfter: Date.now() + 5000 });
+            var req = tx.objectStore("outbox").put({ docId, designId, fileUri, productName, bypass, ts: Date.now(), processAfter: Date.now() + 5000 });
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => resolve(null);
         });
@@ -4721,8 +4721,8 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
     }
 
     try {
-        // High Quality Native Camera
-        var photo = await Capacitor.Plugins.Camera.getPhoto({ quality: 100, allowEditing: false, resultType: 'uri', source: 'CAMERA' });
+        // High Quality Native Camera or Gallery Selection
+        var photo = await Capacitor.Plugins.Camera.getPhoto({ quality: 100, allowEditing: false, resultType: 'uri', source: 'PROMPT' });
 
         window.tempCamDocId = docId;
         window.tempCamPid = pid;
@@ -4759,11 +4759,14 @@ window.confirmAdminUpload = async function () {
     var modal = document.getElementById('adminCameraPreviewModal');
     var designInput = document.getElementById('adminDesignNumberInput');
     var finalDesignId = (designInput && designInput.value) ? designInput.value.trim().toUpperCase() : "02";
+    
+    var bypassCb = document.getElementById('adminBypassCloudinary');
+    var bypass = bypassCb ? bypassCb.checked : false;
 
     if (modal) modal.style.display = 'none';
 
     try {
-        var outboxId = await window.saveToOutbox(window.tempCamDocId, finalDesignId, window.tempCamPhotoPath);
+        var outboxId = await window.saveToOutbox(window.tempCamDocId, finalDesignId, window.tempCamPhotoPath, window.tempCamProductName || "", bypass);
         if (outboxId) {
             var toastId = 'undoToast_' + Date.now();
             var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:12px 20px; border-radius:4px; font-size:14px; box-shadow:0 3px 10px rgba(0,0,0,0.3); z-index:9999; display:flex; align-items:center; gap:15px;">
@@ -4817,22 +4820,58 @@ window.processCameraOutbox = async function () {
                 var res = await fetch(`data:image/jpeg;base64,${fileData.data}`);
                 var blob = await res.blob();
 
-                var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
+                if (item.bypass) {
+                    var pMatch = window.allProducts ? window.allProducts.find(x => x.docId === item.docId) : null;
+                    if (!pMatch) throw new Error("Product not found for bypass multi-folder upload");
 
-                var uploadRes = await window.fetchWithRetry(uploadUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'image/jpeg' },
-                    body: blob
-                }, 1);
+                    var folders = [];
+                    if (pMatch.gridUrl && pMatch.gridUrl.toLowerCase() !== "none") folders.push(pMatch.gridUrl);
+                    if (pMatch.zoomUrl && pMatch.zoomUrl.toLowerCase() !== "none") folders.push(pMatch.zoomUrl);
+                    if (pMatch.gridUrl) folders.push(pMatch.gridUrl.replace(/\/Grid\/?/i, "/Thumb"));
 
-                if (uploadRes.ok) {
-                    await window.deleteFromOutbox(item.id);
-                    var uploadDuration = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
-                    var totalJourney = ((Date.now() - item.ts) / 1000).toFixed(2);
-                    window.logAppError('Upload Success', `File: ${filename} | Net Time: ${uploadDuration}s | Total Journey: ${totalJourney}s`);
-                    console.log(`✅ Successfully uploaded: ${filename} in ${uploadDuration}s`);
+                    folders = [...new Set(folders)];
+                    if (folders.length === 0) throw new Error("No active Firebase folders resolved");
+
+                    var uploadPromises = folders.map(folderUrl => {
+                        var cleanFolder = String(folderUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                        var destUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=` + cleanFolder + `%2F` + encodeURIComponent(item.designId + ".jpg");
+                        
+                        return window.fetchWithRetry(destUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'image/jpeg' },
+                            body: blob
+                        }, 1);
+                    });
+
+                    var results = await Promise.all(uploadPromises);
+                    var allOk = results.every(r => r.ok);
+
+                    if (allOk) {
+                        await window.deleteFromOutbox(item.id);
+                        var uploadDuration = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
+                        window.logAppError('Upload Success', `Bypass multi-folder: ${filename}`);
+                        console.log(`✅ Successfully uploaded bypass to ${folders.length} folders in ${uploadDuration}s`);
+                    } else {
+                        throw new Error(`One or more bypass multi-folder uploads failed`);
+                    }
                 } else {
-                    throw new Error(`Status ${uploadRes.status}`);
+                    var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
+
+                    var uploadRes = await window.fetchWithRetry(uploadUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'image/jpeg' },
+                        body: blob
+                    }, 1);
+
+                    if (uploadRes.ok) {
+                        await window.deleteFromOutbox(item.id);
+                        var uploadDuration = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
+                        var totalJourney = ((Date.now() - item.ts) / 1000).toFixed(2);
+                        window.logAppError('Upload Success', `File: ${filename} | Net Time: ${uploadDuration}s | Total Journey: ${totalJourney}s`);
+                        console.log(`✅ Successfully uploaded: ${filename} in ${uploadDuration}s`);
+                    } else {
+                        throw new Error(`Status ${uploadRes.status}`);
+                    }
                 }
             } catch (err) {
                 window.logAppError('Outbox Uploader', 'Failed to upload ' + filename + ': ' + err.message);
