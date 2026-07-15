@@ -150,24 +150,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
 
 
-        // Header scroll effect
-        var gridWrap = document.getElementById('gridWrapper');
-        if (gridWrap) {
-            gridWrap.addEventListener('scroll', function () {
-                var hdr = document.querySelector('.hdr');
-                var metaTheme = document.querySelector('meta[name="theme-color"]');
-                if (!hdr) return;
-                if (this.scrollTop > 20) {
-                    hdr.style.backgroundColor = '#ffffff';
-                    hdr.style.borderBottom = '1px solid #eee';
-                    if (metaTheme) metaTheme.setAttribute('content', '#ffffff');
-                } else {
-                    hdr.style.backgroundColor = 'transparent';
-                    hdr.style.borderBottom = 'none';
-                    if (metaTheme) metaTheme.setAttribute('content', '#dcfce7');
-                }
-            });
-        }
+        // Header scroll effect removed to preserve CSS gradient
 
         try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
         try { cart = JSON.parse(localStorage.getItem("dsCart")) || {}; } catch (e) { }
