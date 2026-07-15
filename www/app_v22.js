@@ -3380,7 +3380,7 @@ function showDevLog(msg, isErr) {
 
 function saveProductEdit(p) {
     if (!window.isSuperAdmin) {
-        console.warn("Unauthorized edit attempt blocked.");
+        console.log("Local edit only (non-admin). Not syncing to server.");
         return;
     }
     try {
@@ -3431,13 +3431,6 @@ function saveProductEdit(p) {
 function setupEditableFields() {
     var priceBot = document.getElementById('dtPriceBot');
     var packBot = document.getElementById('dtPackBot');
-
-    // SECURITY: Remove contenteditable for non-admins
-    if (!window.isSuperAdmin) {
-        if (priceBot) priceBot.removeAttribute('contenteditable');
-        if (packBot) packBot.removeAttribute('contenteditable');
-        return;
-    }
 
     if (priceBot) {
         priceBot.addEventListener('keydown', function (e) {
@@ -4133,11 +4126,6 @@ function toggleCartInlineEdit(productId) {
 }
 
 function saveCartInlineEdit(productId, closeEdit = true) {
-    if (!window.isSuperAdmin) {
-        console.warn("Unauthorized cart edit attempt blocked.");
-        return;
-    }
-
     var rateInput = document.getElementById('ie_rate_' + productId);
     var packInput = document.getElementById('ie_pack_' + productId);
 
@@ -4190,7 +4178,7 @@ function saveCartInlineEdit(productId, closeEdit = true) {
     openCart(); // Re-render to show updated static text
 
     // 🚀 NEW: 2-WAY SYNC - FIREBASE & EXCEL WEBHOOK
-    if (matchP && matchP.docId) {
+    if (window.isSuperAdmin && matchP && matchP.docId) {
         showDevLog("Syncing: " + matchP.name + " -> Rate: " + newRate + " Pack: " + newPacking, false);
         // Firebase Live DB Update
         var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
