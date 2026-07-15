@@ -3585,15 +3585,6 @@ window.renderHorizontalCategories = function() {
 
     var sortedCats = Object.keys(cats).sort();
     var html = '';
-    
-    var allActive = activeCategories.length === 0 ? 'active' : '';
-    html += `
-    <div class="cat-circle-item ${allActive}" onclick="window.clearCategoryFilter()">
-        <div class="cat-circle-img-wrap" style="background:#f1f1f1; border-color:transparent;">
-            <i class="fas fa-th-large" style="font-size:24px; color:#666;"></i>
-        </div>
-        <div class="cat-circle-label">All</div>
-    </div>`;
 
     sortedCats.forEach(cat => {
         var activeClass = activeCategories.includes(cat) ? 'active' : '';
