@@ -1320,11 +1320,65 @@ function renderProductGrid(products) {
         for (var k in cart) { if (cart[k].p.id === p.id) totalQty += parseInt(cart[k].qty) || 0; }
         var bHtml = totalQty > 0 ? `<div class="item-qty-badge" id="badge-${p.id}">${totalQty} in cart</div>` : `<div class="item-qty-badge" id="badge-${p.id}" style="display:none;"></div>`;
 
+        // Advanced Auto-Cropper: Scans image pixels to dynamically remove white borders and text overlay
+        window.autoCropImage = function(img) {
+            if (img.dataset.cropped === "true") return;
+            if (!img.complete || img.naturalWidth === 0) return;
+            if (img.src.includes('data:image')) return;
+            
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            
+            try {
+                ctx.drawImage(img, 0, 0);
+                var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            } catch(e) { return; } // Silently fail on CORS
+            
+            var w = canvas.width, h = canvas.height;
+            var top = 0, bottom = h;
+            
+            // Scan for top content (ignore rows that are >60% white)
+            for (var y = 0; y < h; y+=2) {
+                var bg = 0, chk = 0;
+                for (var x = 0; x < w; x+=5) {
+                    var i = (y * w + x) * 4;
+                    if (imgData[i] > 230 && imgData[i+1] > 230 && imgData[i+2] > 230) bg++;
+                    chk++;
+                }
+                if (bg / chk < 0.6) { top = y; break; }
+            }
+            // Scan for bottom content
+            for (var y = h - 1; y >= 0; y-=2) {
+                var bg = 0, chk = 0;
+                for (var x = 0; x < w; x+=5) {
+                    var i = (y * w + x) * 4;
+                    if (imgData[i] > 230 && imgData[i+1] > 230 && imgData[i+2] > 230) bg++;
+                    chk++;
+                }
+                if (bg / chk < 0.6) { bottom = y; break; }
+            }
+            
+            var contentH = bottom - top;
+            if (contentH > 0 && contentH < h) {
+                var scale = Math.min(h / contentH, 1.35); // Max 35% zoom
+                if (scale > 1.02) {
+                    var contentCenterY = top + (contentH / 2);
+                    var imgCenterY = h / 2;
+                    var yOffset = ((imgCenterY - contentCenterY) / h) * 100;
+                    img.style.transform = 'scale(' + scale + ') translateY(' + yOffset + '%)';
+                    img.style.transformOrigin = 'center center';
+                }
+            }
+            img.dataset.cropped = "true";
+        };
+
         htmlBuffer.push(`
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
+                <img id="${imgElementId}" crossorigin="anonymous" onload="if(window.autoCropImage) window.autoCropImage(this)" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
