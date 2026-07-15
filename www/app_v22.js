@@ -650,6 +650,7 @@ function initApp() {
         } catch (e) { console.error("Cart sync error:", e); }
 
         if (typeof populateCategories === "function") populateCategories();
+        if (typeof renderHorizontalCategories === "function") renderHorizontalCategories();
         renderProductGrid(displayList);
         updateCartHeader();
     }
@@ -2570,7 +2571,7 @@ function openCart() {
                 cHtml.push('<div style="font-size: 11px; margin-top: 4px; color:var(--text-light);">' + dLabel + '</div>');
 
                 if (isEditing) {
-                    cHtml.push('<input type="number" id="ie_qty_' + g.p.id + '_' + safeDesignLabel + '" value="' + (item.qty || 0) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:4px; border:1px solid var(--myntra-pink); border-radius:4px; text-align:center; font-size:12px; font-weight:bold; color:var(--text-main); margin-top:2px;">');
+                    cHtml.push('<input type="number" id="ie_qty_' + g.p.id + '_' + safeDesignLabel + '" value="' + (item.qty || 0) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:4px; border:1px solid #myntra-pink; border-radius:4px; text-align:center; font-size:12px; font-weight:bold; color:var(--text-main); margin-top:2px;">');
                 } else {
                     cHtml.push('<div style="font-size: 12px; font-weight: bold; color: var(--myntra-pink);">' + (item.qty || 0) + ' pcs</div>');
                 }
@@ -2882,7 +2883,7 @@ window.triggerShare = async function (action) {
 
         if (action === 'images') {
             if (allHighResUrls.length > 100) {
-                alert("⚠ ï¸ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
+                alert("⚠ ï¸  WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
                 allHighResUrls = allHighResUrls.slice(0, 100);
             }
             if (typeof shareNativeImages === 'function') {
@@ -3140,7 +3141,7 @@ async function syncImages(silent = false) {
                 try {
                     const ctrl = new AbortController();
                     const tid = setTimeout(() => ctrl.abort(), 30000);
-                    // ðŸ›¡ï¸ CRITICAL FIX: Bulletproof retry for "failed to fetch"
+                    // ðŸ›¡ï¸  CRITICAL FIX: Bulletproof retry for "failed to fetch"
                     var listRes = await window.fetchWithRetry(listUrl, { signal: ctrl.signal }, 3);
                     clearTimeout(tid);
                     if (listRes.ok) {
@@ -3272,7 +3273,7 @@ async function syncImages(silent = false) {
                 if (!downloaded) {
                     failed++;
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
-                    console.error("âŒ SYNC FAILED:", p.name, "|", lastFailReason);
+                    console.error("â Œ SYNC FAILED:", p.name, "|", lastFailReason);
                     if (!window.syncReportResults) window.syncReportResults = [];
                     var syncErrKey = p.gridUrl;
                     var existing2 = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
@@ -3538,7 +3539,7 @@ document.addEventListener("backbutton", function (e) {
 }, false);
 
 // ====================================
-// ðŸ” SEARCH, SORT, FILTER & FAVORITES ENGINE
+// ðŸ”  SEARCH, SORT, FILTER & FAVORITES ENGINE
 // ====================================
 var showOnlyFavs = false;
 
@@ -3571,6 +3572,52 @@ window.doSearch = function (val) {
     }
 };
 
+window.renderHorizontalCategories = function() {
+    var stripEl = document.getElementById('horizontalCategoryStrip');
+    if (!stripEl) return;
+
+    var cats = {};
+    allProducts.forEach(p => {
+        if (p.cat && !cats[p.cat]) {
+            cats[p.cat] = p; // Store first product as representative image
+        }
+    });
+
+    var sortedCats = Object.keys(cats).sort();
+    var html = '';
+    
+    var allActive = activeCategories.length === 0 ? 'active' : '';
+    html += `
+    <div class="cat-circle-item ${allActive}" onclick="window.clearCategoryFilter()">
+        <div class="cat-circle-img-wrap" style="background:#f1f1f1; border-color:transparent;">
+            <i class="fas fa-th-large" style="font-size:24px; color:#666;"></i>
+        </div>
+        <div class="cat-circle-label">All</div>
+    </div>`;
+
+    sortedCats.forEach(cat => {
+        var activeClass = activeCategories.includes(cat) ? 'active' : '';
+        var p = cats[cat];
+        var imgId = 'cat-circle-img-' + encodeURIComponent(cat).replace(/[^a-zA-Z0-9]/g, '');
+        
+        html += `
+        <div class="cat-circle-item ${activeClass}" onclick="toggleCategoryFilter(null, '${esc(cat)}')">
+            <div class="cat-circle-img-wrap">
+                <img id="${imgId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(cat)}">
+            </div>
+            <div class="cat-circle-label">${esc(cat)}</div>
+        </div>`;
+        
+        // Schedule image render
+        setTimeout(() => {
+            var el = document.getElementById(imgId);
+            if(el && window.renderWebpFromFolder) window.renderWebpFromFolder(el, p.gridUrl, null, null);
+        }, 10);
+    });
+
+    stripEl.innerHTML = html;
+};
+
 window.populateCategories = function () {
     var catListEl = document.getElementById('categoryList');
     if (!catListEl) return;
@@ -3600,6 +3647,14 @@ window.toggleCategoryFilter = function (element, cat) {
         if (element) element.classList.remove('active');
     }
     applyFilter();
+    if (window.renderHorizontalCategories) window.renderHorizontalCategories();
+};
+
+window.clearCategoryFilter = function() {
+    activeCategories = [];
+    applyFilter();
+    if (window.renderHorizontalCategories) window.renderHorizontalCategories();
+    if (window.populateCategories) window.populateCategories();
 };
 
 window.togglePriceFilter = function (element, min, max) {
