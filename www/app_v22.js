@@ -3594,7 +3594,7 @@ window.renderHorizontalCategories = function() {
         html += `
         <div class="cat-circle-item ${activeClass}" onclick="toggleCategoryFilter(null, '${esc(cat)}')">
             <div class="cat-circle-img-wrap">
-                <img id="${imgId}" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(cat)}">
+                <img id="${imgId}" crossorigin="anonymous" onload="if(window.autoCropImage) window.autoCropImage(this)" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(cat)}">
             </div>
             <div class="cat-circle-label">${esc(cat)}</div>
         </div>`;
