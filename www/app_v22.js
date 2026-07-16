@@ -140,21 +140,24 @@ try {
 window.addEventListener('DOMContentLoaded', function () {
     try {
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
-            // Handled natively via capacitor.config.json to prevent flashing
+            window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true }).then(() => {
+                return window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
+            }).then(() => {
+                return window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#dcfce7' });
+            }).catch(e => console.error("StatusBar init error:", e));
         }
-
-
 
         // Header scroll effect
         var gridWrap = document.getElementById('gridWrapper');
         if (gridWrap) {
+            var currentStatusBarColor = '#dcfce7'; // Track state
             gridWrap.addEventListener('scroll', function () {
                 var hdr = document.querySelector('.hdr');
                 var metaTheme = document.querySelector('meta[name="theme-color"]');
                 if (!hdr) return;
                 
                 var targetColor = this.scrollTop > 20 ? '#ffffff' : '#dcfce7';
-                
+
                 if (this.scrollTop > 20) {
                     hdr.style.backgroundColor = '#ffffff';
                     hdr.style.borderBottom = '1px solid #eee';
@@ -163,6 +166,14 @@ window.addEventListener('DOMContentLoaded', function () {
                     hdr.style.backgroundColor = 'transparent';
                     hdr.style.borderBottom = 'none';
                     if (metaTheme) metaTheme.setAttribute('content', '#dcfce7');
+                }
+
+                // Sync Native Android StatusBar Color efficiently
+                if (targetColor !== currentStatusBarColor) {
+                    currentStatusBarColor = targetColor;
+                    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
+                        try { window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: targetColor }); } catch(e){}
+                    }
                 }
             });
         }
@@ -2780,7 +2791,7 @@ function getExactFirebaseUrl(folderPath, dId) {
 }
 
 // ====================================
-// ðŸ“¦ 2. MODAL & SHARE LOGIC (MULTI-IMAGE UPGRADE)
+// 🖼️ 2. MODAL & SHARE LOGIC (MULTI-IMAGE UPGRADE)
 // ====================================
 function askShareTypeAsync() {
     return new Promise((resolve) => {
@@ -2904,7 +2915,7 @@ window.triggerShare = async function (action) {
 
         if (action === 'images') {
             if (allHighResUrls.length > 100) {
-                alert("⚠ ï¸  WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
+                alert("⚠ ️ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
                 allHighResUrls = allHighResUrls.slice(0, 100);
             }
             if (typeof shareNativeImages === 'function') {
@@ -2978,7 +2989,7 @@ window.openCartFs = function (productId, designId, cartImgSrc) {
     openFs(actualProductId, 0, designId, cartImgSrc);
 };
 
-// ðŸš€ Cart fullscreen: loads image from IndexedDB using exact cache key, then opens FS
+// 🖼️ Cart fullscreen: loads image from IndexedDB using exact cache key, then opens FS
 window.openCartFsFromCache = function (productId, designId, gridUrl) {
     var pItem = allProducts.find(x => x.id === productId);
     var bucket = "durga-sarees.firebasestorage.app";
@@ -3143,7 +3154,7 @@ async function syncImages(silent = false) {
 
         if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
-        // ðŸ›¡ï¸  BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
+        // 🛡️ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
         // This guarantees we never hit Samsung/Android OS TCP socket connection limits (ERR_INSUFFICIENT_RESOURCES).
         var batchSize = 40;
         for (var i = 0; i < productsToSync.length; i += batchSize) {
@@ -3156,13 +3167,13 @@ async function syncImages(silent = false) {
                 var lastFailReason = "";
                 var downloaded = false;
 
-                // â”€â”€ 1. Fetch Firebase folder listing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── 1. Fetch Firebase folder listing ──────────────────────
                 var folderFiles = []; // filenames only (e.g. "01.webp", "02.webp")
                 var listSuccess = false;
                 try {
                     const ctrl = new AbortController();
                     const tid = setTimeout(() => ctrl.abort(), 30000);
-                    // ðŸ›¡ï¸  CRITICAL FIX: Bulletproof retry for "failed to fetch"
+                    // 🛡️ CRITICAL FIX: Bulletproof retry for "failed to fetch"
                     var listRes = await window.fetchWithRetry(listUrl, { signal: ctrl.signal }, 3);
                     clearTimeout(tid);
                     if (listRes.ok) {
@@ -3184,13 +3195,13 @@ async function syncImages(silent = false) {
                 }
 
                 if (!listSuccess) {
-                    // Offline / error â€” keep existing cache, log error
+                    // Offline / error — keep existing cache, log error
                     var existingCover = await checkImageInDB(p.gridUrl);
                     if (existingCover) downloaded = true;
                     else lastFailReason = lastFailReason || "Offline & no local cache";
 
                 } else if (folderFiles.length === 0) {
-                    // Firebase folder is EMPTY â€” keep existing cover, do NOT delete
+                    // Firebase folder is EMPTY — keep existing cover, do NOT delete
                     downloaded = true;
                     console.log("[SYNC] Folder empty for", p.name, "- keeping cached cover.");
 
@@ -3204,13 +3215,13 @@ async function syncImages(silent = false) {
                     // Designs = each file, key stored as full Firebase URL
                     var coverFile = folderFiles[0];
                     var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-                    var designKeys = {}; // key â†’ url map for all files
+                    var designKeys = {}; // key → url map for all files
                     folderFiles.forEach(f => {
                         var key = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
                         designKeys[key] = key;
                     });
 
-                    // â”€â”€ 2. Cleanup: Delete from DB keys NOT in Firebase anymore â”€â”€
+                    // ── 2. Cleanup: Delete from DB keys NOT in Firebase anymore ──
                     // Scan DB for all keys that belong to this product's folder
                     var dbKeyPrefix = fbBase + encGridPath + "%2F";
                     var cachedKeys = await listDBKeysForPrefix(dbKeyPrefix);
@@ -3290,11 +3301,11 @@ async function syncImages(silent = false) {
                     }
                 }
 
-                // â”€â”€ 5. Track errors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── 5. Track errors ──────────────────────────────────────────
                 if (!downloaded) {
                     failed++;
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
-                    console.error("â Œ SYNC FAILED:", p.name, "|", lastFailReason);
+                    console.error("❌ SYNC FAILED:", p.name, "|", lastFailReason);
                     if (!window.syncReportResults) window.syncReportResults = [];
                     var syncErrKey = p.gridUrl;
                     var existing2 = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
@@ -3522,7 +3533,7 @@ function updateBottomQtyFromActiveDesign() {
     }
 }
 
-// ðŸ“± Listen to hybrid app native backbutton event to prevent app minimization and handle stack back transition
+// 📱 Listen to hybrid app native backbutton event to prevent app minimization and handle stack back transition
 document.addEventListener("backbutton", function (e) {
     var hasActiveModal = false;
 
@@ -3553,7 +3564,7 @@ document.addEventListener("backbutton", function (e) {
 }, false);
 
 // ====================================
-// ðŸ”  SEARCH, SORT, FILTER & FAVORITES ENGINE
+// 🔎 SEARCH, SORT, FILTER & FAVORITES ENGINE
 // ====================================
 var showOnlyFavs = false;
 
@@ -3802,7 +3813,7 @@ window.applyFilter = function () {
     renderProductGrid(displayList);
 };
 
-// ðŸ“± Listen to popstate to handle history back/forward navigation and close/open modals accordingly
+// 📱 Listen to popstate to handle history back/forward navigation and close/open modals accordingly
 function applyModalState(modal) {
     var detailPanel = document.getElementById('detailPanel');
     var cartPanel = document.getElementById('cartPanel');
@@ -3967,7 +3978,7 @@ async function logout() {
 }
 
 // ====================================
-// ðŸ›’ CART CUSTOMER DETAILS & EDIT MODALS
+// 📦 CART CUSTOMER DETAILS & EDIT MODALS
 // ====================================
 
 var _currentEditProductId = null;
@@ -4273,7 +4284,7 @@ function printCartPdf() {
 }
 
 // ====================================
-// ðŸ” SYNC REPORT LOGIC
+// 📊 SYNC REPORT LOGIC
 // ====================================
 
 function openSyncReportModal() {
@@ -4339,7 +4350,7 @@ async function runSyncReport() {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000);
-            // ðŸ›¡ï¸ Bulletproof Retry applied to Sync Report
+            // 🛡️ Bulletproof Retry applied to Sync Report
             var res = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
             clearTimeout(timeoutId);
 
@@ -4494,7 +4505,7 @@ async function resyncFailedProducts() {
             // 1. Fetch directory listing first
             var prefix = cleanGridPath + "/";
             var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix + "&delimiter=/";
-            // ðŸ›¡ï¸ Bulletproof Retry applied to Resync
+            // 🛡️ Bulletproof Retry applied to Resync
             var listRes = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
 
             if (!listRes.ok) {
