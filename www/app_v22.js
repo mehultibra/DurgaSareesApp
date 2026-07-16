@@ -2856,7 +2856,7 @@ window.triggerShare = async function (action) {
             var fp = favProducts[i];
             var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
 
-            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
             if (dArr.length > 0) {
                 for (var j = 0; j < dArr.length; j++) {
                     allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
@@ -2864,7 +2864,7 @@ window.triggerShare = async function (action) {
             } else {
                 // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
                 var fallbackFile = dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
-                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
                 var coverDesignId = 'DIRECT';
 
                 if (fallbackFile) {
@@ -2901,7 +2901,7 @@ window.triggerShare = async function (action) {
 
     var highResUrls = [];
     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
 
     if (dArr.length > 0) {
         for (var j = 0; j < dArr.length; j++) {
@@ -2911,7 +2911,7 @@ window.triggerShare = async function (action) {
         // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
         var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
         var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
-        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
         var coverDesignId = 'DIRECT';
 
         if (fallbackFile) {
@@ -5301,4 +5301,5 @@ function uint8ToBase64(u8Arr) {
     }
     return btoa(result);
 }
+
 
