@@ -143,8 +143,8 @@ window.addEventListener('DOMContentLoaded', function () {
             try {
                 // Enable transparent status bar (overlaps webview)
                 window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true });
-                // Use light icons for the pink/red gradient background
-                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
+                // Use dark icons since the header background is now light (rama) again
+                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'DARK' });
             } catch (e) { }
         }
 
