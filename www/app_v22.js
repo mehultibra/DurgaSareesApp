@@ -146,14 +146,11 @@ window.addEventListener('DOMContentLoaded', function () {
         // Header scroll effect
         var gridWrap = document.getElementById('gridWrapper');
         if (gridWrap) {
-            var currentStatusBarColor = '#dcfce7'; // Track state
             gridWrap.addEventListener('scroll', function () {
                 var hdr = document.querySelector('.hdr');
                 var metaTheme = document.querySelector('meta[name="theme-color"]');
                 if (!hdr) return;
                 
-                var targetColor = this.scrollTop > 20 ? '#ffffff' : '#dcfce7';
-
                 if (this.scrollTop > 20) {
                     hdr.style.backgroundColor = '#ffffff';
                     hdr.style.borderBottom = '1px solid #eee';
@@ -162,14 +159,6 @@ window.addEventListener('DOMContentLoaded', function () {
                     hdr.style.backgroundColor = 'transparent';
                     hdr.style.borderBottom = 'none';
                     if (metaTheme) metaTheme.setAttribute('content', '#dcfce7');
-                }
-
-                // Sync Native Android StatusBar Color efficiently
-                if (targetColor !== currentStatusBarColor) {
-                    currentStatusBarColor = targetColor;
-                    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
-                        try { window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: targetColor }); } catch(e){}
-                    }
                 }
             });
         }
