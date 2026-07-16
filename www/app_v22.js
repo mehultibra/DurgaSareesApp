@@ -143,8 +143,7 @@ window.addEventListener('DOMContentLoaded', function () {
             try {
                 // Enable transparent status bar (overlaps webview)
                 window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true });
-                // Ensure the status bar is actually transparent so the webview gradient shows through
-                window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#00000000' });
+                window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#dcfce7' });
                 // Use dark icons since the header background is now light (rama) again
                 window.Capacitor.Plugins.StatusBar.setStyle({ style: 'DARK' });
             } catch (e) { }
@@ -155,10 +154,14 @@ window.addEventListener('DOMContentLoaded', function () {
         // Header scroll effect
         var gridWrap = document.getElementById('gridWrapper');
         if (gridWrap) {
+            var currentStatusBarColor = '#dcfce7'; // Track state to avoid bridge spam
             gridWrap.addEventListener('scroll', function () {
                 var hdr = document.querySelector('.hdr');
                 var metaTheme = document.querySelector('meta[name="theme-color"]');
                 if (!hdr) return;
+                
+                var targetColor = this.scrollTop > 20 ? '#ffffff' : '#dcfce7';
+                
                 if (this.scrollTop > 20) {
                     hdr.style.backgroundColor = '#ffffff';
                     hdr.style.borderBottom = '1px solid #eee';
@@ -167,6 +170,14 @@ window.addEventListener('DOMContentLoaded', function () {
                     hdr.style.backgroundColor = 'transparent';
                     hdr.style.borderBottom = 'none';
                     if (metaTheme) metaTheme.setAttribute('content', '#dcfce7');
+                }
+
+                // Sync Native Android StatusBar Color efficiently
+                if (targetColor !== currentStatusBarColor) {
+                    currentStatusBarColor = targetColor;
+                    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
+                        try { window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: targetColor }); } catch(e){}
+                    }
                 }
             });
         }
