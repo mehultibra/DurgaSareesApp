@@ -144,8 +144,8 @@ window.addEventListener('DOMContentLoaded', function () {
                 // Enable transparent status bar (overlaps webview)
                 window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true });
                 window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#dcfce7' });
-                // Use dark icons since the header background is now light (rama) again
-                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'DARK' });
+                // Use LIGHT style to get dark text/icons on the light background
+                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
             } catch (e) { }
         }
 
