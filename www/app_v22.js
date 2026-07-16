@@ -266,9 +266,8 @@ window.addEventListener('DOMContentLoaded', function () {
             try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
         }
 
-        // Check for updates on ALL platforms (Native & Web)
-        setTimeout(checkForOTAUpdates, 2000);
-    } catch (err) { console.error("Init error:", err); }
+    // Check for updates on ALL platforms (Native & Web)
+    setTimeout(checkForOTAUpdates, 2000);
 });
 
 async function checkForOTAUpdates() {
