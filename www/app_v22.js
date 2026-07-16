@@ -138,10 +138,8 @@ try {
 }
 
 window.addEventListener('DOMContentLoaded', function () {
-    try {
-        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
-                window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true }).catch(e => {});
-        }
+
+
 
         // Header scroll effect
         var gridWrap = document.getElementById('gridWrapper');

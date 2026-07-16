@@ -3,10 +3,13 @@ package com.durgasarees.catalog;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.WindowInsetsController;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.view.WindowCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -25,10 +28,20 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         instance = this;
         registerPlugin(AndroidBackBridgePlugin.class);
+
+        // Enable edge-to-edge overlay (native equivalent of JS setOverlaysWebView: true)
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+
         super.onCreate(savedInstanceState);
 
         enforceLightStatusBar();
         enforceLightNavBar();
+
+        // Re-enforce 800ms after launch to beat Capacitor StatusBar plugin reset
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            enforceLightStatusBar();
+            enforceLightNavBar();
+        }, 800);
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
