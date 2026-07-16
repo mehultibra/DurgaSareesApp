@@ -29,10 +29,10 @@ public class MainActivity extends BridgeActivity {
         instance = this;
         registerPlugin(AndroidBackBridgePlugin.class);
 
+        super.onCreate(savedInstanceState);
+
         // Enable edge-to-edge overlay (native equivalent of JS setOverlaysWebView: true)
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-
-        super.onCreate(savedInstanceState);
 
         enforceLightStatusBar();
         enforceLightNavBar();
