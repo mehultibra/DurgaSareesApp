@@ -5,6 +5,11 @@
   "plugins": {
     "FirebaseAuthentication": {
       "providers": ["phone"]
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "LIGHT",
+      "backgroundColor": "#00000000"
     }
   }
 }
