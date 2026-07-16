@@ -677,11 +677,22 @@ function initApp() {
         .then(data => {
             var docs = data.documents || [];
             if (docs.length > 0) {
-                // Only save to cache if we got valid data
-                try { localStorage.setItem("dsOfflineProducts", JSON.stringify(docs)); } catch (e) { }
+                // Only save to cache and re-render if data actually changed
+                var newDataStr = JSON.stringify(docs);
+                var oldDataStr = "";
+                try { oldDataStr = localStorage.getItem("dsOfflineProducts") || ""; } catch (e) { }
+
+                if (newDataStr !== oldDataStr) {
+                    try { localStorage.setItem("dsOfflineProducts", newDataStr); } catch (e) { }
+                    
+                    if (loadedFromCache) {
+                        // Force UI update to show the new data fetched from Firebase
+                        processProducts(docs);
+                    }
+                }
             }
             if (bootScreen) bootScreen.style.display = 'none';
-            // Only re-render if we did NOT already render from cache (avoid double render)
+            // If we didn't have cache initially, render now
             if (!loadedFromCache) {
                 processProducts(docs);
             }
