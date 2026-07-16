@@ -141,9 +141,11 @@ window.addEventListener('DOMContentLoaded', function () {
     try {
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
             try {
+                // Enable transparent status bar (overlaps webview)
                 window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true });
-                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
                 window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#dcfce7' });
+                // Use dark icons since the header background is now light (rama) again
+                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'DARK' });
             } catch (e) { }
         }
 
@@ -159,7 +161,7 @@ window.addEventListener('DOMContentLoaded', function () {
                 if (!hdr) return;
                 
                 var targetColor = this.scrollTop > 20 ? '#ffffff' : '#dcfce7';
-
+                
                 if (this.scrollTop > 20) {
                     hdr.style.backgroundColor = '#ffffff';
                     hdr.style.borderBottom = '1px solid #eee';
