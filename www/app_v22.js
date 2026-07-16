@@ -142,9 +142,8 @@ window.addEventListener('DOMContentLoaded', function () {
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
             try {
                 window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true });
-                window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#dcfce7' });
-                // Use LIGHT style to get dark text/icons on the light background
                 window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
+                window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#dcfce7' });
             } catch (e) { }
         }
 
