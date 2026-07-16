@@ -2593,10 +2593,17 @@ function openCart() {
                                     if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
                                     if (!cleanNum2) cleanNum2 = safeDesignLabel;
                                     var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
+                                    var fallbackUrlJpg = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".jpg") + "?alt=media";
 
                                     fetch(fallbackUrl).then(function (res) {
                                         if (res.ok) return res.blob();
-                                        throw new Error('Network failed');
+                                        return fetch(fallbackUrlJpg).then(function(res2) {
+                                            if (res2.ok) {
+                                                fallbackUrl = fallbackUrlJpg;
+                                                return res2.blob();
+                                            }
+                                            throw new Error('Network failed');
+                                        });
                                     }).then(function (blob) {
                                         imgEl.src = URL.createObjectURL(blob);
                                         saveImageToDB(fallbackUrl, blob); // Cache it for future!

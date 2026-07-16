@@ -643,6 +643,18 @@ html {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+}
+
+.fs-controls button::before {
+    content: '';
+    position: absolute;
+    top: -20px;
+    right: -20px;
+    bottom: -20px;
+    left: -20px;
+}
+.fs-controls button {
     color: var(--myntra-pink);
     background: #fff;
 }
