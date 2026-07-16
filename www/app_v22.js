@@ -125,13 +125,13 @@ window.sessionImageCache = new Map();
 window.dsFolderCache = {};
 try {
     var _cacheVer = localStorage.getItem("dsFolderCacheVer");
-    if (_cacheVer === "v2") {
+    if (_cacheVer === "v3") {
         window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {};
     } else {
         // Clear old cache - URL format changed (now uses Grid path + delimiter=/)
         localStorage.removeItem("dsFolderCache");
-        localStorage.setItem("dsFolderCacheVer", "v2");
-        console.log("Cleared stale folder cache (format upgrade to v2)");
+        localStorage.setItem("dsFolderCacheVer", "v3");
+        console.log("Cleared stale folder cache (format upgrade to v3)");
     }
 } catch (e) {
     console.error("Error reading dsFolderCache", e);
@@ -2581,7 +2581,7 @@ function openCart() {
                             var imgEl = document.getElementById(imgId);
                             if (!imgEl || !group.p.gridUrl) return;
 
-                            var cleanGrid = group.p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                            var cleanGrid = decodeURIComponent(String(group.p.gridUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                             var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
 
                             window.findDesignKeyInCache(group.p.gridUrl, safeDesignLabel).then(function (cacheKey) {
@@ -3124,7 +3124,7 @@ async function syncImages(silent = false) {
         for (var i = 0; i < productsToSync.length; i += batchSize) {
             var batch = productsToSync.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
-                var cleanGrid = p.gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                var cleanGrid = decodeURIComponent(String(p.gridUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                 var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
                 var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
                 var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
