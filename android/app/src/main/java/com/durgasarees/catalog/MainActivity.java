@@ -9,7 +9,6 @@ import android.view.View;
 import android.view.WindowInsetsController;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
-import androidx.core.view.WindowCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -31,13 +30,10 @@ public class MainActivity extends BridgeActivity {
 
         super.onCreate(savedInstanceState);
 
-        // Enable edge-to-edge overlay (native equivalent of JS setOverlaysWebView: true)
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-
         enforceLightStatusBar();
         enforceLightNavBar();
 
-        // Re-enforce 800ms after launch to beat Capacitor StatusBar plugin reset
+        // Re-enforce after Capacitor bridge + plugins finish initializing (~800ms)
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             enforceLightStatusBar();
             enforceLightNavBar();
