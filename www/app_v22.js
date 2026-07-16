@@ -2597,10 +2597,16 @@ function openCart() {
 
                                     fetch(fallbackUrl).then(function (res) {
                                         if (res.ok) return res.blob();
+                                        if (typeof window.logAppError === 'function') {
+                                            window.logAppError('AUDITOR: Cart Fallback Network', `Missing .webp, trying .jpg for ${cleanNum2}`);
+                                        }
                                         return fetch(fallbackUrlJpg).then(function(res2) {
                                             if (res2.ok) {
                                                 fallbackUrl = fallbackUrlJpg;
                                                 return res2.blob();
+                                            }
+                                            if (typeof window.logAppError === 'function') {
+                                                window.logAppError('AUDITOR: Cart Fallback Network Failed', `HTTP ${res2.status} on .jpg fallback for ${cleanNum2}`);
                                             }
                                             throw new Error('Network failed');
                                         });
