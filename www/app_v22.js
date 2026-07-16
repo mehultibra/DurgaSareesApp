@@ -798,7 +798,7 @@ async function manageProductHDCache(product, action) {
         try {
             var bucket = "durga-sarees.firebasestorage.app";
             var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-            var encPath = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/');
+            var encPath = decodeURIComponent(zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/');
             var listUrl = fbBase + "?prefix=" + encPath + "/&delimiter=/";
 
             window.fetchWithRetry(listUrl).then(res => res.json()).then(data => {
@@ -858,7 +858,7 @@ async function manageProductHDCache(product, action) {
 
         if (!product.zoomUrl || product.zoomUrl === product.gridUrl || product.zoomUrl.toLowerCase() === "none") return;
 
-        var cleanZoom = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+        var cleanZoom = decodeURIComponent(zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
         var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
         var bucket = "durga-sarees.firebasestorage.app";
         var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
@@ -989,7 +989,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
     var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-    var encZoomPath = (zoomPath && zoomPath !== "None") ? zoomPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
+    var encZoomPath = (zoomPath && zoomPath !== "None") ? decodeURIComponent(String(zoomPath)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
 
     var fileToFetch = targetFile ? targetFile : "cover.webp"; // Main grid: always try cover.webp first
 
@@ -1152,7 +1152,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     // 2. Background Load High-Res Zoom Image (if applicable) — saved to IndexedDB for PDF speed
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
-        var encZoomPath = zoomPath.trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
+        var encZoomPath = decodeURIComponent(String(zoomPath)).trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
         var highResUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
 
         // Check if already in IndexedDB before fetching
@@ -2990,7 +2990,7 @@ window.openCartFsFromCache = function (productId, designId, gridUrl) {
 
         // Try Zoom cache first
         if (gridCacheKey && pItem && pItem.zoomUrl && pItem.zoomUrl !== "None") {
-            var cleanZoom = pItem.zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+            var cleanZoom = pItem.decodeURIComponent(zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
             var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
             var zoomCacheKey = gridCacheKey.replace(encGridPath, encZoomPath);
             blobToUse = await getImageFromDB(zoomCacheKey);
@@ -5301,3 +5301,4 @@ function uint8ToBase64(u8Arr) {
     }
     return btoa(result);
 }
+
