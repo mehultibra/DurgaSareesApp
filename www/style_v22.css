@@ -871,8 +871,8 @@ html {
     left: 0;
     right: 0;
     z-index: 100 !important;
-    background-color: transparent !important;
-    border-bottom: 1px solid #eeeeee !important;
+    background-color: #ffffff !important;
+    border-bottom: none !important;
     transition: background-color 0.3s ease;
     height: calc(45px + env(safe-area-inset-top, 20px)) !important;
     padding-top: env(safe-area-inset-top, 20px) !important;
