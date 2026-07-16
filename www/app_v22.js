@@ -140,11 +140,7 @@ try {
 window.addEventListener('DOMContentLoaded', function () {
     try {
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
-            window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true }).then(() => {
-                return window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
-            }).then(() => {
-                return window.Capacitor.Plugins.StatusBar.setBackgroundColor({ color: '#dcfce7' });
-            }).catch(e => console.error("StatusBar init error:", e));
+                window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true }).catch(e => {});
         }
 
         // Header scroll effect
