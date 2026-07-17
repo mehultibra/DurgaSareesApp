@@ -125,41 +125,33 @@ window.sessionImageCache = new Map();
 window.dsFolderCache = {};
 try {
     var _cacheVer = localStorage.getItem("dsFolderCacheVer");
-    if (_cacheVer === "v3") {
+    if (_cacheVer === "v2") {
         window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {};
     } else {
         // Clear old cache - URL format changed (now uses Grid path + delimiter=/)
         localStorage.removeItem("dsFolderCache");
-        localStorage.setItem("dsFolderCacheVer", "v3");
-        console.log("Cleared stale folder cache (format upgrade to v3)");
+        localStorage.setItem("dsFolderCacheVer", "v2");
+        console.log("Cleared stale folder cache (format upgrade to v2)");
     }
 } catch (e) {
     console.error("Error reading dsFolderCache", e);
 }
 
 window.addEventListener('DOMContentLoaded', function () {
-
-
-
-        // Header scroll effect
-        var gridWrap = document.getElementById('gridWrapper');
-        if (gridWrap) {
-            gridWrap.addEventListener('scroll', function () {
-                var hdr = document.querySelector('.hdr');
-                var metaTheme = document.querySelector('meta[name="theme-color"]');
-                if (!hdr) return;
-                
-                if (this.scrollTop > 20) {
-                    hdr.style.backgroundColor = '#ffffff';
-                    hdr.style.borderBottom = '1px solid #eee';
-                    if (metaTheme) metaTheme.setAttribute('content', '#ffffff');
-                } else {
-                    hdr.style.backgroundColor = 'transparent';
-                    hdr.style.borderBottom = 'none';
-                    if (metaTheme) metaTheme.setAttribute('content', '#dcfce7');
-                }
-            });
+    try {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
+            try {
+                // Enable transparent status bar (overlaps webview)
+                window.Capacitor.Plugins.StatusBar.setOverlaysWebView({ overlay: true });
+                // Use light icons for the pink/red gradient background
+                window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' });
+            } catch (e) { }
         }
+
+
+
+        // Header scroll effect removed to preserve CSS gradient
+
         try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
         try { cart = JSON.parse(localStorage.getItem("dsCart")) || {}; } catch (e) { }
         try { favorites = JSON.parse(localStorage.getItem("dsFavs")) || {}; } catch (e) { }
@@ -266,8 +258,9 @@ window.addEventListener('DOMContentLoaded', function () {
             try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
         }
 
-    // Check for updates on ALL platforms (Native & Web)
-    setTimeout(checkForOTAUpdates, 2000);
+        // Check for updates on ALL platforms (Native & Web)
+        setTimeout(checkForOTAUpdates, 2000);
+    } catch (err) { console.error("Init error:", err); }
 });
 
 async function checkForOTAUpdates() {
@@ -668,22 +661,11 @@ function initApp() {
         .then(data => {
             var docs = data.documents || [];
             if (docs.length > 0) {
-                // Only save to cache and re-render if data actually changed
-                var newDataStr = JSON.stringify(docs);
-                var oldDataStr = "";
-                try { oldDataStr = localStorage.getItem("dsOfflineProducts") || ""; } catch (e) { }
-
-                if (newDataStr !== oldDataStr) {
-                    try { localStorage.setItem("dsOfflineProducts", newDataStr); } catch (e) { }
-                    
-                    if (loadedFromCache) {
-                        // Force UI update to show the new data fetched from Firebase
-                        processProducts(docs);
-                    }
-                }
+                // Only save to cache if we got valid data
+                try { localStorage.setItem("dsOfflineProducts", JSON.stringify(docs)); } catch (e) { }
             }
             if (bootScreen) bootScreen.style.display = 'none';
-            // If we didn't have cache initially, render now
+            // Only re-render if we did NOT already render from cache (avoid double render)
             if (!loadedFromCache) {
                 processProducts(docs);
             }
@@ -816,7 +798,7 @@ async function manageProductHDCache(product, action) {
         try {
             var bucket = "durga-sarees.firebasestorage.app";
             var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-            var encPath = decodeURIComponent(zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/');
+            var encPath = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/');
             var listUrl = fbBase + "?prefix=" + encPath + "/&delimiter=/";
 
             window.fetchWithRetry(listUrl).then(res => res.json()).then(data => {
@@ -876,7 +858,7 @@ async function manageProductHDCache(product, action) {
 
         if (!product.zoomUrl || product.zoomUrl === product.gridUrl || product.zoomUrl.toLowerCase() === "none") return;
 
-        var cleanZoom = decodeURIComponent(zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+        var cleanZoom = zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
         var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
         var bucket = "durga-sarees.firebasestorage.app";
         var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
@@ -894,7 +876,7 @@ async function manageProductHDCache(product, action) {
 window.findDesignKeyInCache = async function (gridUrl, designLabel) {
     if (!gridUrl || gridUrl.startsWith('http')) return null;
 
-    var cleanGrid = gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+    var cleanGrid = decodeURIComponent(gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
     var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
@@ -1007,7 +989,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
     var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-    var encZoomPath = (zoomPath && zoomPath !== "None") ? decodeURIComponent(String(zoomPath)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
+    var encZoomPath = (zoomPath && zoomPath !== "None") ? zoomPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
 
     var fileToFetch = targetFile ? targetFile : "cover.webp"; // Main grid: always try cover.webp first
 
@@ -1170,7 +1152,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
     // 2. Background Load High-Res Zoom Image (if applicable) — saved to IndexedDB for PDF speed
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
-        var encZoomPath = decodeURIComponent(String(zoomPath)).trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
+        var encZoomPath = zoomPath.trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
         var highResUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
 
         // Check if already in IndexedDB before fetching
@@ -1711,7 +1693,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
         delete window.brokenImagesMap[zoomPath];
     }
 
-    var cleanGridPath = gridPath ? String(gridPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : "";
+    var cleanGridPath = gridPath ? decodeURIComponent(String(gridPath)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : "";
     var cleanZoomPath = zoomPath && zoomPath !== "None" ? String(zoomPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : cleanGridPath;
 
     if (!cleanGridPath || cleanGridPath === "" || cleanGridPath.toLowerCase() === "none") {
@@ -2538,7 +2520,7 @@ function openCart() {
 
             cHtml.push('<div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden;">');
             cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">');
-            cHtml.push('<div style="' + (!isEditing ? 'cursor:pointer;' : '') + ' flex:1;" ' + (!isEditing ? 'onclick="closeCart(true); openDetail(\'' + g.p.id + '\');"' : '') + '>');
+            cHtml.push('<div style="' + (!isEditing ? 'cursor:pointer;' : '') + ' flex:1;" ' + (!isEditing ? 'onclick="openDetail(\'' + g.p.id + '\');"' : '') + '>');
             cHtml.push('<div style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></div>');
 
             if (isEditing) {
@@ -2564,7 +2546,7 @@ function openCart() {
                 var imgId = "cart_img_" + g.p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
 
                 var onClickAction = safeDesignLabel === 'DIRECT' ?
-                    "closeCart(true); openDetail('" + g.p.id + "');" :
+                    "openDetail('" + g.p.id + "');" :
                     "openCartFsFromCache('" + g.p.id + "', '" + safeDesignLabel + "', '" + g.p.gridUrl + "');";
 
                 cHtml.push('<div style="width: 80px; text-align: center;" ' + (!isEditing ? 'onclick="' + onClickAction + '"' : '') + '>');
@@ -2597,29 +2579,14 @@ function openCart() {
                             var safeDesignLabel = item.design || 'DIRECT';
                             var imgId = "cart_img_" + group.p.id + "_" + safeDesignLabel.replace(/[^a-zA-Z0-9]/g, '');
                             var imgEl = document.getElementById(imgId);
-                            if (!imgEl) return;
-                            var fallbackSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+                            if (!imgEl || !group.p.gridUrl) return;
 
-                            if (safeDesignLabel === 'DIRECT') {
-                                if (group.p.coverUrl) {
-                                    window.getImageFromDB(group.p.coverUrl).then(function(blob) {
-                                        if (blob) imgEl.src = URL.createObjectURL(blob);
-                                        else imgEl.src = group.p.coverUrl;
-                                    }).catch(function() {
-                                        imgEl.src = group.p.coverUrl;
-                                    });
-                                } else {
-                                    imgEl.src = fallbackSVG;
-                                }
-                                return;
-                            }
-
-                            if (!group.p.gridUrl) return;
-
-                            var cleanGrid = decodeURIComponent(String(group.p.gridUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                            var cleanGrid = group.p.decodeURIComponent(gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                             var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
 
                             window.findDesignKeyInCache(group.p.gridUrl, safeDesignLabel).then(function (cacheKey) {
+                                var fallbackSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
+
                                 if (!cacheKey) {
                                     // Not found in cache. Try network guess as a last resort!
                                     var cleanNum2 = safeDesignLabel.replace(/\D/g, '');
@@ -2788,7 +2755,7 @@ function getExactFirebaseUrl(folderPath, dId) {
 }
 
 // ====================================
-// 🖼️ 2. MODAL & SHARE LOGIC (MULTI-IMAGE UPGRADE)
+// ðŸ“¦ 2. MODAL & SHARE LOGIC (MULTI-IMAGE UPGRADE)
 // ====================================
 function askShareTypeAsync() {
     return new Promise((resolve) => {
@@ -2889,7 +2856,7 @@ window.triggerShare = async function (action) {
             var fp = favProducts[i];
             var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
 
-            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
+            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
             if (dArr.length > 0) {
                 for (var j = 0; j < dArr.length; j++) {
                     allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
@@ -2897,7 +2864,7 @@ window.triggerShare = async function (action) {
             } else {
                 // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
                 var fallbackFile = dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
-                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
+                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d) : [];
                 var coverDesignId = 'DIRECT';
 
                 if (fallbackFile) {
@@ -2912,7 +2879,7 @@ window.triggerShare = async function (action) {
 
         if (action === 'images') {
             if (allHighResUrls.length > 100) {
-                alert("⚠ ️ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
+                alert("⚠ ï¸  WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
                 allHighResUrls = allHighResUrls.slice(0, 100);
             }
             if (typeof shareNativeImages === 'function') {
@@ -2934,7 +2901,7 @@ window.triggerShare = async function (action) {
 
     var highResUrls = [];
     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
+    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
 
     if (dArr.length > 0) {
         for (var j = 0; j < dArr.length; j++) {
@@ -2944,7 +2911,7 @@ window.triggerShare = async function (action) {
         // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
         var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
         var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
-        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
+        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d) : [];
         var coverDesignId = 'DIRECT';
 
         if (fallbackFile) {
@@ -2986,7 +2953,65 @@ window.openCartFs = function (productId, designId, cartImgSrc) {
     openFs(actualProductId, 0, designId, cartImgSrc);
 };
 
+// ðŸš€ Cart fullscreen: loads image from IndexedDB using exact cache key, then opens FS
+window.openCartFsFromCache = function (productId, designId, gridUrl) {
+    var pItem = allProducts.find(x => x.id === productId);
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
 
+    var cleanGrid = decodeURIComponent(gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+    var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
+
+    function showInFullscreen(src) {
+        var fsModal = document.getElementById('fsModal');
+        var fsImg = document.getElementById('fsImg');
+        var fsVideo = document.getElementById('fsVideo');
+        if (fsVideo) fsVideo.style.display = 'none';
+        fsImg.style.display = 'block';
+        fsImg.src = src;
+        fsImg.style.transition = '';
+        fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
+        fsScale = 1; fsTranslateX = 0; fsTranslateY = 0;
+        document.getElementById('fsTitle').innerText = (pItem ? pItem.name : productId) + " - " + (designId === 'DIRECT' ? "Cover" : designId);
+        var keyCart = productId + '_' + designId;
+        document.getElementById('fsQty').innerText = cart[keyCart] ? cart[keyCart].qty : 0;
+        document.querySelectorAll('.fs-nav').forEach(n => n.style.display = 'none');
+        fsModal.style.display = 'flex';
+        pushHistoryState('fs');
+
+        // THE FIX: Sync design ID and preload product images so they can SWIPE!
+        fsDesignId = designId;
+        window.fsIsStandalone = false;
+        openDetail(productId, true, true);
+    }
+
+    window.findDesignKeyInCache(gridUrl, designId).then(async function (gridCacheKey) {
+        var blobToUse = null;
+
+        // Try Zoom cache first
+        if (gridCacheKey && pItem && pItem.zoomUrl && pItem.zoomUrl !== "None") {
+            var cleanZoom = pItem.zoomUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+            var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+            var zoomCacheKey = gridCacheKey.replace(encGridPath, encZoomPath);
+            blobToUse = await getImageFromDB(zoomCacheKey);
+        }
+
+        // Try Grid cache if zoom isn't found
+        if (!blobToUse && gridCacheKey) {
+            blobToUse = await getImageFromDB(gridCacheKey);
+        }
+
+        if (blobToUse) {
+            showInFullscreen(URL.createObjectURL(blobToUse));
+        } else {
+            if (typeof window.logAppError === 'function') {
+                window.logAppError('AUDITOR: Cart Cache Miss', `CRITICAL: Cart item missing from storage. | Product: ${pItem ? pItem.name : productId} - Design: ${designId}`);
+            }
+            // Professional visual fallback for the user:
+            showInFullscreen(window.dsMissingImage);
+        }
+    });
+};
 
 // ====================================
 // UTILS & HELPERS
@@ -3093,26 +3118,26 @@ async function syncImages(silent = false) {
 
         if (bootMsg) bootMsg.innerText = "Smart syncing 0 / " + total + "...";
 
-        // 🛡️ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
+        // ðŸ›¡ï¸  BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
         // This guarantees we never hit Samsung/Android OS TCP socket connection limits (ERR_INSUFFICIENT_RESOURCES).
         var batchSize = 40;
         for (var i = 0; i < productsToSync.length; i += batchSize) {
             var batch = productsToSync.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
-                var cleanGrid = decodeURIComponent(String(p.gridUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                var cleanGrid = p.decodeURIComponent(gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                 var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
                 var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
                 var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
                 var lastFailReason = "";
                 var downloaded = false;
 
-                // ── 1. Fetch Firebase folder listing ──────────────────────
+                // â”€â”€ 1. Fetch Firebase folder listing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 var folderFiles = []; // filenames only (e.g. "01.webp", "02.webp")
                 var listSuccess = false;
                 try {
                     const ctrl = new AbortController();
                     const tid = setTimeout(() => ctrl.abort(), 30000);
-                    // 🛡️ CRITICAL FIX: Bulletproof retry for "failed to fetch"
+                    // ðŸ›¡ï¸  CRITICAL FIX: Bulletproof retry for "failed to fetch"
                     var listRes = await window.fetchWithRetry(listUrl, { signal: ctrl.signal }, 3);
                     clearTimeout(tid);
                     if (listRes.ok) {
@@ -3134,13 +3159,13 @@ async function syncImages(silent = false) {
                 }
 
                 if (!listSuccess) {
-                    // Offline / error — keep existing cache, log error
+                    // Offline / error â€” keep existing cache, log error
                     var existingCover = await checkImageInDB(p.gridUrl);
                     if (existingCover) downloaded = true;
                     else lastFailReason = lastFailReason || "Offline & no local cache";
 
                 } else if (folderFiles.length === 0) {
-                    // Firebase folder is EMPTY — keep existing cover, do NOT delete
+                    // Firebase folder is EMPTY â€” keep existing cover, do NOT delete
                     downloaded = true;
                     console.log("[SYNC] Folder empty for", p.name, "- keeping cached cover.");
 
@@ -3154,13 +3179,13 @@ async function syncImages(silent = false) {
                     // Designs = each file, key stored as full Firebase URL
                     var coverFile = folderFiles[0];
                     var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-                    var designKeys = {}; // key → url map for all files
+                    var designKeys = {}; // key â†’ url map for all files
                     folderFiles.forEach(f => {
                         var key = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
                         designKeys[key] = key;
                     });
 
-                    // ── 2. Cleanup: Delete from DB keys NOT in Firebase anymore ──
+                    // â”€â”€ 2. Cleanup: Delete from DB keys NOT in Firebase anymore â”€â”€
                     // Scan DB for all keys that belong to this product's folder
                     var dbKeyPrefix = fbBase + encGridPath + "%2F";
                     var cachedKeys = await listDBKeysForPrefix(dbKeyPrefix);
@@ -3240,11 +3265,11 @@ async function syncImages(silent = false) {
                     }
                 }
 
-                // ── 5. Track errors ──────────────────────────────────────────
+                // â”€â”€ 5. Track errors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if (!downloaded) {
                     failed++;
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
-                    console.error("❌ SYNC FAILED:", p.name, "|", lastFailReason);
+                    console.error("â Œ SYNC FAILED:", p.name, "|", lastFailReason);
                     if (!window.syncReportResults) window.syncReportResults = [];
                     var syncErrKey = p.gridUrl;
                     var existing2 = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
@@ -3472,7 +3497,7 @@ function updateBottomQtyFromActiveDesign() {
     }
 }
 
-// 📱 Listen to hybrid app native backbutton event to prevent app minimization and handle stack back transition
+// ðŸ“± Listen to hybrid app native backbutton event to prevent app minimization and handle stack back transition
 document.addEventListener("backbutton", function (e) {
     var hasActiveModal = false;
 
@@ -3503,7 +3528,7 @@ document.addEventListener("backbutton", function (e) {
 }, false);
 
 // ====================================
-// 🔎 SEARCH, SORT, FILTER & FAVORITES ENGINE
+// ðŸ”  SEARCH, SORT, FILTER & FAVORITES ENGINE
 // ====================================
 var showOnlyFavs = false;
 
@@ -3752,7 +3777,7 @@ window.applyFilter = function () {
     renderProductGrid(displayList);
 };
 
-// 📱 Listen to popstate to handle history back/forward navigation and close/open modals accordingly
+// ðŸ“± Listen to popstate to handle history back/forward navigation and close/open modals accordingly
 function applyModalState(modal) {
     var detailPanel = document.getElementById('detailPanel');
     var cartPanel = document.getElementById('cartPanel');
@@ -3917,7 +3942,7 @@ async function logout() {
 }
 
 // ====================================
-// 📦 CART CUSTOMER DETAILS & EDIT MODALS
+// ðŸ›’ CART CUSTOMER DETAILS & EDIT MODALS
 // ====================================
 
 var _currentEditProductId = null;
@@ -4223,7 +4248,7 @@ function printCartPdf() {
 }
 
 // ====================================
-// 📊 SYNC REPORT LOGIC
+// ðŸ” SYNC REPORT LOGIC
 // ====================================
 
 function openSyncReportModal() {
@@ -4282,14 +4307,14 @@ async function runSyncReport() {
             continue;
         }
 
-        var cleanGridPath = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+        var cleanGridPath = decodeURIComponent(String(p.gridUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
 
         var listUrl = fbBase + cleanGridPath + "&delimiter=/";
 
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000);
-            // 🛡️ Bulletproof Retry applied to Sync Report
+            // ðŸ›¡ï¸ Bulletproof Retry applied to Sync Report
             var res = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
             clearTimeout(timeoutId);
 
@@ -4435,7 +4460,7 @@ async function resyncFailedProducts() {
             continue;
         }
 
-        var cleanGridPath = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+        var cleanGridPath = decodeURIComponent(String(p.gridUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
 
         try {
             const controller = new AbortController();
@@ -4444,7 +4469,7 @@ async function resyncFailedProducts() {
             // 1. Fetch directory listing first
             var prefix = cleanGridPath + "/";
             var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + prefix + "&delimiter=/";
-            // 🛡️ Bulletproof Retry applied to Resync
+            // ðŸ›¡ï¸ Bulletproof Retry applied to Resync
             var listRes = await window.fetchWithRetry(listUrl, { signal: controller.signal }, 3);
 
             if (!listRes.ok) {
@@ -5276,5 +5301,4 @@ function uint8ToBase64(u8Arr) {
     }
     return btoa(result);
 }
-
 
