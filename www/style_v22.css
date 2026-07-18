@@ -647,6 +647,8 @@ html {
     align-items: center;
     justify-content: center;
     position: relative;
+    touch-action: manipulation; /* Fix 300ms delay */
+    -webkit-tap-highlight-color: transparent;
 }
 
 .fs-controls button::before {
@@ -670,6 +672,9 @@ html {
     color: rgba(255, 255, 255, 0.5);
     padding: 20px;
     z-index: 10;
+    touch-action: manipulation; /* Fix 300ms delay */
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
 }
 
 .fs-nav-left {
