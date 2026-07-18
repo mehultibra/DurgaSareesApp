@@ -1617,7 +1617,7 @@ function fetchZoomNatively(zoomUrl, imgEl) {
     tempImg.src = zoomUrl;
 }
 
-function openDetail(productId, skipShow, keepSearchShown) {
+function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     if (!skipShow) {
         cameFromDetail = false;
 
@@ -1716,6 +1716,7 @@ function openDetail(productId, skipShow, keepSearchShown) {
 
     if (!cleanGridPath || cleanGridPath === "" || cleanGridPath.toLowerCase() === "none") {
         deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="' + window.dsMissingImage + '"></div>';
+        if (typeof onRenderComplete === 'function') onRenderComplete();
         return;
     }
 
@@ -1799,7 +1800,12 @@ function openDetail(productId, skipShow, keepSearchShown) {
         });
 
         if (validFiles.length > 0) {
-            renderSwipeDeck(validFiles);
+            renderSwipeDeck(validFiles).then(() => {
+                if (typeof onRenderComplete === 'function') {
+                    onRenderComplete();
+                    onRenderComplete = null;
+                }
+            });
 
         } else {
             // Firebase Storage folder is empty: Clear fallback cards and show only the cover image
@@ -1856,6 +1862,10 @@ function openDetail(productId, skipShow, keepSearchShown) {
                 var curStockCover = p.stock && p.stock['Cover'] !== undefined ? p.stock['Cover'] : 999;
                 loadAndCacheDesignImage(imgEl, fallbackZoomUrl, fallbackGridUrl, p.id, 'Cover', p.gridUrl, true, cleanZoomPath, curStockCover > 0);
             }
+            if (typeof onRenderComplete === 'function') {
+                onRenderComplete();
+                onRenderComplete = null;
+            }
         }
     }
 
@@ -1892,6 +1902,11 @@ function openDetail(productId, skipShow, keepSearchShown) {
                     fallbackItems.push({ name: cleanGridPath + '/' + n + ".webp" });
                 }
                 processFolderItems(fallbackItems);
+            } else {
+                 if (typeof onRenderComplete === 'function') {
+                     onRenderComplete();
+                     onRenderComplete = null;
+                 }
             }
         });
 
@@ -2479,19 +2494,41 @@ window.openCartFsFromCache = function (pId, dId, gridUrl) {
     var pItem = allProducts.find(x => x.id === pId);
     if (!pItem) return;
 
-    // 1. Populate detail panel silently to generate the swipe-cards without showing it
-    openDetail(pId, true);
+    var cartImgId = "cart_img_" + pId + "_" + (dId === 'DIRECT' ? 'DIRECT' : dId.replace(/[^a-zA-Z0-9]/g, ''));
+    var cartImgEl = document.getElementById(cartImgId);
+    var cartImgSrc = cartImgEl ? cartImgEl.src : null;
 
-    // 2. Wait for DOM to parse
-    setTimeout(function () {
-        // Try to get cartImgSrc from the clicked cart element for immediate fallback
-        var cartImgId = "cart_img_" + pId + "_" + (dId === 'DIRECT' ? 'DIRECT' : dId.replace(/[^a-zA-Z0-9]/g, ''));
-        var cartImgEl = document.getElementById(cartImgId);
-        var cartImgSrc = cartImgEl ? cartImgEl.src : null;
+    // 1. Instantly show full screen modal with the cached cart image
+    var fsModal = document.getElementById('fsModal');
+    var fsImg = document.getElementById('fsImg');
+    var fsTitle = document.getElementById('fsTitle');
+    var fsVideo = document.getElementById('fsVideo');
 
-        // 3. Open Fullscreen normally with full swiping enabled
+    if (fsVideo) fsVideo.style.display = 'none';
+    if (fsImg) {
+        fsImg.style.display = 'block';
+        fsImg.src = cartImgSrc || window.dsMissingImage;
+        fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
+    }
+    
+    curProduct = pItem;
+    fsDesignId = dId;
+    
+    if (fsTitle) {
+        var dName = dId === 'DIRECT' ? "Cover" : dId;
+        fsTitle.innerText = pItem.name + " - " + dName + " (Loading...)";
+    }
+    
+    if (fsModal && fsModal.style.display !== 'flex') {
+        fsModal.style.display = 'flex';
+        pushHistoryState('fs'); // 🛡️ TRAPS BACK BUTTON
+    }
+
+    // 2. Populate detail panel silently to generate the swipe-cards
+    openDetail(pId, true, false, function () {
+        // 3. Once fully rendered, call openFs to hook up swipe functionality and HD images
         openFs(pId, 0, dId, cartImgSrc);
-    }, 100);
+    });
 };
 
 function openCart() {
@@ -2601,13 +2638,8 @@ function openCart() {
                             var fallbackSVG = "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="100%" height="100%" fill="#eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#999">Design Not Found</text></svg>');
 
                             if (safeDesignLabel === 'DIRECT') {
-                                if (group.p.coverUrl) {
-                                    window.getImageFromDB(group.p.coverUrl).then(function(blob) {
-                                        if (blob) imgEl.src = URL.createObjectURL(blob);
-                                        else imgEl.src = group.p.coverUrl;
-                                    }).catch(function() {
-                                        imgEl.src = group.p.coverUrl;
-                                    });
+                                if (window.renderWebpFromFolder) {
+                                    window.renderWebpFromFolder(imgEl, group.p.gridUrl, group.p.zoomUrl, null);
                                 } else {
                                     imgEl.src = fallbackSVG;
                                 }
