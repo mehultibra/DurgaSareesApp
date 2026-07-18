@@ -2041,16 +2041,22 @@ window.changeQty = function (pid, designId, amount) {
     for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
     manageProductHDCache(p, totalQty > 0 ? 'CACHE' : 'DELETE');
 
-    // 3. Update Cart Live if it's open in the background!
+    // 3. 🚀 Update Cart Live WITHOUT re-rendering everything!
+    var cartText = document.getElementById('cart_qty_text_' + pid + '_' + designId);
+    if (cartText) cartText.innerText = newQ + ' pcs';
+    var cartInp = document.getElementById('ie_qty_' + pid + '_' + designId);
+    if (cartInp) cartInp.value = newQ;
+    
+    // Update global cart headers/badges
+    if (typeof updateCartHeader === 'function') updateCartHeader();
+    
+    // Update Cart Panel Total Bottom Bar if cart is open
     var cartPanel = document.getElementById('cartPanel');
     if (cartPanel && cartPanel.classList.contains('open')) {
-        var isEditingAny = false;
-        if (window.cartEditingMap) {
-            for (var ed in window.cartEditingMap) {
-                if (window.cartEditingMap[ed]) isEditingAny = true;
-            }
-        }
-        if (!isEditingAny) openCart();
+        var count = 0;
+        for (var k in cart) { if (cart[k] && cart[k].qty) count += parseInt(cart[k].qty) || 0; }
+        var footerQty = document.getElementById('cartTotalQty');
+        if (footerQty) footerQty.innerText = count + " pcs";
     }
 };
 
@@ -2090,15 +2096,22 @@ window.setExactQty = function (pid, designId, value) {
     for (var k in cart) { if (k.startsWith(pid + '_')) totalQty += cart[k].qty; }
     manageProductHDCache(p, totalQty > 0 ? 'CACHE' : 'DELETE');
 
+    // 3. 🚀 Update Cart Live WITHOUT re-rendering everything!
+    var cartText = document.getElementById('cart_qty_text_' + pid + '_' + designId);
+    if (cartText) cartText.innerText = newQ + ' pcs';
+    var cartInp = document.getElementById('ie_qty_' + pid + '_' + designId);
+    if (cartInp) cartInp.value = newQ;
+    
+    // Update global cart headers/badges
+    if (typeof updateCartHeader === 'function') updateCartHeader();
+    
+    // Update Cart Panel Total Bottom Bar if cart is open
     var cartPanel = document.getElementById('cartPanel');
     if (cartPanel && cartPanel.classList.contains('open')) {
-        var isEditingAny = false;
-        if (window.cartEditingMap) {
-            for (var ed in window.cartEditingMap) {
-                if (window.cartEditingMap[ed]) isEditingAny = true;
-            }
-        }
-        if (!isEditingAny) openCart();
+        var count = 0;
+        for (var k in cart) { if (cart[k] && cart[k].qty) count += parseInt(cart[k].qty) || 0; }
+        var footerQty = document.getElementById('cartTotalQty');
+        if (footerQty) footerQty.innerText = count + " pcs";
     }
 };
 
@@ -2611,7 +2624,7 @@ function openCart() {
                 if (isEditing) {
                     cHtml.push('<input type="number" id="ie_qty_' + g.p.id + '_' + safeDesignLabel + '" value="' + (item.qty || 0) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:4px; border:1px solid #myntra-pink; border-radius:4px; text-align:center; font-size:12px; font-weight:bold; color:var(--text-main); margin-top:2px;">');
                 } else {
-                    cHtml.push('<div style="font-size: 12px; font-weight: bold; color: var(--myntra-pink);">' + (item.qty || 0) + ' pcs</div>');
+                    cHtml.push('<div id="cart_qty_text_' + g.p.id + '_' + safeDesignLabel + '" style="font-size: 12px; font-weight: bold; color: var(--myntra-pink);">' + (item.qty || 0) + ' pcs</div>');
                 }
                 cHtml.push('</div>');
             });

@@ -355,9 +355,9 @@
       <img id="fsImg" class="fs-img" src="">
     </div>
     <div class="fs-controls">
-      <button onclick="fsChg(-1)">−</button>
+      <button onpointerdown="event.preventDefault(); fsChg(-1)">−</button>
       <span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">0</span>
-      <button onclick="fsChg(1)">+</button>
+      <button onpointerdown="event.preventDefault(); fsChg(1)">+</button>
     </div>
   </div>
 
