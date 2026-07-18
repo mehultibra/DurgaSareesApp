@@ -2653,32 +2653,67 @@ function openCart() {
 
                             window.findDesignKeyInCache(group.p.gridUrl, safeDesignLabel).then(function (cacheKey) {
                                 if (!cacheKey) {
-                                    // Not found in cache. Try network guess as a last resort!
-                                    var cleanNum2 = safeDesignLabel.replace(/\D/g, '');
-                                    if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
-                                    if (!cleanNum2) cleanNum2 = safeDesignLabel;
-                                    var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
-                                    var fallbackUrlJpg = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".jpg") + "?alt=media";
-
-                                    fetch(fallbackUrl).then(function (res) {
-                                        if (res.ok) return res.blob();
-                                        if (typeof window.logAppError === 'function') {
-                                            window.logAppError('AUDITOR: Cart Fallback Network', `Missing .webp, trying .jpg for ${cleanNum2}`);
-                                        }
-                                        return fetch(fallbackUrlJpg).then(function(res2) {
-                                            if (res2.ok) {
-                                                fallbackUrl = fallbackUrlJpg;
-                                                return res2.blob();
-                                            }
-                                            if (typeof window.logAppError === 'function') {
-                                                window.logAppError('AUDITOR: Cart Fallback Network Failed', `HTTP ${res2.status} on .jpg fallback for ${cleanNum2}`);
-                                            }
-                                            throw new Error('Network failed');
+                                    // Not found in cache. Use Firebase List API to dynamically find the correct filename!
+                                    var listPrefix = encGridPath + "%2F";
+                                    var listUrl = fbBase + "?prefix=" + listPrefix + "&delimiter=/";
+                                    
+                                    if (!window.folderListCache) window.folderListCache = {};
+                                    
+                                    var fetchPromise;
+                                    if (window.folderListCache[listUrl]) {
+                                        fetchPromise = Promise.resolve(window.folderListCache[listUrl]);
+                                    } else {
+                                        fetchPromise = fetch(listUrl).then(function(res) {
+                                            if (res.ok) return res.json();
+                                            throw new Error("List HTTP " + res.status);
+                                        }).then(function(data) {
+                                            var files = (data.items || []).map(function(item) {
+                                                return item.name.substring(item.name.lastIndexOf('/') + 1);
+                                            }).filter(function(f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
+                                            window.folderListCache[listUrl] = files;
+                                            return files;
                                         });
-                                    }).then(function (blob) {
-                                        imgEl.src = URL.createObjectURL(blob);
-                                        saveImageToDB(fallbackUrl, blob); // Cache it for future!
-                                    }).catch(function () {
+                                    }
+                                    
+                                    fetchPromise.then(function(folderFiles) {
+                                        if (folderFiles.length === 0) throw new Error("Folder empty");
+                                        
+                                        var targetFile = null;
+                                        var targetNum = parseInt(String(safeDesignLabel).replace(/\D/g, ''));
+                                        
+                                        if (!isNaN(targetNum)) {
+                                            for (var i = 0; i < folderFiles.length; i++) {
+                                                var f = folderFiles[i];
+                                                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+                                                if (parseInt(nameWithoutExt.replace(/\D/g, '')) === targetNum) {
+                                                    targetFile = f;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if (!targetFile) {
+                                            for (var i = 0; i < folderFiles.length; i++) {
+                                                var f = folderFiles[i];
+                                                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+                                                if (nameWithoutExt.toLowerCase() === String(safeDesignLabel).toLowerCase()) {
+                                                    targetFile = f;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if (!targetFile) targetFile = folderFiles[0];
+                                        
+                                        var finalUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(targetFile) + "?alt=media";
+                                        return fetch(finalUrl).then(function(r) {
+                                            if (r.ok) {
+                                                return r.blob().then(function(blob) {
+                                                    imgEl.src = URL.createObjectURL(blob);
+                                                    saveImageToDB(finalUrl, blob);
+                                                });
+                                            }
+                                            throw new Error("HTTP " + r.status);
+                                        });
+                                    }).catch(function() {
                                         imgEl.src = fallbackSVG;
                                     });
                                     return;
@@ -2822,191 +2857,9 @@ function getExactFirebaseUrl(folderPath, dId) {
 // ====================================
 // 🖼️ 2. MODAL & SHARE LOGIC (MULTI-IMAGE UPGRADE)
 // ====================================
-function askShareTypeAsync() {
-    return new Promise((resolve) => {
-        var overlay = document.createElement('div');
-        overlay.style.position = 'fixed';
-        overlay.style.top = '0'; overlay.style.left = '0'; overlay.style.width = '100%'; overlay.style.height = '100%';
-        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
-        overlay.style.zIndex = '10000';
-        overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
 
-        var box = document.createElement('div');
-        box.style.backgroundColor = '#fff'; box.style.padding = '20px'; box.style.borderRadius = '12px';
-        box.style.width = '300px'; box.style.textAlign = 'center';
 
-        var title = document.createElement('h3');
-        title.innerText = 'Select Share Type';
-        title.style.marginTop = '0'; title.style.color = '#333';
 
-        var resolved = false;
-        var onPopState = function () {
-            if (!resolved) {
-                resolved = true;
-                if (document.body.contains(overlay)) document.body.removeChild(overlay);
-                window.removeEventListener('popstate', onPopState);
-                resolve(null);
-            }
-        };
-        window.addEventListener('popstate', onPopState);
-
-        var close = function (val) {
-            if (!resolved) {
-                resolved = true;
-                if (document.body.contains(overlay)) document.body.removeChild(overlay);
-                window.removeEventListener('popstate', onPopState);
-                history.back(); // Pop the state we pushed
-                resolve(val);
-            }
-        };
-
-        var btnCover = document.createElement('button');
-        btnCover.innerText = 'Product Catalouge';
-        btnCover.style.width = '100%'; btnCover.style.padding = '12px'; btnCover.style.marginBottom = '10px';
-        btnCover.style.backgroundColor = 'var(--myntra-pink)'; btnCover.style.color = '#fff';
-        btnCover.style.border = 'none'; btnCover.style.borderRadius = '6px'; btnCover.style.fontSize = '14px';
-        btnCover.onclick = function () { close('cover'); };
-
-        var btnReady = document.createElement('button');
-        btnReady.innerText = 'With Ready Designs';
-        btnReady.style.width = '100%'; btnReady.style.padding = '12px'; btnReady.style.marginBottom = '10px';
-        btnReady.style.backgroundColor = '#333'; btnReady.style.color = '#fff';
-        btnReady.style.border = 'none'; btnReady.style.borderRadius = '6px'; btnReady.style.fontSize = '14px';
-        btnReady.onclick = function () { close('full'); };
-
-        var btnCancel = document.createElement('button');
-        btnCancel.innerText = 'Cancel';
-        btnCancel.style.width = '100%'; btnCancel.style.padding = '12px';
-        btnCancel.style.backgroundColor = '#eee'; btnCancel.style.color = '#333';
-        btnCancel.style.border = 'none'; btnCancel.style.borderRadius = '6px'; btnCancel.style.fontSize = '14px';
-        btnCancel.onclick = function () { close(null); };
-
-        box.appendChild(title); box.appendChild(btnCover); box.appendChild(btnReady); box.appendChild(btnCancel);
-        overlay.appendChild(box);
-        document.body.appendChild(overlay);
-
-        // Replace shareModal state with askShareType so back button works perfectly
-        history.replaceState({ modal: 'askShareType' }, '');
-        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AndroidBackBridge) {
-            window.Capacitor.Plugins.AndroidBackBridge.setCanGoBack({ canGoBack: true });
-        }
-    });
-}
-
-window.triggerShare = async function (action) {
-    if (action === 'copy') {
-        alert("Web links are coming in the next update!");
-        return;
-    }
-
-    // Visually hide shareModal but DO NOT closeModals() since we will replace its history state
-    document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
-
-    var isDetailOpen = document.getElementById('detailPanel') && document.getElementById('detailPanel').classList.contains('open');
-
-    if (!isDetailOpen) {
-        // --- MAIN PAGE SHARE (Favorites) ---
-        var favProducts = allProducts.filter(p => favorites[p.id]);
-        if (favProducts.length === 0) {
-            return alert("No favorite items to share. Please mark some products as favorites first.");
-        }
-
-        var shareType = await askShareTypeAsync();
-        if (!shareType) return;
-
-        var allHighResUrls = [];
-        var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
-
-        for (var i = 0; i < favProducts.length; i++) {
-            var fp = favProducts[i];
-            var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
-
-            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
-            if (dArr.length > 0) {
-                for (var j = 0; j < dArr.length; j++) {
-                    allHighResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
-                }
-            } else {
-                // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
-                var fallbackFile = dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
-                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
-                var coverDesignId = 'DIRECT';
-
-                if (fallbackFile) {
-                    coverDesignId = fallbackFile;
-                } else if (readyDesigns.length > 0) {
-                    coverDesignId = readyDesigns[0];
-                }
-
-                allHighResUrls.push(getExactFirebaseUrl(folderPath, coverDesignId));
-            }
-        }
-
-        if (action === 'images') {
-            if (allHighResUrls.length > 100) {
-                alert("⚠ ️ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
-                allHighResUrls = allHighResUrls.slice(0, 100);
-            }
-            if (typeof shareNativeImages === 'function') {
-                await shareNativeImages("Favorite Items", "", allHighResUrls);
-            }
-        } else if (action === 'wa') {
-            if (typeof generateFavoritesPDF === 'function') {
-                await generateFavoritesPDF(favProducts, shareType, action);
-            }
-        }
-        return;
-    }
-
-    // --- EXISTING SINGLE PRODUCT SHARE ---
-    if (!curProduct) return;
-
-    var shareType = await askShareTypeAsync();
-    if (!shareType) return;
-
-    var highResUrls = [];
-    var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
-
-    if (dArr.length > 0) {
-        for (var j = 0; j < dArr.length; j++) {
-            highResUrls.push(getExactFirebaseUrl(folderPath, dArr[j]));
-        }
-    } else {
-        // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
-        var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
-        var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
-        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
-        var coverDesignId = 'DIRECT';
-
-        if (fallbackFile) {
-            coverDesignId = fallbackFile;
-        } else if (readyDesigns.length > 0) {
-            coverDesignId = readyDesigns[0];
-        }
-
-        highResUrls.push(getExactFirebaseUrl(folderPath, coverDesignId));
-    }
-
-    if (highResUrls.length === 0) {
-        alert("Images are still loading. Please wait a second.");
-        return;
-    }
-
-    if (action === 'images') {
-        if (highResUrls.length > 100) {
-            alert("WhatsApp limit is 100 images. You are trying to share " + highResUrls.length + " images. Please share as PDF.");
-            return;
-        }
-        if (typeof shareNativeImages === 'function') {
-            await shareNativeImages(curProduct.name, curProduct.price, highResUrls);
-        }
-    } else {
-        if (typeof generateNativePDF === 'function') {
-            await generateNativePDF(curProduct, highResUrls, action);
-        }
-    }
-}
 
 window.openCartFs = function (productId, designId, cartImgSrc) {
     var actualProductId = curProduct ? curProduct.id : productId;

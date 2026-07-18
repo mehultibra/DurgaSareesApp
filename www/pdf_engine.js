@@ -150,6 +150,111 @@ function getBase64FromCache(cacheKey) {
 // ==========================================
 // Helper: Get Firebase URL for a design
 // ==========================================
+
+async function resolveCorrectUrl(p, dId) {
+    if (!p) return null;
+    var cacheKey = null;
+    if (typeof window.findDesignKeyInCache === 'function') {
+        cacheKey = await window.findDesignKeyInCache(p.gridUrl, dId);
+    }
+    if (cacheKey) {
+        if (p.zoomUrl && p.zoomUrl !== "None" && p.zoomUrl !== p.gridUrl) {
+            var cleanGrid = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+            var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
+            var cleanZoom = String(p.zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+            var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+            return cacheKey.replace(encGridPath, encZoomPath);
+        }
+        return cacheKey;
+    }
+    
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return null; 
+
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    var folderPath = p.gridUrl;
+    if (!folderPath || folderPath === 'None') return null;
+    var encGridPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+    var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover');
+    var dsFallbackMap = {};
+    try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+
+    if (isCover && dsFallbackMap[folderPath]) {
+        var fallbackFileName = dsFallbackMap[folderPath];
+        var finalUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fallbackFileName) + "?alt=media";
+        if (p.zoomUrl && p.zoomUrl !== "None" && p.zoomUrl !== p.gridUrl) {
+            var encZoomPath = String(p.zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+            return finalUrl.replace(encGridPath, encZoomPath);
+        }
+        return finalUrl;
+    }
+
+    var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+    var listUrl = fbBase + "?prefix=" + listPrefix + "&delimiter=/";
+    
+    if (!window.folderListCache) window.folderListCache = {};
+    var folderFiles = window.folderListCache[listUrl];
+
+    if (!folderFiles) {
+        try {
+            var listRes = await window.fetchWithRetry(listUrl, {}, 1);
+            if (listRes.ok) {
+                var listData = await listRes.json();
+                folderFiles = (listData.items || [])
+                    .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
+                    .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+                window.folderListCache[listUrl] = folderFiles;
+            } else {
+                folderFiles = [];
+            }
+        } catch(e) {
+            folderFiles = [];
+        }
+    }
+
+    if (folderFiles.length === 0) return null;
+    folderFiles.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
+    
+    var targetFile = null;
+    if (isCover) {
+        targetFile = folderFiles[0];
+        dsFallbackMap[folderPath] = targetFile;
+        try { localStorage.setItem("dsFallbackMap", JSON.stringify(dsFallbackMap)); } catch (e) { }
+    } else {
+        var targetNum = parseInt(String(dId).replace(/\D/g, ''));
+        if (!isNaN(targetNum)) {
+            for (var i = 0; i < folderFiles.length; i++) {
+                var f = folderFiles[i];
+                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+                if (parseInt(nameWithoutExt.replace(/\D/g, '')) === targetNum) {
+                    targetFile = f;
+                    break;
+                }
+            }
+        }
+        if (!targetFile) {
+            for (var i = 0; i < folderFiles.length; i++) {
+                var f = folderFiles[i];
+                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+                if (nameWithoutExt.toLowerCase() === String(dId).toLowerCase()) {
+                    targetFile = f;
+                    break;
+                }
+            }
+        }
+        if (!targetFile) targetFile = folderFiles[0];
+    }
+
+    if (!targetFile) return null;
+
+    var finalUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(targetFile) + "?alt=media";
+    if (p.zoomUrl && p.zoomUrl !== "None" && p.zoomUrl !== p.gridUrl) {
+        var encZoomPath = String(p.zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+        return finalUrl.replace(encGridPath, encZoomPath);
+    }
+    return finalUrl;
+}
+
 function getDesignFirebaseUrl(folderPath, dId) {
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/";
     var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean)
@@ -923,7 +1028,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             
             var coverUrl;
             if (dArr.length > 0) {
-                coverUrl = getExactFirebaseUrl(folderPath, dArr[0]);
+                coverUrl = await resolveCorrectUrl(curProduct, dArr[0]);
             } else {
                 // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
                 var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
@@ -937,7 +1042,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                     coverDesignId = readyFallback[0];
                 }
                 
-                coverUrl = getExactFirebaseUrl(folderPath, coverDesignId);
+                coverUrl = await resolveCorrectUrl(curProduct, coverDesignId);
             }
             
             var coverBase64 = await getBase64FromCache(coverUrl);
@@ -1061,7 +1166,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             if (dArr.length > 0) {
                 for (var j = 1; j < dArr.length; j++) {
                     var dId = dArr[j];
-                    var dUrl = getExactFirebaseUrl(folderPath, dId);
+                    var dUrl = await resolveCorrectUrl(curProduct, dId);
                     var dBase64 = await getBase64FromCache(dUrl);
                     
                     doc.addPage();
@@ -1283,3 +1388,191 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
 
     if (bootScreen) bootScreen.style.display = 'none';
 }
+
+
+function askShareTypeAsync() {
+    return new Promise((resolve) => {
+        var overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0'; overlay.style.left = '0'; overlay.style.width = '100%'; overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+        overlay.style.zIndex = '10000';
+        overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+
+        var box = document.createElement('div');
+        box.style.backgroundColor = '#fff'; box.style.padding = '20px'; box.style.borderRadius = '12px';
+        box.style.width = '300px'; box.style.textAlign = 'center';
+
+        var title = document.createElement('h3');
+        title.innerText = 'Select Share Type';
+        title.style.marginTop = '0'; title.style.color = '#333';
+
+        var resolved = false;
+        var onPopState = function () {
+            if (!resolved) {
+                resolved = true;
+                if (document.body.contains(overlay)) document.body.removeChild(overlay);
+                window.removeEventListener('popstate', onPopState);
+                resolve(null);
+            }
+        };
+        window.addEventListener('popstate', onPopState);
+
+        var close = function (val) {
+            if (!resolved) {
+                resolved = true;
+                if (document.body.contains(overlay)) document.body.removeChild(overlay);
+                window.removeEventListener('popstate', onPopState);
+                history.back(); // Pop the state we pushed
+                resolve(val);
+            }
+        };
+
+        var btnCover = document.createElement('button');
+        btnCover.innerText = 'Product Catalouge';
+        btnCover.style.width = '100%'; btnCover.style.padding = '12px'; btnCover.style.marginBottom = '10px';
+        btnCover.style.backgroundColor = 'var(--myntra-pink)'; btnCover.style.color = '#fff';
+        btnCover.style.border = 'none'; btnCover.style.borderRadius = '6px'; btnCover.style.fontSize = '14px';
+        btnCover.onclick = function () { close('cover'); };
+
+        var btnReady = document.createElement('button');
+        btnReady.innerText = 'With Ready Designs';
+        btnReady.style.width = '100%'; btnReady.style.padding = '12px'; btnReady.style.marginBottom = '10px';
+        btnReady.style.backgroundColor = '#333'; btnReady.style.color = '#fff';
+        btnReady.style.border = 'none'; btnReady.style.borderRadius = '6px'; btnReady.style.fontSize = '14px';
+        btnReady.onclick = function () { close('full'); };
+
+        var btnCancel = document.createElement('button');
+        btnCancel.innerText = 'Cancel';
+        btnCancel.style.width = '100%'; btnCancel.style.padding = '12px';
+        btnCancel.style.backgroundColor = '#eee'; btnCancel.style.color = '#333';
+        btnCancel.style.border = 'none'; btnCancel.style.borderRadius = '6px'; btnCancel.style.fontSize = '14px';
+        btnCancel.onclick = function () { close(null); };
+
+        box.appendChild(title); box.appendChild(btnCover); box.appendChild(btnReady); box.appendChild(btnCancel);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        // Replace shareModal state with askShareType so back button works perfectly
+        history.replaceState({ modal: 'askShareType' }, '');
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AndroidBackBridge) {
+            window.Capacitor.Plugins.AndroidBackBridge.setCanGoBack({ canGoBack: true });
+        }
+    });
+}
+
+window.triggerShare = async function (action) {
+    if (action === 'copy') {
+        alert("Web links are coming in the next update!");
+        return;
+    }
+
+    // Visually hide shareModal but DO NOT closeModals() since we will replace its history state
+    document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
+
+    var isDetailOpen = document.getElementById('detailPanel') && document.getElementById('detailPanel').classList.contains('open');
+
+    if (!isDetailOpen) {
+        // --- MAIN PAGE SHARE (Favorites) ---
+        var favProducts = allProducts.filter(p => favorites[p.id]);
+        if (favProducts.length === 0) {
+            return alert("No favorite items to share. Please mark some products as favorites first.");
+        }
+
+        var shareType = await askShareTypeAsync();
+        if (!shareType) return;
+
+        var allHighResUrls = [];
+        var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
+
+        for (var i = 0; i < favProducts.length; i++) {
+            var fp = favProducts[i];
+            var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
+
+            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
+            if (dArr.length > 0) {
+                for (var j = 0; j < dArr.length; j++) {
+                    allHighResUrls.push(await resolveCorrectUrl(curProduct, dArr[j]));
+                }
+            } else {
+                // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
+                var fallbackFile = dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
+                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
+                var coverDesignId = 'DIRECT';
+
+                if (fallbackFile) {
+                    coverDesignId = fallbackFile;
+                } else if (readyDesigns.length > 0) {
+                    coverDesignId = readyDesigns[0];
+                }
+
+                allHighResUrls.push(await resolveCorrectUrl(curProduct, coverDesignId));
+            }
+        }
+
+        if (action === 'images') {
+            if (allHighResUrls.length > 100) {
+                alert("⚠ ️ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
+                allHighResUrls = allHighResUrls.slice(0, 100);
+            }
+            if (typeof shareNativeImages === 'function') {
+                await shareNativeImages("Favorite Items", "", allHighResUrls);
+            }
+        } else if (action === 'wa') {
+            if (typeof generateFavoritesPDF === 'function') {
+                await generateFavoritesPDF(favProducts, shareType, action);
+            }
+        }
+        return;
+    }
+
+    // --- EXISTING SINGLE PRODUCT SHARE ---
+    if (!curProduct) return;
+
+    var shareType = await askShareTypeAsync();
+    if (!shareType) return;
+
+    var highResUrls = [];
+    var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
+    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
+
+    if (dArr.length > 0) {
+        for (var j = 0; j < dArr.length; j++) {
+            highResUrls.push(await resolveCorrectUrl(curProduct, dArr[j]));
+        }
+    } else {
+        // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
+        var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
+        var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
+        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
+        var coverDesignId = 'DIRECT';
+
+        if (fallbackFile) {
+            coverDesignId = fallbackFile;
+        } else if (readyDesigns.length > 0) {
+            coverDesignId = readyDesigns[0];
+        }
+
+        highResUrls.push(await resolveCorrectUrl(curProduct, coverDesignId));
+    }
+
+    if (highResUrls.length === 0) {
+        alert("Images are still loading. Please wait a second.");
+        return;
+    }
+
+    if (action === 'images') {
+        if (highResUrls.length > 100) {
+            alert("WhatsApp limit is 100 images. You are trying to share " + highResUrls.length + " images. Please share as PDF.");
+            return;
+        }
+        if (typeof shareNativeImages === 'function') {
+            await shareNativeImages(curProduct.name, curProduct.price, highResUrls);
+        }
+    } else {
+        if (typeof generateNativePDF === 'function') {
+            await generateNativePDF(curProduct, highResUrls, action);
+        }
+    }
+}
+
