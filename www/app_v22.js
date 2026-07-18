@@ -3707,6 +3707,16 @@ function applyModalState(modal) {
     if (modal === 'cart') {
         if (cartPanel && !cartPanel.classList.contains('open')) {
             cartPanel.classList.add('open');
+        } else if (cartPanel && cartPanel.classList.contains('open')) {
+            // Returning to an already open cart via hardware back button (popstate).
+            // Redraw cart live to catch newly added/removed swipe designs!
+            var isEditingAny = false;
+            if (window.cartEditingMap) {
+                for (var ed in window.cartEditingMap) {
+                    if (window.cartEditingMap[ed]) isEditingAny = true;
+                }
+            }
+            if (!isEditingAny && typeof openCart === 'function') openCart(true);
         }
     } else {
         if (cartPanel) {
