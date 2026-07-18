@@ -2491,6 +2491,19 @@ function closeFs() {
         fsVideo.pause();
         fsVideo.src = '';
     }
+    
+    // Refresh Cart Live with scroll preservation
+    var cartPanel = document.getElementById('cartPanel');
+    if (cartPanel && cartPanel.classList.contains('open')) {
+        var isEditingAny = false;
+        if (window.cartEditingMap) {
+            for (var ed in window.cartEditingMap) {
+                if (window.cartEditingMap[ed]) isEditingAny = true;
+            }
+        }
+        if (!isEditingAny && typeof openCart === 'function') openCart(true);
+    }
+    
     history.back();
 }
 
@@ -2544,11 +2557,12 @@ window.openCartFsFromCache = function (pId, dId, gridUrl) {
     });
 };
 
-function openCart() {
+function openCart(preserveScroll) {
     cameFromDetail = false;
     try {
         var cb = document.getElementById('cartBody');
         if (!cb) return;
+        var oldScroll = cb.scrollTop || 0;
         cb.innerHTML = '';
         var count = 0;
         var grouped = {};
@@ -2759,6 +2773,10 @@ function openCart() {
         if (panel && !panel.classList.contains('open')) {
             panel.classList.add('open');
             pushHistoryState('cart');
+        }
+
+        if (preserveScroll && cb) {
+            cb.scrollTop = oldScroll;
         }
 
     } catch (err) {
