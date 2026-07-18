@@ -2473,7 +2473,7 @@ function openFs(arg1, arg2, arg3, arg4) {
         if (!window.isAdminMode && curStock === 0) {
             fsControls.innerHTML = '<span style="background: red; color: white; padding: 6px 16px; border-radius: 4px; font-weight: bold; font-size: 16px;">PACKED</span>';
         } else {
-            fsControls.innerHTML = '<button onclick="fsChg(-1)">−</button><span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">' + (cart[key] ? cart[key].qty : 0) + '</span><button onclick="fsChg(1)">+</button>';
+            fsControls.innerHTML = '<button onpointerdown="event.preventDefault(); fsChg(-1)">−</button><span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">' + (cart[key] ? cart[key].qty : 0) + '</span><button onpointerdown="event.preventDefault(); fsChg(1)">+</button>';
         }
     }
 
