@@ -376,35 +376,38 @@ html {
 .qty-clean {
     display: flex;
     align-items: center;
-    height: 28px;
+    height: 36px; /* Increased from 28px for better touch area */
 }
 
 .qty-clean button {
     background: transparent;
     border: none;
-    font-size: 18px;
+    font-size: 22px; /* Increased from 18px */
     font-weight: bold;
     color: var(--myntra-pink);
     cursor: pointer;
-    padding: 0 8px;
+    padding: 0 16px; /* Increased from 8px for wider touch target */
     margin: 0;
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
     outline: none;
+    touch-action: manipulation; /* Removes 300ms mobile delay */
+    -webkit-tap-highlight-color: transparent;
 }
 
 .qty-clean input {
     border: none;
-    width: 22px;
+    width: 28px; /* Increased from 22px */
     text-align: center;
     font-weight: bold;
-    font-size: 13px;
+    font-size: 14px; /* Increased from 13px */
     background: transparent;
     outline: none;
     padding: 0;
     color: var(--text-main);
+    touch-action: manipulation;
 }
 
 .add-btn-clean {
