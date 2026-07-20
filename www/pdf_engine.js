@@ -1028,7 +1028,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             
             var coverUrl;
             if (dArr.length > 0) {
-                coverUrl = await resolveCorrectUrl(curProduct, dArr[0]);
+                coverUrl = await resolveCorrectUrl(product, dArr[0]);
             } else {
                 // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
                 var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
@@ -1042,7 +1042,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                     coverDesignId = readyFallback[0];
                 }
                 
-                coverUrl = await resolveCorrectUrl(curProduct, coverDesignId);
+                coverUrl = await resolveCorrectUrl(product, coverDesignId);
             }
             
             var coverBase64 = await getBase64FromCache(coverUrl);
@@ -1166,7 +1166,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             if (dArr.length > 0) {
                 for (var j = 1; j < dArr.length; j++) {
                     var dId = dArr[j];
-                    var dUrl = await resolveCorrectUrl(curProduct, dId);
+                    var dUrl = await resolveCorrectUrl(product, dId);
                     var dBase64 = await getBase64FromCache(dUrl);
                     
                     doc.addPage();
@@ -1492,7 +1492,7 @@ window.triggerShare = async function (action) {
             var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
             if (dArr.length > 0) {
                 for (var j = 0; j < dArr.length; j++) {
-                    allHighResUrls.push(await resolveCorrectUrl(curProduct, dArr[j]));
+                    allHighResUrls.push(await resolveCorrectUrl(fp, dArr[j]));
                 }
             } else {
                 // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
@@ -1506,7 +1506,7 @@ window.triggerShare = async function (action) {
                     coverDesignId = readyDesigns[0];
                 }
 
-                allHighResUrls.push(await resolveCorrectUrl(curProduct, coverDesignId));
+                allHighResUrls.push(await resolveCorrectUrl(fp, coverDesignId));
             }
         }
 
