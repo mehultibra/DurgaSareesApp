@@ -32,10 +32,33 @@ function blobToBase64Direct(blob) {
             resolve(null);
             return;
         }
-        var fr = new FileReader();
-        fr.onload = function() { resolve(fr.result); };
-        fr.onerror = function() { resolve(null); };
-        fr.readAsDataURL(blob);
+        
+        // FAST PDF WEBP -> JPEG CONVERTER
+        // PDF Specification does NOT support WebP. jsPDF will inflate WebP to raw pixels (3MB+).
+        // By converting it to JPEG (quality 0.70) here, we inject native JPEG streams into the PDF, keeping it under 200kb!
+        var url = URL.createObjectURL(blob);
+        var img = new Image();
+        img.onload = function() {
+            var canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            var ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            var jpegData = canvas.toDataURL('image/jpeg', 0.70);
+            URL.revokeObjectURL(url);
+            resolve(jpegData);
+        };
+        img.onerror = function() {
+            URL.revokeObjectURL(url);
+            // Fallback to FileReader if Image load fails
+            var fr = new FileReader();
+            fr.onload = function() { resolve(fr.result); };
+            fr.onerror = function() { resolve(null); };
+            fr.readAsDataURL(blob);
+        };
+        img.src = url;
     });
 }
 
