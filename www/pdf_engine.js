@@ -306,6 +306,32 @@ function getLogoBase64() {
 // ==========================================
 // CART ORDER PDF — LIGHTNING FAST FROM CACHE
 // Mirrors the visual layout of the Cart panel
+function compressBase64ForPDF(base64Src) {
+    return new Promise(function(resolve) {
+        if (!base64Src) return resolve(null);
+        var img = new Image();
+        img.onload = function() {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            var MAX_W = 150;
+            var MAX_H = 150;
+            var width = img.width;
+            var height = img.height;
+            if (width > MAX_W || height > MAX_H) {
+                var ratio = Math.min(MAX_W / width, MAX_H / height);
+                width = width * ratio;
+                height = height * ratio;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.6));
+        };
+        img.onerror = function() { resolve(base64Src); };
+        img.src = base64Src;
+    });
+}
+
 // ==========================================
 async function generateCartOrderPDF(actionType) {
     var bootScreen = document.getElementById('boot');
@@ -369,7 +395,7 @@ async function generateCartOrderPDF(actionType) {
                 }
                 
                 if (b64) {
-                    item._pdfImgSrc = b64;
+                    item._pdfImgSrc = await compressBase64ForPDF(b64);
                 } else {
                     item._pdfImgSrc = null;
                     item._pdfFailReason = (dId === 'DIRECT' || dId === 'Cover') ? 'Cover not synced' : 'Design not synced';
