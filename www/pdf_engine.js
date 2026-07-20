@@ -349,57 +349,19 @@ async function generateCartOrderPDF(actionType) {
 
         if (bootMsg) bootMsg.innerText = "Loading images from cache...";
 
-        // ── Strict IndexedDB-only image lookup — ZERO network, ZERO canvas ──
-        var bucket = "durga-sarees.firebasestorage.app";
-        var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-
+        // ── Unified Image Resolution (Cache + Fallback) ──
         for (var g of groupArr) {
-            var gridUrl = g.p.gridUrl;
-            var cleanGrid = gridUrl ? gridUrl.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(function(s){ return s.trim(); }).join('/') : '';
-            var encGridPath = cleanGrid.split('/').map(function(s){ return encodeURIComponent(s); }).join('%2F');
-
             for (var item of g.items) {
                 var dId = item.design || 'DIRECT';
+                var resolvedUrl = await resolveCorrectUrl(g.p, dId);
+                var b64 = null;
                 
-                var cacheKey = await window.findDesignKeyInCache(gridUrl, dId);
-                var blob = cacheKey ? await getImageFromDB(cacheKey) : null;
-                
-                // Fallback to network if completely missing from cache
-                if (!blob && dId !== 'DIRECT' && dId !== 'Cover') {
-                    var cleanNum2 = dId.replace(/\D/g, '');
-                    if (cleanNum2.length === 1) cleanNum2 = "0" + cleanNum2;
-                    if (!cleanNum2) cleanNum2 = dId;
-                    var fallbackUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".webp") + "?alt=media";
-                    
-                    try {
-                        var res = await fetch(fallbackUrl);
-                        if (res.ok) {
-                            blob = await res.blob();
-                        } else {
-                            var jpgUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".jpg") + "?alt=media";
-                            var res2 = await fetch(jpgUrl);
-                            if (res2.ok) {
-                                blob = await res2.blob();
-                                if (typeof window.logAppError === 'function') window.logAppError('PDF Fallback Triggered', `Failed to load ${cleanNum2}.webp. Trying .jpg`);
-                            } else {
-                                var pngUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cleanNum2 + ".png") + "?alt=media";
-                                var res3 = await fetch(pngUrl);
-                                if (res3.ok) {
-                                    blob = await res3.blob();
-                                    if (typeof window.logAppError === 'function') window.logAppError('PDF Fallback Triggered', `Failed to load ${cleanNum2}.webp. Trying .png`);
-                                } else {
-                                    if (typeof window.logAppError === 'function') window.logAppError('PDF Fallback Failed (404)', `Both original and fallback missing. Failed on ${cleanNum2}.webp`);
-                                }
-                            }
-                        }
-                    } catch(e) {}
+                if (resolvedUrl) {
+                    b64 = await getBase64FromCache(resolvedUrl);
                 }
-
-                if (blob) {
-                    item._pdfImgSrc = await blobToBase64Direct(blob);
-                    if (!item._pdfImgSrc) {
-                        item._pdfFailReason = 'Corrupt blob';
-                    }
+                
+                if (b64) {
+                    item._pdfImgSrc = b64;
                 } else {
                     item._pdfImgSrc = null;
                     item._pdfFailReason = (dId === 'DIRECT' || dId === 'Cover') ? 'Cover not synced' : 'Design not synced';
