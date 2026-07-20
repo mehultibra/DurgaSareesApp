@@ -3074,12 +3074,39 @@ async function syncImages(silent = false) {
                         }
                     }
 
+                    // ——— Helper to Fetch Zoom Images IF In Stock ———
+                    async function fetchZoomIfInStock(fname, isCover) {
+                        var stockKey = isCover ? 'Cover' : fname;
+                        var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
+                        if (curStock > 0 && p.zoomUrl && String(p.zoomUrl).toLowerCase() !== "none" && p.zoomUrl !== p.gridUrl) {
+                            var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                            var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+                            var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                            
+                            var existing = await checkImageInDB(zoomImgUrl);
+                            if (existing) return;
+                            
+                            try {
+                                const ctrlZ = new AbortController();
+                                const tidZ = setTimeout(() => ctrlZ.abort(), 30000);
+                                var zRes = await window.fetchWithRetry(zoomImgUrl, { signal: ctrlZ.signal }, 3);
+                                clearTimeout(tidZ);
+                                if (zRes.ok) {
+                                    var zBlob = await zRes.blob();
+                                    if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
+                                }
+                            } catch (e) {}
+                        }
+                    }
+
                     // ——— 3. Download the COVER file —————————————————————————————————
                     var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
                     var existingCover = await checkImageInDB(p.gridUrl);
 
                     if (existingCover) {
                         downloaded = true;
+                        // Also ensure zoom cover is synced if stock > 0
+                        await fetchZoomIfInStock(coverFile, true);
                     } else {
                         try {
                             const ctrl2 = new AbortController();
@@ -3098,6 +3125,7 @@ async function syncImages(silent = false) {
                                     await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
                                     await saveImageToDB(coverUrl, coverBlob);  // 🛡️ CRITICAL: Also save under its full URL!
                                     downloaded = true;
+                                    await fetchZoomIfInStock(coverFile, true);
                                 }
                             } else {
                                 lastFailReason = "Cover HTTP " + coverRes.status;
@@ -3116,34 +3144,37 @@ async function syncImages(silent = false) {
                             await Promise.all(fBatch.map(async (fname) => {
                                 var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
                                 var existing = await checkImageInDB(designUrl);
-                                if (existing) return; // already in cache
-                                try {
-                                    const ctrl3 = new AbortController();
-                                    const tid3 = setTimeout(() => ctrl3.abort(), 30000);
-                                    // 🛡️ CRITICAL FIX: Bulletproof retry for inner images
-                                    var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
-                                    clearTimeout(tid3);
-                                    if (dRes.ok) {
-                                        var dBlob = await dRes.blob();
-                                        if (dBlob.size === 0) {
-                                            if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', fname + " | " + p.name);
-                                            downloaded = false;
-                                            lastFailReason = (lastFailReason ? lastFailReason + ", " : "Corrupted: ") + fname;
+                                
+                                if (!existing) {
+                                    try {
+                                        const ctrl3 = new AbortController();
+                                        const tid3 = setTimeout(() => ctrl3.abort(), 30000);
+                                        // 🛡️ CRITICAL FIX: Bulletproof retry for inner images
+                                        var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
+                                        clearTimeout(tid3);
+                                        if (dRes.ok) {
+                                            var dBlob = await dRes.blob();
+                                            if (dBlob.size === 0) {
+                                                if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', fname + " | " + p.name);
+                                                downloaded = false;
+                                                lastFailReason = (lastFailReason ? lastFailReason + ", " : "Corrupted: ") + fname;
+                                            } else {
+                                                await saveImageToDB(designUrl, dBlob);
+                                            }
                                         } else {
-                                            await saveImageToDB(designUrl, dBlob);
+                                            window.logAppError('AUDITOR: Sync Engine Failure', `Missing File: HTTP ${dRes.status} | ${fname} | ${p.name}`);
                                         }
-                                    } else {
-                                        window.logAppError('AUDITOR: Sync Engine Failure', `Missing File: HTTP ${dRes.status} | ${fname} | ${p.name}`);
+                                    } catch (e) {
+                                        console.warn("[SYNC] Fast design fetch failed:", fname, e.message); if (typeof window.logAppError === 'function') window.logAppError('Sync Inner Image', e.message + " | " + p.name);
                                     }
-                                } catch (e) {
-                                    console.warn("[SYNC] Fast design fetch failed:", fname, e.message); if (typeof window.logAppError === 'function') window.logAppError('Sync Inner Image', e.message + " | " + p.name);
                                 }
+                                
+                                // Finally, sync the Zoom Image if in stock!
+                                await fetchZoomIfInStock(fname, false);
                             }));
                         }
                     }
-                }
-
-                // ── 5. Track errors ──────────────────────────────────────────
+                                // ── 5. Track errors ──────────────────────────────────────────
                 if (!downloaded) {
                     failed++;
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
