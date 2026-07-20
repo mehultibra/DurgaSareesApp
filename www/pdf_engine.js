@@ -60,14 +60,27 @@ function blobToJpegForPDF(blob) {
         var url = URL.createObjectURL(blob);
         var img = new Image();
         img.onload = function() {
+            // Cap dimensions to 600px to guarantee < 40kb file size per image.
+            var max_size = 600;
+            var w = img.width;
+            var h = img.height;
+            
+            if (w > max_size || h > max_size) {
+                var ratio = Math.min(max_size / w, max_size / h);
+                w = Math.round(w * ratio);
+                h = Math.round(h * ratio);
+            }
+            
             var canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
+            canvas.width = w;
+            canvas.height = h;
             var ctx = canvas.getContext('2d');
             ctx.fillStyle = '#FFFFFF'; // Solve alpha
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
-            var jpegData = canvas.toDataURL('image/jpeg', 0.70);
+            ctx.fillRect(0, 0, w, h);
+            // Must use w, h in drawImage to actually scale it down on the canvas!
+            ctx.drawImage(img, 0, 0, w, h);
+            var jpegData = canvas.toDataURL('image/jpeg', 0.60); // 60% quality is perfect for 600px A4 rendering
+            
             URL.revokeObjectURL(url);
             resolve(jpegData);
         };
