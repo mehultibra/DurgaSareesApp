@@ -357,6 +357,14 @@ async function generateCartOrderPDF(actionType) {
                 var b64 = null;
                 
                 if (resolvedUrl) {
+                    // Downgrade to Grid Image for lightning-fast cart PDF generation
+                    if (g.p.zoomUrl && g.p.zoomUrl !== "None" && g.p.zoomUrl !== g.p.gridUrl) {
+                        var cleanGrid = String(g.p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                        var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
+                        var cleanZoom = String(g.p.zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                        var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+                        resolvedUrl = resolvedUrl.replace(encZoomPath, encGridPath);
+                    }
                     b64 = await getBase64FromCache(resolvedUrl);
                 }
                 
