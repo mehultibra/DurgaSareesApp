@@ -413,7 +413,7 @@ async function generateCartOrderPDF(actionType) {
                 }
                 
                 if (blob) {
-                    item._pdfImgSrc = await blobToBase64Direct(blob);
+                    item._pdfImgSrc = await blobToJpegForPDF(blob);
                 } else {
                     item._pdfImgSrc = null;
                     item._pdfFailReason = (dId === 'DIRECT' || dId === 'Cover') ? 'Cover not synced' : 'Design not synced';
