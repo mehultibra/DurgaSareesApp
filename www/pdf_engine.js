@@ -306,32 +306,6 @@ function getLogoBase64() {
 // ==========================================
 // CART ORDER PDF — LIGHTNING FAST FROM CACHE
 // Mirrors the visual layout of the Cart panel
-function compressBase64ForPDF(base64Src) {
-    return new Promise(function(resolve) {
-        if (!base64Src) return resolve(null);
-        var img = new Image();
-        img.onload = function() {
-            var canvas = document.createElement('canvas');
-            var ctx = canvas.getContext('2d');
-            var MAX_W = 150;
-            var MAX_H = 150;
-            var width = img.width;
-            var height = img.height;
-            if (width > MAX_W || height > MAX_H) {
-                var ratio = Math.min(MAX_W / width, MAX_H / height);
-                width = width * ratio;
-                height = height * ratio;
-            }
-            canvas.width = width;
-            canvas.height = height;
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.6));
-        };
-        img.onerror = function() { resolve(base64Src); };
-        img.src = base64Src;
-    });
-}
-
 // ==========================================
 async function generateCartOrderPDF(actionType) {
     var bootScreen = document.getElementById('boot');
@@ -375,12 +349,12 @@ async function generateCartOrderPDF(actionType) {
 
         if (bootMsg) bootMsg.innerText = "Loading images from cache...";
 
-        // ── Unified Image Resolution (Cache + Fallback) ──
+        // ── Strictly Offline Image Resolution (Lightning Fast) ──
         for (var g of groupArr) {
             for (var item of g.items) {
                 var dId = item.design || 'DIRECT';
                 var resolvedUrl = await resolveCorrectUrl(g.p, dId);
-                var b64 = null;
+                var blob = null;
                 
                 if (resolvedUrl) {
                     // Downgrade to Grid Image for lightning-fast cart PDF generation
@@ -391,11 +365,18 @@ async function generateCartOrderPDF(actionType) {
                         var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
                         resolvedUrl = resolvedUrl.replace(encZoomPath, encGridPath);
                     }
-                    b64 = await getBase64FromCache(resolvedUrl);
+                    
+                    // STRICT OFFLINE: Only pull from IndexedDB directly. No network fallbacks.
+                    blob = await getImageFromDB(resolvedUrl);
+                    
+                    if (!blob && window.findDesignKeyInCache) {
+                        var altKey = await window.findDesignKeyInCache(g.p.gridUrl, dId);
+                        if (altKey) blob = await getImageFromDB(altKey);
+                    }
                 }
                 
-                if (b64) {
-                    item._pdfImgSrc = await compressBase64ForPDF(b64);
+                if (blob) {
+                    item._pdfImgSrc = await blobToBase64Direct(blob);
                 } else {
                     item._pdfImgSrc = null;
                     item._pdfFailReason = (dId === 'DIRECT' || dId === 'Cover') ? 'Cover not synced' : 'Design not synced';
@@ -589,7 +570,7 @@ async function generateCartOrderPDF(actionType) {
                             if (drawW > iW) { drawW = iW; drawH = iW / imgRatio; }
                             var imgX = cellX + ((CELL_W - THUMB_GAP - drawW) / 2);
                             var imgY = y;
-                            doc.addImage(item._pdfImgSrc, 'JPEG', imgX, imgY, drawW, drawH);
+                            doc.addImage(item._pdfImgSrc, imgX, imgY, drawW, drawH);
                             // Make the thumbnail image a clickable link
                             doc.link(imgX, imgY, drawW, drawH, { url: wixUrl });
                         } catch(e) {
@@ -900,7 +881,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
                     doc.rect(imgX, imgY, finalW, finalH, 'D');
                     // Image links to product Wix page
                     doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
-                    doc.addImage(base64Img, 'JPEG', imgX, imgY, finalW, finalH);
+                    doc.addImage(base64Img, imgX, imgY, finalW, finalH);
                 }
 
                 // Footer
@@ -933,7 +914,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
                     var xPos = (pageWidth - finalW) / 2;
                     var yPos = 65 + ((targetH - finalH) / 2);
                     doc.link(xPos, yPos, finalW, finalH, { url: wixUrl });
-                    doc.addImage(base64Img, 'JPEG', xPos, yPos, finalW, finalH);
+                    doc.addImage(base64Img, xPos, yPos, finalW, finalH);
                 }
 
                 // Footer
@@ -1134,7 +1115,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 doc.setLineWidth(1);
                 doc.rect(imgX, imgY, finalW, finalH, 'D');
                 doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
-                doc.addImage(coverBase64, 'JPEG', imgX, imgY, finalW, finalH);
+                doc.addImage(coverBase64, imgX, imgY, finalW, finalH);
             }
             
             // Footer
@@ -1182,7 +1163,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                         var xPos = (pageWidth - finalW2) / 2;
                         var yPos = 65 + ((targetH2 - finalH2) / 2);
                         doc.link(xPos, yPos, finalW2, finalH2, { url: wixUrl });
-                        doc.addImage(dBase64, 'JPEG', xPos, yPos, finalW2, finalH2);
+                        doc.addImage(dBase64, xPos, yPos, finalW2, finalH2);
                     }
 
                     doc.setFont("helvetica", "normal");
