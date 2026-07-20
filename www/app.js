@@ -3510,13 +3510,30 @@ window.populateCategories = function () {
 window.toggleCategoryFilter = function (element, cat) {
     cameFromDetail = false;
     var idx = activeCategories.indexOf(cat);
-    if (idx === -1) {
-        activeCategories.push(cat);
-        if (element) element.classList.add('active');
+
+    if (!element) {
+        // Top Round Icons: Single Selection Behavior
+        if (idx === -1) {
+            activeCategories = [cat];
+        } else {
+            if (activeCategories.length === 1) {
+                activeCategories = [];
+            } else {
+                activeCategories = [cat];
+            }
+        }
+        if (window.populateCategories) window.populateCategories();
     } else {
-        activeCategories.splice(idx, 1);
-        if (element) element.classList.remove('active');
+        // Bottom Filter UI: Multiple Selection Behavior
+        if (idx === -1) {
+            activeCategories.push(cat);
+            if (element) element.classList.add('active');
+        } else {
+            activeCategories.splice(idx, 1);
+            if (element) element.classList.remove('active');
+        }
     }
+
     applyFilter();
     if (window.renderHorizontalCategories) window.renderHorizontalCategories();
 };
