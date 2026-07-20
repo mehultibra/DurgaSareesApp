@@ -61,7 +61,7 @@ function blobToJpegForPDF(blob) {
         var img = new Image();
         img.onload = function() {
             // Cap dimensions to 600px to guarantee < 40kb file size per image.
-            var max_size = 600;
+            var max_size = 300;
             var w = img.width;
             var h = img.height;
             

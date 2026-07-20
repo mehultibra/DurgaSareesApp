@@ -15,8 +15,8 @@ window.DS_APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx89H5yDUi-6
 
 window.dsMissingImage = "data:image/svg+xml;utf8," + encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800">
-    <rect width="100%" height="100%" fill="#1a1a1a"/>
-    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="bold" fill="#666666">Loading...</text>
+    <rect width="100%" height="100%" fill="#f5f5f6"/>
+    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="bold" fill="#bbbbbb">Loading...</text>
 </svg>
 `);
 
