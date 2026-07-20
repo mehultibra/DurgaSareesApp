@@ -1871,6 +1871,17 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
     if (window.dsFolderCache && window.dsFolderCache[listUrl]) {
         processFolderItems(window.dsFolderCache[listUrl]);
+    } else {
+        // FAST RENDER: Show the cover image immediately while we wait for the network!
+        var gridImgEl = document.getElementById("img_" + p.id);
+        var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : window.dsMissingImage;
+        deck.innerHTML = `
+            <div class="swipe-card" data-design="DIRECT" style="position:relative;">
+                <img src="${coverSrc}" style="width: 100%; object-fit: cover;">
+                <div class="swipe-card-bot" style="text-align:center;">
+                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Loading Designs...</div>
+                </div>
+            </div>`;
     }
 
     // ALWAYS fetch from network to sync any newly uploaded admin images
@@ -1916,31 +1927,8 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
         var placeholderSVG = window.dsMissingImage;
 
-        // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker!)
-        try {
-            await Promise.all(files.map(async (file, idx) => {
-                if (!file.isVideo) {
-                    var isCover = false; // All images are treated equally
-
-                    // 1. Try HD Zoom First
-                    var targetBlob = await getImageFromDB(file.url);
-                    if (targetBlob) {
-                        file.isZoomLoaded = true;
-                    } else {
-                        // 2. Fallback to Grid
-                        if (!targetBlob && file.gridUrl) targetBlob = await getImageFromDB(file.gridUrl);
-                        if (!targetBlob && window.findDesignKeyInCache) {
-                            var altKey = await window.findDesignKeyInCache(p.gridUrl, file.name);
-                            if (altKey) targetBlob = await getImageFromDB(altKey);
-                        }
-                    }
-
-                    if (targetBlob) file.cachedObjectUrl = URL.createObjectURL(targetBlob);
-                }
-            }));
-        } catch (fetchErr) {
-            console.warn("Failed to prefetch blobs, continuing with network fallback", fetchErr);
-        }
+        // 🚀 SKIPPED PRE-FETCH TO ALLOW LIGHTNING FAST PANEL OPEN
+        // We let loadAndCacheDesignImage handle the blob fetching after paint
 
         var html = '';
         files.forEach((file, idx) => {
@@ -5181,19 +5169,19 @@ function generateTSPL(canvas, type, qty) {
     // TSPL Commands
     var headerStr = "";
     if (type === 'barcode') {
-        headerStr += "SIZE 72 mm, 48 mm\r\n";
-        headerStr += "GAP 3 mm, 0 mm\r\n";
+        headerStr += "SIZE 72 mm, 48 mm\n";
+        headerStr += "GAP 3 mm, 0 mm\n";
     } else {
-        headerStr += "SIZE 78 mm, 57 mm\r\n";
-        headerStr += "GAP 0 mm, 0 mm\r\n"; // Continuous tearable
+        headerStr += "SIZE 78 mm, 57 mm\n";
+        headerStr += "GAP 0 mm, 0 mm\n"; // Continuous tearable
     }
-    headerStr += "DIRECTION 0\r\n";
-    headerStr += "CLS\r\n";
+    headerStr += "DIRECTION 0\n";
+    headerStr += "CLS\n";
 
     // BITMAP X,Y,width_bytes,height,mode,bitmap_data
     var bitmapCmdStr = "BITMAP 0,0," + widthBytes + "," + h + ",0,";
 
-    var footerStr = "\r\nPRINT " + (qty || 1) + "\r\n";
+    var footerStr = "\nPRINT " + (qty || 1) + "\n";
 
     var headerBytes = new TextEncoder().encode(headerStr + bitmapCmdStr);
     var footerBytes = new TextEncoder().encode(footerStr);
