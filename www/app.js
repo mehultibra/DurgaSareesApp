@@ -3174,7 +3174,8 @@ async function syncImages(silent = false) {
                             }));
                         }
                     }
-                                // ── 5. Track errors ──────────────────────────────────────────
+                }
+                // ── 5. Track errors ──────────────────────────────────────────
                 if (!downloaded) {
                     failed++;
                     failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
