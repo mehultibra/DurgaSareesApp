@@ -158,13 +158,7 @@ async function resolveCorrectUrl(p, dId) {
         cacheKey = await window.findDesignKeyInCache(p.gridUrl, dId);
     }
     if (cacheKey) {
-        if (p.zoomUrl && p.zoomUrl !== "None" && p.zoomUrl !== p.gridUrl) {
-            var cleanGrid = String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
-            var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
-            var cleanZoom = String(p.zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
-            var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
-            return cacheKey.replace(encGridPath, encZoomPath);
-        }
+
         return cacheKey;
     }
     
@@ -182,10 +176,7 @@ async function resolveCorrectUrl(p, dId) {
     if (isCover && dsFallbackMap[folderPath]) {
         var fallbackFileName = dsFallbackMap[folderPath];
         var finalUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fallbackFileName) + "?alt=media";
-        if (p.zoomUrl && p.zoomUrl !== "None" && p.zoomUrl !== p.gridUrl) {
-            var encZoomPath = String(p.zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-            return finalUrl.replace(encGridPath, encZoomPath);
-        }
+
         return finalUrl;
     }
 
@@ -248,10 +239,7 @@ async function resolveCorrectUrl(p, dId) {
     if (!targetFile) return null;
 
     var finalUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(targetFile) + "?alt=media";
-    if (p.zoomUrl && p.zoomUrl !== "None" && p.zoomUrl !== p.gridUrl) {
-        var encZoomPath = String(p.zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-        return finalUrl.replace(encGridPath, encZoomPath);
-    }
+
     return finalUrl;
 }
 
