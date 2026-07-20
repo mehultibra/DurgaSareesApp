@@ -24,6 +24,11 @@ function buildWixProductUrl(product) {
 // ZERO canvas, ZERO compression — images are already small (10-20kb)
 // Works with any format: WebP, JPEG, PNG
 // ==========================================
+/**
+ * ENGINE 1: ZERO-CANVAS BLOB STREAMER (blobToBase64Direct)
+ * Dedicated pipeline for multi-file native sharing (e.g., WhatsApp bundles).
+ * Near 0MB memory overhead.
+ */
 function blobToBase64Direct(blob) {
     return new Promise(function(resolve) {
         if (!blob) { resolve(null); return; }
@@ -32,10 +37,26 @@ function blobToBase64Direct(blob) {
             resolve(null);
             return;
         }
-        
-        // FAST PDF WEBP -> JPEG CONVERTER
-        // PDF Specification does NOT support WebP. jsPDF will inflate WebP to raw pixels (3MB+).
-        // By converting it to JPEG (quality 0.70) here, we inject native JPEG streams into the PDF, keeping it under 200kb!
+        var fr = new FileReader();
+        fr.onload = function() { resolve(fr.result); };
+        fr.onerror = function() { resolve(null); };
+        fr.readAsDataURL(blob);
+    });
+}
+
+/**
+ * ENGINE 2: SINGLE-INSTANCE TRANSCODER (blobToJpegForPDF)
+ * Dedicated pipeline for jsPDF multi-page document construction.
+ * Downsamples heavy WebP to 0.70 quality JPEGs to fix the 3MB+ PDF bloat issue.
+ */
+function blobToJpegForPDF(blob) {
+    return new Promise(function(resolve) {
+        if (!blob) { resolve(null); return; }
+        if (blob.size === 0) {
+            if (typeof window.logAppError === 'function') window.logAppError('Zero Byte Corrupt Image', 'PDF Engine Blob | Unknown');
+            resolve(null);
+            return;
+        }
         var url = URL.createObjectURL(blob);
         var img = new Image();
         img.onload = function() {
@@ -43,7 +64,7 @@ function blobToBase64Direct(blob) {
             canvas.width = img.width;
             canvas.height = img.height;
             var ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#FFFFFF';
+            ctx.fillStyle = '#FFFFFF'; // Solve alpha
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0);
             var jpegData = canvas.toDataURL('image/jpeg', 0.70);
@@ -62,7 +83,12 @@ function blobToBase64Direct(blob) {
     });
 }
 
-function getBase64FromCache(cacheKey) {
+/**
+ * ROUTING & DOWNGRADE INTERCEPTOR
+ * forceJpeg = false -> Engine 1 (Sharing)
+ * forceJpeg = true  -> Engine 2 (PDF)
+ */
+function getBase64FromCache(cacheKey, forceJpeg = false) {
     var isCoverOrGarbage = false;
     if (cacheKey) {
         if (cacheKey.includes('cover.webp')) isCoverOrGarbage = true;
@@ -111,7 +137,7 @@ function getBase64FromCache(cacheKey) {
                                 if (files.length > 0) {
                                     files.sort(function(a, b) { return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999); });
                                     var finalUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('%2F') + "%2F" + encodeURIComponent(files[0]) + "?alt=media";
-                                    return window.fetchWithRetry(finalUrl, {}, 0).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? blobToBase64Direct(b) : null; });
+                                    return window.fetchWithRetry(finalUrl, {}, 0).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? (forceJpeg ? blobToJpegForPDF(b) : blobToBase64Direct(b)) : null; });
                                 }
                                 return null;
                             }).catch(function() { return null; });
@@ -129,7 +155,7 @@ function getBase64FromCache(cacheKey) {
                         if (typeof window.logAppError === 'function') window.logAppError('Zero Byte Corrupt Image', fallbacks[index] + ' | PDF Generation');
                         throw new Error("Zero byte file");
                     }
-                    return blobToBase64Direct(netBlob); 
+                    return forceJpeg ? blobToJpegForPDF(netBlob) : blobToBase64Direct(netBlob); 
                 })
                 .catch(function(err) {
                     if (err && err.message && !err.message.includes("HTTP") && !err.message.includes("Zero byte")) {
@@ -144,7 +170,7 @@ function getBase64FromCache(cacheKey) {
     }
 
     return getImageFromDB(cacheKey).then(function(blob) {
-        if (blob) return blobToBase64Direct(blob);
+        if (blob) return forceJpeg ? blobToJpegForPDF(blob) : blobToBase64Direct(blob);
         
         if (isCoverOrGarbage) {
             try {
@@ -154,9 +180,9 @@ function getBase64FromCache(cacheKey) {
                 var backPath = fwdPath.replace(/\//g, '\\');
                 
                 return getImageFromDB(fwdPath).then(function(b1) {
-                    if (b1) return blobToBase64Direct(b1);
+                    if (b1) return forceJpeg ? blobToJpegForPDF(b1) : blobToBase64Direct(b1);
                     return getImageFromDB(backPath).then(function(b2) {
-                        if (b2) return blobToBase64Direct(b2);
+                        if (b2) return forceJpeg ? blobToJpegForPDF(b2) : blobToBase64Direct(b2);
                         return networkFallback(cacheKey);
                     });
                 }).catch(function() { return networkFallback(cacheKey); });
@@ -793,7 +819,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
             if (i > 0) doc.addPage();
 
             // Try cache first for speed, then network
-            var base64Img = await getBase64FromCache(imageUrlsArray[i]);
+            var base64Img = await getBase64FromCache(imageUrlsArray[i], true);
 
             if (i === 0) {
                 // ── COVER PAGE ─────────────────────────────
@@ -1033,7 +1059,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 coverUrl = await resolveCorrectUrl(product, coverDesignId);
             }
             
-            var coverBase64 = await getBase64FromCache(coverUrl);
+            var coverBase64 = await getBase64FromCache(coverUrl, true);
             
             if (!isFirstPage) doc.addPage();
             isFirstPage = false;
@@ -1155,7 +1181,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 for (var j = 1; j < dArr.length; j++) {
                     var dId = dArr[j];
                     var dUrl = await resolveCorrectUrl(product, dId);
-                    var dBase64 = await getBase64FromCache(dUrl);
+                    var dBase64 = await getBase64FromCache(dUrl, true);
                     
                     doc.addPage();
                     
