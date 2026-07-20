@@ -57,7 +57,8 @@ function blobToJpegForPDF(blob) {
             resolve(null);
             return;
         }
-        var url = URL.createObjectURL(blob);
+        var webpBlob = new Blob([blob], { type: 'image/webp' });
+        var url = URL.createObjectURL(webpBlob);
         var img = new Image();
         img.onload = function() {
             // Cap dimensions to 600px to guarantee < 40kb file size per image.
@@ -620,7 +621,7 @@ async function generateCartOrderPDF(actionType) {
                             if (drawW > iW) { drawW = iW; drawH = iW / imgRatio; }
                             var imgX = cellX + ((CELL_W - THUMB_GAP - drawW) / 2);
                             var imgY = y;
-                            doc.addImage(item._pdfImgSrc, imgX, imgY, drawW, drawH);
+                            doc.addImage(item._pdfImgSrc, 'JPEG', imgX, imgY, drawW, drawH, undefined, 'FAST');
                             // Make the thumbnail image a clickable link
                             doc.link(imgX, imgY, drawW, drawH, { url: wixUrl });
                         } catch(e) {
@@ -931,7 +932,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
                     doc.rect(imgX, imgY, finalW, finalH, 'D');
                     // Image links to product Wix page
                     doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
-                    doc.addImage(base64Img, imgX, imgY, finalW, finalH);
+                    doc.addImage(base64Img, 'JPEG', imgX, imgY, finalW, finalH, undefined, 'FAST');
                 }
 
                 // Footer
@@ -964,7 +965,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
                     var xPos = (pageWidth - finalW) / 2;
                     var yPos = 65 + ((targetH - finalH) / 2);
                     doc.link(xPos, yPos, finalW, finalH, { url: wixUrl });
-                    doc.addImage(base64Img, xPos, yPos, finalW, finalH);
+                    doc.addImage(base64Img, 'JPEG', xPos, yPos, finalW, finalH, undefined, 'FAST');
                 }
 
                 // Footer
@@ -1165,7 +1166,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 doc.setLineWidth(1);
                 doc.rect(imgX, imgY, finalW, finalH, 'D');
                 doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
-                doc.addImage(coverBase64, imgX, imgY, finalW, finalH);
+                doc.addImage(coverBase64, 'JPEG', imgX, imgY, finalW, finalH, undefined, 'FAST');
             }
             
             // Footer
@@ -1213,7 +1214,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                         var xPos = (pageWidth - finalW2) / 2;
                         var yPos = 65 + ((targetH2 - finalH2) / 2);
                         doc.link(xPos, yPos, finalW2, finalH2, { url: wixUrl });
-                        doc.addImage(dBase64, xPos, yPos, finalW2, finalH2);
+                        doc.addImage(dBase64, 'JPEG', xPos, yPos, finalW2, finalH2, undefined, 'FAST');
                     }
 
                     doc.setFont("helvetica", "normal");
