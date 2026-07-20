@@ -567,7 +567,7 @@ html {
     position: fixed;
     inset: 0;
     background: #fff;
-    z-index: 3000;
+    z-index: 3200;
     flex-direction: column;
     overflow-y: auto;
 }
@@ -970,7 +970,7 @@ html {
 
 /* Layer 300: Cart & Modals */
 #cartPanel {
-    z-index: 300 !important;
+    z-index: 340 !important;
 }
 
 #cartPanel .sl-hdr {
