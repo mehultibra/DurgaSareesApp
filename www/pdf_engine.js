@@ -44,7 +44,7 @@ function blobToBase64Direct(blob) {
     });
 }
 
-
+/**
  * ROUTING & DOWNGRADE INTERCEPTOR
  * forceJpeg = false -> Engine 1 (Sharing)
  * forceJpeg = true  -> Engine 2 (PDF)
