@@ -1874,10 +1874,9 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     } else {
         // FAST RENDER: Generate pseudo-items from p.stock or p.ready for instant offline rendering!
         cachedItems = [];
-        cachedItems.push({ name: prefix + "01.webp" });
-        var added = {"01.webp": true, "01": true};
+        var added = {};
 
-        if (p.stock) {
+        if (p.stock && Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'Cover').length > 0) {
             for (var k in p.stock) {
                 if (k === "DIRECT" || k === "Cover") continue;
                 var fileName = k.includes('.') ? k : k + ".webp";
@@ -1898,14 +1897,9 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             });
         }
         
-        if (cachedItems.length <= 1) {
-            // Fallback guess 12 designs if completely offline with no data
-            for (var i = 2; i <= 12; i++) {
-                var n = String(i).padStart(2, '0');
-                if (!added[n + ".webp"]) {
-                    cachedItems.push({ name: prefix + n + ".webp" });
-                }
-            }
+        if (cachedItems.length === 0) {
+            // Only add a cover if we literally have NO designs to show, so the fallback kicks in
+            cachedItems.push({ name: prefix + "cover.webp" });
         }
     }
 
@@ -1955,31 +1949,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
         var placeholderSVG = window.dsMissingImage;
 
-        // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker Instant Load)
-        await Promise.all(files.map(async (file) => {
-            if (!file.isVideo) {
-                var isCover = /^(01|1|cover)$/i.test(file.name);
-                
-                // 1. Try HD Zoom First
-                var targetBlob = await getImageFromDB(file.url);
-                if (targetBlob) {
-                    file.isZoomLoaded = true;
-                } else {
-                    // 2. Fallback to Grid
-                    targetBlob = await getImageFromDB(file.gridUrl);
-                    if (!targetBlob && typeof window.findDesignKeyInCache === 'function') {
-                        var altKey = await window.findDesignKeyInCache(p.gridUrl, file.name);
-                        if (altKey) targetBlob = await getImageFromDB(altKey);
-                    }
-                    if (!targetBlob && isCover && p.gridUrl) {
-                        targetBlob = await getImageFromDB(p.gridUrl);
-                    }
-                }
-                
-                if (targetBlob) file.cachedObjectUrl = URL.createObjectURL(targetBlob);
-            }
-        }));
-
+        // 🚀 HTML IS BUILT IMMEDIATELY WITH NO AWAIT FOR LIGHTNING FAST PANEL OPEN
         var html = '';
         files.forEach((file, idx) => {
             var dKey = p.id + '_' + file.name;
@@ -2016,13 +1986,10 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 </div>`;
             } else {
                 var imgId = "design_img_" + p.id + "_" + idx;
-                var loadedZoomAttr = file.isZoomLoaded ? 'data-loaded-zoom="true"' : 'data-loaded-zoom="false"';
-                var imgSrc = file.cachedObjectUrl ? file.cachedObjectUrl : (file.gridUrl || placeholderSVG);
-                var tempUrlAttr = file.cachedObjectUrl ? 'data-temp-blob-url="' + file.cachedObjectUrl + '"' : '';
                 html += `
                 <div class="swipe-card" data-design="${file.name}" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
                     ${adminCheckboxHtml}
-                    <img id="${imgId}" src="${imgSrc}" ${loadedZoomAttr} data-zoom-url="${file.url}" ${tempUrlAttr}>
+                    <img id="${imgId}" src="${file.gridUrl || placeholderSVG}" data-loaded-zoom="false" data-zoom-url="${file.url}">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
                         ${qtyHtml}
@@ -2032,7 +1999,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         });
         deck.innerHTML = html;
 
-        // Trigger loadAndCacheDesignImage to fetch the ZOOM images in the background, or fallback to network if not cached
+        // Trigger background load of blobs so UI renders instantly
         files.forEach((file, idx) => {
             if (!file.isVideo) {
                 var imgId = "design_img_" + p.id + "_" + idx;
