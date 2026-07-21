@@ -1868,20 +1868,49 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         }
     }
 
+    var cachedItems = null;
     if (window.dsFolderCache && window.dsFolderCache[listUrl]) {
-        processFolderItems(window.dsFolderCache[listUrl]);
+        cachedItems = window.dsFolderCache[listUrl];
     } else {
-        // FAST RENDER: Show the cover image immediately while we wait for the network!
-        var gridImgEl = document.getElementById("img_" + p.id);
-        var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : window.dsMissingImage;
-        deck.innerHTML = `
-            <div class="swipe-card" data-design="DIRECT" style="position:relative;">
-                <img src="${coverSrc}" style="width: 100%; object-fit: cover;">
-                <div class="swipe-card-bot" style="text-align:center;">
-                    <div style="font-weight:bold; font-size:12px; color:var(--text-main);">Loading Designs...</div>
-                </div>
-            </div>`;
+        // FAST RENDER: Generate pseudo-items from p.stock or p.ready for instant offline rendering!
+        cachedItems = [];
+        cachedItems.push({ name: prefix + "01.webp" });
+        var added = {"01.webp": true, "01": true};
+
+        if (p.stock) {
+            for (var k in p.stock) {
+                if (k === "DIRECT" || k === "Cover") continue;
+                var fileName = k.includes('.') ? k : k + ".webp";
+                if (!added[fileName]) {
+                    cachedItems.push({ name: prefix + fileName });
+                    added[fileName] = true;
+                }
+            }
+        } else if (p.ready) {
+            var readyArr = String(p.ready).split(',').map(d => d.trim()).filter(d => d);
+            readyArr.forEach(k => {
+                if (k === "DIRECT" || k === "Cover") return;
+                var fileName = k.includes('.') ? k : k + ".webp";
+                if (!added[fileName]) {
+                    cachedItems.push({ name: prefix + fileName });
+                    added[fileName] = true;
+                }
+            });
+        }
+        
+        if (cachedItems.length <= 1) {
+            // Fallback guess 12 designs if completely offline with no data
+            for (var i = 2; i <= 12; i++) {
+                var n = String(i).padStart(2, '0');
+                if (!added[n + ".webp"]) {
+                    cachedItems.push({ name: prefix + n + ".webp" });
+                }
+            }
+        }
     }
+
+    // Instantly process and render cards from local memory!
+    processFolderItems(cachedItems);
 
     // ALWAYS fetch from network to sync any newly uploaded admin images
     fetch(listUrl + "&_t=" + new Date().getTime(), { cache: 'no-store' })
@@ -1926,8 +1955,30 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
         var placeholderSVG = window.dsMissingImage;
 
-        // 🚀 SKIPPED PRE-FETCH TO ALLOW LIGHTNING FAST PANEL OPEN
-        // We let loadAndCacheDesignImage handle the blob fetching after paint
+        // 🚀 PRE-FETCH CACHED BLOBS BEFORE RENDERING HTML (Zero Flicker Instant Load)
+        await Promise.all(files.map(async (file) => {
+            if (!file.isVideo) {
+                var isCover = /^(01|1|cover)$/i.test(file.name);
+                
+                // 1. Try HD Zoom First
+                var targetBlob = await getImageFromDB(file.url);
+                if (targetBlob) {
+                    file.isZoomLoaded = true;
+                } else {
+                    // 2. Fallback to Grid
+                    targetBlob = await getImageFromDB(file.gridUrl);
+                    if (!targetBlob && typeof window.findDesignKeyInCache === 'function') {
+                        var altKey = await window.findDesignKeyInCache(p.gridUrl, file.name);
+                        if (altKey) targetBlob = await getImageFromDB(altKey);
+                    }
+                    if (!targetBlob && isCover && p.gridUrl) {
+                        targetBlob = await getImageFromDB(p.gridUrl);
+                    }
+                }
+                
+                if (targetBlob) file.cachedObjectUrl = URL.createObjectURL(targetBlob);
+            }
+        }));
 
         var html = '';
         files.forEach((file, idx) => {
