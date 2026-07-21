@@ -161,116 +161,38 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
 // Helper: Get Firebase URL for a design
 // ==========================================
 
-async function resolveCorrectUrl(p, dId) {
+async function resolveCorrectUrl(p, dId, overrideFolder) {
     if (!p) return null;
-    var cacheKey = null;
-    if (typeof window.findDesignKeyInCache === 'function') {
-        cacheKey = await window.findDesignKeyInCache(p.gridUrl, dId);
-    }
-    if (cacheKey) {
-
-        return cacheKey;
-    }
+    var folderPath = overrideFolder || ((p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl);
     
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return null; 
+    // 1. Check if the cover is explicitly remapped via dsFallbackMap
+    var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover');
+    if (isCover) {
+        var dsFallbackMap = {};
+        try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+        var fallbackFileName = dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
+        if (fallbackFileName) {
+            dId = fallbackFileName;
+        }
+    }
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     
-    // Try gridUrl first, then zoomUrl
-    var folderPathsToTry = [p.gridUrl];
-    if (p.zoomUrl && p.zoomUrl !== "None" && p.zoomUrl !== p.gridUrl) {
-        folderPathsToTry.push(p.zoomUrl);
-    }
-
-    var targetFile = null;
-    var finalFolderPath = null;
-    var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover');
-    var dsFallbackMap = {};
-    try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
-
-    for (var fIdx = 0; fIdx < folderPathsToTry.length; fIdx++) {
-        var folderPath = folderPathsToTry[fIdx];
-        if (!folderPath || folderPath === "None" || folderPath.startsWith("http")) continue;
-
-        if (isCover && dsFallbackMap[folderPath]) {
-            var fallbackFileName = dsFallbackMap[folderPath];
-            return fbBase + folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') + "%2F" + encodeURIComponent(fallbackFileName) + "?alt=media";
-        }
-
-        var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-        var listUrl = fbBase + "?prefix=" + listPrefix + "&delimiter=/";
-        
-        if (!window.folderListCache) window.folderListCache = {};
-        var folderFiles = window.folderListCache[listUrl];
-
-        if (!folderFiles) {
-            try {
-                var listRes = await window.fetchWithRetry(listUrl, {}, 1);
-                if (listRes.ok) {
-                    var listData = await listRes.json();
-                    folderFiles = (listData.items || [])
-                        .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
-                        .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
-                    window.folderListCache[listUrl] = folderFiles;
-                } else {
-                    folderFiles = [];
-                }
-            } catch(e) {
-                folderFiles = [];
-            }
-        }
-
-        if (folderFiles.length === 0) continue;
-        folderFiles.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
-
-        if (isCover) {
-            targetFile = folderFiles[0];
-            finalFolderPath = folderPath;
-            dsFallbackMap[folderPath] = targetFile;
-            try { localStorage.setItem("dsFallbackMap", JSON.stringify(dsFallbackMap)); } catch (e) { }
-            break;
+    var fileName = "01.webp";
+    if (dId !== 'DIRECT' && dId !== 'Cover') {
+        if (/\.(webp|jpg|jpeg|png)$/i.test(dId)) {
+            fileName = dId;
         } else {
-            var targetNum = parseInt(String(dId).replace(/\D/g, ''));
-            if (!isNaN(targetNum)) {
-                for (var i = 0; i < folderFiles.length; i++) {
-                    var f = folderFiles[i];
-                    var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
-                    if (parseInt(nameWithoutExt.replace(/\D/g, '')) === targetNum) {
-                        targetFile = f;
-                        break;
-                    }
-                }
-            }
-            if (!targetFile) {
-                for (var i = 0; i < folderFiles.length; i++) {
-                    var f = folderFiles[i];
-                    var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
-                    if (nameWithoutExt.toLowerCase() === String(dId).toLowerCase()) {
-                        targetFile = f;
-                        break;
-                    }
-                }
-            }
-            if (targetFile) {
-                finalFolderPath = folderPath;
-                break;
-            }
+            var num = String(dId).replace(/\D/g, '');
+            if (num.length === 1) num = "0" + num;
+            if (num === "") num = dId;
+            fileName = num + ".webp";
         }
     }
 
-    if (!targetFile) {
-        // If it's a specific design and we couldn't find it, DO NOT fallback to cover!
-        // We just return null so it gets skipped instead of duplicating the cover 20 times.
-        if (!isCover) return null;
-        
-        // If it's the cover, just return null, we can't find anything
-        return null;
-    }
-
-    var encGridPath = finalFolderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-    var finalUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(targetFile) + "?alt=media";
-    return finalUrl;
+    return fbBase + encPath + "%2F" + encodeURIComponent(fileName) + "?alt=media";
 }
 
 function getDesignFirebaseUrl(folderPath, dId) {
@@ -371,26 +293,32 @@ async function generateCartOrderPDF(actionType) {
         for (var g of groupArr) {
             for (var item of g.items) {
                 var dId = item.design || 'DIRECT';
-                var resolvedUrl = await resolveCorrectUrl(g.p, dId);
-                var blob = null;
+                // Force resolution from GRID url to ensure tiny PDF size (identical to July 3rd logic)
+                var resolvedUrl = await resolveCorrectUrl(g.p, dId, g.p.gridUrl);
                 
-                if (resolvedUrl) {
-                    // Downgrade to Grid Image for lightning-fast cart PDF generation
-                    if (g.p.zoomUrl && g.p.zoomUrl !== "None" && g.p.zoomUrl !== g.p.gridUrl) {
-                        var cleanGrid = String(g.p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
-                        var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
-                        var cleanZoom = String(g.p.zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
-                        var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
-                        resolvedUrl = resolvedUrl.replace(encZoomPath, encGridPath);
-                    }
-                    
-                    // STRICT OFFLINE: Only pull from IndexedDB directly. No network fallbacks.
-                    blob = await getImageFromDB(resolvedUrl);
-                    
-                    if (!blob && window.findDesignKeyInCache) {
-                        var altKey = await window.findDesignKeyInCache(g.p.gridUrl, dId);
-                        if (altKey) blob = await getImageFromDB(altKey);
-                    }
+                var blob = null;
+                var cacheKey = await window.findDesignKeyInCache(g.p.gridUrl, dId);
+                if (cacheKey) blob = await getImageFromDB(cacheKey);
+
+                if (!blob && resolvedUrl) {
+                    try {
+                        var res = await fetch(resolvedUrl);
+                        if (res.ok) {
+                            blob = await res.blob();
+                        } else {
+                            var jpgUrl = resolvedUrl.replace('.webp', '.jpg');
+                            var res2 = await fetch(jpgUrl);
+                            if (res2.ok) {
+                                blob = await res2.blob();
+                            } else {
+                                var pngUrl = resolvedUrl.replace('.webp', '.png');
+                                var res3 = await fetch(pngUrl);
+                                if (res3.ok) {
+                                    blob = await res3.blob();
+                                }
+                            }
+                        }
+                    } catch (e) { }
                 }
                 
                 if (blob) {
