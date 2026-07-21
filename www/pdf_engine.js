@@ -44,60 +44,7 @@ function blobToBase64Direct(blob) {
     });
 }
 
-/**
- * ENGINE 2: SINGLE-INSTANCE TRANSCODER (blobToJpegForPDF)
- * Dedicated pipeline for jsPDF multi-page document construction.
- * Downsamples heavy WebP to 0.70 quality JPEGs to fix the 3MB+ PDF bloat issue.
- */
-function blobToJpegForPDF(blob) {
-    return new Promise(function(resolve) {
-        if (!blob) { resolve(null); return; }
-        if (blob.size === 0) {
-            if (typeof window.logAppError === 'function') window.logAppError('Zero Byte Corrupt Image', 'PDF Engine Blob | Unknown');
-            resolve(null);
-            return;
-        }
-        var webpBlob = new Blob([blob], { type: 'image/webp' });
-        var url = URL.createObjectURL(webpBlob);
-        var img = new Image();
-        img.onload = function() {
-            // Cap dimensions to 600px to guarantee < 40kb file size per image.
-            var max_size = 300;
-            var w = img.width;
-            var h = img.height;
-            
-            if (w > max_size || h > max_size) {
-                var ratio = Math.min(max_size / w, max_size / h);
-                w = Math.round(w * ratio);
-                h = Math.round(h * ratio);
-            }
-            
-            var canvas = document.createElement('canvas');
-            canvas.width = w;
-            canvas.height = h;
-            var ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#FFFFFF'; // Solve alpha
-            ctx.fillRect(0, 0, w, h);
-            // Must use w, h in drawImage to actually scale it down on the canvas!
-            ctx.drawImage(img, 0, 0, w, h);
-            var jpegData = canvas.toDataURL('image/jpeg', 0.60); // 60% quality is perfect for 600px A4 rendering
-            
-            URL.revokeObjectURL(url);
-            resolve(jpegData);
-        };
-        img.onerror = function() {
-            URL.revokeObjectURL(url);
-            // Fallback to FileReader if Image load fails
-            var fr = new FileReader();
-            fr.onload = function() { resolve(fr.result); };
-            fr.onerror = function() { resolve(null); };
-            fr.readAsDataURL(blob);
-        };
-        img.src = url;
-    });
-}
 
-/**
  * ROUTING & DOWNGRADE INTERCEPTOR
  * forceJpeg = false -> Engine 1 (Sharing)
  * forceJpeg = true  -> Engine 2 (PDF)
@@ -229,80 +176,100 @@ async function resolveCorrectUrl(p, dId) {
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    var folderPath = p.gridUrl;
-    if (!folderPath || folderPath === 'None') return null;
-    var encGridPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+    
+    // Try gridUrl first, then zoomUrl
+    var folderPathsToTry = [p.gridUrl];
+    if (p.zoomUrl && p.zoomUrl !== "None" && p.zoomUrl !== p.gridUrl) {
+        folderPathsToTry.push(p.zoomUrl);
+    }
+
+    var targetFile = null;
+    var finalFolderPath = null;
     var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover');
     var dsFallbackMap = {};
     try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
 
-    if (isCover && dsFallbackMap[folderPath]) {
-        var fallbackFileName = dsFallbackMap[folderPath];
-        var finalUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fallbackFileName) + "?alt=media";
+    for (var fIdx = 0; fIdx < folderPathsToTry.length; fIdx++) {
+        var folderPath = folderPathsToTry[fIdx];
+        if (!folderPath || folderPath === "None" || folderPath.startsWith("http")) continue;
 
-        return finalUrl;
-    }
+        if (isCover && dsFallbackMap[folderPath]) {
+            var fallbackFileName = dsFallbackMap[folderPath];
+            return fbBase + folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') + "%2F" + encodeURIComponent(fallbackFileName) + "?alt=media";
+        }
 
-    var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-    var listUrl = fbBase + "?prefix=" + listPrefix + "&delimiter=/";
-    
-    if (!window.folderListCache) window.folderListCache = {};
-    var folderFiles = window.folderListCache[listUrl];
+        var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+        var listUrl = fbBase + "?prefix=" + listPrefix + "&delimiter=/";
+        
+        if (!window.folderListCache) window.folderListCache = {};
+        var folderFiles = window.folderListCache[listUrl];
 
-    if (!folderFiles) {
-        try {
-            var listRes = await window.fetchWithRetry(listUrl, {}, 1);
-            if (listRes.ok) {
-                var listData = await listRes.json();
-                folderFiles = (listData.items || [])
-                    .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
-                    .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
-                window.folderListCache[listUrl] = folderFiles;
-            } else {
+        if (!folderFiles) {
+            try {
+                var listRes = await window.fetchWithRetry(listUrl, {}, 1);
+                if (listRes.ok) {
+                    var listData = await listRes.json();
+                    folderFiles = (listData.items || [])
+                        .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
+                        .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+                    window.folderListCache[listUrl] = folderFiles;
+                } else {
+                    folderFiles = [];
+                }
+            } catch(e) {
                 folderFiles = [];
             }
-        } catch(e) {
-            folderFiles = [];
+        }
+
+        if (folderFiles.length === 0) continue;
+        folderFiles.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
+
+        if (isCover) {
+            targetFile = folderFiles[0];
+            finalFolderPath = folderPath;
+            dsFallbackMap[folderPath] = targetFile;
+            try { localStorage.setItem("dsFallbackMap", JSON.stringify(dsFallbackMap)); } catch (e) { }
+            break;
+        } else {
+            var targetNum = parseInt(String(dId).replace(/\D/g, ''));
+            if (!isNaN(targetNum)) {
+                for (var i = 0; i < folderFiles.length; i++) {
+                    var f = folderFiles[i];
+                    var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+                    if (parseInt(nameWithoutExt.replace(/\D/g, '')) === targetNum) {
+                        targetFile = f;
+                        break;
+                    }
+                }
+            }
+            if (!targetFile) {
+                for (var i = 0; i < folderFiles.length; i++) {
+                    var f = folderFiles[i];
+                    var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+                    if (nameWithoutExt.toLowerCase() === String(dId).toLowerCase()) {
+                        targetFile = f;
+                        break;
+                    }
+                }
+            }
+            if (targetFile) {
+                finalFolderPath = folderPath;
+                break;
+            }
         }
     }
 
-    if (folderFiles.length === 0) return null;
-    folderFiles.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
-    
-    var targetFile = null;
-    if (isCover) {
-        targetFile = folderFiles[0];
-        dsFallbackMap[folderPath] = targetFile;
-        try { localStorage.setItem("dsFallbackMap", JSON.stringify(dsFallbackMap)); } catch (e) { }
-    } else {
-        var targetNum = parseInt(String(dId).replace(/\D/g, ''));
-        if (!isNaN(targetNum)) {
-            for (var i = 0; i < folderFiles.length; i++) {
-                var f = folderFiles[i];
-                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
-                if (parseInt(nameWithoutExt.replace(/\D/g, '')) === targetNum) {
-                    targetFile = f;
-                    break;
-                }
-            }
-        }
-        if (!targetFile) {
-            for (var i = 0; i < folderFiles.length; i++) {
-                var f = folderFiles[i];
-                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
-                if (nameWithoutExt.toLowerCase() === String(dId).toLowerCase()) {
-                    targetFile = f;
-                    break;
-                }
-            }
-        }
-        if (!targetFile) targetFile = folderFiles[0];
+    if (!targetFile) {
+        // If it's a specific design and we couldn't find it, DO NOT fallback to cover!
+        // We just return null so it gets skipped instead of duplicating the cover 20 times.
+        if (!isCover) return null;
+        
+        // If it's the cover, just return null, we can't find anything
+        return null;
     }
 
-    if (!targetFile) return null;
-
+    var encGridPath = finalFolderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     var finalUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(targetFile) + "?alt=media";
-
     return finalUrl;
 }
 
@@ -427,7 +394,7 @@ async function generateCartOrderPDF(actionType) {
                 }
                 
                 if (blob) {
-                    item._pdfImgSrc = await blobToJpegForPDF(blob);
+                    item._pdfImgSrc = await blobToBase64Direct(blob);
                 } else {
                     item._pdfImgSrc = null;
                     item._pdfFailReason = (dId === 'DIRECT' || dId === 'Cover') ? 'Cover not synced' : 'Design not synced';
@@ -621,7 +588,7 @@ async function generateCartOrderPDF(actionType) {
                             if (drawW > iW) { drawW = iW; drawH = iW / imgRatio; }
                             var imgX = cellX + ((CELL_W - THUMB_GAP - drawW) / 2);
                             var imgY = y;
-                            doc.addImage(item._pdfImgSrc, 'JPEG', imgX, imgY, drawW, drawH, undefined, 'FAST');
+                            doc.addImage(item._pdfImgSrc, 'JPEG', imgX, imgY, drawW, drawH);
                             // Make the thumbnail image a clickable link
                             doc.link(imgX, imgY, drawW, drawH, { url: wixUrl });
                         } catch(e) {
@@ -833,7 +800,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
             if (i > 0) doc.addPage();
 
             // Try cache first for speed, then network
-            var base64Img = await getBase64FromCache(imageUrlsArray[i], true);
+            var base64Img = await getBase64FromCache(imageUrlsArray[i]);
 
             if (i === 0) {
                 // ── COVER PAGE ─────────────────────────────
@@ -932,7 +899,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
                     doc.rect(imgX, imgY, finalW, finalH, 'D');
                     // Image links to product Wix page
                     doc.link(imgX, imgY, finalW, finalH, { url: wixUrl });
-                    doc.addImage(base64Img, 'JPEG', imgX, imgY, finalW, finalH, undefined, 'FAST');
+                    doc.addImage(base64Img, 'JPEG', imgX, imgY, finalW, finalH);
                 }
 
                 // Footer
@@ -1519,8 +1486,16 @@ window.triggerShare = async function (action) {
 
             var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
             if (dArr.length > 0) {
+                // ALWAYS include the cover image first in full catalogue share for each product
+                var coverUrl = await resolveCorrectUrl(fp, 'DIRECT');
+                if (coverUrl && !allHighResUrls.includes(coverUrl)) {
+                    allHighResUrls.push(coverUrl);
+                }
                 for (var j = 0; j < dArr.length; j++) {
-                    allHighResUrls.push(await resolveCorrectUrl(fp, dArr[j]));
+                    var dUrl = await resolveCorrectUrl(fp, dArr[j]);
+                    if (dUrl && !allHighResUrls.includes(dUrl)) {
+                        allHighResUrls.push(dUrl);
+                    }
                 }
             } else {
                 // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
@@ -1565,8 +1540,16 @@ window.triggerShare = async function (action) {
     var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
 
     if (dArr.length > 0) {
+        // ALWAYS include the cover image first in full catalogue share
+        var coverUrl = await resolveCorrectUrl(curProduct, 'DIRECT');
+        if (coverUrl && !highResUrls.includes(coverUrl)) {
+            highResUrls.push(coverUrl);
+        }
         for (var j = 0; j < dArr.length; j++) {
-            highResUrls.push(await resolveCorrectUrl(curProduct, dArr[j]));
+            var dUrl = await resolveCorrectUrl(curProduct, dArr[j]);
+            if (dUrl && !highResUrls.includes(dUrl)) {
+                highResUrls.push(dUrl);
+            }
         }
     } else {
         // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
