@@ -53,7 +53,6 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
     var isCoverOrGarbage = false;
     if (cacheKey) {
         if (cacheKey.includes('cover.webp')) isCoverOrGarbage = true;
-        if (/(%2F|\/)[0-9]{10,}\.webp\?alt=media/i.test(cacheKey)) isCoverOrGarbage = true;
     }
 
     function networkFallback(url) {
@@ -77,7 +76,7 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
             }
         }
 
-        function tryNext(index) {
+        function tryNext(index, lastError) {
             if (index >= fallbacks.length) {
                 // Ultimate Fallback: Query Firebase folder for ANY image
                 if (isCoverOrGarbage) {
@@ -104,6 +103,11 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
                             }).catch(function() { return null; });
                     } catch (e) { return Promise.resolve(null); }
                 }
+
+                if (!isCoverOrGarbage && typeof window.logAppError === 'function') {
+                    var errMsg = lastError ? lastError.message : "Unknown error";
+                    window.logAppError('Image Fetch Failed', 'URL: ' + fallbacks[0] + ' | Error: ' + errMsg);
+                }
                 return Promise.resolve(null);
             }
             return window.fetchWithRetry(fallbacks[index], {}, 0) // ZERO retries to prevent 6s loop
@@ -121,13 +125,14 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
                 .catch(function(err) {
                     if (err && err.message && !err.message.includes("HTTP") && !err.message.includes("Zero byte")) {
                         // Network error (offline or CORS). Abort fallbacks instantly!
+                        if (typeof window.logAppError === 'function') window.logAppError('Image Network Error', 'URL: ' + fallbacks[index] + ' | Error: ' + err.message);
                         return Promise.resolve(null);
                     }
-                    return tryNext(index + 1); 
+                    return tryNext(index + 1, err); 
                 });
         }
         
-        return tryNext(0);
+        return tryNext(0, null);
     }
 
     return getImageFromDB(cacheKey).then(function(blob) {
