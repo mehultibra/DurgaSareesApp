@@ -1467,11 +1467,6 @@ window.triggerShare = async function (action) {
 
             var dArr = await getActualDesignsForProduct(fp, shareType);
             if (dArr.length > 0) {
-                // ALWAYS include the cover image first in full catalogue share for each product
-                var coverUrl = await resolveCorrectUrl(fp, 'DIRECT');
-                if (coverUrl && !allHighResUrls.includes(coverUrl)) {
-                    allHighResUrls.push(coverUrl);
-                }
                 for (var j = 0; j < dArr.length; j++) {
                     var dUrl = await resolveCorrectUrl(fp, dArr[j]);
                     if (dUrl && !allHighResUrls.includes(dUrl)) {
@@ -1521,11 +1516,6 @@ window.triggerShare = async function (action) {
     var dArr = await getActualDesignsForProduct(curProduct, shareType);
 
     if (dArr.length > 0) {
-        // ALWAYS include the cover image first in full catalogue share
-        var coverUrl = await resolveCorrectUrl(curProduct, 'DIRECT');
-        if (coverUrl && !highResUrls.includes(coverUrl)) {
-            highResUrls.push(coverUrl);
-        }
         for (var j = 0; j < dArr.length; j++) {
             var dUrl = await resolveCorrectUrl(curProduct, dArr[j]);
             if (dUrl && !highResUrls.includes(dUrl)) {
