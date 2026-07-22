@@ -53,7 +53,7 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
     var isCoverOrGarbage = false;
     if (cacheKey) {
         if (cacheKey.includes('cover.webp')) isCoverOrGarbage = true;
-        if (/(%2F|\/)[0-9]{5,}\.webp\?alt=media/i.test(cacheKey)) isCoverOrGarbage = true;
+        if (/(%2F|\/)[0-9]{10,}\.webp\?alt=media/i.test(cacheKey)) isCoverOrGarbage = true;
     }
 
     function networkFallback(url) {
