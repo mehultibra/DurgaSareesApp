@@ -60,6 +60,16 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return Promise.resolve(null);
         
         var fallbacks = [url];
+        if (url.toLowerCase().includes('.webp?alt=media')) {
+            fallbacks.push(url.replace(/\.webp\?alt=media/i, '.jpg?alt=media'));
+            fallbacks.push(url.replace(/\.webp\?alt=media/i, '.jpeg?alt=media'));
+            fallbacks.push(url.replace(/\.webp\?alt=media/i, '.png?alt=media'));
+        } else if (url.toLowerCase().includes('.jpg?alt=media')) {
+            fallbacks.push(url.replace(/\.jpg\?alt=media/i, '.webp?alt=media'));
+            fallbacks.push(url.replace(/\.jpg\?alt=media/i, '.jpeg?alt=media'));
+            fallbacks.push(url.replace(/\.jpg\?alt=media/i, '.png?alt=media'));
+        }
+
         if (isCoverOrGarbage) {
             var extIndex = url.indexOf('.webp?alt=media');
             if (extIndex > -1) {
