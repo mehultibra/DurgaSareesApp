@@ -2,6 +2,46 @@
 // 🌸 DURGA SAREES: PDF ENGINE (V7 - CART PDF + WIX LINKS)
 // ==========================================
 
+async function getActualDesignsForProduct(p, shareType) {
+    if (shareType !== 'full') return [];
+    var folderPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
+    if (!folderPath) return [];
+    var bucket = "durga-sarees.firebasestorage.app";
+    var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
+    
+    var items = [];
+    if (window.dsFolderCache && window.dsFolderCache[listUrl]) {
+        items = window.dsFolderCache[listUrl];
+    } else {
+        try {
+            var res = await (window.fetchWithRetry ? window.fetchWithRetry(listUrl, {}, 1) : fetch(listUrl));
+            if (res.ok) {
+                var data = await res.json();
+                items = data.items || [];
+                if (!window.dsFolderCache) window.dsFolderCache = {};
+                window.dsFolderCache[listUrl] = items;
+            }
+        } catch (e) { }
+    }
+
+    if (items && items.length > 0) {
+        var validFiles = items.map(it => it.name.substring(it.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+        validFiles = validFiles.filter(f => !/^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
+        validFiles = validFiles.filter(f => {
+            if (p.stock && p.stock[f] === 0) return false;
+            var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+            if (p.stock && p.stock[nameWithoutExt] === 0) return false;
+            return true;
+        });
+        
+        validFiles.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
+        return validFiles;
+    }
+
+    return (p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(d => d && (!p.stock || p.stock[d] !== 0)) : [];
+}
+
 const WEBSITE_BASE = "https://www.durgasarees.com";
 const WEBSITE_PRODUCT_BASE = "https://www.durgasarees.com/product-page/";
 
@@ -200,10 +240,7 @@ async function resolveCorrectUrl(p, dId, overrideFolder) {
         if (/\.(webp|jpg|jpeg|png)$/i.test(dId)) {
             fileName = dId;
         } else {
-            var num = String(dId).replace(/\D/g, '');
-            if (num.length === 1) num = "0" + num;
-            if (num === "") num = dId;
-            fileName = num + ".webp";
+            fileName = String(dId).trim() + ".webp";
         }
     }
 
@@ -216,10 +253,11 @@ function getDesignFirebaseUrl(folderPath, dId) {
         .map(s => encodeURIComponent(s.trim())).join('%2F');
     var fileName = "01.webp";
     if (dId && dId !== 'DIRECT' && dId !== 'Cover') {
-        var num = dId.replace(/\D/g, '');
-        if (num.length === 1) num = "0" + num;
-        if (num === "") num = dId;
-        fileName = num + ".webp";
+        if (/\.(webp|jpg|jpeg|png)$/i.test(dId)) {
+            fileName = dId;
+        } else {
+            fileName = String(dId).trim() + ".webp";
+        }
     }
     return fbBase + encPath + "%2F" + encodeURIComponent(fileName) + "?alt=media";
 }
@@ -962,7 +1000,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             var wixUrl = buildWixProductUrl(product);
             
             var folderPath = (product.zoomUrl && product.zoomUrl !== "None") ? product.zoomUrl : product.gridUrl;
-            var dArr = (shareType === 'full' && product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d && !/\.(mp4|mov|avi|wmv|webm)$/i.test(d)) : [];
+            var dArr = await getActualDesignsForProduct(product, shareType);
             
             var coverUrl;
             if (dArr.length > 0) {
@@ -1427,7 +1465,7 @@ window.triggerShare = async function (action) {
             var fp = favProducts[i];
             var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
 
-            var dArr = (shareType === 'full' && fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
+            var dArr = await getActualDesignsForProduct(fp, shareType);
             if (dArr.length > 0) {
                 // ALWAYS include the cover image first in full catalogue share for each product
                 var coverUrl = await resolveCorrectUrl(fp, 'DIRECT');
@@ -1480,7 +1518,7 @@ window.triggerShare = async function (action) {
 
     var highResUrls = [];
     var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-    var dArr = (shareType === 'full' && curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
+    var dArr = await getActualDesignsForProduct(curProduct, shareType);
 
     if (dArr.length > 0) {
         // ALWAYS include the cover image first in full catalogue share
