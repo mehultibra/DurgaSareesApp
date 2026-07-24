@@ -1899,7 +1899,12 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         
         if (cachedItems.length === 0) {
             // Only add a cover if we literally have NO designs to show, so the fallback kicks in
-            cachedItems.push({ name: prefix + "cover.webp" });
+            var fallbackFile = window.dsFallbackMap ? window.dsFallbackMap[p.gridUrl] : null;
+            if (fallbackFile && fallbackFile.toLowerCase() !== "cover.webp" && fallbackFile.toLowerCase() !== "cover1.webp") {
+                cachedItems.push({ name: prefix + fallbackFile });
+            } else {
+                cachedItems.push({ name: prefix + "cover.webp" });
+            }
         }
     }
 
