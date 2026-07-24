@@ -1921,13 +1921,13 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             var items = data.items || [];
             if (!window.dsFolderCache) window.dsFolderCache = {};
 
-            var oldItemsStr = JSON.stringify(window.dsFolderCache[listUrl] || []);
-            var newItemsStr = JSON.stringify(items);
-
             window.dsFolderCache[listUrl] = items;
             try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
 
-            if (oldItemsStr !== newItemsStr) {
+            var oldNames = cachedItems ? cachedItems.map(x => x.name).join(',') : "";
+            var newNames = items.map(x => x.name).join(',');
+
+            if (oldNames !== newNames) {
                 processFolderItems(items);
             }
         })
