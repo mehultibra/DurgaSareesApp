@@ -2242,6 +2242,7 @@ function setupFsGestures() {
     var startPanX = 0;
     var startPanY = 0;
     var isPanning = false;
+    var isSwipeDragging = false;
 
     // Double tap variable
     var lastTapTime = 0;
@@ -2293,6 +2294,8 @@ function setupFsGestures() {
                 isPanning = true;
                 startPanX = e.touches[0].clientX - fsTranslateX;
                 startPanY = e.touches[0].clientY - fsTranslateY;
+            } else {
+                isSwipeDragging = false;
             }
         } else if (e.touches.length === 2) {
             // Pinch to zoom
@@ -2330,6 +2333,19 @@ function setupFsGestures() {
             fsTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, fsTranslateY));
 
             fsImg.style.transform = `translate3d(${fsTranslateX}px, ${fsTranslateY}px, 0) scale(${fsScale})`;
+        } else if (e.touches.length === 1 && fsScale === 1) {
+            // Smooth gallery swipe dragging
+            var diffX = e.touches[0].clientX - startTouchX;
+            var diffY = e.touches[0].clientY - startTouchY;
+            
+            // Only start horizontal swipe if we moved mostly horizontally
+            if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 10) {
+                isSwipeDragging = true;
+                fsImg.style.transition = 'none';
+                fsImg.style.transform = `translate3d(${diffX}px, 0, 0)`;
+                // Adding a slight fade adds a nice premium touch
+                fsImg.style.opacity = Math.max(0.2, 1 - (Math.abs(diffX) / window.innerWidth));
+            }
         }
     }, { passive: true });
 
@@ -2343,14 +2359,34 @@ function setupFsGestures() {
         }
 
         // If it was a single finger and scale === 1, detect horizontal swipe
-        if (e.touches.length === 0 && fsScale === 1) {
+        if (e.changedTouches && e.changedTouches.length === 1 && fsScale === 1) {
             var endX = e.changedTouches[0].clientX;
             var endY = e.changedTouches[0].clientY;
             var diffX = endX - startTouchX;
             var diffY = endY - startTouchY;
 
-            // Ensure it is mostly horizontal swipe
-            if (Math.abs(diffX) > Math.abs(diffY)) {
+            if (isSwipeDragging) {
+                isSwipeDragging = false;
+                if (Math.abs(diffX) > 50) {
+                    // Smoothly slide out
+                    fsImg.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
+                    var dir = diffX > 0 ? 1 : -1;
+                    fsImg.style.transform = `translate3d(${dir * window.innerWidth}px, 0, 0)`;
+                    fsImg.style.opacity = '0';
+                    window.fsSwipeDirection = dir; // Tell openFs which way to slide in from
+                    setTimeout(() => {
+                        handleSwipe(diffX);
+                    }, 200);
+                } else {
+                    // Snap back to center if swipe threshold not met
+                    fsImg.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
+                    fsImg.style.transform = `translate3d(0, 0, 0)`;
+                    fsImg.style.opacity = '1';
+                    setTimeout(() => { fsImg.style.transition = ''; }, 200);
+                }
+            } else if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
+                // Fallback for very fast swipe that didn't trigger touchmove much
+                window.fsSwipeDirection = diffX > 0 ? 1 : -1;
                 handleSwipe(diffX);
             }
         }
@@ -2426,6 +2462,16 @@ function openFs(arg1, arg2, arg3, arg4) {
 
     dId = targetCard.getAttribute('data-design') || 'DIRECT';
 
+    // Auto-detect direction if arrows were clicked instead of swiped
+    if (typeof window.fsSwipeDirection === 'undefined' || window.fsSwipeDirection === 0) {
+        if (typeof fsIndex !== 'undefined' && index !== fsIndex) {
+            window.fsSwipeDirection = index < fsIndex ? 1 : -1;
+            // Check for wrapping
+            if (fsIndex === 0 && index === cards.length - 1) window.fsSwipeDirection = 1;
+            if (fsIndex === cards.length - 1 && index === 0) window.fsSwipeDirection = -1;
+        }
+    }
+
     fsIndex = index;
     fsDesignId = dId;
 
@@ -2461,11 +2507,31 @@ function openFs(arg1, arg2, arg3, arg4) {
         }
         if (fsImg) {
             fsImg.style.display = 'block';
-            fsImg.style.transition = '';
-            fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
             fsScale = 1;
             fsTranslateX = 0;
             fsTranslateY = 0;
+
+            if (window.fsSwipeDirection) {
+                // Slide in animation from the opposite side
+                fsImg.style.transition = 'none';
+                fsImg.style.transform = `translate3d(${-window.fsSwipeDirection * window.innerWidth}px, 0, 0) scale(1)`;
+                fsImg.style.opacity = '0';
+                
+                // Force browser reflow to apply the starting position instantly
+                void fsImg.offsetWidth;
+                
+                fsImg.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+                fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
+                fsImg.style.opacity = '1';
+                
+                window.fsSwipeDirection = 0;
+                // Clean up transition after animation
+                setTimeout(() => { fsImg.style.transition = ''; }, 260);
+            } else {
+                fsImg.style.transition = '';
+                fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
+                fsImg.style.opacity = '1';
+            }
 
             var chosenSrc = imgEl ? imgEl.src : '';
             // If the swipe card is still showing the missing SVG placeholder, use the cart image
