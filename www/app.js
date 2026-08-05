@@ -5411,20 +5411,3 @@ function uint8ToBase64(u8Arr) {
     return btoa(result);
 }
 
-
-
-var _currentStatusStyle = 'LIGHT';
-window.toggleStatusBarColor = function() {
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
-        _currentStatusStyle = _currentStatusStyle === 'LIGHT' ? 'DARK' : 'LIGHT';
-        window.Capacitor.Plugins.StatusBar.setStyle({ style: _currentStatusStyle }).then(() => {
-            console.log('Status bar set to: ' + _currentStatusStyle);
-            alert('Set status bar to ' + _currentStatusStyle);
-        }).catch(e => {
-            alert('StatusBar Error: ' + e);
-        });
-    } else {
-        alert('StatusBar Plugin not available');
-    }
-};
-
