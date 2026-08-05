@@ -2254,6 +2254,30 @@ function setupFsGestures() {
         return Math.sqrt(dx * dx + dy * dy);
     }
 
+    function getAdjacentSrc(offset) {
+        var deck = document.getElementById('dtDesigns');
+        if (!deck) return '';
+        var cards = Array.from(deck.querySelectorAll('.swipe-card')).filter(c => c.style.display !== 'none');
+        if (cards.length === 0) return '';
+        
+        var targetIdx = fsIndex + offset;
+        if (targetIdx < 0) targetIdx = cards.length - 1;
+        if (targetIdx >= cards.length) targetIdx = 0;
+        
+        var card = cards[targetIdx];
+        if (!card) return '';
+        var img = card.querySelector('img');
+        if (!img) return '';
+        var chosenSrc = img.src;
+        if (chosenSrc.includes("data:image/svg+xml")) {
+             var dId = card.getAttribute('data-design');
+             var pId = window.curProduct ? window.curProduct.id : '';
+             var cartImgSrc = window.getCartImgSrc ? window.getCartImgSrc(pId, dId) : '';
+             if (cartImgSrc) chosenSrc = cartImgSrc;
+        }
+        return chosenSrc;
+    }
+
     // Swipe navigation logic
     function handleSwipe(diffX) {
         if (window.fsIsStandalone) return;
@@ -2341,8 +2365,21 @@ function setupFsGestures() {
             // Only start horizontal swipe if we moved mostly horizontally
             if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 10) {
                 isSwipeDragging = true;
-                fsImg.style.transition = 'none';
-                fsImg.style.transform = `translate3d(${diffX}px, 0, 0)`;
+                var wrapper = document.getElementById('fsSliderWrapper');
+                if (wrapper) {
+                    wrapper.style.transition = 'none';
+                    wrapper.style.transform = `translate3d(${diffX}px, 0, 0)`;
+                }
+                
+                var prevImg = document.getElementById('fsImgPrev');
+                var nextImg = document.getElementById('fsImgNext');
+                if (diffX > 0 && prevImg && prevImg.style.display === 'none') {
+                    var src = getAdjacentSrc(-1);
+                    if (src) { prevImg.src = src; prevImg.style.display = 'block'; }
+                } else if (diffX < 0 && nextImg && nextImg.style.display === 'none') {
+                    var src = getAdjacentSrc(1);
+                    if (src) { nextImg.src = src; nextImg.style.display = 'block'; }
+                }
             }
         }
     }, { passive: true });
@@ -2372,9 +2409,22 @@ function setupFsGestures() {
                     handleSwipe(diffX);
                 } else {
                     // Snap back to center if swipe threshold not met
-                    fsImg.style.transition = 'transform 0.2s ease-out';
-                    fsImg.style.transform = `translate3d(0, 0, 0)`;
-                    setTimeout(() => { fsImg.style.transition = ''; }, 200);
+                    var wrapper = document.getElementById('fsSliderWrapper');
+                    if (wrapper) {
+                        wrapper.style.transition = 'transform 0.2s ease-out';
+                        wrapper.style.transform = `translate3d(0, 0, 0)`;
+                        setTimeout(() => { 
+                            wrapper.style.transition = 'none'; 
+                            var pImg = document.getElementById('fsImgPrev');
+                            var nImg = document.getElementById('fsImgNext');
+                            if (pImg) pImg.style.display = 'none';
+                            if (nImg) nImg.style.display = 'none';
+                        }, 200);
+                    } else {
+                        fsImg.style.transition = 'transform 0.2s ease-out';
+                        fsImg.style.transform = `translate3d(0, 0, 0)`;
+                        setTimeout(() => { fsImg.style.transition = ''; }, 200);
+                    }
                 }
             } else if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
                 // Fallback for very fast swipe that didn't trigger touchmove much
@@ -2502,67 +2552,67 @@ function openFs(arg1, arg2, arg3, arg4) {
         if (fsImg) {
             fsImg.style.display = 'block';
 
+            var chosenSrc = imgEl ? imgEl.src : '';
+            // If the swipe card is still showing the missing SVG placeholder, use the cart image
+            if (chosenSrc.includes("data:image/svg+xml") && cartImgSrc) {
+                chosenSrc = cartImgSrc;
+            }
+
             if (window.fsSwipeDirection) {
-                // Seamless gallery handoff: create a ghost of the CURRENT image before changing src
-                var ghost = fsImg.cloneNode(true);
-                ghost.id = 'fsImgGhost';
-                ghost.style.position = 'absolute';
-                ghost.style.top = '0';
-                ghost.style.left = '0';
-                ghost.style.width = '100%';
-                ghost.style.height = '100%';
-                
                 var dir = window.fsSwipeDirection;
                 var currentX = window.fsSwipeCurrentX || 0;
+                var wrapper = document.getElementById('fsSliderWrapper');
                 
-                // Start exactly where the user dragged it
-                ghost.style.transform = `translate3d(${currentX}px, 0, 0) scale(1)`;
-                fsImg.parentNode.appendChild(ghost);
-                
-                fsScale = 1;
-                fsTranslateX = 0;
-                fsTranslateY = 0;
+                if (wrapper) {
+                    var sideImg = dir > 0 ? document.getElementById('fsImgPrev') : document.getElementById('fsImgNext');
+                    if (sideImg) {
+                        sideImg.src = chosenSrc;
+                        sideImg.style.display = 'block';
+                    }
 
-                // Slide in animation from the opposite side minus currentX to maintain exact lockstep distance
-                fsImg.style.transition = 'none';
-                fsImg.style.transform = `translate3d(${currentX - (dir * window.innerWidth)}px, 0, 0) scale(1)`;
-                
-                // Force browser reflow so elements are placed before animating
-                void fsImg.offsetWidth;
-                void ghost.offsetWidth;
-                
-                // Animate both synchronously exactly the same distance
-                var duration = '0.25s';
-                ghost.style.transition = `transform ${duration} ease-out`;
-                ghost.style.transform = `translate3d(${dir * window.innerWidth}px, 0, 0) scale(1)`;
-                
-                fsImg.style.transition = `transform ${duration} ease-out`;
-                fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
-                
-                // Remove ghost when done
-                setTimeout(() => {
-                    if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
-                }, 260);
+                    var duration = '0.25s';
+                    var targetX = dir * window.innerWidth;
+                    
+                    wrapper.style.transition = 'none';
+                    wrapper.style.transform = `translate3d(${currentX}px, 0, 0)`;
+                    void wrapper.offsetWidth;
+                    
+                    wrapper.style.transition = `transform ${duration} ease-out`;
+                    wrapper.style.transform = `translate3d(${targetX}px, 0, 0)`;
+                    
+                    setTimeout(() => {
+                        wrapper.style.transition = 'none';
+                        wrapper.style.transform = 'translate3d(0, 0, 0)';
+                        fsImg.src = chosenSrc;
+                        var pImg = document.getElementById('fsImgPrev');
+                        var nImg = document.getElementById('fsImgNext');
+                        if (pImg) pImg.style.display = 'none';
+                        if (nImg) nImg.style.display = 'none';
+                    }, 260);
+                } else {
+                    fsImg.src = chosenSrc;
+                }
                 
                 window.fsSwipeDirection = 0;
                 window.fsSwipeCurrentX = 0;
-                // Clean up transition after animation
-                setTimeout(() => { fsImg.style.transition = ''; }, 260);
             } else {
                 fsScale = 1;
                 fsTranslateX = 0;
                 fsTranslateY = 0;
                 fsImg.style.transition = '';
                 fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
-                fsImg.style.opacity = '1';
+                fsImg.src = chosenSrc;
+                
+                var wrapper = document.getElementById('fsSliderWrapper');
+                if (wrapper) {
+                    wrapper.style.transition = 'none';
+                    wrapper.style.transform = 'translate3d(0, 0, 0)';
+                    var pImg = document.getElementById('fsImgPrev');
+                    var nImg = document.getElementById('fsImgNext');
+                    if (pImg) pImg.style.display = 'none';
+                    if (nImg) nImg.style.display = 'none';
+                }
             }
-
-            var chosenSrc = imgEl ? imgEl.src : '';
-            // If the swipe card is still showing the missing SVG placeholder, use the cart image
-            if (chosenSrc.includes("data:image/svg+xml") && cartImgSrc) {
-                chosenSrc = cartImgSrc;
-            }
-            fsImg.src = chosenSrc;
         }
     }
 

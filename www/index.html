@@ -352,7 +352,11 @@
     <div class="fs-img-container">
       <div class="fs-nav fs-nav-left" onclick="openFs(fsIndex - 1)"><i class="fas fa-chevron-left"></i></div>
       <div class="fs-nav fs-nav-right" onclick="openFs(fsIndex + 1)"><i class="fas fa-chevron-right"></i></div>
-      <img id="fsImg" class="fs-img" src="">
+      <div id="fsSliderWrapper" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+          <img id="fsImgPrev" class="fs-img" src="" style="position: absolute; top: 0; left: -100%; width: 100%; height: 100%; display: none;">
+          <img id="fsImg" class="fs-img" src="" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+          <img id="fsImgNext" class="fs-img" src="" style="position: absolute; top: 0; left: 100%; width: 100%; height: 100%; display: none;">
+      </div>
     </div>
     <div class="fs-controls">
       <button onpointerdown="event.preventDefault(); fsChg(-1)">−</button>
