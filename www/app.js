@@ -5411,3 +5411,11 @@ function uint8ToBase64(u8Arr) {
     return btoa(result);
 }
 
+
+// Force status bar icons to be dark on startup
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
+        window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' }).catch(e => console.log('StatusBar error:', e));
+    }
+});
+
