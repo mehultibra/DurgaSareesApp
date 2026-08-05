@@ -1983,7 +1983,10 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                     ${adminCheckboxHtml}
                     <video src="${file.url}" controls playsinline style="width: 100%; object-fit: cover;" onclick="event.stopPropagation()"></video>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                        <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
+                        <div style="font-weight:bold; font-size:12px; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                            ${file.name}
+                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.url}')"></i>` : ''}
+                        </div>
                         ${qtyHtml}
                     </div>
                 </div>`;
@@ -1994,7 +1997,10 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                     ${adminCheckboxHtml}
                     <img id="${imgId}" src="${file.gridUrl || placeholderSVG}" data-loaded-zoom="false" data-zoom-url="${file.url}">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
-                        <div style="font-weight:bold; font-size:12px; color:var(--text-main);">${file.name}</div>
+                        <div style="font-weight:bold; font-size:12px; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                            ${file.name}
+                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.gridUrl || file.url}')"></i>` : ''}
+                        </div>
                         ${qtyHtml}
                     </div>
                 </div>`;
@@ -5415,4 +5421,82 @@ document.addEventListener('DOMContentLoaded', () => {
         window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' }).catch(e => console.log('StatusBar error:', e));
     }
 });
+
+
+window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
+    if (!window.isAdminMode) return;
+    var p = allProducts.find(x => x.id === pid);
+    if (!p) return;
+
+    var newDesignId = prompt("Enter new design number to Duplicate/Rename '" + oldDesignId + "' to:\n\nNOTE: The old file will NOT be deleted from Firebase as requested.", oldDesignId);
+    if (!newDesignId || newDesignId.trim() === "" || newDesignId.trim() === oldDesignId) return;
+    newDesignId = newDesignId.trim().toUpperCase();
+
+    if(!imgUrl) {
+        alert("Error: Could not find image URL to duplicate.");
+        return;
+    }
+
+    document.body.insertAdjacentHTML('beforeend', '<div id="renamingLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Duplicating '+oldDesignId+' to '+newDesignId+'...</div>');
+
+    try {
+        var res = await window.fetchWithRetry(imgUrl, {}, 3);
+        if(!res.ok) throw new Error("Failed to download image blob");
+        var blob = await res.blob();
+
+        var folders = [];
+        if (p.gridUrl && p.gridUrl.toLowerCase() !== "none") folders.push(p.gridUrl);
+        if (p.zoomUrl && p.zoomUrl.toLowerCase() !== "none") folders.push(p.zoomUrl);
+        if (p.gridUrl) folders.push(p.gridUrl.replace(/\/Grid\/?/i, "/Thumb"));
+        folders.push("Uploads/Raw");
+
+        folders = [...new Set(folders)];
+        var uploadPromises = folders.map(folderUrl => {
+            var destUrl;
+            if (folderUrl === "Uploads/Raw") {
+                destUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F" + encodeURIComponent(newDesignId + ".jpg");
+            } else {
+                var cleanFolder = String(folderUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                destUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=" + cleanFolder + "%2F" + encodeURIComponent(newDesignId + ".jpg");
+            }
+            return window.fetchWithRetry(destUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'image/jpeg' },
+                body: blob
+            }, 1);
+        });
+
+        await Promise.all(uploadPromises);
+
+        var curStock = p.stock && p.stock[oldDesignId] !== undefined ? p.stock[oldDesignId] : 999;
+        var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock." + encodeURIComponent(newDesignId) + "&updateMask.fieldPaths=updateTime";
+        
+        var fsRes = await window.fetchWithRetry(fsUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fields: {
+                    stock: {
+                        mapValue: {
+                            fields: {
+                                [newDesignId]: { integerValue: curStock }
+                            }
+                        }
+                    },
+                    updateTime: { timestampValue: new Date().toISOString() }
+                }
+            })
+        }, 3);
+        
+        if(!fsRes.ok) throw new Error("Failed to update Firestore stock");
+
+        alert("Successfully duplicated design " + oldDesignId + " to " + newDesignId + "!");
+        if(typeof applyFilter === 'function') applyFilter();
+    } catch(e) {
+        alert("Error duplicating design: " + e.message);
+    } finally {
+        var ldr = document.getElementById('renamingLoader');
+        if(ldr) ldr.remove();
+    }
+};
 
