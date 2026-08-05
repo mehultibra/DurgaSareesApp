@@ -5428,16 +5428,16 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
     var p = allProducts.find(x => x.id === pid);
     if (!p) return;
 
-    var newDesignId = prompt("Enter new design number to Duplicate/Rename '" + oldDesignId + "' to:\n\nNOTE: The old file will NOT be deleted from Firebase as requested.", oldDesignId);
+    var newDesignId = prompt("Enter new design number to rename '" + oldDesignId + "' to:", oldDesignId);
     if (!newDesignId || newDesignId.trim() === "" || newDesignId.trim() === oldDesignId) return;
     newDesignId = newDesignId.trim().toUpperCase();
 
     if(!imgUrl) {
-        alert("Error: Could not find image URL to duplicate.");
+        alert("Error: Could not find image URL to rename.");
         return;
     }
 
-    document.body.insertAdjacentHTML('beforeend', '<div id="renamingLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Duplicating '+oldDesignId+' to '+newDesignId+'...</div>');
+    document.body.insertAdjacentHTML('beforeend', '<div id="renamingLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Renaming '+oldDesignId+' to '+newDesignId+'...</div>');
 
     try {
         var res = await window.fetchWithRetry(imgUrl, {}, 3);
@@ -5468,8 +5468,24 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
 
         await Promise.all(uploadPromises);
 
+        // Delete the old files
+        var deletePromises = folders.map(folderUrl => {
+            var delUrl;
+            if (folderUrl === "Uploads/Raw") {
+                delUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/Uploads%2FRaw%2F" + encodeURIComponent(oldDesignId + ".jpg");
+            } else {
+                var cleanFolder = String(folderUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                delUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + encodeURIComponent(oldDesignId + ".jpg");
+            }
+            return window.fetchWithRetry(delUrl, { method: 'DELETE' }, 1).catch(e => console.log("Failed to delete old file:", delUrl, e));
+        });
+
+        await Promise.all(deletePromises);
+
         var curStock = p.stock && p.stock[oldDesignId] !== undefined ? p.stock[oldDesignId] : 999;
-        var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock." + encodeURIComponent(newDesignId) + "&updateMask.fieldPaths=updateTime";
+        
+        // Add both old and new fields to updateMask. Omitting the old field from 'fields' will delete it.
+        var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock." + encodeURIComponent(newDesignId) + "&updateMask.fieldPaths=stock." + encodeURIComponent(oldDesignId) + "&updateMask.fieldPaths=updateTime";
         
         var fsRes = await window.fetchWithRetry(fsUrl, {
             method: 'PATCH',
@@ -5490,10 +5506,10 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
         
         if(!fsRes.ok) throw new Error("Failed to update Firestore stock");
 
-        alert("Successfully duplicated design " + oldDesignId + " to " + newDesignId + "!");
+        alert("Successfully renamed design " + oldDesignId + " to " + newDesignId + "!");
         if(typeof applyFilter === 'function') applyFilter();
     } catch(e) {
-        alert("Error duplicating design: " + e.message);
+        alert("Error renaming design: " + e.message);
     } finally {
         var ldr = document.getElementById('renamingLoader');
         if(ldr) ldr.remove();
