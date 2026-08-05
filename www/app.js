@@ -2368,15 +2368,9 @@ function setupFsGestures() {
             if (isSwipeDragging) {
                 isSwipeDragging = false;
                 if (Math.abs(diffX) > 50) {
-                    // Smoothly slide out
-                    fsImg.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
                     var dir = diffX > 0 ? 1 : -1;
-                    fsImg.style.transform = `translate3d(${dir * window.innerWidth}px, 0, 0)`;
-                    fsImg.style.opacity = '0';
                     window.fsSwipeDirection = dir; // Tell openFs which way to slide in from
-                    setTimeout(() => {
-                        handleSwipe(diffX);
-                    }, 200);
+                    handleSwipe(diffX);
                 } else {
                     // Snap back to center if swipe threshold not met
                     fsImg.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
@@ -2507,14 +2501,41 @@ function openFs(arg1, arg2, arg3, arg4) {
         }
         if (fsImg) {
             fsImg.style.display = 'block';
-            fsScale = 1;
-            fsTranslateX = 0;
-            fsTranslateY = 0;
 
             if (window.fsSwipeDirection) {
+                // Seamless gallery handoff: create a ghost of the CURRENT image before changing src
+                var ghost = fsImg.cloneNode(true);
+                ghost.id = 'fsImgGhost';
+                ghost.style.position = 'absolute';
+                ghost.style.top = '0';
+                ghost.style.left = '0';
+                ghost.style.width = '100%';
+                ghost.style.height = '100%';
+                // Start exactly where the user dragged it
+                ghost.style.transform = fsImg.style.transform || 'translate3d(0px, 0px, 0px) scale(1)';
+                fsImg.parentNode.appendChild(ghost);
+                
+                var dir = window.fsSwipeDirection;
+                
+                // Animate ghost out
+                setTimeout(() => {
+                    ghost.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+                    ghost.style.transform = `translate3d(${dir * window.innerWidth}px, 0, 0) scale(1)`;
+                    ghost.style.opacity = '0';
+                }, 10);
+                
+                // Remove ghost when done
+                setTimeout(() => {
+                    if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+                }, 300);
+
+                fsScale = 1;
+                fsTranslateX = 0;
+                fsTranslateY = 0;
+
                 // Slide in animation from the opposite side
                 fsImg.style.transition = 'none';
-                fsImg.style.transform = `translate3d(${-window.fsSwipeDirection * window.innerWidth}px, 0, 0) scale(1)`;
+                fsImg.style.transform = `translate3d(${-dir * window.innerWidth}px, 0, 0) scale(1)`;
                 fsImg.style.opacity = '0';
                 
                 // Force browser reflow to apply the starting position instantly
@@ -2528,6 +2549,9 @@ function openFs(arg1, arg2, arg3, arg4) {
                 // Clean up transition after animation
                 setTimeout(() => { fsImg.style.transition = ''; }, 260);
             } else {
+                fsScale = 1;
+                fsTranslateX = 0;
+                fsTranslateY = 0;
                 fsImg.style.transition = '';
                 fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
                 fsImg.style.opacity = '1';
