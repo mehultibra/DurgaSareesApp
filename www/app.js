@@ -2232,6 +2232,7 @@ function setupFsGestures() {
 
     var startTouchX = 0;
     var startTouchY = 0;
+    var startTouchTime = 0;
 
     // Pinch variables
     var initialPinchDistance = 0;
@@ -2313,6 +2314,7 @@ function setupFsGestures() {
 
             startTouchX = e.touches[0].clientX;
             startTouchY = e.touches[0].clientY;
+            startTouchTime = new Date().getTime();
 
             if (fsScale > 1) {
                 isPanning = true;
@@ -2362,8 +2364,8 @@ function setupFsGestures() {
             var diffX = e.touches[0].clientX - startTouchX;
             var diffY = e.touches[0].clientY - startTouchY;
             
-            // Only start horizontal swipe if we moved mostly horizontally
-            if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 10) {
+            // Start horizontal swipe smoothly
+            if (isSwipeDragging || (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 5)) {
                 isSwipeDragging = true;
                 var wrapper = document.getElementById('fsSliderWrapper');
                 if (wrapper) {
@@ -2399,10 +2401,12 @@ function setupFsGestures() {
             var endY = e.changedTouches[0].clientY;
             var diffX = endX - startTouchX;
             var diffY = endY - startTouchY;
+            var diffTime = new Date().getTime() - startTouchTime;
+            var velocity = Math.abs(diffX) / diffTime;
 
             if (isSwipeDragging) {
                 isSwipeDragging = false;
-                if (Math.abs(diffX) > 50) {
+                if (Math.abs(diffX) > window.innerWidth / 4 || velocity > 0.4) {
                     var dir = diffX > 0 ? 1 : -1;
                     window.fsSwipeDirection = dir; // Tell openFs which way to slide in from
                     window.fsSwipeCurrentX = diffX;
@@ -2411,7 +2415,7 @@ function setupFsGestures() {
                     // Snap back to center if swipe threshold not met
                     var wrapper = document.getElementById('fsSliderWrapper');
                     if (wrapper) {
-                        wrapper.style.transition = 'transform 0.2s ease-out';
+                        wrapper.style.transition = 'transform 0.15s ease-out';
                         wrapper.style.transform = `translate3d(0, 0, 0)`;
                         setTimeout(() => { 
                             wrapper.style.transition = 'none'; 
@@ -2419,15 +2423,15 @@ function setupFsGestures() {
                             var nImg = document.getElementById('fsImgNext');
                             if (pImg) pImg.style.display = 'none';
                             if (nImg) nImg.style.display = 'none';
-                        }, 200);
+                        }, 150);
                     } else {
-                        fsImg.style.transition = 'transform 0.2s ease-out';
+                        fsImg.style.transition = 'transform 0.15s ease-out';
                         fsImg.style.transform = `translate3d(0, 0, 0)`;
-                        setTimeout(() => { fsImg.style.transition = ''; }, 200);
+                        setTimeout(() => { fsImg.style.transition = ''; }, 150);
                     }
                 }
-            } else if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
-                // Fallback for very fast swipe that didn't trigger touchmove much
+            } else if ((Math.abs(diffX) > 30 || velocity > 0.4) && Math.abs(diffX) > Math.abs(diffY)) {
+                // Fallback for very fast swipe flick
                 window.fsSwipeDirection = diffX > 0 ? 1 : -1;
                 window.fsSwipeCurrentX = diffX;
                 handleSwipe(diffX);
@@ -2570,7 +2574,7 @@ function openFs(arg1, arg2, arg3, arg4) {
                         sideImg.style.display = 'block';
                     }
 
-                    var duration = '0.25s';
+                    var duration = '0.15s';
                     var targetX = dir * window.innerWidth;
                     
                     wrapper.style.transition = 'none';
@@ -2588,7 +2592,7 @@ function openFs(arg1, arg2, arg3, arg4) {
                         var nImg = document.getElementById('fsImgNext');
                         if (pImg) pImg.style.display = 'none';
                         if (nImg) nImg.style.display = 'none';
-                    }, 260);
+                    }, 160);
                 } else {
                     fsImg.src = chosenSrc;
                 }
