@@ -2343,8 +2343,6 @@ function setupFsGestures() {
                 isSwipeDragging = true;
                 fsImg.style.transition = 'none';
                 fsImg.style.transform = `translate3d(${diffX}px, 0, 0)`;
-                // Adding a slight fade adds a nice premium touch
-                fsImg.style.opacity = Math.max(0.2, 1 - (Math.abs(diffX) / window.innerWidth));
             }
         }
     }, { passive: true });
@@ -2373,9 +2371,8 @@ function setupFsGestures() {
                     handleSwipe(diffX);
                 } else {
                     // Snap back to center if swipe threshold not met
-                    fsImg.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
+                    fsImg.style.transition = 'transform 0.2s ease-out';
                     fsImg.style.transform = `translate3d(0, 0, 0)`;
-                    fsImg.style.opacity = '1';
                     setTimeout(() => { fsImg.style.transition = ''; }, 200);
                 }
             } else if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
@@ -2519,9 +2516,8 @@ function openFs(arg1, arg2, arg3, arg4) {
                 
                 // Animate ghost out
                 setTimeout(() => {
-                    ghost.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+                    ghost.style.transition = 'transform 0.25s ease-out';
                     ghost.style.transform = `translate3d(${dir * window.innerWidth}px, 0, 0) scale(1)`;
-                    ghost.style.opacity = '0';
                 }, 10);
                 
                 // Remove ghost when done
@@ -2536,14 +2532,12 @@ function openFs(arg1, arg2, arg3, arg4) {
                 // Slide in animation from the opposite side
                 fsImg.style.transition = 'none';
                 fsImg.style.transform = `translate3d(${-dir * window.innerWidth}px, 0, 0) scale(1)`;
-                fsImg.style.opacity = '0';
                 
                 // Force browser reflow to apply the starting position instantly
                 void fsImg.offsetWidth;
                 
-                fsImg.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+                fsImg.style.transition = 'transform 0.25s ease-out';
                 fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
-                fsImg.style.opacity = '1';
                 
                 window.fsSwipeDirection = 0;
                 // Clean up transition after animation
