@@ -91,6 +91,10 @@ html {
     color: var(--text-main) !important;
 }
 
+#favTopIcon {
+    color: #ff3f6c !important;
+}
+
 .hdr img {
     height: 40px !important;
     object-fit: contain;

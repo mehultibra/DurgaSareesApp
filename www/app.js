@@ -155,7 +155,7 @@ window.addEventListener('DOMContentLoaded', function () {
                 } else {
                     hdr.style.backgroundColor = 'transparent';
                     hdr.style.borderBottom = 'none';
-                    if (metaTheme) metaTheme.setAttribute('content', '#dcfce7');
+                    if (metaTheme) metaTheme.setAttribute('content', '#ffffff');
                 }
             });
         }
