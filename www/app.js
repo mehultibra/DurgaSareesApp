@@ -1298,18 +1298,15 @@ function renderProductGrid(products) {
         if (aBroken && !bBroken) return 1;
         if (!aBroken && bBroken) return -1;
 
-        var catA = (a.cat || "Uncategorized").toLowerCase();
-        var catB = (b.cat || "Uncategorized").toLowerCase();
-
-        // Primary sort: Category name alphabetically
-        if (catA < catB) return -1;
-        if (catA > catB) return 1;
-
         // Secondary sort: Selected sorting rule
         if (currentSort === 'priceAsc') {
             return a.price - b.price;
         } else if (currentSort === 'priceDesc') {
             return b.price - a.price;
+        } else if (currentSort === 'new') {
+            var timeA = new Date(a.updateTime || 0).getTime();
+            var timeB = new Date(b.updateTime || 0).getTime();
+            return timeB - timeA;
         } else {
             return 0;
         }
