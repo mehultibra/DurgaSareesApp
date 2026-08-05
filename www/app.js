@@ -611,7 +611,8 @@ function initApp() {
                     border: f.border ? f.border.stringValue : "",
                     cut: f.cut ? f.cut.stringValue : "",
                     pallu: f.pallu ? f.pallu.stringValue : "",
-                    blouse: f.blouse ? f.blouse.stringValue : ""
+                    blouse: f.blouse ? f.blouse.stringValue : "",
+                    updateTime: d.updateTime || d.createTime || ""
                 });
                 validCounter++;
             }
@@ -3720,7 +3721,11 @@ window.applyFilter = function () {
     } else if (currentSort === 'priceDesc') {
         filtered.sort((a, b) => b.price - a.price);
     } else if (currentSort === 'new') {
-        // Default loading order
+        filtered.sort((a, b) => {
+            var timeA = new Date(a.updateTime || 0).getTime();
+            var timeB = new Date(b.updateTime || 0).getTime();
+            return timeB - timeA;
+        });
     }
 
     displayList = filtered;
