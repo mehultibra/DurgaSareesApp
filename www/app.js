@@ -2368,6 +2368,7 @@ function setupFsGestures() {
                 if (Math.abs(diffX) > 50) {
                     var dir = diffX > 0 ? 1 : -1;
                     window.fsSwipeDirection = dir; // Tell openFs which way to slide in from
+                    window.fsSwipeCurrentX = diffX;
                     handleSwipe(diffX);
                 } else {
                     // Snap back to center if swipe threshold not met
@@ -2378,6 +2379,7 @@ function setupFsGestures() {
             } else if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
                 // Fallback for very fast swipe that didn't trigger touchmove much
                 window.fsSwipeDirection = diffX > 0 ? 1 : -1;
+                window.fsSwipeCurrentX = diffX;
                 handleSwipe(diffX);
             }
         }
@@ -2457,6 +2459,7 @@ function openFs(arg1, arg2, arg3, arg4) {
     if (typeof window.fsSwipeDirection === 'undefined' || window.fsSwipeDirection === 0) {
         if (typeof fsIndex !== 'undefined' && index !== fsIndex) {
             window.fsSwipeDirection = index < fsIndex ? 1 : -1;
+            window.fsSwipeCurrentX = 0;
             // Check for wrapping
             if (fsIndex === 0 && index === cards.length - 1) window.fsSwipeDirection = 1;
             if (fsIndex === cards.length - 1 && index === 0) window.fsSwipeDirection = -1;
@@ -2508,38 +2511,41 @@ function openFs(arg1, arg2, arg3, arg4) {
                 ghost.style.left = '0';
                 ghost.style.width = '100%';
                 ghost.style.height = '100%';
-                // Start exactly where the user dragged it
-                ghost.style.transform = fsImg.style.transform || 'translate3d(0px, 0px, 0px) scale(1)';
-                fsImg.parentNode.appendChild(ghost);
                 
                 var dir = window.fsSwipeDirection;
+                var currentX = window.fsSwipeCurrentX || 0;
                 
-                // Animate ghost out
-                setTimeout(() => {
-                    ghost.style.transition = 'transform 0.25s ease-out';
-                    ghost.style.transform = `translate3d(${dir * window.innerWidth}px, 0, 0) scale(1)`;
-                }, 10);
+                // Start exactly where the user dragged it
+                ghost.style.transform = `translate3d(${currentX}px, 0, 0) scale(1)`;
+                fsImg.parentNode.appendChild(ghost);
                 
-                // Remove ghost when done
-                setTimeout(() => {
-                    if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
-                }, 300);
-
                 fsScale = 1;
                 fsTranslateX = 0;
                 fsTranslateY = 0;
 
-                // Slide in animation from the opposite side
+                // Slide in animation from the opposite side minus currentX to maintain exact lockstep distance
                 fsImg.style.transition = 'none';
-                fsImg.style.transform = `translate3d(${-dir * window.innerWidth}px, 0, 0) scale(1)`;
+                fsImg.style.transform = `translate3d(${currentX - (dir * window.innerWidth)}px, 0, 0) scale(1)`;
                 
-                // Force browser reflow to apply the starting position instantly
+                // Force browser reflow so elements are placed before animating
                 void fsImg.offsetWidth;
+                void ghost.offsetWidth;
                 
-                fsImg.style.transition = 'transform 0.25s ease-out';
+                // Animate both synchronously exactly the same distance
+                var duration = '0.25s';
+                ghost.style.transition = `transform ${duration} ease-out`;
+                ghost.style.transform = `translate3d(${dir * window.innerWidth}px, 0, 0) scale(1)`;
+                
+                fsImg.style.transition = `transform ${duration} ease-out`;
                 fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
                 
+                // Remove ghost when done
+                setTimeout(() => {
+                    if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+                }, 260);
+                
                 window.fsSwipeDirection = 0;
+                window.fsSwipeCurrentX = 0;
                 // Clean up transition after animation
                 setTimeout(() => { fsImg.style.transition = ''; }, 260);
             } else {
