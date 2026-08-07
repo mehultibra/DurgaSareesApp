@@ -5440,10 +5440,6 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
     document.body.insertAdjacentHTML('beforeend', '<div id="renamingLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Renaming '+oldDesignId+' to '+newDesignId+'...</div>');
 
     try {
-        var res = await window.fetchWithRetry(imgUrl, {}, 3);
-        if(!res.ok) throw new Error("Failed to download image blob");
-        var blob = await res.blob();
-
         var folders = [];
         if (p.gridUrl && p.gridUrl.toLowerCase() !== "none") folders.push(p.gridUrl);
         if (p.zoomUrl && p.zoomUrl.toLowerCase() !== "none") folders.push(p.zoomUrl);
@@ -5451,36 +5447,49 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
         folders.push("Uploads/Raw");
 
         folders = [...new Set(folders)];
-        var uploadPromises = folders.map(folderUrl => {
-            var destUrl;
-            if (folderUrl === "Uploads/Raw") {
-                destUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F" + encodeURIComponent(newDesignId + ".jpg");
-            } else {
-                var cleanFolder = String(folderUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                destUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=" + cleanFolder + "%2F" + encodeURIComponent(newDesignId + ".jpg");
+
+        var uploadPromises = folders.map(async (folderPath) => {
+            var cleanFolder = String(folderPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+            
+            // Try .webp first
+            var oldFileName = encodeURIComponent(oldDesignId + ".webp");
+            var oldFileUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + oldFileName + "?alt=media";
+            var res = await fetch(oldFileUrl);
+            var ext = ".webp";
+            var type = "image/webp";
+
+            if (!res.ok) {
+                // Try .jpg
+                oldFileName = encodeURIComponent(oldDesignId + ".jpg");
+                oldFileUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + oldFileName + "?alt=media";
+                res = await fetch(oldFileUrl);
+                ext = ".jpg";
+                type = "image/jpeg";
             }
-            return window.fetchWithRetry(destUrl, {
+
+            if (!res.ok) return; // File not found in this folder, skip
+
+            var blob = await res.blob();
+            var newFileName = encodeURIComponent(newDesignId + ext);
+            var destUploadUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=" + cleanFolder + "%2F" + newFileName;
+            var delUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + oldFileName;
+
+            await window.fetchWithRetry(destUploadUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'image/jpeg' },
+                headers: { 'Content-Type': type },
                 body: blob
             }, 1);
+
+            await window.fetchWithRetry(delUrl, { method: 'DELETE' }, 1).catch(e => console.log("Failed to delete", delUrl));
+            
+            // Clean up any accidental .jpg copies made during previous buggy version if this was a .webp
+            if (ext === ".webp" && folderPath !== "Uploads/Raw") {
+                var accidentalJpg = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + encodeURIComponent(newDesignId + ".jpg");
+                window.fetchWithRetry(accidentalJpg, { method: 'DELETE' }, 1).catch(()=>{});
+            }
         });
 
         await Promise.all(uploadPromises);
-
-        // Delete the old files
-        var deletePromises = folders.map(folderUrl => {
-            var delUrl;
-            if (folderUrl === "Uploads/Raw") {
-                delUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/Uploads%2FRaw%2F" + encodeURIComponent(oldDesignId + ".jpg");
-            } else {
-                var cleanFolder = String(folderUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                delUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + encodeURIComponent(oldDesignId + ".jpg");
-            }
-            return window.fetchWithRetry(delUrl, { method: 'DELETE' }, 1).catch(e => console.log("Failed to delete old file:", delUrl, e));
-        });
-
-        await Promise.all(deletePromises);
 
         var curStock = p.stock && p.stock[oldDesignId] !== undefined ? p.stock[oldDesignId] : 999;
         
