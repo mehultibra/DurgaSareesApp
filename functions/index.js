@@ -274,3 +274,50 @@ exports.syncFromExcel = functions.https.onRequest(async (req, res) => {
     }
 });
 
+exports.cleanupDuplicateJpgs = functions.https.onRequest(async (req, res) => {
+    const admin = require('firebase-admin');
+    if (admin.apps.length === 0) admin.initializeApp();
+
+    try {
+        const bucket = admin.storage().bucket();
+        const [files] = await bucket.getFiles();
+        
+        const jpgFiles = files.filter(file => {
+            const name = file.name;
+            return (name.includes('/Grid/') || name.includes('/Zoom/')) && name.toLowerCase().endsWith('.jpg');
+        });
+
+        const webpFiles = new Set(files.filter(file => {
+            const name = file.name;
+            return (name.includes('/Grid/') || name.includes('/Zoom/')) && name.toLowerCase().endsWith('.webp');
+        }).map(file => file.name));
+
+        const deletedFiles = [];
+        const ignoredFiles = [];
+
+        // Run deletions in batches of 10 to avoid hitting API rate limits
+        for (let i = 0; i < jpgFiles.length; i += 10) {
+            const batch = jpgFiles.slice(i, i + 10);
+            await Promise.all(batch.map(async (file) => {
+                const webpName = file.name.replace(/\.jpg$/i, '.webp');
+                if (webpFiles.has(webpName)) {
+                    await file.delete();
+                    deletedFiles.push(file.name);
+                } else {
+                    ignoredFiles.push(file.name);
+                }
+            }));
+        }
+
+        res.json({
+            success: true,
+            message: `Cleanup Complete. Deleted ${deletedFiles.length} duplicate JPGs. Ignored ${ignoredFiles.length} solo JPGs.`,
+            deletedFiles: deletedFiles,
+            ignoredFiles: ignoredFiles
+        });
+    } catch (error) {
+        console.error("Cleanup Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
