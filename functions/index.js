@@ -284,12 +284,12 @@ exports.cleanupDuplicateJpgs = functions.https.onRequest(async (req, res) => {
         
         const jpgFiles = files.filter(file => {
             const name = file.name;
-            return (name.includes('/Grid/') || name.includes('/Zoom/')) && name.toLowerCase().endsWith('.jpg');
+            return (name.includes('Grid/') || name.includes('Zoom/')) && name.toLowerCase().endsWith('.jpg');
         });
 
         const webpFiles = new Set(files.filter(file => {
             const name = file.name;
-            return (name.includes('/Grid/') || name.includes('/Zoom/')) && name.toLowerCase().endsWith('.webp');
+            return (name.includes('Grid/') || name.includes('Zoom/')) && name.toLowerCase().endsWith('.webp');
         }).map(file => file.name));
 
         const deletedFiles = [];
