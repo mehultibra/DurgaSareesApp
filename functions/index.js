@@ -80,38 +80,51 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         const file = bucket.file(filePath);
         const [buffer] = await file.download();
 
+        const isBypass = filename.includes('___BYPASS');
+
+        const eagerTransformations = isBypass ? [
+            // Grid (360px WebP)
+            { transformation: [{ width: 360, crop: 'scale' }, { fetch_format: 'webp' }] },
+            // Zoom (1080px WebP)
+            { transformation: [{ width: 1080, crop: 'scale' }, { fetch_format: 'webp' }] },
+            // Master (Original JPG)
+            { transformation: [{ fetch_format: 'jpg' }] },
+            // Share (1024px JPG)
+            { transformation: [{ width: 1024, crop: 'scale' }, { fetch_format: 'jpg' }] }
+        ] : [
+            { transformation: [
+                { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, 
+                { width: 1080, crop: 'scale' }, 
+                { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
+                { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
+                { width: 360, crop: 'scale' },
+                { fetch_format: 'webp' }
+            ] },
+            { transformation: [
+                { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, 
+                { width: 1080, crop: 'scale' }, 
+                { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
+                { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
+                { fetch_format: 'webp' }
+            ] },
+            { transformation: [{ effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, { fetch_format: 'jpg' }] },
+            { transformation: [
+                { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, 
+                { width: 1080, crop: 'scale' }, 
+                { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
+                { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
+                { width: 1024, crop: 'scale' },
+                { fetch_format: 'jpg' }
+            ] }
+        ];
+
         const uploadResult = await new Promise((resolve, reject) => {
             const uploadStream = cloudinary.uploader.upload_stream({
                 folder: 'DurgaSareesTemp',
-                eager: [
-                    { transformation: [
-                        { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, 
-                        { width: 1080, crop: 'scale' }, 
-                        { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
-                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
-                        { width: 360, crop: 'scale' },
-                        { fetch_format: 'webp' }
-                    ] },
-                    { transformation: [
-                        { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, 
-                        { width: 1080, crop: 'scale' }, 
-                        { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
-                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
-                        { fetch_format: 'webp' }
-                    ] },
-                    { transformation: [{ effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, { fetch_format: 'jpg' }] },
-                    { transformation: [
-                        { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, 
-                        { width: 1080, crop: 'scale' }, 
-                        { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                        { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
-                        { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
-                        { width: 1024, crop: 'scale' },
-                        { fetch_format: 'jpg' }
-                    ] }
-                ],
+                eager: eagerTransformations,
                 eager_async: false // Wait for transformations to complete
             }, (error, result) => {
                 if (error) reject(error);
