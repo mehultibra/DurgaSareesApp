@@ -92,33 +92,39 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             // Share (1024px JPG)
             { transformation: [{ width: 1024, crop: 'scale' }, { fetch_format: 'jpg' }] }
         ] : [
-            { transformation: [
-                { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, 
-                { width: 1080, crop: 'scale' }, 
-                { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
-                { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
-                { width: 360, crop: 'scale' },
-                { fetch_format: 'webp' }
-            ] },
-            { transformation: [
-                { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, 
-                { width: 1080, crop: 'scale' }, 
-                { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
-                { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
-                { fetch_format: 'webp' }
-            ] },
+            {
+                transformation: [
+                    { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' },
+                    { width: 1080, crop: 'scale' },
+                    { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                    { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
+                    { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
+                    { width: 360, crop: 'scale' },
+                    { fetch_format: 'webp' }
+                ]
+            },
+            {
+                transformation: [
+                    { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' },
+                    { width: 1080, crop: 'scale' },
+                    { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                    { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
+                    { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
+                    { fetch_format: 'webp' }
+                ]
+            },
             { transformation: [{ effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, { fetch_format: 'jpg' }] },
-            { transformation: [
-                { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' }, 
-                { width: 1080, crop: 'scale' }, 
-                { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
-                { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
-                { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
-                { width: 1024, crop: 'scale' },
-                { fetch_format: 'jpg' }
-            ] }
+            {
+                transformation: [
+                    { effect: 'improve' }, { effect: 'brightness:15' }, { effect: 'saturation:20' }, { effect: 'contrast:10' }, { effect: 'sharpen:50' },
+                    { width: 1080, crop: 'scale' },
+                    { overlay: 'durga_watermark.png', effect: 'make_transparent:10', width: 0.21, flags: 'relative', gravity: 'north_west', x: 20, y: 20 },
+                    { overlay: { font_family: 'Playfair Display', font_size: 50, font_weight: 'bold', text: productName }, gravity: 'north', y: 60, color: 'rgb:13888F' },
+                    { overlay: { font_family: 'Arial', font_size: 34, font_weight: 'bold', text: 'Vol ' + formattedDesignId }, gravity: 'north', y: 140, color: 'rgb:13888F' },
+                    { width: 1024, crop: 'scale' },
+                    { fetch_format: 'jpg' }
+                ]
+            }
         ];
 
         const uploadResult = await new Promise((resolve, reject) => {
@@ -253,7 +259,7 @@ exports.syncFromExcel = functions.https.onRequest(async (req, res) => {
 
         const db = admin.firestore();
         const snapshot = await db.collection('Products').where('name', '==', data.productName).get();
-        
+
         if (snapshot.empty) {
             return res.status(404).json({ error: 'Product not found' });
         }
@@ -262,7 +268,7 @@ exports.syncFromExcel = functions.https.onRequest(async (req, res) => {
         const updates = {};
         if (data.price !== undefined) updates.price = parseInt(data.price) || 0;
         if (data.packing !== undefined) updates.packing = String(data.packing);
-        
+
         if (Object.keys(updates).length > 0) {
             await doc.ref.update(updates);
         }
@@ -281,15 +287,17 @@ exports.cleanupDuplicateJpgs = functions.https.onRequest(async (req, res) => {
     try {
         const bucket = admin.storage().bucket();
         const [files] = await bucket.getFiles();
-        
+
         const jpgFiles = files.filter(file => {
             const name = file.name;
-            return (name.includes('Grid/') || name.includes('Zoom/')) && name.toLowerCase().endsWith('.jpg');
+            const isGridOrZoom = name.includes('/Grid/') || name.includes('/Zoom/') || name.startsWith('Grid/') || name.startsWith('Zoom/');
+            return isGridOrZoom && name.toLowerCase().endsWith('.jpg');
         });
 
         const webpFiles = new Set(files.filter(file => {
             const name = file.name;
-            return (name.includes('Grid/') || name.includes('Zoom/')) && name.toLowerCase().endsWith('.webp');
+            const isGridOrZoom = name.includes('/Grid/') || name.includes('/Zoom/') || name.startsWith('Grid/') || name.startsWith('Zoom/');
+            return isGridOrZoom && name.toLowerCase().endsWith('.webp');
         }).map(file => file.name));
 
         const deletedFiles = [];
