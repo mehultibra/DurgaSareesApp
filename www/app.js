@@ -1771,7 +1771,8 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                     url: zoomUrl,
                     isVideo: isVideo,
                     isImage: isImage,
-                    isCoverImg: isCoverImg
+                    isCoverImg: isCoverImg,
+                    timeCreated: item.timeCreated
                 });
             }
         });
@@ -1782,13 +1783,22 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             validFiles = validFiles.filter(f => !f.isCoverImg);
         }
 
-        // 🛡️ SORT LATEST DESIGNS FIRST (DESCENDING NUMERICAL) WITH HIGHEST STOCK FIRST
+        // 🛡️ SORT LATEST DESIGNS FIRST WITH HIGHEST STOCK FIRST
         validFiles.sort((a, b) => {
             var stockA = p.stock && p.stock[a.name] !== undefined ? p.stock[a.name] : 999;
             var stockB = p.stock && p.stock[b.name] !== undefined ? p.stock[b.name] : 999;
             if (stockA !== stockB) {
                 return stockB - stockA; // Highest stock first
             }
+            
+            // Sort by newly added images first
+            var timeA = a.timeCreated ? new Date(a.timeCreated).getTime() : 0;
+            var timeB = b.timeCreated ? new Date(b.timeCreated).getTime() : 0;
+            
+            if (timeA !== timeB) {
+                return timeB - timeA; // Newest first
+            }
+            
             var numA = parseInt(a.name.replace(/\D/g, ''));
             var numB = parseInt(b.name.replace(/\D/g, ''));
             if (isNaN(numA)) numA = 0;
@@ -4258,6 +4268,10 @@ function saveCartInlineEdit(productId, closeEdit = true) {
                 delete cart[productId + "_" + item.design];
             } else {
                 item.qty = newQty;
+                // Clone the product object if admin mode is OFF to prevent mutating the global catalog
+                if (!(window.isSuperAdmin && window.isAdminMode)) {
+                    item.p = Object.assign({}, item.p);
+                }
                 item.p.price = newRate;
                 item.p.packing = newPacking;
                 cart[productId + "_" + item.design] = item;
@@ -4265,18 +4279,22 @@ function saveCartInlineEdit(productId, closeEdit = true) {
         }
     });
 
-    // Save to edited memory so changes persist across cart wipes
-    if (items.length > 0) {
-        var edited = {};
-        try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
-        edited[items[0].p.name] = { price: newRate, packing: newPacking };
-        localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
+    if (window.isSuperAdmin && window.isAdminMode) {
+        // Save to edited memory so changes persist across cart wipes
+        if (items.length > 0) {
+            var edited = {};
+            try { edited = JSON.parse(localStorage.getItem("dsEditedProducts")) || {}; } catch (e) { }
+            edited[items[0].p.name] = { price: newRate, packing: newPacking };
+            localStorage.setItem("dsEditedProducts", JSON.stringify(edited));
+        }
     }
 
     var matchP = allProducts.find(x => x.id === productId);
-    if (matchP) {
-        matchP.price = newRate;
-        matchP.packing = newPacking;
+    if (window.isSuperAdmin && window.isAdminMode) {
+        if (matchP) {
+            matchP.price = newRate;
+            matchP.packing = newPacking;
+        }
     }
 
     localStorage.setItem("dsCart", JSON.stringify(cart));
@@ -4286,7 +4304,7 @@ function saveCartInlineEdit(productId, closeEdit = true) {
     openCart(); // Re-render to show updated static text
 
     // 🚀 NEW: 2-WAY SYNC - FIREBASE & EXCEL WEBHOOK
-    if (window.isSuperAdmin && matchP && matchP.docId) {
+    if (window.isSuperAdmin && window.isAdminMode && matchP && matchP.docId) {
         showDevLog("Syncing: " + matchP.name + " -> Rate: " + newRate + " Pack: " + newPacking, false);
         // Firebase Live DB Update
         var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
@@ -4946,8 +4964,7 @@ window.processCameraOutbox = async function () {
                     window.logAppError('Upload Success', `File: ${filename} | Net Time: ${uploadDuration}s | Total Journey: ${totalJourney}s`);
                     console.log(`✅ Successfully uploaded: ${filename} in ${uploadDuration}s`);
                 } else {
-                        throw new Error(`Status ${uploadRes.status}`);
-                    }
+                    throw new Error(`Status ${uploadRes.status}`);
                 }
             } catch (err) {
                 window.logAppError('Outbox Uploader', 'Failed to upload ' + filename + ': ' + err.message);

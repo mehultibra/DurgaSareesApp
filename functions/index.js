@@ -214,6 +214,10 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg', metadata: { source: '888' } } });
 
         console.log(`Success: Generated ${destFileName} at ${finalGridUrl} and ${finalZoomUrl}. Master saved to ${masterInputPath}`);
+        
+        // Touch the product document to bump its updateTime so it sorts to the top of the main grid
+        await productRef.update({ latestImageAddedAt: admin.firestore.FieldValue.serverTimestamp() }).catch(e => console.error("Failed to bump updateTime:", e));
+
         // Delete the staging file since processing succeeded
         await file.delete();
         console.log(`Cleaned up temp staging file: ${filePath}`);
