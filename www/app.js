@@ -4778,6 +4778,19 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
     if (element) element.style.backgroundColor = '#fff9c4'; // Yellow (Saving)
     try {
         var newVal = overrideVal !== null ? overrideVal : (parseInt(element.value) || 0);
+
+        // --- AUTO-HEALING: ORPHAN OVERRIDES ---
+        if (dId !== 'FULLY_PACKED') {
+            if (newVal > 0) {
+                setTimeout(() => window.updateAdminStock(null, docId, pid, 'FULLY_PACKED', 0), 100);
+            } else if (newVal === 0) {
+                var activeInputs = document.querySelectorAll('.admin-stock-input');
+                if (activeInputs.length === 1) {
+                    setTimeout(() => window.updateAdminStock(null, docId, pid, 'FULLY_PACKED', 1), 100);
+                }
+            }
+        }
+
         var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock.%60" + dId + "%60";
         var payload = {
             fields: {
