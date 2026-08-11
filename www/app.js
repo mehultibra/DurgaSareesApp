@@ -1136,13 +1136,17 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                             imgElement.dataset.tempBlobUrl = zObj;
                             imgElement.src = zObj;
                         } else {
-                            coverExistsMap[gridPath] = false;
-                            saveCoverExistsMap();
+                            if (zRes.status === 404) {
+                                coverExistsMap[gridPath] = false;
+                                saveCoverExistsMap();
+                            }
                             tryToLoadLatestReadyDesign();
                         }
                     } catch (e) {
-                        coverExistsMap[gridPath] = false;
-                        saveCoverExistsMap();
+                        if (e && e.message && e.message.includes("HTTP 404")) {
+                            coverExistsMap[gridPath] = false;
+                            saveCoverExistsMap();
+                        }
                         tryToLoadLatestReadyDesign();
                     }
                 }
