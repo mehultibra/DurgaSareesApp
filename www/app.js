@@ -581,13 +581,18 @@ function initApp() {
                 }
                 var tStock = 999;
                 if (f.stock) {
-                    var designKeys = Object.keys(stockMap).filter(k => k !== 'FULLY_PACKED');
-                    var designSum = designKeys.reduce((a, k) => a + stockMap[k], 0);
-
-                    if (designKeys.length > 0) {
+                    var actualDesignKeys = Object.keys(stockMap).filter(k => k !== 'FULLY_PACKED' && k !== 'DIRECT' && k !== 'Cover');
+                    if (actualDesignKeys.length > 0) {
+                        var designSum = actualDesignKeys.reduce((a, k) => a + stockMap[k], 0);
                         tStock = designSum > 0 ? designSum : 0;
                     } else {
-                        tStock = stockMap['FULLY_PACKED'] === 1 ? 0 : 999;
+                        var baseKeys = Object.keys(stockMap).filter(k => k === 'DIRECT' || k === 'Cover');
+                        if (baseKeys.length > 0) {
+                             var baseSum = baseKeys.reduce((a, k) => a + stockMap[k], 0);
+                             tStock = baseSum > 0 ? baseSum : 0;
+                        } else {
+                             tStock = stockMap['FULLY_PACKED'] === 1 ? 0 : 999;
+                        }
                     }
                 }
 
@@ -4793,13 +4798,18 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
                 if (!p.stock) p.stock = {};
                 p.stock[dId] = newVal;
 
-                var designKeys = Object.keys(p.stock).filter(k => k !== 'FULLY_PACKED');
-                var designSum = designKeys.reduce((a, k) => a + p.stock[k], 0);
-
-                if (designKeys.length > 0) {
+                var actualDesignKeys = Object.keys(p.stock).filter(k => k !== 'FULLY_PACKED' && k !== 'DIRECT' && k !== 'Cover');
+                if (actualDesignKeys.length > 0) {
+                    var designSum = actualDesignKeys.reduce((a, k) => a + p.stock[k], 0);
                     p.totalStock = designSum > 0 ? designSum : 0;
                 } else {
-                    p.totalStock = p.stock['FULLY_PACKED'] === 1 ? 0 : 999;
+                    var baseKeys = Object.keys(p.stock).filter(k => k === 'DIRECT' || k === 'Cover');
+                    if (baseKeys.length > 0) {
+                         var baseSum = baseKeys.reduce((a, k) => a + p.stock[k], 0);
+                         p.totalStock = baseSum > 0 ? baseSum : 0;
+                    } else {
+                         p.totalStock = p.stock['FULLY_PACKED'] === 1 ? 0 : 999;
+                    }
                 }
             }
             if (element) {
