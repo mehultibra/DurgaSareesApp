@@ -1942,6 +1942,75 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             if (oldNames !== newNames) {
                 processFolderItems(items);
             }
+
+            // 🚀 JIT PRIORITY SYNC & CLEANUP (Runs asynchronously in background)
+            (async function() {
+                var folderFiles = items.map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
+                                       .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+                if (folderFiles.length === 0) return;
+
+                var bucket = "durga-sarees.firebasestorage.app";
+                var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+                var cleanGrid = decodeURIComponent(String(p.gridUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
+                
+                var encZoomPath = "";
+                if (p.zoomUrl && String(p.zoomUrl).toLowerCase() !== "none" && p.zoomUrl !== p.gridUrl) {
+                    var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                    encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+                }
+
+                // 1. Stale Cleanup
+                var designKeys = {};
+                folderFiles.forEach(f => {
+                    var gridKey = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
+                    designKeys[gridKey] = gridKey;
+                    if (encZoomPath) {
+                        var zoomKey = fbBase + encZoomPath + "%2F" + encodeURIComponent(f) + "?alt=media";
+                        designKeys[zoomKey] = zoomKey;
+                    }
+                });
+
+                var prefixesToClean = [fbBase + encGridPath + "%2F"];
+                if (encZoomPath) prefixesToClean.push(fbBase + encZoomPath + "%2F");
+                for (var prefix of prefixesToClean) {
+                    var cachedKeys = await listDBKeysForPrefix(prefix);
+                    for (var ck of cachedKeys) {
+                        if (!designKeys[ck]) {
+                            await deleteImageFromDB(ck);
+                            console.log("[JIT] Deleted stale cache:", ck);
+                        }
+                    }
+                }
+
+                // 2. Zoom Stock Enforcer
+                if (encZoomPath) {
+                    for (var fname of folderFiles) {
+                        var isCover = (fname === folderFiles[0]);
+                        var stockKey = isCover ? 'Cover' : fname;
+                        var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
+                        var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                        var existing = await checkImageInDB(zoomImgUrl);
+
+                        if (curStock > 0) {
+                            if (!existing) {
+                                try {
+                                    var zRes = await window.fetchWithRetry(zoomImgUrl, {}, 2);
+                                    if (zRes.ok) {
+                                        var zBlob = await zRes.blob();
+                                        if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
+                                    }
+                                } catch (e) {}
+                            }
+                        } else {
+                            if (existing) {
+                                await deleteImageFromDB(zoomImgUrl);
+                                console.log("[JIT] Deleted out-of-stock zoom cache:", fname);
+                            }
+                        }
+                    }
+                }
+            })();
         })
         .catch(err => {
             console.warn("Background folder list load failed", err);
@@ -3242,61 +3311,49 @@ async function syncImages(silent = false) {
                     // Designs = each file, key stored as full Firebase URL
                     var coverFile = folderFiles[0];
                     var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-                    var designKeys = {}; // key → url map for all files
+                    
+                    var encZoomPath = "";
+                    if (p.zoomUrl && String(p.zoomUrl).toLowerCase() !== "none" && p.zoomUrl !== p.gridUrl) {
+                        var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                        encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+                    }
+
+                    var designKeys = {}; 
                     folderFiles.forEach(f => {
-                        var key = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
-                        designKeys[key] = key;
+                        var gridKey = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
+                        designKeys[gridKey] = gridKey;
+                        if (encZoomPath) {
+                            var zoomKey = fbBase + encZoomPath + "%2F" + encodeURIComponent(f) + "?alt=media";
+                            designKeys[zoomKey] = zoomKey;
+                        }
                     });
 
-                    // ── 2. Cleanup: Delete from DB keys NOT in Firebase anymore ──
-                    // Scan DB for all keys that belong to this product's folder
-                    var dbKeyPrefix = fbBase + encGridPath + "%2F";
-                    var cachedKeys = await listDBKeysForPrefix(dbKeyPrefix);
-                    for (var ck of cachedKeys) {
-                        if (!designKeys[ck]) {
-                            await deleteImageFromDB(ck);
-                            console.log("[SYNC] Deleted stale cache:", ck);
+                    // ── 2. Cleanup: Delete from DB keys NOT in Firebase anymore (Grid + Zoom) ──
+                    var prefixesToClean = [fbBase + encGridPath + "%2F"];
+                    if (encZoomPath) prefixesToClean.push(fbBase + encZoomPath + "%2F");
+                    
+                    for (var prefix of prefixesToClean) {
+                        var cachedKeys = await listDBKeysForPrefix(prefix);
+                        for (var ck of cachedKeys) {
+                            if (!designKeys[ck]) {
+                                await deleteImageFromDB(ck);
+                                console.log("[SYNC] Deleted stale cache:", ck);
+                            }
                         }
                     }
 
-                    // ——— Helper to Fetch Zoom Images IF In Stock ———
-                    async function fetchZoomIfInStock(fname, isCover) {
-                        var stockKey = isCover ? 'Cover' : fname;
-                        var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
-                        if (curStock > 0 && p.zoomUrl && String(p.zoomUrl).toLowerCase() !== "none" && p.zoomUrl !== p.gridUrl) {
-                            var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
-                            var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
-                            var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                            
-                            var existing = await checkImageInDB(zoomImgUrl);
-                            if (existing) return;
-                            
-                            try {
-                                const ctrlZ = new AbortController();
-                                const tidZ = setTimeout(() => ctrlZ.abort(), 30000);
-                                var zRes = await window.fetchWithRetry(zoomImgUrl, { signal: ctrlZ.signal }, 3);
-                                clearTimeout(tidZ);
-                                if (zRes.ok) {
-                                    var zBlob = await zRes.blob();
-                                    if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
-                                }
-                            } catch (e) {}
-                        }
-                    }
+                    // Save folder files for Phase 2
+                    p._folderFiles = folderFiles;
 
-                    // ——— 3. Download the COVER file —————————————————————————————————
-                    var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
+                    // ——— 3. Download the COVER file (GRID ONLY) —————————————————————————————————
                     var existingCover = await checkImageInDB(p.gridUrl);
 
                     if (existingCover) {
                         downloaded = true;
-                        // Also ensure zoom cover is synced if stock > 0
-                        await fetchZoomIfInStock(coverFile, true);
                     } else {
                         try {
                             const ctrl2 = new AbortController();
                             const tid2 = setTimeout(() => ctrl2.abort(), 30000);
-                            // 🛡️ CRITICAL FIX: Bulletproof retry for cover image
                             var coverRes = await window.fetchWithRetry(coverUrl, { signal: ctrl2.signal }, 3);
                             clearTimeout(tid2);
 
@@ -3307,10 +3364,9 @@ async function syncImages(silent = false) {
                                     if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', coverFile + " | " + p.name);
                                     downloaded = false;
                                 } else {
-                                    await saveImageToDB(p.gridUrl, coverBlob); // key = folder path string
-                                    await saveImageToDB(coverUrl, coverBlob);  // 🛡️ CRITICAL: Also save under its full URL!
+                                    await saveImageToDB(p.gridUrl, coverBlob); 
+                                    await saveImageToDB(coverUrl, coverBlob); 
                                     downloaded = true;
-                                    await fetchZoomIfInStock(coverFile, true);
                                 }
                             } else {
                                 lastFailReason = "Cover HTTP " + coverRes.status;
@@ -3320,7 +3376,7 @@ async function syncImages(silent = false) {
                         }
                     }
 
-                    // ——— 4. Download remaining design files (FAST PARALLEL BATCHING) ——————————————————
+                    // ——— 4. Download remaining design files (FAST PARALLEL BATCHING - GRID ONLY) ——————————————————
                     if (downloaded) {
                         var innerBatchSize = 2; // Download 2 inner images concurrently!
                         var remainingFiles = folderFiles.filter(f => f !== coverFile);
@@ -3334,7 +3390,6 @@ async function syncImages(silent = false) {
                                     try {
                                         const ctrl3 = new AbortController();
                                         const tid3 = setTimeout(() => ctrl3.abort(), 30000);
-                                        // 🛡️ CRITICAL FIX: Bulletproof retry for inner images
                                         var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
                                         clearTimeout(tid3);
                                         if (dRes.ok) {
@@ -3353,9 +3408,6 @@ async function syncImages(silent = false) {
                                         console.warn("[SYNC] Fast design fetch failed:", fname, e.message); if (typeof window.logAppError === 'function') window.logAppError('Sync Inner Image', e.message + " | " + p.name);
                                     }
                                 }
-                                
-                                // Finally, sync the Zoom Image if in stock!
-                                await fetchZoomIfInStock(fname, false);
                             }));
                         }
                     }
@@ -3386,14 +3438,61 @@ async function syncImages(silent = false) {
 
             if (bootMsg) bootMsg.innerText = "Smart syncing " + count + " / " + total + "...";
 
-            if (silent) {
-                await new Promise(resolve => setTimeout(resolve, 350));
-            }
+            // Yield the main thread to keep UI smooth
+            await new Promise(resolve => setTimeout(resolve, 50));
         }
 
         if (bootScreen && !silent) bootScreen.style.display = 'none';
         window.isSyncing = false;
         if (syncIcon) syncIcon.classList.remove('fa-spin');
+
+        // 🚀 PHASE 2: SILENT BACKGROUND ZOOM SYNC & OUT-OF-STOCK CLEANUP
+        (async function() {
+            var zBatchSize = 10;
+            for (var i = 0; i < productsToSync.length; i += zBatchSize) {
+                 var batch = productsToSync.slice(i, i + zBatchSize);
+                 await Promise.all(batch.map(async (p) => {
+                     if (!p._folderFiles || p._folderFiles.length === 0) return;
+                     if (!p.zoomUrl || String(p.zoomUrl).toLowerCase() === "none" || p.zoomUrl === p.gridUrl) return;
+
+                     var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                     var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+                     
+                     async function handleZoomImage(fname, isCover) {
+                         var stockKey = isCover ? 'Cover' : fname;
+                         var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
+                         var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                         var existing = await checkImageInDB(zoomImgUrl);
+
+                         if (curStock > 0) {
+                             if (existing) return;
+                             try {
+                                 var zRes = await window.fetchWithRetry(zoomImgUrl, {}, 2);
+                                 if (zRes.ok) {
+                                     var zBlob = await zRes.blob();
+                                     if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
+                                 }
+                             } catch (e) {}
+                         } else {
+                             // OUT OF STOCK - DELETE ZOOM
+                             if (existing) {
+                                 await deleteImageFromDB(zoomImgUrl);
+                                 console.log("[SYNC Phase 2] Deleted out-of-stock zoom cache:", fname);
+                             }
+                         }
+                     }
+
+                     var coverFile = p._folderFiles[0];
+                     await handleZoomImage(coverFile, true);
+                     var remainingFiles = p._folderFiles.filter(f => f !== coverFile);
+                     for (var fname of remainingFiles) {
+                         await handleZoomImage(fname, false);
+                     }
+                 }));
+                 // Yield the main thread to keep UI smooth
+                 await new Promise(resolve => setTimeout(resolve, 50));
+            }
+        })();
 
         if (silent) {
             // Background sync update: update main screen layout with newly localized grid imagery
