@@ -1918,19 +1918,15 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             });
         }
         
-        if (cachedItems.length === 0) {
-            // Only add a cover if we literally have NO designs to show, so the fallback kicks in
-            var fallbackFile = window.dsFallbackMap ? window.dsFallbackMap[p.gridUrl] : null;
-            if (fallbackFile && fallbackFile.toLowerCase() !== "cover.webp" && fallbackFile.toLowerCase() !== "cover1.webp") {
-                cachedItems.push({ name: prefix + fallbackFile });
-            } else {
-                cachedItems.push({ name: prefix + "cover.webp" });
-            }
-        }
     }
 
-    // Instantly process and render cards from local memory!
-    processFolderItems(cachedItems);
+    if (cachedItems && cachedItems.length > 0) {
+        // Instantly process and render cards from local memory!
+        processFolderItems(cachedItems);
+    } else {
+        var deck = document.getElementById('swipeDeck');
+        if (deck) deck.innerHTML = '<div style="width:100%; text-align:center; padding: 60px 20px; color: var(--text-muted, #888); font-size: 14px;"><i class="fas fa-spinner fa-spin" style="margin-right: 8px;"></i> Loading designs...</div>';
+    }
 
     // ALWAYS fetch from network to sync any newly uploaded admin images
     fetch(listUrl + "&_t=" + new Date().getTime(), { cache: 'no-store' })
