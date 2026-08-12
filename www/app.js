@@ -621,7 +621,7 @@ function initApp() {
                     cut: f.cut ? f.cut.stringValue : "",
                     pallu: f.pallu ? f.pallu.stringValue : "",
                     blouse: f.blouse ? f.blouse.stringValue : "",
-                    updateTime: d.updateTime || d.createTime || ""
+                    updateTime: f.latestImageAddedAt ? (f.latestImageAddedAt.timestampValue || f.latestImageAddedAt.stringValue) : (d.createTime || d.updateTime || "")
                 });
                 validCounter++;
             }
@@ -668,9 +668,9 @@ function initApp() {
     // Show boot screen only if we have nothing cached
     if (!loadedFromCache && bootScreen) bootScreen.style.display = 'flex';
 
-    // ── STEP 2: Fetch fresh data in background with 5s timeout ────────────
+    // ── STEP 2: Fetch fresh data in background with 10s timeout ────────────
     var fetchPromise = window.fetchWithRetry(FIRESTORE_PRODUCTS_URL, {}, 2);
-    var timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Boot timeout")), 5000));
+    var timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Boot timeout")), 10000));
 
     Promise.race([fetchPromise, timeoutPromise])
         .then(res => res.json())
@@ -1897,9 +1897,9 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         cachedItems = [];
         var added = {};
 
-        if (p.stock && Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'Cover').length > 0) {
+        if (p.stock && Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0) {
             for (var k in p.stock) {
-                if (k === "DIRECT" || k === "Cover") continue;
+                if (k === "DIRECT" || k === "FULLY_PACKED" || k.toLowerCase().startsWith('cover')) continue;
                 var fileName = k.includes('.') ? k : k + ".webp";
                 if (!added[fileName]) {
                     cachedItems.push({ name: prefix + fileName });
@@ -1909,7 +1909,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         } else if (p.ready) {
             var readyArr = String(p.ready).split(',').map(d => d.trim()).filter(d => d);
             readyArr.forEach(k => {
-                if (k === "DIRECT" || k === "Cover") return;
+                if (k === "DIRECT" || k === "FULLY_PACKED" || k.toLowerCase().startsWith('cover')) return;
                 var fileName = k.includes('.') ? k : k + ".webp";
                 if (!added[fileName]) {
                     cachedItems.push({ name: prefix + fileName });
