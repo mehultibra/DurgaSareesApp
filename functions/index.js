@@ -333,3 +333,54 @@ exports.cleanupDuplicateJpgs = functions.https.onRequest(async (req, res) => {
     }
 });
 
+exports.getMasterCache = functions.https.onRequest(async (req, res) => {
+    // Enable CORS
+    res.set('Access-Control-Allow-Origin', '*');
+    if (req.method === 'OPTIONS') {
+        res.set('Access-Control-Allow-Methods', 'GET');
+        return res.status(204).send('');
+    }
+
+    const admin = require('firebase-admin');
+    if (admin.apps.length === 0) {
+        admin.initializeApp();
+    }
+    const bucket = admin.storage().bucket();
+    
+    try {
+        const [files] = await bucket.getFiles();
+        const cache = {};
+        
+        files.forEach(file => {
+            const path = file.name;
+            // Only process Grid and App_Grid images
+            if (!path.startsWith('Grid/') && !path.startsWith('App_Grid/')) return;
+            if (!path.endsWith('.webp') && !path.endsWith('.jpg') && !path.endsWith('.png')) return;
+            
+            const parts = path.split('/');
+            const filename = parts.pop();
+            const folderPath = parts.join('/');
+            
+            // Remove extension to save space in the cache string (e.g., '01.webp' -> '01')
+            const basename = filename.substring(0, filename.lastIndexOf('.'));
+            
+            if (!cache[folderPath]) {
+                cache[folderPath] = [];
+            }
+            cache[folderPath].push(basename);
+        });
+
+        const compressedCache = {};
+        for (const folder in cache) {
+            compressedCache[folder] = cache[folder].join(',');
+        }
+
+        // Cache heavily on the CDN for 15 minutes (900 seconds)
+        res.set('Cache-Control', 'public, max-age=900, s-maxage=900');
+        res.json({ success: true, cache: compressedCache });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+

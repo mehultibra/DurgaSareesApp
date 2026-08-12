@@ -20,6 +20,12 @@ window.dsMissingImage = "data:image/svg+xml;utf8," + encodeURIComponent(`
 </svg>
 `);
 
+window.dsMasterCache = {};
+try {
+    var storedMaster = localStorage.getItem("dsMasterCache");
+    if (storedMaster) window.dsMasterCache = JSON.parse(storedMaster);
+} catch(e) {}
+
 // --- ERROR LOGGING ---
 window.globalErrorLog = JSON.parse(localStorage.getItem('dsGlobalErrors') || '[]');
 window.logAppError = function (context, message) {
@@ -669,6 +675,17 @@ function initApp() {
     if (!loadedFromCache && bootScreen) bootScreen.style.display = 'flex';
 
     // ── STEP 2: Fetch fresh data in background with 10s timeout ────────────
+    fetch("https://us-central1-durga-sarees.cloudfunctions.net/getMasterCache")
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.success && data.cache) {
+                try {
+                    localStorage.setItem("dsMasterCache", JSON.stringify(data.cache));
+                    window.dsMasterCache = data.cache;
+                } catch(e) {}
+            }
+        }).catch(e => console.log("Master cache fetch failed:", e));
+
     var fetchPromise = window.fetchWithRetry(FIRESTORE_PRODUCTS_URL, {}, 2);
     var timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Boot timeout")), 10000));
 
@@ -1897,7 +1914,19 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         cachedItems = [];
         var added = {};
 
-        if (p.stock && Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0) {
+        var masterCacheString = window.dsMasterCache ? window.dsMasterCache[cleanGridPath] : null;
+
+        if (masterCacheString) {
+            var readyArr = String(masterCacheString).split(',').map(d => d.trim()).filter(d => d);
+            readyArr.forEach(k => {
+                if (k === "DIRECT" || k === "FULLY_PACKED" || k.toLowerCase().startsWith('cover')) return;
+                var fileName = k.includes('.') ? k : k + ".webp";
+                if (!added[fileName]) {
+                    cachedItems.push({ name: prefix + fileName });
+                    added[fileName] = true;
+                }
+            });
+        } else if (p.stock && Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0) {
             for (var k in p.stock) {
                 if (k === "DIRECT" || k === "FULLY_PACKED" || k.toLowerCase().startsWith('cover')) continue;
                 var fileName = k.includes('.') ? k : k + ".webp";
