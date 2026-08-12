@@ -1910,43 +1910,32 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     if (window.dsFolderCache && window.dsFolderCache[listUrl]) {
         cachedItems = window.dsFolderCache[listUrl];
     } else {
-        // FAST RENDER: Generate pseudo-items from p.stock or p.ready for instant offline rendering!
+        // FAST RENDER: Generate pseudo-items from offline sources for instant offline rendering!
         cachedItems = [];
         var added = {};
+
+        function pushItem(k) {
+            if (k === "DIRECT" || k === "FULLY_PACKED" || k.toLowerCase().startsWith('cover')) return;
+            var fileName = k.includes('.') ? k : k + ".webp";
+            if (!added[fileName]) {
+                cachedItems.push({ name: prefix + fileName });
+                added[fileName] = true;
+            }
+        }
+
+        function pushItemsFromString(str) {
+            String(str).split(',').map(d => d.trim()).filter(d => d).forEach(pushItem);
+        }
 
         var masterCacheString = window.dsMasterCache ? window.dsMasterCache[cleanGridPath] : null;
 
         if (masterCacheString) {
-            var readyArr = String(masterCacheString).split(',').map(d => d.trim()).filter(d => d);
-            readyArr.forEach(k => {
-                if (k === "DIRECT" || k === "FULLY_PACKED" || k.toLowerCase().startsWith('cover')) return;
-                var fileName = k.includes('.') ? k : k + ".webp";
-                if (!added[fileName]) {
-                    cachedItems.push({ name: prefix + fileName });
-                    added[fileName] = true;
-                }
-            });
+            pushItemsFromString(masterCacheString);
         } else if (p.stock && Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0) {
-            for (var k in p.stock) {
-                if (k === "DIRECT" || k === "FULLY_PACKED" || k.toLowerCase().startsWith('cover')) continue;
-                var fileName = k.includes('.') ? k : k + ".webp";
-                if (!added[fileName]) {
-                    cachedItems.push({ name: prefix + fileName });
-                    added[fileName] = true;
-                }
-            }
+            Object.keys(p.stock).forEach(pushItem);
         } else if (p.ready) {
-            var readyArr = String(p.ready).split(',').map(d => d.trim()).filter(d => d);
-            readyArr.forEach(k => {
-                if (k === "DIRECT" || k === "FULLY_PACKED" || k.toLowerCase().startsWith('cover')) return;
-                var fileName = k.includes('.') ? k : k + ".webp";
-                if (!added[fileName]) {
-                    cachedItems.push({ name: prefix + fileName });
-                    added[fileName] = true;
-                }
-            });
+            pushItemsFromString(p.ready);
         }
-        
     }
 
     if (cachedItems && cachedItems.length > 0) {
