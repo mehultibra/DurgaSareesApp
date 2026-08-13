@@ -3,7 +3,7 @@
 // ==========================================
 
 async function getActualDesignsForProduct(p, shareType) {
-    if (shareType !== 'full') return [];
+    if (shareType !== 'full' && shareType !== 'cover') return [];
     var folderPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
     if (!folderPath) return [];
     var bucket = "durga-sarees.firebasestorage.app";
@@ -28,18 +28,25 @@ async function getActualDesignsForProduct(p, shareType) {
     if (items && items.length > 0) {
         var validFiles = items.map(it => it.name.substring(it.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
         validFiles = validFiles.filter(f => !/^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
-        validFiles = validFiles.filter(f => {
-            if (p.stock && p.stock[f] === 0) return false;
-            var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
-            if (p.stock && p.stock[nameWithoutExt] === 0) return false;
-            return true;
-        });
+        
+        if (shareType === 'full') {
+            validFiles = validFiles.filter(f => {
+                if (p.stock && p.stock[f] === 0) return false;
+                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+                if (p.stock && p.stock[nameWithoutExt] === 0) return false;
+                return true;
+            });
+        }
         
         validFiles.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
         return validFiles;
     }
 
-    return (p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(d => d && (!p.stock || p.stock[d] !== 0)) : [];
+    var readyArr = (p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+    if (shareType === 'full') {
+        readyArr = readyArr.filter(d => !p.stock || p.stock[d] !== 0);
+    }
+    return readyArr;
 }
 
 const WEBSITE_BASE = "https://www.durgasarees.com";
@@ -1404,19 +1411,19 @@ function askShareTypeAsync() {
             }
         };
 
-        var btnCover = document.createElement('button');
-        btnCover.innerText = 'Product Catalouge';
-        btnCover.style.width = '100%'; btnCover.style.padding = '12px'; btnCover.style.marginBottom = '10px';
-        btnCover.style.backgroundColor = 'var(--myntra-pink)'; btnCover.style.color = '#fff';
-        btnCover.style.border = 'none'; btnCover.style.borderRadius = '6px'; btnCover.style.fontSize = '14px';
-        btnCover.onclick = function () { close('cover'); };
-
         var btnReady = document.createElement('button');
-        btnReady.innerText = 'With Ready Designs';
+        btnReady.innerText = 'Ready Designs';
         btnReady.style.width = '100%'; btnReady.style.padding = '12px'; btnReady.style.marginBottom = '10px';
-        btnReady.style.backgroundColor = '#333'; btnReady.style.color = '#fff';
+        btnReady.style.backgroundColor = 'var(--myntra-pink)'; btnReady.style.color = '#fff';
         btnReady.style.border = 'none'; btnReady.style.borderRadius = '6px'; btnReady.style.fontSize = '14px';
         btnReady.onclick = function () { close('full'); };
+
+        var btnAll = document.createElement('button');
+        btnAll.innerText = 'All designs';
+        btnAll.style.width = '100%'; btnAll.style.padding = '12px'; btnAll.style.marginBottom = '10px';
+        btnAll.style.backgroundColor = '#333'; btnAll.style.color = '#fff';
+        btnAll.style.border = 'none'; btnAll.style.borderRadius = '6px'; btnAll.style.fontSize = '14px';
+        btnAll.onclick = function () { close('cover'); };
 
         var btnCancel = document.createElement('button');
         btnCancel.innerText = 'Cancel';
@@ -1425,7 +1432,7 @@ function askShareTypeAsync() {
         btnCancel.style.border = 'none'; btnCancel.style.borderRadius = '6px'; btnCancel.style.fontSize = '14px';
         btnCancel.onclick = function () { close(null); };
 
-        box.appendChild(title); box.appendChild(btnCover); box.appendChild(btnReady); box.appendChild(btnCancel);
+        box.appendChild(title); box.appendChild(btnReady); box.appendChild(btnAll); box.appendChild(btnCancel);
         overlay.appendChild(box);
         document.body.appendChild(overlay);
 
