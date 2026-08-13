@@ -29,6 +29,19 @@ async function getActualDesignsForProduct(p, shareType) {
         var validFiles = items.map(it => it.name.substring(it.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
         validFiles = validFiles.filter(f => !/^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
         
+        // Check if there's at least one ready design
+        var hasReady = validFiles.some(f => {
+            if (p.stock && p.stock[f] === 0) return false;
+            var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+            if (p.stock && p.stock[nameWithoutExt] === 0) return false;
+            return true;
+        });
+
+        // If no ready images at all, return empty array to trigger cover-only fallback
+        if (!hasReady) {
+            return [];
+        }
+
         if (shareType === 'full') {
             validFiles = validFiles.filter(f => {
                 if (p.stock && p.stock[f] === 0) return false;
@@ -43,6 +56,13 @@ async function getActualDesignsForProduct(p, shareType) {
     }
 
     var readyArr = (p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(d => d) : [];
+    
+    // Check if there's at least one ready design in the fallback string
+    var hasReadyFallback = readyArr.some(d => !p.stock || p.stock[d] !== 0);
+    if (!hasReadyFallback) {
+        return [];
+    }
+
     if (shareType === 'full') {
         readyArr = readyArr.filter(d => !p.stock || p.stock[d] !== 0);
     }
