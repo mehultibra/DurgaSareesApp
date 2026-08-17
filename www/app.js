@@ -611,6 +611,7 @@ function initApp() {
                     cat: f.cat ? f.cat.stringValue : "Uncategorized",
                     gridUrl: f.gridUrl ? f.gridUrl.stringValue : "",
                     zoomUrl: f.zoomUrl ? f.zoomUrl.stringValue : "",
+                    coverDesignId: f.coverDesignId ? f.coverDesignId.stringValue : "",
                     mrp: f.mrp ? (f.mrp.doubleValue || f.mrp.integerValue || 0) : 0,
                     fabric: f.fabric ? f.fabric.stringValue : "",
                     packing: finalPacking,
@@ -2078,28 +2079,32 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             }
 
             if (file.isVideo) {
+                var isCover = (p.coverDesignId === file.name);
                 html += `
                 <div class="swipe-card" data-design="${file.name}" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
                     ${adminCheckboxHtml}
+                    ${window.isAdminMode ? `<i class="${isCover ? 'fas' : 'far'} fa-star" style="position:absolute; top:8px; right:8px; color:gold; font-size:18px; cursor:pointer; background:rgba(0,0,0,0.5); padding:6px; border-radius:50%; z-index:10;" onclick="event.stopPropagation(); window.promptSetAsCover('${p.docId}', '${p.id}', '${file.name}')" title="Set as Cover"></i>` : ''}
                     <video src="${file.url}" controls playsinline style="width: 100%; object-fit: cover;" onclick="event.stopPropagation()"></video>
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main); display:flex; align-items:center; gap:6px;">
                             ${file.name}
-                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.url}')" title="Rename Design"></i> <i class="fas fa-star" style="color:gold; font-size:14px; cursor:pointer; margin-left:8px;" onclick="window.promptSetAsCover('${p.docId}', '${p.id}', '${file.name}')" title="Set as Cover"></i>` : ''}
+                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.url}')" title="Rename Design"></i>` : ''}
                         </div>
                         ${qtyHtml}
                     </div>
                 </div>`;
             } else {
                 var imgId = "design_img_" + p.id + "_" + idx;
+                var isCover = (p.coverDesignId === file.name);
                 html += `
                 <div class="swipe-card" data-design="${file.name}" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
                     ${adminCheckboxHtml}
+                    ${window.isAdminMode ? `<i class="${isCover ? 'fas' : 'far'} fa-star" style="position:absolute; top:8px; right:8px; color:gold; font-size:18px; cursor:pointer; background:rgba(0,0,0,0.5); padding:6px; border-radius:50%; z-index:10;" onclick="event.stopPropagation(); window.promptSetAsCover('${p.docId}', '${p.id}', '${file.name}')" title="Set as Cover"></i>` : ''}
                     <img id="${imgId}" src="${file.gridUrl || placeholderSVG}" data-loaded-zoom="false" data-zoom-url="${file.url}">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main); display:flex; align-items:center; gap:6px;">
                             ${file.name}
-                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.gridUrl || file.url}')" title="Rename Design"></i> <i class="fas fa-star" style="color:gold; font-size:14px; cursor:pointer; margin-left:8px;" onclick="window.promptSetAsCover('${p.docId}', '${p.id}', '${file.name}')" title="Set as Cover"></i>` : ''}
+                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.gridUrl || file.url}')" title="Rename Design"></i>` : ''}
                         </div>
                         ${qtyHtml}
                     </div>
@@ -5670,3 +5675,109 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
     }
 };
 
+window.promptSetAsCover = async function(docId, pid, designId) {
+    if (!confirm("Are you sure you want to set " + designId + " as the new cover image?\n\nThis will permanently replace the current cover image!")) {
+        return;
+    }
+
+    var p = allProducts.find(x => x.docId === docId);
+    if (!p) {
+        alert("Error: Could not find product.");
+        return;
+    }
+
+    document.body.insertAdjacentHTML('beforeend', '<div id="coverLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Setting '+designId+' as Cover...</div>');
+
+    try {
+        var folders = [];
+        if (p.gridUrl && p.gridUrl.toLowerCase() !== "none") {
+            folders.push(p.gridUrl);
+            folders.push(p.gridUrl.replace(/\/?Grid\/?/i, "/Jpg/").replace(/^\//, ""));
+            folders.push(p.gridUrl.replace(/\/?Grid\/?/i, "/Input/").replace(/^\//, ""));
+        }
+        if (p.zoomUrl && p.zoomUrl.toLowerCase() !== "none") {
+            folders.push(p.zoomUrl);
+        }
+
+        folders = [...new Set(folders)];
+
+        var uploadPromises = folders.map(async (folderPath) => {
+            var cleanFolder = String(folderPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+            
+            // Try .webp first
+            var sourceFileName = encodeURIComponent(designId + ".webp");
+            var sourceFileUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + sourceFileName + "?alt=media";
+            var res = await fetch(sourceFileUrl);
+            var ext = ".webp";
+            var type = "image/webp";
+
+            if (!res.ok) {
+                // Try .jpg
+                sourceFileName = encodeURIComponent(designId + ".jpg");
+                sourceFileUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + sourceFileName + "?alt=media";
+                res = await fetch(sourceFileUrl);
+                ext = ".jpg";
+                type = "image/jpeg";
+            }
+
+            if (!res.ok) return; // File not found in this folder, skip
+
+            var blob = await res.blob();
+            var targetFileName = encodeURIComponent("cover" + ext);
+            var destUploadUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=" + cleanFolder + "%2F" + targetFileName;
+
+            await window.fetchWithRetry(destUploadUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': type },
+                body: blob
+            }, 1);
+        });
+
+        await Promise.all(uploadPromises);
+
+        // Touch the document updateTime so it sorts to the top and forces a refresh on mobile apps
+        // Also save the coverDesignId so the UI knows which one is selected
+        var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=updateTime&updateMask.fieldPaths=coverDesignId";
+        await window.fetchWithRetry(fsUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fields: {
+                    coverDesignId: { stringValue: designId }
+                },
+                updateTime: { timestampValue: new Date().toISOString() }
+            })
+        }, 3);
+
+        // Update local object so UI reflects it immediately
+        p.coverDesignId = designId;
+
+        // Clear local cache for this cover image
+        if (window.coverExistsMap) {
+            window.coverExistsMap[p.gridUrl] = true;
+            if (typeof window.saveCoverExistsMap === 'function') window.saveCoverExistsMap();
+        }
+
+        try {
+            var dbReq = indexedDB.open("ImageCache", 1);
+            dbReq.onsuccess = function(e) {
+                var db = e.target.result;
+                if (db.objectStoreNames.contains("images")) {
+                    var tx = db.transaction("images", "readwrite");
+                    tx.objectStore("images").delete(p.gridUrl); // gridPath is the cache key for cover
+                }
+            };
+        } catch(idbErr) { console.error(idbErr); }
+
+        alert("Successfully set " + designId + " as the new cover!");
+        
+        // Refresh the UI
+        if(typeof applyFilter === 'function') applyFilter();
+
+    } catch(e) {
+        alert("Error setting cover: " + e.message);
+    } finally {
+        var ldr = document.getElementById('coverLoader');
+        if(ldr) ldr.remove();
+    }
+};
