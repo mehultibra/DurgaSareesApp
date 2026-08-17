@@ -1127,7 +1127,8 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
         async function fetchImageSecurely(targetUrl) {
             try {
-                var res = await window.fetchWithRetry(targetUrl);
+                var cacheBuster = (targetUrl.includes("cover.webp") || targetUrl.includes("cover1.webp")) ? "&_cb=" + Date.now() : "";
+                var res = await window.fetchWithRetry(targetUrl + cacheBuster);
                 if (res.ok) {
                     var blob = await res.blob();
                     await saveImageToDB(cacheKey, blob);
@@ -1146,7 +1147,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                     fetchImageSecurely(nextUrl);
                 } else {
                     // Final fallback sequence using token validation
-                    var finalZoomUrl = fbBase + encZoomPath + "%2Fcover.webp?alt=media";
+                    var finalZoomUrl = fbBase + encZoomPath + "%2Fcover.webp?alt=media&_cb=" + Date.now();
                     try {
                         var zRes = await window.fetchWithRetry(finalZoomUrl);
                         if (zRes.ok) {
