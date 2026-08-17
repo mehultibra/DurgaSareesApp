@@ -289,7 +289,7 @@ exports.cleanupDuplicateJpgs = functions.https.onRequest(async (req, res) => {
     if (admin.apps.length === 0) admin.initializeApp();
 
     try {
-        const bucket = admin.storage().bucket();
+        const bucket = admin.storage().bucket('durga-sarees.firebasestorage.app');
         const [files] = await bucket.getFiles();
 
         const jpgFiles = files.filter(file => {

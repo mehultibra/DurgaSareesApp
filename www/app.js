@@ -5635,7 +5635,7 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
         var curStock = p.stock && p.stock[oldDesignId] !== undefined ? p.stock[oldDesignId] : 999;
         
         // Add both old and new fields to updateMask. Omitting the old field from 'fields' will delete it.
-        var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock." + encodeURIComponent(newDesignId) + "&updateMask.fieldPaths=stock." + encodeURIComponent(oldDesignId) + "&updateMask.fieldPaths=updateTime";
+        var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock.%60" + encodeURIComponent(newDesignId) + "%60&updateMask.fieldPaths=stock.%60" + encodeURIComponent(oldDesignId) + "%60&updateMask.fieldPaths=updateTime";
         
         var fsRes = await window.fetchWithRetry(fsUrl, {
             method: 'PATCH',
