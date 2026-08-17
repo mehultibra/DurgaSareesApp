@@ -2085,7 +2085,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main); display:flex; align-items:center; gap:6px;">
                             ${file.name}
-                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.url}')"></i>` : ''}
+                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.url}')" title="Rename Design"></i> <i class="fas fa-star" style="color:gold; font-size:14px; cursor:pointer; margin-left:8px;" onclick="window.promptSetAsCover('${p.docId}', '${p.id}', '${file.name}')" title="Set as Cover"></i>` : ''}
                         </div>
                         ${qtyHtml}
                     </div>
@@ -2099,7 +2099,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main); display:flex; align-items:center; gap:6px;">
                             ${file.name}
-                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.gridUrl || file.url}')"></i>` : ''}
+                            ${window.isAdminMode ? `<i class="fas fa-edit" style="color:var(--myntra-pink); font-size:14px; cursor:pointer;" onclick="window.promptRenameDesign('${p.docId}', '${p.id}', '${file.name}', '${file.gridUrl || file.url}')" title="Rename Design"></i> <i class="fas fa-star" style="color:gold; font-size:14px; cursor:pointer; margin-left:8px;" onclick="window.promptSetAsCover('${p.docId}', '${p.id}', '${file.name}')" title="Set as Cover"></i>` : ''}
                         </div>
                         ${qtyHtml}
                     </div>
