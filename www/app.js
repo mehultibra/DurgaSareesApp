@@ -4787,18 +4787,6 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
     try {
         var newVal = overrideVal !== null ? overrideVal : (parseInt(element.value) || 0);
 
-        // --- AUTO-HEALING: ORPHAN OVERRIDES ---
-        if (dId !== 'FULLY_PACKED') {
-            if (newVal > 0) {
-                setTimeout(() => window.updateAdminStock(null, docId, pid, 'FULLY_PACKED', 0), 100);
-            } else if (newVal === 0) {
-                var activeInputs = document.querySelectorAll('.admin-stock-input');
-                if (activeInputs.length === 1) {
-                    setTimeout(() => window.updateAdminStock(null, docId, pid, 'FULLY_PACKED', 1), 100);
-                }
-            }
-        }
-
         var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock.%60" + dId + "%60";
         var payload = {
             fields: {
@@ -4811,17 +4799,44 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
                 }
             }
         };
+
+        // --- AUTO-HEALING: ORPHAN OVERRIDES ---
+        var autoHealPackedValue = null;
+        if (dId !== 'FULLY_PACKED') {
+            if (newVal > 0) {
+                autoHealPackedValue = 0;
+            } else if (newVal === 0) {
+                var p = allProducts.find(x => x.id === pid);
+                if (p && p.stock) {
+                    var otherKeys = Object.keys(p.stock).filter(k => k !== 'FULLY_PACKED' && k !== dId);
+                    var sum = otherKeys.reduce((a, k) => a + p.stock[k], 0);
+                    if (sum === 0) {
+                        autoHealPackedValue = 1;
+                    }
+                }
+            }
+        }
+
+        if (autoHealPackedValue !== null) {
+            url += "&updateMask.fieldPaths=stock.%60FULLY_PACKED%60";
+            payload.fields.stock.mapValue.fields['FULLY_PACKED'] = { integerValue: autoHealPackedValue };
+        }
+
         var res = await window.fetchWithRetry(url, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         }, 1);
+        
         if (res.ok) {
             if (element) element.style.backgroundColor = '#c8e6c9'; // Green (Success)
             var p = allProducts.find(x => x.id === pid);
             if (p) {
                 if (!p.stock) p.stock = {};
                 p.stock[dId] = newVal;
+                if (autoHealPackedValue !== null) {
+                    p.stock['FULLY_PACKED'] = autoHealPackedValue;
+                }
 
                 if (p.stock['FULLY_PACKED'] === 1) {
                     p.totalStock = 0;
