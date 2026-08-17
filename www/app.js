@@ -5582,10 +5582,14 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
 
     try {
         var folders = [];
-        if (p.gridUrl && p.gridUrl.toLowerCase() !== "none") folders.push(p.gridUrl);
-        if (p.zoomUrl && p.zoomUrl.toLowerCase() !== "none") folders.push(p.zoomUrl);
-        if (p.gridUrl) folders.push(p.gridUrl.replace(/\/Grid\/?/i, "/Thumb"));
-        folders.push("Uploads/Raw");
+        if (p.gridUrl && p.gridUrl.toLowerCase() !== "none") {
+            folders.push(p.gridUrl);
+            folders.push(p.gridUrl.replace(/\/?Grid\/?/i, "/Jpg/").replace(/^\//, ""));
+            folders.push(p.gridUrl.replace(/\/?Grid\/?/i, "/Input/").replace(/^\//, ""));
+        }
+        if (p.zoomUrl && p.zoomUrl.toLowerCase() !== "none") {
+            folders.push(p.zoomUrl);
+        }
 
         folders = [...new Set(folders)];
 
