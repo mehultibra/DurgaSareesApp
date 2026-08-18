@@ -5791,9 +5791,9 @@ window.promptSetAsCover = async function(docId, pid, designId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 fields: {
-                    coverDesignId: { stringValue: designId }
-                },
-                updateTime: { timestampValue: new Date().toISOString() }
+                    coverDesignId: { stringValue: designId },
+                    updateTime: { timestampValue: new Date().toISOString() }
+                }
             })
         }, 3);
 
