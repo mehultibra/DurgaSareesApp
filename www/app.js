@@ -1419,7 +1419,7 @@ function renderProductGrid(products) {
 
         setTimeout(() => {
             let imgEl = document.getElementById(imgElementId);
-            if (imgEl) window.renderWebpFromFolder(imgEl, p.gridUrl, null, null); // First file from folder listing
+            if (imgEl) window.renderWebpFromFolder(imgEl, p.gridUrl, null, p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : null);
         }, 0);
     });
 
@@ -1769,7 +1769,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         var mainGridImg = document.getElementById("img_" + p.id);
         if (mainGridImg && items.length > 0) {
             delete window.brokenImagesMap[gridPath];
-            window.renderWebpFromFolder(mainGridImg, p.gridUrl, null, null);
+            window.renderWebpFromFolder(mainGridImg, p.gridUrl, null, p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : null);
         }
 
         var validFiles = [];
@@ -2011,7 +2011,26 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 // 2. Zoom Stock Enforcer
                 if (encZoomPath) {
                     for (var fname of folderFiles) {
-                        var isCover = (fname === folderFiles[0]);
+                        var coverFile;
+                        if (p.coverDesignId) {
+                            var cleanCoverId = String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                            var exact = folderFiles.find(f => f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() === cleanCoverId);
+                            if (exact) {
+                                coverFile = exact;
+                            } else {
+                                // AUTO-HEALING GHOST METADATA
+                                var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=coverDesignId";
+                                fetch(patchUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { coverDesignId: { stringValue: "" } } }) }).catch(e=>{});
+                                p.coverDesignId = ""; // Clear locally
+                            }
+                        }
+                        if (!coverFile) {
+                            var possibleCovers = ["cover", "cover1"];
+                            var foundCover = folderFiles.find(f => possibleCovers.includes(f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase()));
+                            coverFile = foundCover || folderFiles[0];
+                        }
+                        
+                        var isCover = (fname === coverFile);
                         var stockKey = isCover ? 'Cover' : fname;
                         var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
                         var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
@@ -2086,7 +2105,9 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             }
 
             if (file.isVideo) {
-                var isCover = (p.coverDesignId === file.name);
+                var cleanCoverId = p.coverDesignId ? String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() : '';
+                var cleanFileName = String(file.name).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                var isCover = (cleanCoverId !== '' && cleanCoverId === cleanFileName);
                 html += `
                 <div class="swipe-card" data-design="${file.name}" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
                     ${adminCheckboxHtml}
@@ -2102,7 +2123,9 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 </div>`;
             } else {
                 var imgId = "design_img_" + p.id + "_" + idx;
-                var isCover = (p.coverDesignId === file.name);
+                var cleanCoverId = p.coverDesignId ? String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() : '';
+                var cleanFileName = String(file.name).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                var isCover = (cleanCoverId !== '' && cleanCoverId === cleanFileName);
                 html += `
                 <div class="swipe-card" data-design="${file.name}" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
                     ${adminCheckboxHtml}
@@ -3338,9 +3361,24 @@ async function syncImages(silent = false) {
                     // Build the full Firebase URL keys that should exist in DB
                     // Cover = first file, key stored as gridUrl (bare folder path)
                     // Designs = each file, key stored as full Firebase URL
-                    var possibleCovers = ["cover.webp", "cover.jpg", "cover1.webp", "cover1.jpg"];
-                    var foundCover = folderFiles.find(f => possibleCovers.includes(f.toLowerCase()));
-                    var coverFile = foundCover || folderFiles[0];
+                    var coverFile;
+                    if (p.coverDesignId) {
+                        var cleanCoverId = String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                        var exact = folderFiles.find(f => f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() === cleanCoverId);
+                        if (exact) {
+                            coverFile = exact;
+                        } else {
+                            // AUTO-HEALING GHOST METADATA (listSuccess is already true here)
+                            var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=coverDesignId";
+                            fetch(patchUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { coverDesignId: { stringValue: "" } } }) }).catch(e=>{});
+                            p.coverDesignId = ""; // Clear locally
+                        }
+                    }
+                    if (!coverFile) {
+                        var possibleCovers = ["cover", "cover1"];
+                        var foundCover = folderFiles.find(f => possibleCovers.includes(f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase()));
+                        coverFile = foundCover || folderFiles[0];
+                    }
                     var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
                     
                     var remoteItem = listData.items.find(it => it.name.endsWith("/" + coverFile));
@@ -3838,7 +3876,7 @@ window.renderHorizontalCategories = function() {
         // Schedule image render
         setTimeout(() => {
             var el = document.getElementById(imgId);
-            if(el && window.renderWebpFromFolder) window.renderWebpFromFolder(el, p.gridUrl, null, null);
+            if(el && window.renderWebpFromFolder) window.renderWebpFromFolder(el, p.gridUrl, null, p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : null);
         }, 10);
     });
 
@@ -5675,26 +5713,49 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
         var curStock = p.stock && p.stock[oldDesignId] !== undefined ? p.stock[oldDesignId] : 999;
         
         // Add both old and new fields to updateMask. Omitting the old field from 'fields' will delete it.
+        var isCoverRenamed = false;
+        var cleanCoverId = p.coverDesignId ? String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() : '';
+        var cleanOldDesignId = String(oldDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+        if (cleanCoverId !== '' && cleanCoverId === cleanOldDesignId) {
+            isCoverRenamed = true;
+        }
+
         var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock.%60" + encodeURIComponent(newDesignId) + "%60&updateMask.fieldPaths=stock.%60" + encodeURIComponent(oldDesignId) + "%60&updateMask.fieldPaths=updateTime";
+        if (isCoverRenamed) fsUrl += "&updateMask.fieldPaths=coverDesignId";
         
+        var payloadFields = {
+            stock: {
+                mapValue: {
+                    fields: {
+                        [newDesignId]: { integerValue: curStock }
+                    }
+                }
+            },
+            updateTime: { timestampValue: new Date().toISOString() }
+        };
+        if (isCoverRenamed) {
+            payloadFields.coverDesignId = { stringValue: newDesignId };
+            p.coverDesignId = newDesignId; // Update locally
+        }
+
         var fsRes = await window.fetchWithRetry(fsUrl, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                fields: {
-                    stock: {
-                        mapValue: {
-                            fields: {
-                                [newDesignId]: { integerValue: curStock }
-                            }
-                        }
-                    },
-                    updateTime: { timestampValue: new Date().toISOString() }
-                }
-            })
+            body: JSON.stringify({ fields: payloadFields })
         }, 3);
         
         if(!fsRes.ok) throw new Error("Failed to update Firestore stock");
+
+        // Update active shopping cart to prevent ghost references
+        var oldCartKey = p.id + '_' + oldDesignId;
+        if (cart[oldCartKey]) {
+            var cartItem = cart[oldCartKey];
+            cartItem.design = newDesignId;
+            cart[p.id + '_' + newDesignId] = cartItem;
+            delete cart[oldCartKey];
+            try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) {}
+            if (typeof updateCartHeader === 'function') updateCartHeader();
+        }
 
         alert("Successfully renamed design " + oldDesignId + " to " + newDesignId + "!");
         if(typeof applyFilter === 'function') applyFilter();
@@ -5707,7 +5768,7 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
 };
 
 window.promptSetAsCover = async function(docId, pid, designId) {
-    if (!confirm("Are you sure you want to set " + designId + " as the new cover image?\n\nThis will permanently replace the current cover image!")) {
+    if (!confirm("Are you sure you want to set " + designId + " as the new cover image?")) {
         return;
     }
 
@@ -5719,69 +5780,13 @@ window.promptSetAsCover = async function(docId, pid, designId) {
 
     document.body.insertAdjacentHTML('beforeend', '<div id="coverLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Setting '+designId+' as Cover...</div>');
 
+    var oldCoverId = p.coverDesignId;
+    // Optimistic UI Update
+    p.coverDesignId = designId;
+
     try {
-        var folders = [];
-        if (p.gridUrl && p.gridUrl.toLowerCase() !== "none") {
-            folders.push(p.gridUrl);
-            folders.push(p.gridUrl.replace(/\/?Grid\/?/i, "/Jpg/").replace(/^\//, ""));
-            folders.push(p.gridUrl.replace(/\/?Grid\/?/i, "/Input/").replace(/^\//, ""));
-        }
-        if (p.zoomUrl && p.zoomUrl.toLowerCase() !== "none") {
-            folders.push(p.zoomUrl);
-        }
-
-        folders = [...new Set(folders)];
-
-        var uploadPromises = folders.map(async (folderPath) => {
-            var cleanFolder = String(folderPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-            
-            // Try .webp first
-            var sourceFileName = encodeURIComponent(designId + ".webp");
-            var sourceFileUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + sourceFileName + "?alt=media";
-            var res = await fetch(sourceFileUrl);
-            var ext = ".webp";
-            var type = "image/webp";
-
-            if (!res.ok) {
-                // Try .jpg
-                sourceFileName = encodeURIComponent(designId + ".jpg");
-                sourceFileUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + sourceFileName + "?alt=media";
-                res = await fetch(sourceFileUrl);
-                ext = ".jpg";
-                type = "image/jpeg";
-            }
-
-            if (!res.ok) return; // File not found in this folder, skip
-
-            // Delete ALL existing cover files before uploading to ensure clean overwrite
-            var oldNames = ["Cover.webp", "Cover.jpg", "cover1.webp", "cover1.jpg", "cover.jpg", "cover.webp"];
-            var deletePromises = oldNames.map(async (old) => {
-                var delUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + encodeURIComponent(old);
-                await window.fetchWithRetry(delUrl, { method: 'DELETE' }, 1).catch(() => {});
-            });
-            await Promise.all(deletePromises);
-
-            var blob = await res.blob();
-            var targetFileName = encodeURIComponent("cover" + ext);
-            var destUploadUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=" + cleanFolder + "%2F" + targetFileName;
-
-            var uploadRes = await window.fetchWithRetry(destUploadUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': type },
-                body: blob
-            }, 1);
-
-            if (!uploadRes.ok) {
-                console.error("Upload failed: ", await uploadRes.text());
-            }
-        });
-
-        await Promise.all(uploadPromises);
-
-        // Touch the document updateTime so it sorts to the top and forces a refresh on mobile apps
-        // Also save the coverDesignId so the UI knows which one is selected
         var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=updateTime&updateMask.fieldPaths=coverDesignId";
-        await window.fetchWithRetry(fsUrl, {
+        var fsRes = await window.fetchWithRetry(fsUrl, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -5792,8 +5797,7 @@ window.promptSetAsCover = async function(docId, pid, designId) {
             })
         }, 3);
 
-        // Update local object so UI reflects it immediately
-        p.coverDesignId = designId;
+        if (!fsRes.ok) throw new Error("Failed to update Firestore");
 
         // Clear local cache for this cover image
         if (window.coverExistsMap) {
@@ -5804,22 +5808,16 @@ window.promptSetAsCover = async function(docId, pid, designId) {
             delete window.dsFallbackMap[p.gridUrl];
             if (typeof window.saveFallbackMap === 'function') window.saveFallbackMap();
         }
+        if (window.dsCoverTimeCache) {
+            delete window.dsCoverTimeCache[p.gridUrl];
+            try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
+        }
 
-        await new Promise((resolve) => {
-            try {
-                var dbReq = indexedDB.open("ImageCache", 1);
-                dbReq.onsuccess = function(e) {
-                    var db = e.target.result;
-                    if (db.objectStoreNames.contains("images")) {
-                        var tx = db.transaction("images", "readwrite");
-                        tx.objectStore("images").delete(p.gridUrl);
-                        tx.oncomplete = resolve;
-                        tx.onerror = resolve;
-                    } else resolve();
-                };
-                dbReq.onerror = resolve;
-            } catch (e) { resolve(); }
-        });
+        if (typeof window.deleteImageFromDB === 'function') {
+            await window.deleteImageFromDB(p.gridUrl);
+        } else if (typeof deleteImageFromDB === 'function') {
+            await deleteImageFromDB(p.gridUrl);
+        }
 
         alert("Successfully set " + designId + " as the new cover!");
         
@@ -5827,7 +5825,10 @@ window.promptSetAsCover = async function(docId, pid, designId) {
         if(typeof applyFilter === 'function') applyFilter();
 
     } catch(e) {
-        alert("Error setting cover: " + e.message);
+        // Optimistic Revert
+        p.coverDesignId = oldCoverId;
+        if(typeof applyFilter === 'function') applyFilter();
+        alert("Error setting cover: " + e.message + ". Reverted to previous cover.");
     } finally {
         var ldr = document.getElementById('coverLoader');
         if(ldr) ldr.remove();
