@@ -1091,6 +1091,12 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
 
                 if (files.length > 0) {
                     files.sort(function (a, b) {
+                        if (a === "cover.webp") return -1;
+                        if (b === "cover.webp") return 1;
+                        if (a === "cover1.webp") return -1;
+                        if (b === "cover1.webp") return 1;
+                        if (a.toLowerCase() === "cover.webp" && b.toLowerCase() !== "cover.webp") return -1;
+                        if (b.toLowerCase() === "cover.webp" && a.toLowerCase() !== "cover.webp") return 1;
                         return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
                     });
                     var firstFile = files[0];
@@ -5732,6 +5738,13 @@ window.promptSetAsCover = async function(docId, pid, designId) {
                 headers: { 'Content-Type': type },
                 body: blob
             }, 1);
+
+            // Cleanup any duplicate/old named cover files in this folder to prevent conflicts
+            var oldNames = ["Cover.webp", "Cover.jpg", "cover1.webp", "cover1.jpg", "cover.jpg", "cover.webp"].filter(n => n !== "cover" + ext);
+            for (var old of oldNames) {
+                var delUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + encodeURIComponent(old);
+                window.fetchWithRetry(delUrl, { method: 'DELETE' }, 1).catch(() => {});
+            }
         });
 
         await Promise.all(uploadPromises);
@@ -5757,6 +5770,10 @@ window.promptSetAsCover = async function(docId, pid, designId) {
         if (window.coverExistsMap) {
             window.coverExistsMap[p.gridUrl] = true;
             if (typeof window.saveCoverExistsMap === 'function') window.saveCoverExistsMap();
+        }
+        if (window.dsFallbackMap) {
+            delete window.dsFallbackMap[p.gridUrl];
+            if (typeof window.saveFallbackMap === 'function') window.saveFallbackMap();
         }
 
         await new Promise((resolve) => {
