@@ -3338,9 +3338,15 @@ async function syncImages(silent = false) {
                     // Build the full Firebase URL keys that should exist in DB
                     // Cover = first file, key stored as gridUrl (bare folder path)
                     // Designs = each file, key stored as full Firebase URL
-                    var coverFile = folderFiles[0];
+                    var possibleCovers = ["cover.webp", "cover.jpg", "cover1.webp", "cover1.jpg"];
+                    var foundCover = folderFiles.find(f => possibleCovers.includes(f.toLowerCase()));
+                    var coverFile = foundCover || folderFiles[0];
                     var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
                     
+                    var remoteItem = listData.items.find(it => it.name.endsWith("/" + coverFile));
+                    var remoteTime = remoteItem && remoteItem.updated ? new Date(remoteItem.updated).getTime() : 0;
+                    if (!window.dsCoverTimeCache) window.dsCoverTimeCache = JSON.parse(localStorage.getItem("dsCoverTimeCache") || "{}");
+
                     var encZoomPath = "";
                     if (p.zoomUrl && String(p.zoomUrl).toLowerCase() !== "none" && p.zoomUrl !== p.gridUrl) {
                         var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
@@ -3376,14 +3382,20 @@ async function syncImages(silent = false) {
 
                     // ——— 3. Download the COVER file (GRID ONLY) —————————————————————————————————
                     var existingCover = await checkImageInDB(p.gridUrl);
+                    var localTime = window.dsCoverTimeCache[p.gridUrl] || 0;
 
-                    if (existingCover) {
+                    if (existingCover && localTime >= remoteTime) {
                         downloaded = true;
                     } else {
+                        if (existingCover) {
+                            console.log("[SYNC] Updating stale cover for", p.name);
+                            await deleteImageFromDB(p.gridUrl);
+                        }
                         try {
                             const ctrl2 = new AbortController();
                             const tid2 = setTimeout(() => ctrl2.abort(), 30000);
-                            var coverRes = await window.fetchWithRetry(coverUrl, { signal: ctrl2.signal }, 3);
+                            // Add cache-buster to ensure CDN miss for updated files
+                            var coverRes = await window.fetchWithRetry(coverUrl + "&_cb=" + Date.now(), { signal: ctrl2.signal }, 3);
                             clearTimeout(tid2);
 
                             if (coverRes.ok) {
@@ -3395,6 +3407,8 @@ async function syncImages(silent = false) {
                                 } else {
                                     await saveImageToDB(p.gridUrl, coverBlob); 
                                     await saveImageToDB(coverUrl, coverBlob); 
+                                    window.dsCoverTimeCache[p.gridUrl] = remoteTime;
+                                    try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
                                     downloaded = true;
                                 }
                             } else {
