@@ -3429,11 +3429,19 @@ async function syncImages(silent = false) {
                                 var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
                                 var existing = await checkImageInDB(designUrl);
                                 
-                                if (!existing) {
+                                var remoteDesignItem = listData.items.find(it => it.name.endsWith("/" + fname));
+                                var remoteDesignTime = remoteDesignItem && remoteDesignItem.updated ? new Date(remoteDesignItem.updated).getTime() : 0;
+                                var localDesignTime = window.dsCoverTimeCache[designUrl] || 0;
+                                
+                                if (!existing || localDesignTime < remoteDesignTime) {
+                                    if (existing) {
+                                        console.log("[SYNC] Updating stale inner image:", fname);
+                                        await deleteImageFromDB(designUrl);
+                                    }
                                     try {
                                         const ctrl3 = new AbortController();
                                         const tid3 = setTimeout(() => ctrl3.abort(), 30000);
-                                        var dRes = await window.fetchWithRetry(designUrl, { signal: ctrl3.signal }, 3);
+                                        var dRes = await window.fetchWithRetry(designUrl + "&_cb=" + Date.now(), { signal: ctrl3.signal }, 3);
                                         clearTimeout(tid3);
                                         if (dRes.ok) {
                                             var dBlob = await dRes.blob();
@@ -3443,6 +3451,8 @@ async function syncImages(silent = false) {
                                                 lastFailReason = (lastFailReason ? lastFailReason + ", " : "Corrupted: ") + fname;
                                             } else {
                                                 await saveImageToDB(designUrl, dBlob);
+                                                window.dsCoverTimeCache[designUrl] = remoteDesignTime;
+                                                try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
                                             }
                                         } else {
                                             window.logAppError('AUDITOR: Sync Engine Failure', `Missing File: HTTP ${dRes.status} | ${fname} | ${p.name}`);
