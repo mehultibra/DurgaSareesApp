@@ -5759,16 +5759,21 @@ window.promptSetAsCover = async function(docId, pid, designId) {
             if (typeof window.saveCoverExistsMap === 'function') window.saveCoverExistsMap();
         }
 
-        try {
-            var dbReq = indexedDB.open("ImageCache", 1);
-            dbReq.onsuccess = function(e) {
-                var db = e.target.result;
-                if (db.objectStoreNames.contains("images")) {
-                    var tx = db.transaction("images", "readwrite");
-                    tx.objectStore("images").delete(p.gridUrl); // gridPath is the cache key for cover
-                }
-            };
-        } catch(idbErr) { console.error(idbErr); }
+        await new Promise((resolve) => {
+            try {
+                var dbReq = indexedDB.open("ImageCache", 1);
+                dbReq.onsuccess = function(e) {
+                    var db = e.target.result;
+                    if (db.objectStoreNames.contains("images")) {
+                        var tx = db.transaction("images", "readwrite");
+                        tx.objectStore("images").delete(p.gridUrl);
+                        tx.oncomplete = resolve;
+                        tx.onerror = resolve;
+                    } else resolve();
+                };
+                dbReq.onerror = resolve;
+            } catch (e) { resolve(); }
+        });
 
         alert("Successfully set " + designId + " as the new cover!");
         
