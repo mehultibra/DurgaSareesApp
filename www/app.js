@@ -3291,6 +3291,7 @@ async function syncImages(silent = false) {
                 var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
                 var lastFailReason = "";
                 var downloaded = false;
+                p._imagesUpdatedCount = 0;
 
                 // ── 1. Fetch Firebase folder listing ──────────────────────
                 var folderFiles = []; // filenames only (e.g. "01.webp", "02.webp")
@@ -3410,6 +3411,7 @@ async function syncImages(silent = false) {
                                     window.dsCoverTimeCache[p.gridUrl] = remoteTime;
                                     try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
                                     downloaded = true;
+                                    p._imagesUpdatedCount++;
                                 }
                             } else {
                                 lastFailReason = "Cover HTTP " + coverRes.status;
@@ -3453,6 +3455,202 @@ async function syncImages(silent = false) {
                                                 await saveImageToDB(designUrl, dBlob);
                                                 window.dsCoverTimeCache[designUrl] = remoteDesignTime;
                                                 try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
+                                                p._imagesUpdatedCount++;
+                                            }
+                                        } else {
+                                            window.logAppError('AUDITOR: Sync Engine Failure', `Missing File: HTTP ${dRes.status} | ${fname} | ${p.name}`);
+                                        }
+                                    } catch (e) {
+                                        console.warn("[SYNC] Fast design fetch failed:", fname, e.message); if (typeof window.logAppError === 'function') window.logAppError('Sync Inner Image', e.message + " | " + p.name);
+                                    }
+                                }
+                            }));
+                        }
+                    }
+                }
+                // ── 5. Track errors ──────────────────────────────────────────
+                if (!downloaded) {
+                    failed++;
+                    failedList.push({ name: p.name, path: p.gridUrl, reason: lastFailReason });
+                    console.error("❌ SYNC FAILED:", p.name, "|", lastFailReason);
+                    if (!window.syncReportResults) window.syncReportResults = [];
+                    var syncErrKey = p.gridUrl;
+                    var existing2 = window.syncReportResults.find(r => r._gridUrl === syncErrKey);
+                    if (existing2) {
+                        existing2.error = "Sync Failed: " + lastFailReason;
+                        existing2.status = 'error';
+                    } else {
+                        window.syncReportResults.push({
+                            id: null, _gridUrl: syncErrKey,
+                var listPrefix = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('/') + '/';
+                var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
+                var lastFailReason = "";
+                var downloaded = false;
+                p._imagesUpdatedCount = 0;
+
+                // ── 1. Fetch Firebase folder listing ──────────────────────
+                var folderFiles = []; // filenames only (e.g. "01.webp", "02.webp")
+                var listSuccess = false;
+                try {
+                    const ctrl = new AbortController();
+                    const tid = setTimeout(() => ctrl.abort(), 30000);
+                    // 🛡️ CRITICAL FIX: Bulletproof retry for "failed to fetch"
+                    var listRes = await window.fetchWithRetry(listUrl, { signal: ctrl.signal }, 3);
+                    clearTimeout(tid);
+                    if (listRes.ok) {
+                        var listData = await listRes.json();
+                        if (!window.dsFolderCache) window.dsFolderCache = {};
+                        window.dsFolderCache[listUrl] = listData.items || [];
+                        try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
+
+                        folderFiles = (listData.items || [])
+                            .map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
+                            .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+                        listSuccess = true;
+                    } else {
+                        lastFailReason = "List HTTP " + listRes.status;
+                    }
+                } catch (e) {
+                    lastFailReason = "List failed: " + (e.name === 'AbortError' ? 'Timeout (15s)' : e.message);
+                    window.logAppError('syncImages List', lastFailReason + " | " + p.name);
+                }
+
+                if (!listSuccess) {
+                    // Offline / error — keep existing cache, log error
+                    var existingCover = await checkImageInDB(p.gridUrl);
+                    if (existingCover) downloaded = true;
+                    else lastFailReason = lastFailReason || "Offline & no local cache";
+
+                } else if (folderFiles.length === 0) {
+                    // Firebase folder is EMPTY — keep existing cover, do NOT delete
+                    downloaded = true;
+                    console.log("[SYNC] Folder empty for", p.name, "- keeping cached cover.");
+
+                } else {
+                    // Sort files: 01.webp first, then 02, 03...
+                    folderFiles.sort((a, b) =>
+                        (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
+
+                    // Build the full Firebase URL keys that should exist in DB
+                    // Cover = first file, key stored as gridUrl (bare folder path)
+                    // Designs = each file, key stored as full Firebase URL
+                    var possibleCovers = ["cover.webp", "cover.jpg", "cover1.webp", "cover1.jpg"];
+                    var foundCover = folderFiles.find(f => possibleCovers.includes(f.toLowerCase()));
+                    var coverFile = foundCover || folderFiles[0];
+                    var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
+                    
+                    var remoteItem = listData.items.find(it => it.name.endsWith("/" + coverFile));
+                    var remoteTime = remoteItem && remoteItem.updated ? new Date(remoteItem.updated).getTime() : 0;
+                    if (!window.dsCoverTimeCache) window.dsCoverTimeCache = JSON.parse(localStorage.getItem("dsCoverTimeCache") || "{}");
+
+                    var encZoomPath = "";
+                    if (p.zoomUrl && String(p.zoomUrl).toLowerCase() !== "none" && p.zoomUrl !== p.gridUrl) {
+                        var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                        encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+                    }
+
+                    var designKeys = {}; 
+                    folderFiles.forEach(f => {
+                        var gridKey = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
+                        designKeys[gridKey] = gridKey;
+                        if (encZoomPath) {
+                            var zoomKey = fbBase + encZoomPath + "%2F" + encodeURIComponent(f) + "?alt=media";
+                            designKeys[zoomKey] = zoomKey;
+                        }
+                    });
+
+                    // ── 2. Cleanup: Delete from DB keys NOT in Firebase anymore (Grid + Zoom) ──
+                    var prefixesToClean = [fbBase + encGridPath + "%2F"];
+                    if (encZoomPath) prefixesToClean.push(fbBase + encZoomPath + "%2F");
+                    
+                    for (var prefix of prefixesToClean) {
+                        var cachedKeys = await listDBKeysForPrefix(prefix);
+                        for (var ck of cachedKeys) {
+                            if (!designKeys[ck]) {
+                                await deleteImageFromDB(ck);
+                                console.log("[SYNC] Deleted stale cache:", ck);
+                            }
+                        }
+                    }
+
+                    // Save folder files for Phase 2
+                    p._folderFiles = folderFiles;
+
+                    // ——— 3. Download the COVER file (GRID ONLY) —————————————————————————————————
+                    var existingCover = await checkImageInDB(p.gridUrl);
+                    var localTime = window.dsCoverTimeCache[p.gridUrl] || 0;
+
+                    if (existingCover && localTime >= remoteTime) {
+                        downloaded = true;
+                    } else {
+                        if (existingCover) {
+                            console.log("[SYNC] Updating stale cover for", p.name);
+                            await deleteImageFromDB(p.gridUrl);
+                        }
+                        try {
+                            const ctrl2 = new AbortController();
+                            const tid2 = setTimeout(() => ctrl2.abort(), 30000);
+                            // Add cache-buster to ensure CDN miss for updated files
+                            var coverRes = await window.fetchWithRetry(coverUrl + "&_cb=" + Date.now(), { signal: ctrl2.signal }, 3);
+                            clearTimeout(tid2);
+
+                            if (coverRes.ok) {
+                                var coverBlob = await coverRes.blob();
+                                if (coverBlob.size === 0) {
+                                    lastFailReason = "Cover image is 0 bytes (corrupted)";
+                                    if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', coverFile + " | " + p.name);
+                                    downloaded = false;
+                                } else {
+                                    await saveImageToDB(p.gridUrl, coverBlob); 
+                                    await saveImageToDB(coverUrl, coverBlob); 
+                                    window.dsCoverTimeCache[p.gridUrl] = remoteTime;
+                                    try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
+                                    downloaded = true;
+                                    p._imagesUpdatedCount++;
+                                }
+                            } else {
+                                lastFailReason = "Cover HTTP " + coverRes.status;
+                            }
+                        } catch (e) {
+                            lastFailReason = "Cover fetch: " + (e.name === 'AbortError' ? 'Timeout (30s)' : e.message);
+                        }
+                    }
+
+                    // ——— 4. Download remaining design files (FAST PARALLEL BATCHING - GRID ONLY) ——————————————————
+                    if (downloaded) {
+                        var innerBatchSize = 2; // Download 2 inner images concurrently!
+                        var remainingFiles = folderFiles.filter(f => f !== coverFile);
+                        for (var fIdx = 0; fIdx < remainingFiles.length; fIdx += innerBatchSize) {
+                            var fBatch = remainingFiles.slice(fIdx, fIdx + innerBatchSize);
+                            await Promise.all(fBatch.map(async (fname) => {
+                                var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                                var existing = await checkImageInDB(designUrl);
+                                
+                                var remoteDesignItem = listData.items.find(it => it.name.endsWith("/" + fname));
+                                var remoteDesignTime = remoteDesignItem && remoteDesignItem.updated ? new Date(remoteDesignItem.updated).getTime() : 0;
+                                var localDesignTime = window.dsCoverTimeCache[designUrl] || 0;
+                                
+                                if (!existing || localDesignTime < remoteDesignTime) {
+                                    if (existing) {
+                                        console.log("[SYNC] Updating stale inner image:", fname);
+                                        await deleteImageFromDB(designUrl);
+                                    }
+                                    try {
+                                        const ctrl3 = new AbortController();
+                                        const tid3 = setTimeout(() => ctrl3.abort(), 30000);
+                                        var dRes = await window.fetchWithRetry(designUrl + "&_cb=" + Date.now(), { signal: ctrl3.signal }, 3);
+                                        clearTimeout(tid3);
+                                        if (dRes.ok) {
+                                            var dBlob = await dRes.blob();
+                                            if (dBlob.size === 0) {
+                                                if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', fname + " | " + p.name);
+                                                downloaded = false;
+                                                lastFailReason = (lastFailReason ? lastFailReason + ", " : "Corrupted: ") + fname;
+                                            } else {
+                                                await saveImageToDB(designUrl, dBlob);
+                                                window.dsCoverTimeCache[designUrl] = remoteDesignTime;
+                                                try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
+                                                p._imagesUpdatedCount++;
                                             }
                                         } else {
                                             window.logAppError('AUDITOR: Sync Engine Failure', `Missing File: HTTP ${dRes.status} | ${fname} | ${p.name}`);
@@ -3484,6 +3682,14 @@ async function syncImages(silent = false) {
                             imageCount: 0, status: 'error'
                         });
                     }
+                } else if (p._imagesUpdatedCount > 0) {
+                    if (!window.syncReportResults) window.syncReportResults = [];
+                    window.syncReportResults.push({
+                        id: p.id || null, _gridUrl: p.gridUrl,
+                        name: p.name, sku: p.sku || '-',
+                        error: "Updated " + p._imagesUpdatedCount + " images",
+                        imageCount: p._imagesUpdatedCount, status: 'completed'
+                    });
                 }
 
                 count++;
