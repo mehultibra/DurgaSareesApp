@@ -5729,21 +5729,26 @@ window.promptSetAsCover = async function(docId, pid, designId) {
 
             if (!res.ok) return; // File not found in this folder, skip
 
+            // Delete ALL existing cover files before uploading to ensure clean overwrite
+            var oldNames = ["Cover.webp", "Cover.jpg", "cover1.webp", "cover1.jpg", "cover.jpg", "cover.webp"];
+            var deletePromises = oldNames.map(async (old) => {
+                var delUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + encodeURIComponent(old);
+                await window.fetchWithRetry(delUrl, { method: 'DELETE' }, 1).catch(() => {});
+            });
+            await Promise.all(deletePromises);
+
             var blob = await res.blob();
             var targetFileName = encodeURIComponent("cover" + ext);
             var destUploadUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=" + cleanFolder + "%2F" + targetFileName;
 
-            await window.fetchWithRetry(destUploadUrl, {
+            var uploadRes = await window.fetchWithRetry(destUploadUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': type },
                 body: blob
             }, 1);
 
-            // Cleanup any duplicate/old named cover files in this folder to prevent conflicts
-            var oldNames = ["Cover.webp", "Cover.jpg", "cover1.webp", "cover1.jpg", "cover.jpg", "cover.webp"].filter(n => n !== "cover" + ext);
-            for (var old of oldNames) {
-                var delUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + encodeURIComponent(old);
-                window.fetchWithRetry(delUrl, { method: 'DELETE' }, 1).catch(() => {});
+            if (!uploadRes.ok) {
+                console.error("Upload failed: ", await uploadRes.text());
             }
         });
 
