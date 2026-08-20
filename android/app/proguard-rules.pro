@@ -19,3 +19,16 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Capacitor and Firebase keep rules
+-keep class com.getcapacitor.** { *; }
+-keep class com.capacitorjs.plugins.** { *; }
+
+# Ignore warnings for missing classes in third-party plugins
+-dontwarn com.getcapacitor.**
+-dontwarn com.capacitorjs.plugins.**
+-dontwarn org.apache.cordova.**
+-dontwarn com.google.firebase.**
+-dontwarn io.ionic.libs.**
+-dontwarn com.facebook.**
+-dontwarn io.capawesome.**

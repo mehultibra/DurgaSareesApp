@@ -1470,9 +1470,25 @@ window.triggerShare = async function (action) {
 
         for (var i = 0; i < favProducts.length; i++) {
             var fp = favProducts[i];
-            var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
 
             var dArr = await getActualDesignsForProduct(fp, shareType);
+            
+            // Always include the cover image first!
+            var fallbackFile = dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
+            var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
+            var coverDesignId = 'DIRECT';
+
+            if (fallbackFile) {
+                coverDesignId = fallbackFile;
+            } else if (readyDesigns.length > 0) {
+                coverDesignId = readyDesigns[0];
+            }
+
+            var cUrl = await resolveCorrectUrl(fp, coverDesignId);
+            if (cUrl && !allHighResUrls.includes(cUrl)) {
+                allHighResUrls.push(cUrl);
+            }
+
             if (dArr.length > 0) {
                 for (var j = 0; j < dArr.length; j++) {
                     var dUrl = await resolveCorrectUrl(fp, dArr[j]);
@@ -1480,19 +1496,6 @@ window.triggerShare = async function (action) {
                         allHighResUrls.push(dUrl);
                     }
                 }
-            } else {
-                // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
-                var fallbackFile = dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
-                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
-                var coverDesignId = 'DIRECT';
-
-                if (fallbackFile) {
-                    coverDesignId = fallbackFile;
-                } else if (readyDesigns.length > 0) {
-                    coverDesignId = readyDesigns[0];
-                }
-
-                allHighResUrls.push(await resolveCorrectUrl(fp, coverDesignId));
             }
         }
 
@@ -1519,8 +1522,24 @@ window.triggerShare = async function (action) {
     if (!shareType) return;
 
     var highResUrls = [];
-    var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
     var dArr = await getActualDesignsForProduct(curProduct, shareType);
+    
+    // Always include the cover image first!
+    var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
+    var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
+    var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
+    var coverDesignId = 'DIRECT';
+
+    if (fallbackFile) {
+        coverDesignId = fallbackFile;
+    } else if (readyDesigns.length > 0) {
+        coverDesignId = readyDesigns[0];
+    }
+
+    var cUrl = await resolveCorrectUrl(curProduct, coverDesignId);
+    if (cUrl && !highResUrls.includes(cUrl)) {
+        highResUrls.push(cUrl);
+    }
 
     if (dArr.length > 0) {
         for (var j = 0; j < dArr.length; j++) {
@@ -1529,20 +1548,6 @@ window.triggerShare = async function (action) {
                 highResUrls.push(dUrl);
             }
         }
-    } else {
-        // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
-        var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
-        var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
-        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
-        var coverDesignId = 'DIRECT';
-
-        if (fallbackFile) {
-            coverDesignId = fallbackFile;
-        } else if (readyDesigns.length > 0) {
-            coverDesignId = readyDesigns[0];
-        }
-
-        highResUrls.push(await resolveCorrectUrl(curProduct, coverDesignId));
     }
 
     if (highResUrls.length === 0) {
