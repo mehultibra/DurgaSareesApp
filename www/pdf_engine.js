@@ -28,11 +28,17 @@ async function getActualDesignsForProduct(p, shareType, action) {
     if (items && items.length > 0) {
         var validFiles = items.map(it => it.name.substring(it.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
         
-        var coverFiles = validFiles.filter(f => /^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
-        var insideFiles = validFiles.filter(f => !/^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
+        var filesToReturn;
+        if (action === 'images') {
+            // For WhatsApp images, keep everything EXCEPT explicit cover images
+            filesToReturn = validFiles.filter(f => !/^(cover|cover1)\.(webp|jpg|jpeg|png)$/i.test(f));
+        } else {
+            // For PDFs, we also strip 01/1 because the PDF engine prepends the cover page manually
+            filesToReturn = validFiles.filter(f => !/^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
+        }
         
         if (shareType === 'full') {
-            insideFiles = insideFiles.filter(f => {
+            filesToReturn = filesToReturn.filter(f => {
                 if (p.stock && p.stock[f] === 0) return false;
                 var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
                 if (p.stock && p.stock[nameWithoutExt] === 0) return false;
@@ -40,29 +46,13 @@ async function getActualDesignsForProduct(p, shareType, action) {
             });
         }
         
-        insideFiles.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
-        
-        if (action === 'images') {
-            return coverFiles.concat(insideFiles);
-        } else {
-            return insideFiles;
-        }
+        filesToReturn.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
+        return filesToReturn;
     }
 
     var readyArr = (p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(d => d) : [];
     if (shareType === 'full') {
         readyArr = readyArr.filter(d => !p.stock || p.stock[d] !== 0);
-    }
-    
-    if (action === 'images') {
-        var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
-        var fallbackFile = dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl] || 'DIRECT';
-        // Only prepend if the fallback isn't already the first item
-        if (readyArr.length > 0 && fallbackFile !== 'DIRECT' && readyArr[0] !== fallbackFile) {
-            readyArr.unshift(fallbackFile);
-        } else if (readyArr.length > 0 && fallbackFile === 'DIRECT' && readyArr[0] !== '01') {
-            readyArr.unshift('DIRECT');
-        }
     }
     
     return readyArr;
