@@ -11,6 +11,9 @@ async function getActualDesignsForProduct(p, shareType, action) {
     var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
     
     var items = [];
+    if (!window.dsFolderCache) {
+        try { window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {}; } catch(e) { window.dsFolderCache = {}; }
+    }
     if (window.dsFolderCache && window.dsFolderCache[listUrl]) {
         items = window.dsFolderCache[listUrl];
     } else {
@@ -30,8 +33,11 @@ async function getActualDesignsForProduct(p, shareType, action) {
         
         var filesToReturn;
         if (action === 'images') {
-            // For WhatsApp images, keep everything EXCEPT explicit cover images
+            // For WhatsApp images, keep everything EXCEPT explicit cover images (unless it's the ONLY image!)
             filesToReturn = validFiles.filter(f => !/^(cover|cover1)\.(webp|jpg|jpeg|png)$/i.test(f));
+            if (filesToReturn.length === 0 && validFiles.length > 0) {
+                filesToReturn = validFiles; // Single product fallback
+            }
         } else {
             // For PDFs, we also strip 01/1 because the PDF engine prepends the cover page manually
             filesToReturn = validFiles.filter(f => !/^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
@@ -1267,7 +1273,8 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                     var base64Img = base64Results[i];
                     if (base64Img) {
                         var pureBase64 = base64Img.split(',')[1];
-                        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
+                        var ext = base64Img.split(';')[0].split('/')[1] === 'jpeg' ? 'jpg' : base64Img.split(';')[0].split('/')[1];
+                        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "." + ext;
                         var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
                             path: fileName,
                             data: pureBase64,
@@ -1316,7 +1323,8 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
             for (var i = 0; i < base64Results.length; i++) {
                 var base64Img = base64Results[i];
                 if (base64Img) {
-                    var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + ".jpg";
+                    var ext = base64Img.split(';')[0].split('/')[1] === 'jpeg' ? 'jpg' : base64Img.split(';')[0].split('/')[1];
+                    var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "." + ext;
                     filesArray.push(base64ToFile(base64Img, fileName));
                 } else {
                     failedUrls.push(imageUrlsArray[i]);

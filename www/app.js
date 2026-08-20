@@ -3261,8 +3261,9 @@ async function syncImages(silent = false) {
     // Reset per-sync caches
     coverExistsMap = {};
     try { localStorage.removeItem("dsCoverExists"); } catch (e) { }
-    window.dsFolderCache = {};
-    try { localStorage.removeItem("dsFolderCache"); } catch (e) { }
+    if (!window.dsFolderCache) {
+        try { window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {}; } catch(e) { window.dsFolderCache = {}; }
+    }
     window.syncReportResults = [];
 
     if (bootMsg) bootMsg.innerText = "Fetching latest product list...";
