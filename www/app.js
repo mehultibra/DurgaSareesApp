@@ -3651,7 +3651,7 @@ function pushHistoryState(modal) {
 
 function showDevLog(msg, isErr) {
     var d = document.createElement('div');
-    d.style.position = 'fixed'; d.style.bottom = '20px'; d.style.left = '10px'; d.style.right = '10px';
+    d.style.position = 'fixed'; d.style.top = '70px'; d.style.left = '10px'; d.style.right = '10px';
     d.style.background = isErr ? '#c62828' : '#2e7d32'; d.style.color = '#fff';
     d.style.padding = '12px'; d.style.borderRadius = '8px'; d.style.zIndex = '999999';
     d.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)'; d.style.fontSize = '14px';
@@ -5126,7 +5126,7 @@ window.confirmAdminUpload = async function () {
         var outboxId = await window.saveToOutbox(window.tempCamDocId, finalDesignId, window.tempCamPhotoPath, window.tempCamProductName || "", bypass);
         if (outboxId) {
             var toastId = 'undoToast_' + Date.now();
-            var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:12px 20px; border-radius:4px; font-size:14px; box-shadow:0 3px 10px rgba(0,0,0,0.3); z-index:9999; display:flex; align-items:center; gap:15px;">
+            var toastHtml = `<div id="${toastId}" style="position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:12px 20px; border-radius:4px; font-size:14px; box-shadow:0 3px 10px rgba(0,0,0,0.3); z-index:9999; display:flex; align-items:center; gap:15px;">
                 <span>Photo Saved to Outbox.</span>
             </div>`;
             document.body.insertAdjacentHTML('beforeend', toastHtml);
@@ -5146,7 +5146,7 @@ window.undoOutbox = async function (outboxId, toastId) {
     await window.deleteFromOutbox(outboxId);
     var toastEl = document.getElementById(toastId);
     if (toastEl) toastEl.remove();
-    var feedbackHtml = `<div id="deletedToast" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#323232; color:#ff4081; padding:10px 20px; border-radius:4px; font-size:14px; z-index:9999;">Photo Upload Cancelled</div>`;
+    var feedbackHtml = `<div id="deletedToast" style="position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#323232; color:#ff4081; padding:10px 20px; border-radius:4px; font-size:14px; z-index:9999;">Photo Upload Cancelled</div>`;
     document.body.insertAdjacentHTML('beforeend', feedbackHtml);
     setTimeout(() => {
         var el = document.getElementById('deletedToast');
