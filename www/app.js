@@ -1900,14 +1900,14 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     var cleanGridPath = gridPath ? String(gridPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : "";
     var cleanZoomPath = zoomPath && zoomPath !== "None" ? String(zoomPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : cleanGridPath;
 
-    if (!cleanGridPath || cleanGridPath === "" || cleanGridPath.toLowerCase() === "none") {
-        deck.innerHTML = '<div class="swipe-card" data-design="DIRECT"><img src="' + window.dsMissingImage + '"></div>';
-        if (typeof onRenderComplete === 'function') onRenderComplete();
-        return;
-    }
-
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+
+    if (!cleanGridPath || cleanGridPath === "" || cleanGridPath.toLowerCase() === "none") {
+        window.lastRenderedDesignNames = "";
+        processFolderItems([]);
+        return;
+    }
     // List files from Grid path (always has source images), then build Zoom URLs from filenames
     var prefix = cleanGridPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
     // delimiter=/ means only DIRECT children are returned, not recursive subfolders
