@@ -1273,7 +1273,9 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                     var base64Img = base64Results[i];
                     if (base64Img) {
                         var pureBase64 = base64Img.split(',')[1];
-                        var ext = base64Img.split(';')[0].split('/')[1] === 'jpeg' ? 'jpg' : base64Img.split(';')[0].split('/')[1];
+                        var ext = base64Img.split(';')[0].split('/')[1];
+                        if (ext === 'jpeg') ext = 'jpg';
+                        if (ext === 'octet-stream' || !ext) ext = 'webp';
                         var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "." + ext;
                         var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
                             path: fileName,
@@ -1323,7 +1325,9 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
             for (var i = 0; i < base64Results.length; i++) {
                 var base64Img = base64Results[i];
                 if (base64Img) {
-                    var ext = base64Img.split(';')[0].split('/')[1] === 'jpeg' ? 'jpg' : base64Img.split(';')[0].split('/')[1];
+                    var ext = base64Img.split(';')[0].split('/')[1];
+                    if (ext === 'jpeg') ext = 'jpg';
+                    if (ext === 'octet-stream' || !ext) ext = 'webp';
                     var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "." + ext;
                     filesArray.push(base64ToFile(base64Img, fileName));
                 } else {
