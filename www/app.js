@@ -716,8 +716,9 @@ function initApp() {
         renderProductGrid(displayList);
         updateCartHeader();
 
-        let pidParam = new URLSearchParams(window.location.search).get('pid');
+        let pidParam = new URLSearchParams(window.location.search).get('pid') || (typeof window.pendingDeepLinkPid !== 'undefined' ? window.pendingDeepLinkPid : null);
         if (pidParam) {
+            window.pendingDeepLinkPid = null;
             history.replaceState(null, '', window.location.pathname);
             setTimeout(() => { if(typeof openDetail === 'function') openDetail(pidParam); }, 500);
         }
@@ -5751,6 +5752,26 @@ document.addEventListener('DOMContentLoaded', () => {
         window.Capacitor.Plugins.StatusBar.setStyle({ style: 'LIGHT' }).catch(e => console.log('StatusBar error:', e));
     }
 });
+
+// Deep Link Native Handling
+window.pendingDeepLinkPid = null;
+if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+    window.Capacitor.Plugins.App.addListener('appUrlOpen', data => {
+        if (data.url) {
+            try {
+                let urlObj = new URL(data.url);
+                let pid = urlObj.searchParams.get('pid');
+                if (pid) {
+                    if (typeof allProducts !== 'undefined' && allProducts.length > 0 && typeof openDetail === 'function') {
+                        openDetail(pid);
+                    } else {
+                        window.pendingDeepLinkPid = pid;
+                    }
+                }
+            } catch(e) {}
+        }
+    });
+}
 
 
 window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
