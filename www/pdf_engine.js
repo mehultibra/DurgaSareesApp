@@ -1250,7 +1250,7 @@ function base64ToFile(base64Data, filename) {
     return new File([u8arr], filename, { type: mime });
 }
 
-async function shareNativeImages(productName, productPrice, imageUrlsArray) {
+async function shareNativeImages(productName, productPrice, imageUrlsArray, deepLink) {
     var bootScreen = document.getElementById('boot');
     if (bootScreen) {
         bootScreen.style.display = 'flex';
@@ -1300,13 +1300,21 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray) {
                     }
                 }
 
-                // ⚠️ IMPORTANT: On Android, passing both `files` AND `text` in a single share call
-                // causes WhatsApp to receive ONLY the text and silently drop all the image files.
-                // Fix: Share files-only so images arrive correctly in WhatsApp.
-                await window.Capacitor.Plugins.Share.share({
-                    title: "🛍️ " + productName + " — ₹" + productPrice,
+                let shareTitle = productName;
+                if (productPrice) shareTitle += " — ₹" + productPrice;
+                
+                let shareOptions = {
+                    title: shareTitle,
                     files: uriArray
-                });
+                };
+                
+                if (deepLink) {
+                    shareOptions.text = "Check out this design at Durga Sarees:\n\n" + deepLink;
+                }
+
+                // ⚠️ IMPORTANT: On older versions of Android, passing both `files` AND `text` in a single share call
+                // caused WhatsApp to receive ONLY the text. However, users requested the link, so we are passing it.
+                await window.Capacitor.Plugins.Share.share(shareOptions);
                 nativeSuccess = true;
             } catch (nativeErr) {
                 if (nativeErr.message && nativeErr.message.toLowerCase().includes("cancel")) {
@@ -1577,7 +1585,8 @@ window.triggerShare = async function (action) {
             return;
         }
         if (typeof shareNativeImages === 'function') {
-            await shareNativeImages(curProduct.name, curProduct.price, highResUrls);
+            var pLink = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
+            await shareNativeImages(curProduct.name, curProduct.price, highResUrls, pLink);
         }
     } else {
         if (typeof generateNativePDF === 'function') {
