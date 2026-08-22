@@ -2102,7 +2102,6 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         // Instantly process and render cards from local memory!
         processFolderItems(cachedItems);
     } else {
-        var deck = document.getElementById('swipeDeck');
         if (deck) deck.innerHTML = '<div style="width:100%; text-align:center; padding: 60px 20px; color: var(--text-muted, #888); font-size: 14px;"><i class="fas fa-spinner fa-spin" style="margin-right: 8px;"></i> Loading designs...</div>';
     }
 
