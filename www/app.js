@@ -2395,7 +2395,7 @@ function updateLiveDetailHeader() {
     }
 }
 
-function closeDetail() {
+function closeDetail(fromHistory) {
     var fab = document.getElementById('adminCamFab'); if (fab) fab.remove();
     var panel = document.getElementById('detailPanel');
     if (panel) {
@@ -2454,7 +2454,9 @@ function closeDetail() {
         }
     }
 
-    history.back(); // Standard browser back to trigger popstate
+    if (!fromHistory) {
+        history.back(); // Standard browser back to trigger popstate
+    }
 }
 
 // ====================================
@@ -4213,12 +4215,8 @@ function applyModalState(modal) {
             detailPanel.classList.add('open');
         }
     } else {
-        if (detailPanel) {
-            detailPanel.classList.remove('open');
-            var videos = detailPanel.querySelectorAll('video');
-            videos.forEach(function (v) {
-                v.pause();
-            });
+        if (detailPanel && detailPanel.classList.contains('open')) {
+            if (typeof closeDetail === 'function') closeDetail(true);
         }
     }
 
@@ -6041,7 +6039,7 @@ window.openLiveAdmin = function() {
                             <div style="display:flex; flex-direction:column; gap:4px;">
                                 <span id="admin_name_${safeDocId}" style="font-weight:bold; font-size:16px;">${dispName}</span>
                                 ${statusBadge}
-                                <span id="admin_sub_${safeDocId}">${(dispName !== docId && !isGuest) ? `<span style="font-size:12px; color:#888;">${docId}</span>` : ''}</span>
+                                <span id="admin_sub_${safeDocId}"></span>
                             </div>
                             ${actionsHtml}
                         </div>
