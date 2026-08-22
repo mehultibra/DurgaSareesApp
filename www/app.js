@@ -1776,11 +1776,11 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         }
     }
 
-    window.updateLivePresence(productId);
-    
     if (window.viewStartTime && window.curProduct) {
         window.recordTimeSpent();
     }
+
+    window.updateLivePresence(productId);
     
     var p = allProducts.find(x => x.id === productId || x.docId === productId);
     if (!p) return;
@@ -6001,7 +6001,7 @@ window.openLiveAdmin = function() {
                     }
 
                     let historyHtml = '';
-                    if (d.historyMap) {
+                    if (d.historyMap && Object.keys(d.historyMap).length > 0) {
                         let sortedDates = Object.keys(d.historyMap).sort().reverse();
                         sortedDates.forEach(date => {
                             historyHtml += `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
