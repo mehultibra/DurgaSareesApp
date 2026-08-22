@@ -728,7 +728,9 @@ function initApp() {
         let pidParam = new URLSearchParams(window.location.search).get('pid') || (typeof window.pendingDeepLinkPid !== 'undefined' ? window.pendingDeepLinkPid : null);
         if (pidParam) {
             window.pendingDeepLinkPid = null;
-            history.replaceState(null, '', window.location.pathname);
+            if (!window.isGuestMode) {
+                history.replaceState(null, '', window.location.pathname);
+            }
             setTimeout(() => { if(typeof openDetail === 'function') openDetail(pidParam); }, 500);
         }
     }
@@ -1880,7 +1882,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         var wasOpen = detailPanel && detailPanel.classList.contains('open');
         if (detailPanel) detailPanel.classList.add('open');
 
-        if (!wasOpen) {
+        if (!wasOpen && !window.isGuestMode) {
             pushHistoryState('detail');
         } else {
             // Already open, no need to push another identical state!
@@ -6025,51 +6027,92 @@ window.shareWhatsAppLink = async function() {
     var textMsg = "Check out this design at Durga Sarees:\n\n" + link;
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
+        
+        document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing HD Images...</div>');
+
         try {
-            var coverSrc = "";
-            var gridImg = document.getElementById("img_" + curProduct.id);
-            if (gridImg && gridImg.src && !gridImg.src.startsWith("data:")) coverSrc = gridImg.src;
-            if (!coverSrc) {
-                var dtImg = document.getElementById("design_img_" + curProduct.id + "_DIRECT");
-                if (dtImg && dtImg.src && !dtImg.src.startsWith("data:")) coverSrc = dtImg.src;
+            var folderPath = "Uploads/Images/" + curProduct.cat + "/" + curProduct.name;
+            var fileNames = window.dsFolderCache[folderPath] || [];
+            
+            if (fileNames.length === 0) {
+                var listUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?prefix=" + encodeURIComponent(folderPath + "/");
+                var listRes = await fetch(listUrl);
+                if (listRes.ok) {
+                    var data = await listRes.json();
+                    fileNames = (data.items || []).map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
+                                .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+                    window.dsFolderCache[folderPath] = fileNames;
+                }
             }
 
-            if (coverSrc) {
-                var res = await fetch(coverSrc);
-                var blob = await res.blob();
-                var reader = new FileReader();
-                reader.readAsDataURL(blob);
-                reader.onloadend = async function() {
-                    try {
-                        var base64data = reader.result;
-                        var pathName = "share_" + Date.now() + ".jpg";
-                        var writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
-                            path: pathName,
-                            data: base64data,
-                            directory: 'CACHE'
-                        });
-                        await window.Capacitor.Plugins.Share.share({
-                            title: curProduct.name,
-                            text: textMsg,
-                            url: writeRes.uri,
-                            dialogTitle: 'Share to WhatsApp'
-                        });
-                    } catch(e) {
-                        console.error("Native share error", e);
-                        window.open("https://wa.me/?text=" + encodeURIComponent(textMsg), '_blank');
-                    }
-                    if (typeof closeModals === 'function') closeModals();
-                };
-                return;
+            var localFiles = [];
+            var maxShare = 6;
+            var shareUrls = [];
+            
+            if (fileNames.length > 0) {
+                var sorted = [];
+                for (var i = 0; i < fileNames.length; i++) {
+                    var fn = typeof fileNames[i] === 'string' ? fileNames[i] : fileNames[i].name;
+                    if (/^(cover|cover1)\./i.test(fn)) sorted.unshift(fn);
+                    else sorted.push(fn);
+                }
+                
+                for (var i = 0; i < Math.min(sorted.length, maxShare); i++) {
+                    var zoomUrl = typeof window.getFirebaseZoomUrl === 'function' ? window.getFirebaseZoomUrl(folderPath, sorted[i]) : "";
+                    if (zoomUrl) shareUrls.push(zoomUrl);
+                }
             }
+            
+            if (shareUrls.length === 0) {
+                var coverSrc = "";
+                var gridImg = document.getElementById("img_" + curProduct.id);
+                if (gridImg && gridImg.src && !gridImg.src.startsWith("data:")) coverSrc = gridImg.src;
+                if (!coverSrc) {
+                    var dtImg = document.getElementById("design_img_" + curProduct.id + "_DIRECT");
+                    if (dtImg && dtImg.src && !dtImg.src.startsWith("data:")) coverSrc = dtImg.src;
+                }
+                if (coverSrc) shareUrls.push(coverSrc);
+            }
+
+            var downloadPromises = shareUrls.map(async (url, idx) => {
+                var res = await fetch(url);
+                var blob = await res.blob();
+                var base64data = await new Promise((resolve) => {
+                    var reader = new FileReader();
+                    reader.readAsDataURL(blob);
+                    reader.onloadend = () => resolve(reader.result);
+                });
+                var pathName = "share_" + Date.now() + "_" + idx + ".jpg";
+                var writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
+                    path: pathName,
+                    data: base64data,
+                    directory: 'CACHE'
+                });
+                return writeRes.uri;
+            });
+
+            localFiles = await Promise.all(downloadPromises);
+
+            if (localFiles.length > 0) {
+                await window.Capacitor.Plugins.Share.share({
+                    title: curProduct.name,
+                    text: textMsg,
+                    files: localFiles
+                });
+            } else {
+                throw new Error("No images available to share.");
+            }
+
         } catch (e) {
-            console.error("Native share setup error", e);
+            console.error("Share error:", e);
+            window.location.href = "https://wa.me/?text=" + encodeURIComponent(textMsg);
+        } finally {
+            var ldr = document.getElementById('shareLoader');
+            if (ldr) ldr.remove();
         }
+    } else {
+        window.open("https://wa.me/?text=" + encodeURIComponent(textMsg), '_blank');
     }
-    
-    // Fallback for Web or if native fails
-    window.open("https://wa.me/?text=" + encodeURIComponent(textMsg), '_blank');
-    if (typeof closeModals === 'function') closeModals();
 };
 
 window.openLiveAdmin = function() {
