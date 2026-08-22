@@ -1742,13 +1742,17 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     }
 
     window.updateLivePresence(productId);
-    if (!keepSearchShown) {
-        document.getElementById('searchInput').value = '';
-        renderProductGrid();
-    }
     var p = allProducts.find(x => x.id === productId || x.docId === productId);
     if (!p) return;
     curProduct = p;
+
+    if (p && p.name) {
+        if (!window.livePresenceHistory) window.livePresenceHistory = [];
+        if (!window.livePresenceHistory.includes(p.name)) {
+            window.livePresenceHistory.push(p.name);
+            if (window.livePresenceHistory.length > 10) window.livePresenceHistory.shift();
+        }
+    }
 
     document.getElementById('dtNameTop').innerText = p.name;
     document.getElementById('dtPriceBot').innerText = p.price || '0';
@@ -5930,13 +5934,24 @@ window.openLiveAdmin = function() {
                 }
                 snapshot.forEach(doc => {
                     let d = doc.data();
-                    let html = `<div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid #4caf50;">
+                    let isGuest = doc.id.startsWith('guest_');
+                    let actionsHtml = isGuest 
+                        ? `<span style="background:#e0e0e0; color:#555; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold;">Guest Visitor</span>`
+                        : `<div style="display:flex; gap:8px;">
+                             <a href="tel:${doc.id}" style="background:#1976d2; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fas fa-phone"></i> Call</a>
+                             <a href="https://wa.me/${doc.id.replace(/\D/g, '')}" target="_blank" style="background:#25D366; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fab fa-whatsapp"></i> WA</a>
+                           </div>`;
+                    
+                    let recentHistoryHtml = (d.recentHistory && d.recentHistory.length) ? `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${d.recentHistory.join(', ')}</div>` : '';
+                    
+                    let html = `<div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${isGuest ? '#9e9e9e' : '#4caf50'};">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                             <span style="font-weight:bold; font-size:16px;">${doc.id}</span>
-                            <a href="tel:${doc.id}" style="background:#1976d2; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fas fa-phone"></i> Call</a>
+                            ${actionsHtml}
                         </div>
                         <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Viewing:</b> ${d.currentProduct || 'None'}</div>
                         <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Cart:</b> ${d.cartCount || 0} items (₹${d.cartValue || 0})</div>
+                        ${recentHistoryHtml}
                         ${(d.cartSummary && d.cartSummary.length) ? `<div style="font-size:12px; color:#666; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;">${d.cartSummary.join('<br>')}</div>` : ''}
                     </div>`;
                     contentEl.insertAdjacentHTML('beforeend', html);
