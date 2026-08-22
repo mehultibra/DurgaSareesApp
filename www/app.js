@@ -5998,8 +5998,9 @@ window.openLiveAdmin = function() {
                         sortedDates.forEach(date => {
                             historyHtml += `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
                             for (let prodName in d.historyMap[date]) {
-                                let mins = parseFloat(d.historyMap[date][prodName]).toFixed(1);
-                                historyHtml += `<div style="font-size:12px; color:#333; margin-left:8px;">• ${prodName} (${mins} mins)</div>`;
+                                let mins = parseFloat(d.historyMap[date][prodName]);
+                                let timeStr = mins < 1 ? Math.round(mins * 60) + " secs" : Math.floor(mins) + "m " + Math.round((mins % 1) * 60) + "s";
+                                historyHtml += `<div style="font-size:12px; color:#333; margin-left:8px;">• ${prodName} (${timeStr})</div>`;
                             }
                         });
                     } else if (d.recentHistory && d.recentHistory.length) {
@@ -6010,12 +6011,33 @@ window.openLiveAdmin = function() {
                     let stationPortion = (d.customerStation && d.customerStation !== "Unknown") ? ' - ' + d.customerStation : '';
                     let dispName = namePortion + stationPortion;
 
+                    if (!window.adminCustomerCache) window.adminCustomerCache = {};
+                    if (dispName === docId && !window.adminCustomerCache[docId] && !isGuest) {
+                        window.adminCustomerCache[docId] = "fetching";
+                        firebase.firestore().collection('Users').doc(docId).get().then(uDoc => {
+                            if (uDoc.exists) {
+                                let u = uDoc.data();
+                                window.adminCustomerCache[docId] = u.name ? (u.name + (u.station ? ' - ' + u.station : '')) : docId;
+                                let safeId = docId.replace(/\+/g, '');
+                                let el = document.getElementById('admin_name_' + safeId);
+                                if (el) el.innerText = window.adminCustomerCache[docId];
+                                let subEl = document.getElementById('admin_sub_' + safeId);
+                                if (subEl && window.adminCustomerCache[docId] !== docId) {
+                                    subEl.innerHTML = `<span style="font-size:12px; color:#888;">${docId}</span>`;
+                                }
+                            }
+                        }).catch(()=>{});
+                    } else if (window.adminCustomerCache[docId] && window.adminCustomerCache[docId] !== "fetching") {
+                        dispName = window.adminCustomerCache[docId];
+                    }
+
+                    let safeDocId = docId.replace(/\+/g, '');
                     let html = `<div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${isLiveNow ? '#4caf50' : '#9e9e9e'};">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                             <div style="display:flex; flex-direction:column; gap:4px;">
-                                <span style="font-weight:bold; font-size:16px;">${dispName}</span>
+                                <span id="admin_name_${safeDocId}" style="font-weight:bold; font-size:16px;">${dispName}</span>
                                 ${statusBadge}
-                                ${(dispName !== docId && !isGuest) ? `<span style="font-size:12px; color:#888;">${docId}</span>` : ''}
+                                <span id="admin_sub_${safeDocId}">${(dispName !== docId && !isGuest) ? `<span style="font-size:12px; color:#888;">${docId}</span>` : ''}</span>
                             </div>
                             ${actionsHtml}
                         </div>
