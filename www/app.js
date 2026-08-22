@@ -5961,9 +5961,10 @@ window.openLiveAdmin = function() {
                     let isGuest = docId.startsWith('guest_');
                     
                     let isLiveNow = d.lastActive.toDate() >= fifteenMinsAgo;
+                    let lastSeenStr = d.lastActive ? d.lastActive.toDate().toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true}) : "Unknown";
                     let statusBadge = isLiveNow 
                         ? `<span style="background:#4caf50; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🟢 Live Now</span>`
-                        : `<span style="background:#9e9e9e; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">⚪ Recent</span>`;
+                        : `<span style="background:#9e9e9e; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🕒 Last seen: ${lastSeenStr}</span>`;
 
                     let actionsHtml = isGuest 
                         ? `<span style="background:#e0e0e0; color:#555; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold;">Guest Visitor</span>`
@@ -5992,14 +5993,16 @@ window.openLiveAdmin = function() {
                         historyHtml = `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${d.recentHistory.join(', ')}</div>`;
                     }
                     
-                    let dispName = d.customerName ? (d.customerName + (d.customerStation ? ' - ' + d.customerStation : '')) : docId;
+                    let namePortion = (d.customerName && d.customerName !== "Guest") ? d.customerName : (isGuest ? "Guest" : docId);
+                    let stationPortion = (d.customerStation && d.customerStation !== "Unknown") ? ' - ' + d.customerStation : '';
+                    let dispName = namePortion + stationPortion;
 
                     let html = `<div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${isLiveNow ? '#4caf50' : '#9e9e9e'};">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                             <div style="display:flex; flex-direction:column; gap:4px;">
                                 <span style="font-weight:bold; font-size:16px;">${dispName}</span>
                                 ${statusBadge}
-                                <span style="font-size:12px; color:#888;">${docId}</span>
+                                ${(dispName !== docId && !isGuest) ? `<span style="font-size:12px; color:#888;">${docId}</span>` : ''}
                             </div>
                             ${actionsHtml}
                         </div>
