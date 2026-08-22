@@ -5955,7 +5955,7 @@ window.shareWhatsAppLink = function() {
 };
 
 window.openLiveAdmin = function() {
-    document.getElementById('adminLiveModal').style.display = 'flex';
+    openModal('adminLiveModal');
     var contentEl = document.getElementById('adminLiveContent');
     contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">Fetching live activity...</div>';
     
@@ -6069,7 +6069,7 @@ window.openLiveAdmin = function() {
 };
 
 window.closeLiveAdmin = function() {
-    document.getElementById('adminLiveModal').style.display = 'none';
+    closeModals();
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
     }
