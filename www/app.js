@@ -246,11 +246,20 @@ window.addEventListener('DOMContentLoaded', function () {
         // ALWAYS initialize Firebase Web SDK for Firestore support on Native
         initFirebaseGlobally();
 
+        var guestPid = new URLSearchParams(window.location.search).get('pid');
+
         if (activeUser && activeUser !== "null" && activeUser !== "undefined") {
             if (loginScreen && appBody) {
                 loginScreen.style.display = 'none';
                 appBody.style.display = 'flex';
                 checkAdminStatus(activeUser);
+                setTimeout(initApp, 100);
+            }
+        } else if (guestPid) {
+            window.isGuestMode = true;
+            if (loginScreen && appBody) {
+                loginScreen.style.display = 'none';
+                appBody.style.display = 'flex';
                 setTimeout(initApp, 100);
             }
         } else {
@@ -1764,6 +1773,43 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         var slBody = detailPanel ? detailPanel.querySelector('.sl-body') : null;
         if (slBody) slBody.style.display = 'block';
 
+        if (window.isGuestMode) {
+            // Hide all unnecessary app UI for guests
+            var hdr = document.querySelector('.hdr');
+            if (hdr) hdr.style.display = 'none';
+            var bNav = document.querySelector('.myntra-bottom-nav');
+            if (bNav) bNav.style.display = 'none';
+            var detailBottom = document.getElementById('detailBottomRow');
+            if (detailBottom) detailBottom.style.display = 'none';
+            
+            // Hide back buttons in the detail panel header
+            var slHdr = detailPanel ? detailPanel.querySelector('.sl-hdr') : null;
+            if (slHdr) slHdr.style.display = 'none';
+
+            // Add the sticky "Download App" button
+            var existingBtn = document.getElementById('guestDownloadBtn');
+            if (!existingBtn && detailPanel) {
+                var btn = document.createElement('a');
+                btn.id = 'guestDownloadBtn';
+                btn.href = 'https://play.google.com/store/apps/details?id=com.durgasarees.catalog';
+                btn.innerHTML = '<b>Download Durga Sarees App</b><br>To view Wholesale Prices & Order';
+                btn.style.position = 'absolute';
+                btn.style.bottom = '0';
+                btn.style.left = '0';
+                btn.style.width = '100%';
+                btn.style.padding = '18px';
+                btn.style.backgroundColor = '#ff3f6c';
+                btn.style.color = '#fff';
+                btn.style.textAlign = 'center';
+                btn.style.textDecoration = 'none';
+                btn.style.fontSize = '16px';
+                btn.style.zIndex = '999999';
+                btn.style.boxShadow = '0 -4px 15px rgba(0,0,0,0.3)';
+                btn.style.boxSizing = 'border-box';
+                detailPanel.appendChild(btn);
+            }
+        }
+
         if (!keepSearchShown) {
             var input = document.getElementById('srchMainInput');
             var logo = document.getElementById('appLogoImg');
@@ -2882,7 +2928,9 @@ function openFs(arg1, arg2, arg3, arg4) {
     var curStock = window.curProduct && window.curProduct.stock && window.curProduct.stock[fsDesignId] !== undefined ? window.curProduct.stock[fsDesignId] : 999;
     var fsControls = document.querySelector('.fs-controls');
     if (fsControls) {
-        if (!window.isAdminMode && curStock === 0) {
+        if (window.isGuestMode) {
+            fsControls.style.display = 'none';
+        } else if (!window.isAdminMode && curStock === 0) {
             fsControls.innerHTML = '<span style="background: red; color: white; padding: 6px 16px; border-radius: 4px; font-weight: bold; font-size: 16px;">PACKED</span>';
         } else {
             fsControls.innerHTML = '<button onpointerdown="event.preventDefault(); fsChg(-1)">−</button><span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">' + (cart[key] ? cart[key].qty : 0) + '</span><button onpointerdown="event.preventDefault(); fsChg(1)">+</button>';
@@ -5971,10 +6019,56 @@ window.promptSetAsCover = async function(docId, pid, designId) {
     }
 };
 
-window.shareWhatsAppLink = function() {
+window.shareWhatsAppLink = async function() {
     if (!curProduct) return;
     var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
-    window.open("https://wa.me/?text=" + encodeURIComponent("Check out this design at Durga Sarees:\n\n" + link), '_blank');
+    var textMsg = "Check out this design at Durga Sarees:\n\n" + link;
+
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
+        try {
+            var coverSrc = "";
+            var gridImg = document.getElementById("img_" + curProduct.id);
+            if (gridImg && gridImg.src && !gridImg.src.startsWith("data:")) coverSrc = gridImg.src;
+            if (!coverSrc) {
+                var dtImg = document.getElementById("design_img_" + curProduct.id + "_DIRECT");
+                if (dtImg && dtImg.src && !dtImg.src.startsWith("data:")) coverSrc = dtImg.src;
+            }
+
+            if (coverSrc) {
+                var res = await fetch(coverSrc);
+                var blob = await res.blob();
+                var reader = new FileReader();
+                reader.readAsDataURL(blob);
+                reader.onloadend = async function() {
+                    try {
+                        var base64data = reader.result;
+                        var pathName = "share_" + Date.now() + ".jpg";
+                        var writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
+                            path: pathName,
+                            data: base64data,
+                            directory: 'CACHE'
+                        });
+                        await window.Capacitor.Plugins.Share.share({
+                            title: curProduct.name,
+                            text: textMsg,
+                            url: writeRes.uri,
+                            dialogTitle: 'Share to WhatsApp'
+                        });
+                    } catch(e) {
+                        console.error("Native share error", e);
+                        window.open("https://wa.me/?text=" + encodeURIComponent(textMsg), '_blank');
+                    }
+                    if (typeof closeModals === 'function') closeModals();
+                };
+                return;
+            }
+        } catch (e) {
+            console.error("Native share setup error", e);
+        }
+    }
+    
+    // Fallback for Web or if native fails
+    window.open("https://wa.me/?text=" + encodeURIComponent(textMsg), '_blank');
     if (typeof closeModals === 'function') closeModals();
 };
 
