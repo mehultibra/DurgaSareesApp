@@ -88,14 +88,17 @@ function getActiveUserId() {
 }
 
 let presenceTimeout = null;
-window.updateLivePresence = function(productId) {
+let lastPresencePush = 0;
+window.updateLivePresence = function(productId, force = false) {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
   
-  clearTimeout(presenceTimeout);
-  presenceTimeout = setTimeout(() => {
-    try {
-      if (typeof firebase === 'undefined' || !firebase.firestore) return;
-      const uid = getActiveUserId();
+  let now = Date.now();
+  if (!force && now - lastPresencePush < 15000) return;
+  lastPresencePush = now;
+  
+  try {
+    if (typeof firebase === 'undefined' || !firebase.firestore) return;
+    const uid = getActiveUserId();
       
       let totalQty = 0;
       let totalVal = 0;
@@ -131,7 +134,6 @@ window.updateLivePresence = function(productId) {
       firebase.firestore().collection('LiveSessions').doc(uid).set(payload, { merge: true })
         .catch(err => console.warn("Live presence sync skipped:", err));
     } catch(e) {}
-  }, 15000);
 };
 var activeCategories = [];
 var activePriceFilters = [];
@@ -576,6 +578,17 @@ async function checkAdminStatus(phone) {
         var data = await res.json();
         if (data && data.length > 0 && data[0].document) {
             var f = data[0].document.fields;
+            
+            // Cache identity so it is immediately available for the Live Analytics engine
+            let userProfile = {
+                name: f.name ? f.name.stringValue : "",
+                firm: f.firm ? f.firm.stringValue : "",
+                station: f.station ? f.station.stringValue : "",
+                state: f.state ? f.state.stringValue : "",
+                phone: phone
+            };
+            localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile));
+
             if (f.isAdmin && f.isAdmin.booleanValue === true) {
                 localStorage.setItem('dsIsAdmin', 'true');
                 window.isSuperAdmin = true;
@@ -2437,7 +2450,7 @@ function closeDetail() {
         localStorage.setItem('dsLiveHistory', JSON.stringify(historyMap));
         window.viewStartTime = null;
         if (typeof window.updateLivePresence === 'function') {
-            window.updateLivePresence(null);
+            window.updateLivePresence(null, true);
         }
     }
 
