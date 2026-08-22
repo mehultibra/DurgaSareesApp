@@ -5290,6 +5290,18 @@ window.confirmAdminUpload = async function () {
 
     if (modal) modal.style.display = 'none';
 
+    var p = window.allProducts ? window.allProducts.find(x => x.id === window.tempCamPid) : null;
+    if (p && (!p.gridUrl || p.gridUrl.trim() === "" || p.gridUrl.toLowerCase() === "none")) {
+        p.gridUrl = "Images/" + p.cat + "/" + p.name + "/Grid";
+        p.zoomUrl = "Images/" + p.cat + "/" + p.name + "/Zoom";
+        var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + window.tempCamDocId + "?updateMask.fieldPaths=gridUrl&updateMask.fieldPaths=zoomUrl";
+        fetch(patchUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { gridUrl: { stringValue: p.gridUrl }, zoomUrl: { stringValue: p.zoomUrl } } })
+        }).catch(e => console.error("Auto-heal gridUrl failed", e));
+    }
+
     try {
         var outboxId = await window.saveToOutbox(window.tempCamDocId, finalDesignId, window.tempCamPhotoPath, window.tempCamProductName || "", bypass);
         if (outboxId) {
