@@ -5902,20 +5902,11 @@ window.promptSetAsCover = async function(docId, pid, designId) {
     }
 };
 
-window.copyAppLink = function() {
+window.shareWhatsAppLink = function() {
     if (!curProduct) return;
     var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
-    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Clipboard) {
-        Capacitor.Plugins.Clipboard.write({ string: link }).then(() => {
-            showDevLog("Link copied to clipboard!", false);
-        });
-    } else if (navigator.clipboard) {
-        navigator.clipboard.writeText(link).then(() => {
-            showDevLog("Link copied to clipboard!", false);
-        });
-    } else {
-        showDevLog("Clipboard not supported.", true);
-    }
+    window.open("https://wa.me/?text=" + encodeURIComponent("Check out this design at Durga Sarees:\n\n" + link), '_blank');
+    if (typeof closeModals === 'function') closeModals();
 };
 
 window.openLiveAdmin = function() {
