@@ -86,6 +86,55 @@ var displayList = [];
 var cart = {};
 var favorites = {};
 var activeUser = null;
+window.livePresenceHistory = [];
+
+function getActiveUserId() {
+  if (activeUser && activeUser !== "null" && activeUser !== "undefined") return activeUser;
+  let uid = localStorage.getItem('app_session_uid');
+  if (!uid) {
+    uid = 'guest_' + Math.random().toString(36).substring(2, 11);
+    localStorage.setItem('app_session_uid', uid);
+  }
+  return uid;
+}
+
+let presenceTimeout = null;
+window.updateLivePresence = function(productId) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  
+  clearTimeout(presenceTimeout);
+  presenceTimeout = setTimeout(() => {
+    try {
+      if (typeof firebase === 'undefined' || !firebase.firestore) return;
+      const uid = getActiveUserId();
+      
+      let totalQty = 0;
+      let totalVal = 0;
+      let cartSummary = [];
+      for (let k in cart) {
+        if (cart[k] && cart[k].qty > 0) {
+          totalQty += Number(cart[k].qty);
+          let rate = (cart[k].p && cart[k].p.price) ? Number(cart[k].p.price) : 0;
+          totalVal += Number(cart[k].qty) * rate;
+          cartSummary.push(`${cart[k].p ? cart[k].p.name : 'Saree'} (${cart[k].design}): ${cart[k].qty} pcs`);
+        }
+      }
+
+      const payload = {
+        user: uid,
+        currentProduct: productId || null,
+        recentHistory: (window.livePresenceHistory || []).slice(-10),
+        cartCount: totalQty,
+        cartValue: totalVal,
+        cartSummary: cartSummary.slice(0, 8),
+        lastActive: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      firebase.firestore().collection('LiveSessions').doc(uid).set(payload, { merge: true })
+        .catch(err => console.warn("Live presence sync skipped:", err));
+    } catch(e) {}
+  }, 15000);
+};
 var activeCategories = [];
 var activePriceFilters = [];
 var currentSort = 'new';
@@ -653,6 +702,12 @@ function initApp() {
         if (typeof renderHorizontalCategories === "function") renderHorizontalCategories();
         renderProductGrid(displayList);
         updateCartHeader();
+
+        let pidParam = new URLSearchParams(window.location.search).get('pid');
+        if (pidParam) {
+            history.replaceState(null, '', window.location.pathname);
+            setTimeout(() => { if(typeof openDetail === 'function') openDetail(pidParam); }, 500);
+        }
     }
 
     // ── STEP 1: Instantly render from cache (zero wait time) ──────────────
@@ -1686,7 +1741,12 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         }
     }
 
-    var p = allProducts.find(x => x.id === productId);
+    window.updateLivePresence(productId);
+    if (!keepSearchShown) {
+        document.getElementById('searchInput').value = '';
+        renderProductGrid();
+    }
+    var p = allProducts.find(x => x.id === productId || x.docId === productId);
     if (!p) return;
     curProduct = p;
 
@@ -2164,6 +2224,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 window.changeQty = function (pid, designId, amount) {
     var p = allProducts.find(x => x.id === pid); if (!p) return;
     if (!window.isAdminMode && p.stock && p.stock[designId] === 0) return; // Cart Protection
+    if (typeof window.updateLivePresence === 'function') window.updateLivePresence(typeof curProduct !== 'undefined' && curProduct ? curProduct.id : null);
     var key = pid + '_' + designId;
     var curQ = cart[key] ? cart[key].qty : 0;
     var newQ = Math.max(0, curQ + (amount * (p.mult || 1)));
@@ -2212,6 +2273,7 @@ window.changeQty = function (pid, designId, amount) {
 window.setExactQty = function (pid, designId, value) {
     var p = allProducts.find(x => x.id === pid); if (!p) return;
     var key = pid + '_' + designId;
+    if (typeof window.updateLivePresence === 'function') window.updateLivePresence(typeof curProduct !== 'undefined' && curProduct ? curProduct.id : null);
     var newQ = parseInt(value) || 0;
     if (newQ < 0) newQ = 0;
 
@@ -5833,5 +5895,61 @@ window.promptSetAsCover = async function(docId, pid, designId) {
     } finally {
         var ldr = document.getElementById('coverLoader');
         if(ldr) ldr.remove();
+    }
+};
+
+window.copyAppLink = function() {
+    if (!curProduct) return;
+    var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
+    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Clipboard) {
+        Capacitor.Plugins.Clipboard.write({ string: link }).then(() => {
+            showDevLog("Link copied to clipboard!", false);
+        });
+    } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(link).then(() => {
+            showDevLog("Link copied to clipboard!", false);
+        });
+    } else {
+        showDevLog("Clipboard not supported.", true);
+    }
+};
+
+window.openLiveAdmin = function() {
+    document.getElementById('adminLiveModal').style.display = 'flex';
+    var contentEl = document.getElementById('adminLiveContent');
+    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">Fetching live activity...</div>';
+    
+    if (typeof firebase !== 'undefined' && firebase.firestore) {
+        window.liveAdminUnsubscribe = firebase.firestore().collection('LiveSessions')
+            .where('lastActive', '>=', new Date(Date.now() - 15 * 60000))
+            .onSnapshot(snapshot => {
+                contentEl.innerHTML = '';
+                if (snapshot.empty) {
+                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 15 minutes.</div>';
+                    return;
+                }
+                snapshot.forEach(doc => {
+                    let d = doc.data();
+                    let html = `<div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid #4caf50;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span style="font-weight:bold; font-size:16px;">${doc.id}</span>
+                            <a href="tel:${doc.id}" style="background:#1976d2; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fas fa-phone"></i> Call</a>
+                        </div>
+                        <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Viewing:</b> ${d.currentProduct || 'None'}</div>
+                        <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Cart:</b> ${d.cartCount || 0} items (₹${d.cartValue || 0})</div>
+                        ${(d.cartSummary && d.cartSummary.length) ? `<div style="font-size:12px; color:#666; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;">${d.cartSummary.join('<br>')}</div>` : ''}
+                    </div>`;
+                    contentEl.insertAdjacentHTML('beforeend', html);
+                });
+            }, err => {
+                contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching live data.</div>';
+            });
+    }
+};
+
+window.closeLiveAdmin = function() {
+    document.getElementById('adminLiveModal').style.display = 'none';
+    if (typeof window.liveAdminUnsubscribe === 'function') {
+        window.liveAdminUnsubscribe();
     }
 };
