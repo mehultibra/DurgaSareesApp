@@ -2005,6 +2005,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
         } else {
             // Firebase Storage folder is empty: Clear fallback cards and show only the cover image
+            window.lastRenderedDesignNames = "";
             var gridImgEl = document.getElementById("img_" + p.id);
             var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
             var fallbackGridUrl = "";
@@ -2121,7 +2122,10 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             var oldNames = cachedItems ? cachedItems.map(x => x.name).join(',') : "";
             var newNames = items.map(x => x.name).join(',');
 
-            if (oldNames !== newNames) {
+            var needsRender = (oldNames !== newNames);
+            if (!cachedItems || cachedItems.length === 0) needsRender = true; // Always render if we were stuck on 'Loading designs...'
+
+            if (needsRender) {
                 processFolderItems(items);
             }
 
