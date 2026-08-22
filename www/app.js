@@ -108,14 +108,23 @@ window.updateLivePresence = function(productId) {
           cartSummary.push(`${cart[k].p ? cart[k].p.name : 'Saree'} (${cart[k].design}): ${cart[k].qty} pcs`);
         }
       }
+      let cd = {};
+      try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || "{}"); } catch(e){}
+      let customerName = cd.name || cd.firm || "Guest";
+      let customerStation = cd.station || "Unknown";
+      
+      let historyMap = {};
+      try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch(e){}
 
       const payload = {
         user: uid,
         currentProduct: productId || null,
-        recentHistory: (window.livePresenceHistory || []).slice(-10),
+        customerName: customerName,
+        customerStation: customerStation,
+        historyMap: historyMap,
         cartCount: totalQty,
         cartValue: totalVal,
-        cartSummary: cartSummary.slice(0, 8),
+        cartSummary: cartSummary,
         lastActive: firebase.firestore.FieldValue.serverTimestamp()
       };
 
@@ -1736,6 +1745,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     var p = allProducts.find(x => x.id === productId || x.docId === productId);
     if (!p) return;
     curProduct = p;
+    window.viewStartTime = Date.now();
 
     if (p && p.name) {
         if (!window.livePresenceHistory) window.livePresenceHistory = [];
@@ -2407,6 +2417,29 @@ function closeDetail() {
     }
     var slBody = panel ? panel.querySelector('.sl-body') : null;
     if (slBody) slBody.style.display = 'block';
+
+    if (window.viewStartTime && curProduct) {
+        let spentMins = (Date.now() - window.viewStartTime) / 60000;
+        let today = new Date().toISOString().split('T')[0];
+        let historyMap = {};
+        try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch(e){}
+        
+        if (!historyMap[today]) historyMap[today] = {};
+        historyMap[today][curProduct.name] = (historyMap[today][curProduct.name] || 0) + spentMins;
+        
+        let cutoff = Date.now() - (48 * 60 * 60 * 1000);
+        for (let dateKey in historyMap) {
+            if (new Date(dateKey).getTime() < cutoff) {
+                delete historyMap[dateKey];
+            }
+        }
+        
+        localStorage.setItem('dsLiveHistory', JSON.stringify(historyMap));
+        window.viewStartTime = null;
+        if (typeof window.updateLivePresence === 'function') {
+            window.updateLivePresence(null);
+        }
+    }
 
     history.back(); // Standard browser back to trigger popstate
 }
@@ -5910,35 +5943,75 @@ window.openLiveAdmin = function() {
             .onSnapshot(snapshot => {
                 contentEl.innerHTML = '';
                 let hasLive = false;
+                let fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
                 let fifteenMinsAgo = new Date(Date.now() - 15 * 60000);
+                
+                let sortedDocs = [];
                 snapshot.forEach(doc => {
                     let d = doc.data();
-                    if (!d.lastActive || d.lastActive.toDate() < fifteenMinsAgo) return;
+                    if (!d.lastActive || d.lastActive.toDate() < fortyEightHoursAgo) return;
+                    sortedDocs.push({id: doc.id, data: d, time: d.lastActive.toDate()});
+                });
+                sortedDocs.sort((a,b) => b.time - a.time);
+
+                sortedDocs.forEach(item => {
                     hasLive = true;
-                    let isGuest = doc.id.startsWith('guest_');
+                    let d = item.data;
+                    let docId = item.id;
+                    let isGuest = docId.startsWith('guest_');
+                    
+                    let isLiveNow = d.lastActive.toDate() >= fifteenMinsAgo;
+                    let statusBadge = isLiveNow 
+                        ? `<span style="background:#4caf50; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🟢 Live Now</span>`
+                        : `<span style="background:#9e9e9e; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">⚪ Recent</span>`;
+
                     let actionsHtml = isGuest 
                         ? `<span style="background:#e0e0e0; color:#555; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold;">Guest Visitor</span>`
                         : `<div style="display:flex; gap:8px;">
-                             <a href="tel:${doc.id}" style="background:#1976d2; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fas fa-phone"></i> Call</a>
-                             <a href="https://wa.me/${doc.id.replace(/\D/g, '')}" target="_blank" style="background:#25D366; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fab fa-whatsapp"></i> WA</a>
+                             <a href="tel:${docId}" style="background:#1976d2; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fas fa-phone"></i> Call</a>
+                             <a href="https://wa.me/${docId.replace(/\D/g, '')}" target="_blank" style="background:#25D366; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fab fa-whatsapp"></i> WA</a>
                            </div>`;
                     
-                    let recentHistoryHtml = (d.recentHistory && d.recentHistory.length) ? `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${d.recentHistory.join(', ')}</div>` : '';
+                    let viewingProduct = 'None';
+                    if (d.currentProduct) {
+                        let p = allProducts.find(x => x.id === d.currentProduct || x.docId === d.currentProduct);
+                        viewingProduct = p ? p.name : d.currentProduct;
+                    }
+
+                    let historyHtml = '';
+                    if (d.historyMap) {
+                        let sortedDates = Object.keys(d.historyMap).sort().reverse();
+                        sortedDates.forEach(date => {
+                            historyHtml += `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
+                            for (let prodName in d.historyMap[date]) {
+                                let mins = parseFloat(d.historyMap[date][prodName]).toFixed(1);
+                                historyHtml += `<div style="font-size:12px; color:#333; margin-left:8px;">• ${prodName} (${mins} mins)</div>`;
+                            }
+                        });
+                    } else if (d.recentHistory && d.recentHistory.length) {
+                        historyHtml = `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${d.recentHistory.join(', ')}</div>`;
+                    }
                     
-                    let html = `<div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${isGuest ? '#9e9e9e' : '#4caf50'};">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                            <span style="font-weight:bold; font-size:16px;">${doc.id}</span>
+                    let dispName = d.customerName ? (d.customerName + (d.customerStation ? ' - ' + d.customerStation : '')) : docId;
+
+                    let html = `<div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${isLiveNow ? '#4caf50' : '#9e9e9e'};">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <span style="font-weight:bold; font-size:16px;">${dispName}</span>
+                                ${statusBadge}
+                                <span style="font-size:12px; color:#888;">${docId}</span>
+                            </div>
                             ${actionsHtml}
                         </div>
-                        <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Viewing:</b> ${d.currentProduct || 'None'}</div>
+                        <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Viewing:</b> ${viewingProduct}</div>
                         <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Cart:</b> ${d.cartCount || 0} items (₹${d.cartValue || 0})</div>
-                        ${recentHistoryHtml}
+                        ${historyHtml}
                         ${(d.cartSummary && d.cartSummary.length) ? `<div style="font-size:12px; color:#666; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;">${d.cartSummary.join('<br>')}</div>` : ''}
                     </div>`;
                     contentEl.insertAdjacentHTML('beforeend', html);
                 });
                 if (!hasLive) {
-                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 15 minutes.</div>';
+                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 48 hours.</div>';
                 }
             }, err => {
                 contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching live data.</div>';
