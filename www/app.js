@@ -1714,6 +1714,28 @@ function fetchZoomNatively(zoomUrl, imgEl) {
     tempImg.src = zoomUrl;
 }
 
+window.recordTimeSpent = function() {
+    if (window.viewStartTime && window.curProduct) {
+        let spentMins = (Date.now() - window.viewStartTime) / 60000;
+        let today = new Date().toISOString().split('T')[0];
+        let historyMap = {};
+        try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch(e){}
+        
+        if (!historyMap[today]) historyMap[today] = {};
+        historyMap[today][window.curProduct.name] = (historyMap[today][window.curProduct.name] || 0) + spentMins;
+        
+        let cutoff = Date.now() - (48 * 60 * 60 * 1000);
+        for (let dateKey in historyMap) {
+            if (new Date(dateKey).getTime() < cutoff) {
+                delete historyMap[dateKey];
+            }
+        }
+        
+        localStorage.setItem('dsLiveHistory', JSON.stringify(historyMap));
+        window.viewStartTime = null;
+    }
+};
+
 function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     if (!skipShow) {
         cameFromDetail = false;
@@ -1755,6 +1777,11 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     }
 
     window.updateLivePresence(productId);
+    
+    if (window.viewStartTime && window.curProduct) {
+        window.recordTimeSpent();
+    }
+    
     var p = allProducts.find(x => x.id === productId || x.docId === productId);
     if (!p) return;
     curProduct = p;
@@ -2431,27 +2458,10 @@ function closeDetail(fromHistory) {
     var slBody = panel ? panel.querySelector('.sl-body') : null;
     if (slBody) slBody.style.display = 'block';
 
-    if (window.viewStartTime && curProduct) {
-        let spentMins = (Date.now() - window.viewStartTime) / 60000;
-        let today = new Date().toISOString().split('T')[0];
-        let historyMap = {};
-        try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch(e){}
-        
-        if (!historyMap[today]) historyMap[today] = {};
-        historyMap[today][curProduct.name] = (historyMap[today][curProduct.name] || 0) + spentMins;
-        
-        let cutoff = Date.now() - (48 * 60 * 60 * 1000);
-        for (let dateKey in historyMap) {
-            if (new Date(dateKey).getTime() < cutoff) {
-                delete historyMap[dateKey];
-            }
-        }
-        
-        localStorage.setItem('dsLiveHistory', JSON.stringify(historyMap));
-        window.viewStartTime = null;
-        if (typeof window.updateLivePresence === 'function') {
-            window.updateLivePresence(null, true);
-        }
+    window.recordTimeSpent();
+    
+    if (typeof window.updateLivePresence === 'function') {
+        window.updateLivePresence(null, true);
     }
 
     if (!fromHistory) {
