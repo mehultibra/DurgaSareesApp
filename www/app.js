@@ -6014,10 +6014,14 @@ window.openLiveAdmin = function() {
                     if (!window.adminCustomerCache) window.adminCustomerCache = {};
                     if (dispName === docId && !window.adminCustomerCache[docId] && !isGuest) {
                         window.adminCustomerCache[docId] = "fetching";
-                        firebase.firestore().collection('Users').doc(docId).get().then(uDoc => {
-                            if (uDoc.exists) {
-                                let u = uDoc.data();
-                                window.adminCustomerCache[docId] = u.name ? (u.name + (u.station ? ' - ' + u.station : '')) : docId;
+                        fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + docId)
+                        .then(res => res.json())
+                        .then(uDoc => {
+                            if (uDoc && uDoc.fields) {
+                                let f = uDoc.fields;
+                                let uName = f.name ? f.name.stringValue : "";
+                                let uStation = f.station ? f.station.stringValue : "";
+                                window.adminCustomerCache[docId] = uName ? (uName + (uStation ? ' - ' + uStation : '')) : docId;
                                 let safeId = docId.replace(/\+/g, '');
                                 let el = document.getElementById('admin_name_' + safeId);
                                 if (el) el.innerText = window.adminCustomerCache[docId];
@@ -6042,9 +6046,8 @@ window.openLiveAdmin = function() {
                             ${actionsHtml}
                         </div>
                         <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Viewing:</b> ${viewingProduct}</div>
-                        <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Cart:</b> ${d.cartCount || 0} items (₹${d.cartValue || 0})</div>
                         ${historyHtml}
-                        ${(d.cartSummary && d.cartSummary.length) ? `<div style="font-size:12px; color:#666; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;">${d.cartSummary.join('<br>')}</div>` : ''}
+                        ${(d.cartSummary && d.cartSummary.length) ? `<div style="font-size:12px; color:#333; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;"><b>Cart:</b><br>${d.cartSummary.join('<br>')}</div>` : ''}
                     </div>`;
                     contentEl.insertAdjacentHTML('beforeend', html);
                 });
