@@ -6094,11 +6094,33 @@ window.shareWhatsAppLink = async function() {
             localFiles = await Promise.all(downloadPromises);
 
             if (localFiles.length > 0) {
-                await window.Capacitor.Plugins.Share.share({
+                let shareOptions = {
                     title: curProduct.name,
-                    text: textMsg,
                     files: localFiles
-                });
+                };
+
+                if (localFiles.length > 1) {
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(textMsg);
+                        else {
+                            var ta = document.createElement("textarea"); ta.value = textMsg; document.body.appendChild(ta);
+                            ta.focus(); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        }
+                        
+                        var toastId = 'copyToast_' + Date.now();
+                        var toastHtml = `<div id="${toastId}" style="position:fixed; top:40%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.9); color:#fff; padding:16px 24px; border-radius:8px; font-size:16px; font-weight:bold; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:10000; display:flex; flex-direction:column; gap:8px; pointer-events:none;">
+                            <i class="fas fa-check-circle" style="font-size:28px; color:#4caf50;"></i>
+                            <span>Link Copied!</span>
+                            <span style="font-size:13px; font-weight:normal; color:#ddd;">Please paste it into WhatsApp<br>after images appear.</span>
+                        </div>`;
+                        document.body.insertAdjacentHTML('beforeend', toastHtml);
+                        setTimeout(() => { var t = document.getElementById(toastId); if(t) t.remove(); }, 5000);
+                    } catch(e) {}
+                } else {
+                    shareOptions.text = textMsg;
+                }
+
+                await window.Capacitor.Plugins.Share.share(shareOptions);
             } else {
                 throw new Error("No images available to share.");
             }
