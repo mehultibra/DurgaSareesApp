@@ -5925,15 +5925,14 @@ window.openLiveAdmin = function() {
     
     if (typeof firebase !== 'undefined' && firebase.firestore) {
         window.liveAdminUnsubscribe = firebase.firestore().collection('LiveSessions')
-            .where('lastActive', '>=', new Date(Date.now() - 15 * 60000))
             .onSnapshot(snapshot => {
                 contentEl.innerHTML = '';
-                if (snapshot.empty) {
-                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 15 minutes.</div>';
-                    return;
-                }
+                let hasLive = false;
+                let fifteenMinsAgo = new Date(Date.now() - 15 * 60000);
                 snapshot.forEach(doc => {
                     let d = doc.data();
+                    if (!d.lastActive || d.lastActive.toDate() < fifteenMinsAgo) return;
+                    hasLive = true;
                     let isGuest = doc.id.startsWith('guest_');
                     let actionsHtml = isGuest 
                         ? `<span style="background:#e0e0e0; color:#555; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold;">Guest Visitor</span>`
@@ -5956,6 +5955,9 @@ window.openLiveAdmin = function() {
                     </div>`;
                     contentEl.insertAdjacentHTML('beforeend', html);
                 });
+                if (!hasLive) {
+                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 15 minutes.</div>';
+                }
             }, err => {
                 contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching live data.</div>';
             });
