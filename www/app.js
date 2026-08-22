@@ -1719,7 +1719,10 @@ window.recordTimeSpent = function() {
         let spentMins = (Date.now() - window.viewStartTime) / 60000;
         let today = new Date().toISOString().split('T')[0];
         let historyMap = {};
-        try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch(e){}
+        try { 
+            let parsed = JSON.parse(localStorage.getItem('dsLiveHistory')); 
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) historyMap = parsed;
+        } catch(e){}
         
         if (!historyMap[today]) historyMap[today] = {};
         historyMap[today][curProduct.name] = (historyMap[today][curProduct.name] || 0) + spentMins;
@@ -6008,7 +6011,7 @@ window.openLiveAdmin = function() {
                             for (let prodName in d.historyMap[date]) {
                                 let mins = parseFloat(d.historyMap[date][prodName]);
                                 let timeStr = mins < 1 ? Math.round(mins * 60) + " secs" : Math.floor(mins) + "m " + Math.round((mins % 1) * 60) + "s";
-                                historyHtml += `<div style="font-size:12px; color:#333; margin-left:8px;">• ${prodName} (${timeStr})</div>`;
+                                historyHtml += `<div style="font-size:12px; color:#333; margin-left:8px;">&bull; ${prodName} (${timeStr})</div>`;
                             }
                         });
                     } else if (d.recentHistory && d.recentHistory.length) {
