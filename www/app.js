@@ -59,26 +59,15 @@ const firebaseConfig = {
 };
 var webConfirmationResult = null;
 
-function initFirebaseWebFallback() {
-    if (window.Capacitor && window.Capacitor.isNativePlatform()) return;
-    if (typeof firebase !== 'undefined') return;
-
-    var s1 = document.createElement('script');
-    s1.src = "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js";
-    s1.onload = function () {
-        var s2 = document.createElement('script');
-        s2.src = "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js";
-        s2.onload = function () {
-            firebase.initializeApp(firebaseConfig);
-            try {
-                window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-                    'size': 'invisible'
-                });
-            } catch (e) { console.error(e); }
-        };
-        document.head.appendChild(s2);
-    };
-    document.head.appendChild(s1);
+function initFirebaseGlobally() {
+    if (typeof firebase !== 'undefined' && firebase.apps.length === 0) {
+        firebase.initializeApp(firebaseConfig);
+        try {
+            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+                'size': 'invisible'
+            });
+        } catch (e) { console.error("Recaptcha error:", e); }
+    }
 }
 
 var allProducts = [];
@@ -254,7 +243,7 @@ window.addEventListener('DOMContentLoaded', function () {
             if (loginScreen && appBody) {
                 loginScreen.style.display = 'flex';
                 appBody.style.display = 'none';
-                initFirebaseWebFallback();
+                initFirebaseGlobally();
             }
         }
 
@@ -309,7 +298,8 @@ window.addEventListener('DOMContentLoaded', function () {
                 });
             }
         } else {
-            // Handled by initFirebaseWebFallback
+            // Handled by initFirebaseGlobally
+            initFirebaseGlobally();
         }
 
         setupEditableFields();
@@ -581,9 +571,11 @@ async function checkAdminStatus(phone) {
             if (f.isAdmin && f.isAdmin.booleanValue === true) {
                 localStorage.setItem('dsIsAdmin', 'true');
                 window.isSuperAdmin = true;
+                if(document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
             } else {
                 localStorage.setItem('dsIsAdmin', 'false');
                 window.isSuperAdmin = false;
+                if(document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'none';
             }
         }
     } catch (e) {

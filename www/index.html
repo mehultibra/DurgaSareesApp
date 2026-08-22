@@ -24,7 +24,10 @@
   <meta name="apple-mobile-web-app-title" content="Durga Sarees">
   <link rel="apple-touch-icon" href="icon.png">
 
-  <!-- Firebase Web SDK loaded dynamically in app.js if needed -->
+  <!-- Firebase Web SDK Loaded Globally -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 
 
@@ -141,7 +144,7 @@
             <div onclick="openSyncReportModal()"
               style="padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text-main); font-size:14px; display:flex; align-items:center; gap:8px;">
               <i class="fas fa-file-contract" style="color:var(--myntra-pink);"></i> Sync Report</div>
-            <div onclick="window.openLiveAdmin()" style="padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:#2e7d32; font-size:14px; font-weight:bold; display:flex; align-items:center; gap:8px;">
+            <div id="menuLiveAdmin" onclick="window.openLiveAdmin()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:#2e7d32; font-size:14px; font-weight:bold; align-items:center; gap:8px;">
               <i class="fas fa-users" style="color:#4caf50;"></i> Live Customers 🟢
             </div>
             <div onclick="logout()"
