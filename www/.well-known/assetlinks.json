@@ -1,0 +1,13 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.durgasarees.catalog",
+    "sha256_cert_fingerprints": [
+      "47:0F:75:EB:69:D3:EC:A3:3B:89:33:3C:5B:BB:DD:13:2D:3B:18:7B:A1:17:C0:8D:66:32:45:17:9D:F3:97:ED",
+      "98:7B:E6:A4:AA:E9:31:B7:D8:B9:AF:FC:23:2B:2C:8C:13:C7:05:E4:81:61:FD:57:20:7A:7F:99:F4:5F:35:BC",
+      "D9:67:4A:41:10:E9:F6:63:75:27:33:68:D1:02:E3:A8:24:65:36:97:F7:5A:E0:10:2A:83:0B:20:89:F6:8F:66",
+      "3A:69:FA:EF:3A:95:21:18:06:8B:6F:4C:93:0F:2F:96:5A:EA:1B:41:DE:8B:6C:5B:1C:B5:41:98:A2:47:C4:2C"
+    ]
+  }
+}]
