@@ -1715,14 +1715,14 @@ function fetchZoomNatively(zoomUrl, imgEl) {
 }
 
 window.recordTimeSpent = function() {
-    if (window.viewStartTime && window.curProduct) {
+    if (window.viewStartTime && typeof curProduct !== 'undefined' && curProduct) {
         let spentMins = (Date.now() - window.viewStartTime) / 60000;
         let today = new Date().toISOString().split('T')[0];
         let historyMap = {};
         try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch(e){}
         
         if (!historyMap[today]) historyMap[today] = {};
-        historyMap[today][window.curProduct.name] = (historyMap[today][window.curProduct.name] || 0) + spentMins;
+        historyMap[today][curProduct.name] = (historyMap[today][curProduct.name] || 0) + spentMins;
         
         let cutoff = Date.now() - (48 * 60 * 60 * 1000);
         for (let dateKey in historyMap) {
@@ -1776,7 +1776,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         }
     }
 
-    if (window.viewStartTime && window.curProduct) {
+    if (window.viewStartTime && typeof curProduct !== 'undefined' && curProduct) {
         window.recordTimeSpent();
     }
 
@@ -5981,7 +5981,7 @@ window.openLiveAdmin = function() {
                     let docId = item.id;
                     let isGuest = docId.startsWith('guest_');
                     
-                    let isLiveNow = d.lastActive.toDate() >= fifteenMinsAgo;
+                    let isLiveNow = d.lastActive && (Date.now() - d.lastActive.toDate().getTime() < 60000); // 1 minute strict
                     let lastSeenStr = d.lastActive ? d.lastActive.toDate().toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true}) : "Unknown";
                     let statusBadge = isLiveNow 
                         ? `<span style="background:#4caf50; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🟢 Live Now</span>`
