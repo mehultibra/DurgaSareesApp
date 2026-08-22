@@ -232,6 +232,9 @@ window.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        // ALWAYS initialize Firebase Web SDK for Firestore support on Native
+        initFirebaseGlobally();
+
         if (activeUser && activeUser !== "null" && activeUser !== "undefined") {
             if (loginScreen && appBody) {
                 loginScreen.style.display = 'none';
@@ -243,7 +246,6 @@ window.addEventListener('DOMContentLoaded', function () {
             if (loginScreen && appBody) {
                 loginScreen.style.display = 'flex';
                 appBody.style.display = 'none';
-                initFirebaseGlobally();
             }
         }
 
@@ -297,9 +299,6 @@ window.addEventListener('DOMContentLoaded', function () {
                     if (btn) btn.innerText = "SEND OTP";
                 });
             }
-        } else {
-            // Handled by initFirebaseGlobally
-            initFirebaseGlobally();
         }
 
         setupEditableFields();
