@@ -3955,8 +3955,10 @@ function updateBottomQtyFromActiveDesign() {
     }
 }
 
-// 📱 Listen to hybrid app native backbutton event to prevent app minimization and handle stack back transition
-document.addEventListener("backbutton", function (e) {
+var backButtonPressedOnce = false;
+var backButtonTimer = null;
+
+function handleHardwareBack() {
     var hasActiveModal = false;
 
     var detailPanel = document.getElementById('detailPanel');
@@ -3980,10 +3982,45 @@ document.addEventListener("backbutton", function (e) {
     }
 
     if (hasActiveModal) {
-        e.preventDefault();
-        history.back();
+        history.back(); // Step back to previous modal or home
+    } else {
+        // We are on the main home screen
+        if (backButtonPressedOnce) {
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+                window.Capacitor.Plugins.App.minimizeApp();
+            }
+        } else {
+            backButtonPressedOnce = true;
+            
+            // Show disappearing toast message
+            var toastId = 'exitToast_' + Date.now();
+            var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(40,40,40,0.95); color:#fff; padding:12px 24px; border-radius:30px; font-size:14px; box-shadow:0 4px 15px rgba(0,0,0,0.4); z-index:999999; text-align:center; transition: opacity 0.3s; pointer-events:none;">Press back again to exit</div>`;
+            document.body.insertAdjacentHTML('beforeend', toastHtml);
+            
+            if (backButtonTimer) clearTimeout(backButtonTimer);
+            backButtonTimer = setTimeout(() => {
+                backButtonPressedOnce = false;
+                var t = document.getElementById(toastId);
+                if (t) {
+                    t.style.opacity = '0';
+                    setTimeout(() => t.remove(), 300);
+                }
+            }, 2000);
+        }
     }
-}, false);
+}
+
+// 📱 Listen to hybrid app native backbutton event to prevent app minimization and handle stack back transition
+if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+    window.Capacitor.Plugins.App.addListener('backButton', ({ canGoBack }) => {
+        handleHardwareBack();
+    });
+} else {
+    document.addEventListener("backbutton", function (e) {
+        e.preventDefault();
+        handleHardwareBack();
+    }, false);
+}
 
 // ====================================
 // 🔎 SEARCH, SORT, FILTER & FAVORITES ENGINE
