@@ -6083,17 +6083,23 @@ window.shareWhatsAppLink = async function() {
         document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing HD Images...</div>');
 
         try {
-            var folderPath = "Uploads/Images/" + curProduct.cat + "/" + curProduct.name;
-            var fileNames = window.dsFolderCache[folderPath] || [];
+            var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
+            var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+            var listUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?prefix=" + listPrefix + "&delimiter=/";
             
-            if (fileNames.length === 0) {
-                var listUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?prefix=" + encodeURIComponent(folderPath + "/");
+            var cachedItems = window.dsFolderCache[listUrl];
+            var fileNames = [];
+            
+            if (cachedItems && cachedItems.length > 0) {
+                fileNames = cachedItems.map(item => item.name.substring(item.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+            } else {
                 var listRes = await fetch(listUrl);
                 if (listRes.ok) {
                     var data = await listRes.json();
-                    fileNames = (data.items || []).map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
-                                .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
-                    window.dsFolderCache[folderPath] = fileNames;
+                    cachedItems = data.items || [];
+                    window.dsFolderCache[listUrl] = cachedItems;
+                    try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch(e){}
+                    fileNames = cachedItems.map(item => item.name.substring(item.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
                 }
             }
 
@@ -6110,7 +6116,13 @@ window.shareWhatsAppLink = async function() {
                 }
                 
                 for (var i = 0; i < Math.min(sorted.length, maxShare); i++) {
-                    var zoomUrl = typeof window.getFirebaseZoomUrl === 'function' ? window.getFirebaseZoomUrl(folderPath, sorted[i]) : "";
+                    var zoomUrl = "";
+                    if (typeof window.resolveCorrectUrl === 'function') {
+                        zoomUrl = await window.resolveCorrectUrl(curProduct, sorted[i]);
+                    } else {
+                        var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                        zoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encPath + "%2F" + encodeURIComponent(sorted[i]) + "?alt=media";
+                    }
                     if (zoomUrl) shareUrls.push(zoomUrl);
                 }
             }
