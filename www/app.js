@@ -1,5 +1,5 @@
 // ==========================================
-// ðŸŒ¸ DURGA SAREES - FIXED APP.JS v3 (RESTORED UI)
+// 🌸 DURGA SAREES - FIXED APP.JS v3 (RESTORED UI)
 // ==========================================
 
 const FIRESTORE_PRODUCTS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products?pageSize=1000";
@@ -1339,7 +1339,7 @@ function buildCardDetails(p) {
 
     var h = [];
     h.push('<div style="display:flex; align-items:center; width:100%; gap:4px; overflow:hidden;">');
-    h.push('<div class="ci-brand" style="flex:1 1 0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:clip; margin:0;">' + esc(p.name) + '</div>');
+    h.push('<div class="ci-brand" onclick="window.openProductDetailsModal(\'' + p.id + '\', event)" style="flex:1 1 0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:clip; margin:0; cursor:pointer;">' + esc(p.name) + '</div>');
 
     var packLen = String(p.packing || "1").length;
     var displayLen = Math.min(packLen, 8);
@@ -6325,8 +6325,185 @@ window.closeLiveAdmin = function() {
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
     }
+
+// ====================================
+// PRODUCT DETAILS MODAL (VIEW / EDIT)
+// ====================================
+window.openProductDetailsModal = function(pid, event) {
+    if (event) event.stopPropagation();
+    
+    var p = allProducts.find(x => x.id === pid);
+    if (!p) return;
+    
+    var cv = document.getElementById('pdCustomerView');
+    var av = document.getElementById('pdAdminView');
+    
+    if (window.isAdminMode) {
+        cv.style.display = 'none';
+        av.style.display = 'flex';
+        
+        document.getElementById('editProdId').value = p.id;
+        document.getElementById('editProdCat').value = p.cat || '';
+        document.getElementById('editProdName').value = p.name || '';
+        document.getElementById('editProdPrice').value = p.price || '';
+        document.getElementById('editProdSku').value = p.sku || '';
+        document.getElementById('editProdPacking').value = p.packing || '';
+        document.getElementById('editProdMult').value = p.mult || 1;
+        document.getElementById('editProdFabric').value = p.fabric || '';
+        document.getElementById('editProdWork').value = p.work || '';
+        document.getElementById('editProdJari').value = p.jari || '';
+        document.getElementById('editProdPallu').value = p.pallu || '';
+        document.getElementById('editProdBorder').value = p.border || '';
+        document.getElementById('editProdBlouse').value = p.blouse || '';
+        document.getElementById('editProdCut').value = p.cut || '';
+        
+    } else {
+        av.style.display = 'none';
+        cv.style.display = 'flex';
+        
+        var fields = [
+            { label: 'Category', val: p.cat },
+            { label: 'Fabric', val: p.fabric },
+            { label: 'Work', val: p.work },
+            { label: 'Cut', val: p.cut },
+            { label: 'Jari', val: p.jari },
+            { label: 'Pallu', val: p.pallu },
+            { label: 'Border', val: p.border },
+            { label: 'Blouse', val: p.blouse },
+            { label: 'Packing', val: p.packing },
+            { label: 'SKU', val: p.sku }
+        ];
+        
+        var html = '';
+        fields.forEach(f => {
+            if (f.val && String(f.val).trim() !== "") {
+                html += `
+                <div style="display:flex; justify-content:space-between; padding-bottom:8px; border-bottom:1px solid #f0f0f0;">
+                    <span style="color:#666;">${f.label}</span>
+                    <span style="font-weight:600; color:#333; text-align:right;">${esc(f.val)}</span>
+                </div>`;
+            }
+        });
+        if (html === '') html = '<div style="text-align:center; color:#999;">No detailed specifications available.</div>';
+        
+        cv.innerHTML = html;
+    }
+    
+    if (typeof pushModalState === 'function') {
+        pushModalState('productDetailsModal');
+    } else {
+        document.getElementById('productDetailsModal').style.display = 'flex';
+    }
 };
 
+window.saveProductDetails = async function() {
+    var pid = document.getElementById('editProdId').value;
+    var p = allProducts.find(x => x.id === pid);
+    if (!p) return;
+    
+    var btn = document.getElementById('pdSaveBtn');
+    btn.innerText = "Saving...";
+    btn.disabled = true;
+    
+    var price = document.getElementById('editProdPrice').value.trim();
+    var sku = document.getElementById('editProdSku').value.trim();
+    var packing = document.getElementById('editProdPacking').value.trim();
+    var mult = document.getElementById('editProdMult').value.trim();
+    var fabric = document.getElementById('editProdFabric').value.trim();
+    var work = document.getElementById('editProdWork').value.trim();
+    var jari = document.getElementById('editProdJari').value.trim();
+    var pallu = document.getElementById('editProdPallu').value.trim();
+    var border = document.getElementById('editProdBorder').value.trim();
+    var blouse = document.getElementById('editProdBlouse').value.trim();
+    var cut = document.getElementById('editProdCut').value.trim();
+    
+    var patchPayload = {
+        name: p.docId,
+        fields: {
+            price: { integerValue: String(price || "0") },
+            sku: { stringValue: sku },
+            packing: { stringValue: packing },
+            mult: { integerValue: String(mult || "1") },
+            fabric: { stringValue: fabric },
+            work: { stringValue: work },
+            jari: { stringValue: jari },
+            pallu: { stringValue: pallu },
+            border: { stringValue: border },
+            blouse: { stringValue: blouse },
+            cut: { stringValue: cut }
+        }
+    };
+    
+    var updateMask = "?updateMask.fieldPaths=price&updateMask.fieldPaths=sku&updateMask.fieldPaths=packing&updateMask.fieldPaths=mult&updateMask.fieldPaths=fabric&updateMask.fieldPaths=work&updateMask.fieldPaths=jari&updateMask.fieldPaths=pallu&updateMask.fieldPaths=border&updateMask.fieldPaths=blouse&updateMask.fieldPaths=cut";
+    
+    var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/" + p.docId + updateMask;
+    
+    try {
+        var token = await firebase.auth().currentUser.getIdToken();
+        var resp = await fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(patchPayload)
+        });
+        
+        if (!resp.ok) {
+            var err = await resp.text();
+            throw new Error(err);
+        }
+        
+        // 1. Update Local Memory
+        p.price = parseFloat(price) || 0;
+        p.sku = sku;
+        p.packing = packing;
+        p.mult = parseFloat(mult) || 1;
+        p.fabric = fabric;
+        p.work = work;
+        p.jari = jari;
+        p.pallu = pallu;
+        p.border = border;
+        p.blouse = blouse;
+        p.cut = cut;
+        
+        try { localStorage.setItem("dsOfflineProducts", JSON.stringify(window.allProducts)); } catch(e){}
+        
+        // 2. Refresh UI
+        refreshCardUI(p.id);
+        if (typeof applyFilter === 'function') applyFilter();
+        
+        // 3. Sync to Google Apps Script (Webhook)
+        if (window.DS_APP_SCRIPT_URL) {
+            fetch(window.DS_APP_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: 'updateProductDetailsFull', // NEW ACTION TO PREVENT CLASH
+                    productName: p.name,
+                    category: p.cat,
+                    price: p.price,
+                    sku: p.sku,
+                    packing: p.packing,
+                    mult: p.mult,
+                    fabric: p.fabric,
+                    work: p.work,
+                    jari: p.jari,
+                    pallu: p.pallu,
+                    border: p.border,
+                    blouse: p.blouse,
+                    cut: p.cut
+                })
+            }).catch(e => console.error("Apps Script Sync Failed", e));
+        }
+        
+        closeModals();
+        alert("Product Details Updated Successfully!");
+        
+    } catch (error) {
+        alert("Failed to update product: " + error.message);
+    } finally {
+        btn.innerText = "Save Changes";
+        btn.disabled = false;
+    }
+};
 window.openAddProductModal = function() {
     // Populate categories
     var catSelect = document.getElementById('addProdCat');

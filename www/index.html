@@ -284,8 +284,8 @@
       style="display:flex; justify-content:space-between; align-items:center; width:100%; padding:0 12px;">
       <div style="display:flex; align-items:center; gap:12px; flex:1; min-width:0; margin-right:10px;">
         <i class="fas fa-arrow-left" onclick="closeDetail()" style="cursor:pointer; font-size:18px; flex-shrink:0;"></i>
-        <h3 id="dtNameTop"
-          style="margin:0; font-size:16px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">
+        <h3 id="dtNameTop" onclick="if(window.curProduct) window.openProductDetailsModal(window.curProduct.id, event)"
+          style="margin:0; font-size:16px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; cursor:pointer;">
           Product</h3>
         <input type="text" id="dtSearchInput" placeholder="Search Saree Name or SKU..."
           onkeyup="doSearch(this.value); if(event.key === 'Enter') closeDetail();"
@@ -712,6 +712,91 @@
       <button onclick="window.submitNewProduct()" style="width: 100%; background: var(--myntra-pink); color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 20px;">
         <i class="fas fa-save" style="margin-right: 6px;"></i> Create Product
       </button>
+    </div>
+  </div>
+
+  <!-- Unified Product Details Modal -->
+  <div class="action-modal" id="productDetailsModal" onclick="if(event.target===this) closeModals()"
+    style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; flex-direction: column; justify-content: flex-end;">
+    <div class="modal-content"
+      style="background: #fff; border-radius: 16px 16px 0 0; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); text-align: left;">
+      <h3 style="margin-top: 0; margin-bottom: 20px; font-size: 16px; color: var(--text-main);">Product Details</h3>
+      
+      <!-- Customer View: Read-only Professional Table -->
+      <div id="pdCustomerView" style="display: none; flex-direction: column; gap: 8px; font-size: 14px; max-height: 60vh; overflow-y: auto;">
+        <!-- Populated via JS -->
+      </div>
+      
+      <!-- Admin View: Editable Form -->
+      <div id="pdAdminView" style="display: none; flex-direction: column; gap: 12px; font-size: 14px; max-height: 60vh; overflow-y: auto; padding-right: 5px;">
+        <input type="hidden" id="editProdId">
+        <div>
+          <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Category (Read-Only)</label>
+          <input type="text" id="editProdCat" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin-top: 4px; background: #f5f5f5;" readonly disabled>
+        </div>
+        <div>
+          <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Product Name (Read-Only)</label>
+          <input type="text" id="editProdName" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin-top: 4px; background: #f5f5f5;" readonly disabled>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Price (₹)</label>
+            <input type="number" id="editProdPrice" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. 1250">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">SKU</label>
+            <input type="text" id="editProdSku" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. BAN-1001">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Packing</label>
+            <input type="text" id="editProdPacking" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. Box">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Multiplier (Col W)</label>
+            <input type="number" id="editProdMult" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. 1">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Fabric</label>
+            <input type="text" id="editProdFabric" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Fabric">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Work</label>
+            <input type="text" id="editProdWork" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Work">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Jari</label>
+            <input type="text" id="editProdJari" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Jari">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Pallu</label>
+            <input type="text" id="editProdPallu" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Pallu">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Border</label>
+            <input type="text" id="editProdBorder" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Border">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Blouse</label>
+            <input type="text" id="editProdBlouse" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Blouse">
+          </div>
+        </div>
+        <div>
+          <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Cut</label>
+          <input type="text" id="editProdCut" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. 6.30">
+        </div>
+        <button id="pdSaveBtn" onclick="window.saveProductDetails()" style="width: 100%; background: var(--myntra-pink); color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 20px;">
+          <i class="fas fa-save" style="margin-right: 6px;"></i> Save Changes
+        </button>
+      </div>
+      
     </div>
   </div>
 
