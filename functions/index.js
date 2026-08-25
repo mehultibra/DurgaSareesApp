@@ -208,8 +208,8 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         const shareDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
         const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
         if (finalGridUrl.startsWith('Images/')) {
-            shareInputPath = finalGridUrl.replace(/\/(Grid|Zoom)\/$/i, '/Jpg/') + shareDestName;
-            masterInputPath = finalGridUrl.replace(/\/(Grid|Zoom)\/$/i, '/Input/') + masterDestName;
+            shareInputPath = finalGridUrl.replace(/^Images\//i, 'Jpg/Ready Designs/').replace(/\/(Grid|Zoom)\/$/i, '/') + shareDestName;
+            masterInputPath = finalGridUrl.replace(/^Images\//i, 'Input/Ready Designs/').replace(/\/(Grid|Zoom)\/$/i, '/') + masterDestName;
         } else {
             shareInputPath = finalGridUrl.replace(/^(Grid|Zoom)\//i, 'Jpg/Ready Designs/') + shareDestName;
             masterInputPath = finalGridUrl.replace(/^(Grid|Zoom)\//i, 'Input/Ready Designs/') + masterDestName;
