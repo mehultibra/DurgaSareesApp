@@ -638,7 +638,7 @@
       style="background: #fff; border-radius: 16px 16px 0 0; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); text-align: left;">
       <h3 style="margin-top: 0; margin-bottom: 20px; font-size: 16px; color: var(--text-main);">Add New Product</h3>
       
-      <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px;">
+      <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px; max-height: 60vh; overflow-y: auto; padding-right: 5px;">
         <div>
           <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Category</label>
           <select id="addProdCat" onchange="window.onAddProdCatChange()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"></select>
@@ -659,19 +659,53 @@
             <input type="number" id="addProdPrice" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. 1250">
           </div>
           <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">SKU</label>
+            <input type="text" id="addProdSku" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. BAN-1001">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
             <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Packing</label>
-            <input type="text" id="addProdPacking" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. 6 or Box">
+            <input type="text" id="addProdPacking" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. Box">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Multiplier (Col W)</label>
+            <input type="number" id="addProdMult" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. 1" value="1">
           </div>
         </div>
         <div style="display: flex; gap: 10px;">
           <div style="flex: 1;">
             <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Fabric</label>
-            <input type="text" id="addProdFabric" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. Silk">
+            <input type="text" id="addProdFabric" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Fabric">
           </div>
           <div style="flex: 1;">
-            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">SKU</label>
-            <input type="text" id="addProdSku" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. BAN-1001">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Work</label>
+            <input type="text" id="addProdWork" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Work">
           </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Jari</label>
+            <input type="text" id="addProdJari" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Jari">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Pallu</label>
+            <input type="text" id="addProdPallu" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Pallu">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Border</label>
+            <input type="text" id="addProdBorder" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Border">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Blouse</label>
+            <input type="text" id="addProdBlouse" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Blouse">
+          </div>
+        </div>
+        <div>
+          <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Cut</label>
+          <input type="text" id="addProdCut" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. 6.30">
         </div>
       </div>
       

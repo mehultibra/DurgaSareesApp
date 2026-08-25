@@ -6345,7 +6345,14 @@ window.openAddProductModal = function() {
     document.getElementById('addProdName').value = '';
     document.getElementById('addProdPrice').value = '';
     document.getElementById('addProdPacking').value = '';
+    document.getElementById('addProdMult').value = '1';
     document.getElementById('addProdFabric').value = '';
+    document.getElementById('addProdWork').value = '';
+    document.getElementById('addProdJari').value = '';
+    document.getElementById('addProdPallu').value = '';
+    document.getElementById('addProdBorder').value = '';
+    document.getElementById('addProdBlouse').value = '';
+    document.getElementById('addProdCut').value = '';
     document.getElementById('addProdSku').value = '';
 
     openModal('addProductModal');
@@ -6375,7 +6382,14 @@ window.onAddProdCloneChange = function() {
     if (p) {
         document.getElementById('addProdPrice').value = p.price || '';
         document.getElementById('addProdPacking').value = p.packing || '';
+        document.getElementById('addProdMult').value = p.mult || '1';
         document.getElementById('addProdFabric').value = p.fabric || '';
+        document.getElementById('addProdWork').value = p.work || '';
+        document.getElementById('addProdJari').value = p.jari || '';
+        document.getElementById('addProdPallu').value = p.pallu || '';
+        document.getElementById('addProdBorder').value = p.border || '';
+        document.getElementById('addProdBlouse').value = p.blouse || '';
+        document.getElementById('addProdCut').value = p.cut || '';
         document.getElementById('addProdSku').value = p.sku ? (p.sku + '-NEW') : '';
     }
 };
@@ -6389,7 +6403,14 @@ window.submitNewProduct = async function() {
     var name = document.getElementById('addProdName').value.trim();
     var price = document.getElementById('addProdPrice').value.trim();
     var packing = document.getElementById('addProdPacking').value.trim();
+    var mult = document.getElementById('addProdMult').value.trim();
     var fabric = document.getElementById('addProdFabric').value.trim();
+    var work = document.getElementById('addProdWork').value.trim();
+    var jari = document.getElementById('addProdJari').value.trim();
+    var pallu = document.getElementById('addProdPallu').value.trim();
+    var border = document.getElementById('addProdBorder').value.trim();
+    var blouse = document.getElementById('addProdBlouse').value.trim();
+    var cut = document.getElementById('addProdCut').value.trim();
     var sku = document.getElementById('addProdSku').value.trim();
     
     if (!cat || !name || !price) {
@@ -6405,7 +6426,14 @@ window.submitNewProduct = async function() {
             cat: { stringValue: cat },
             price: { integerValue: String(price) },
             packing: { stringValue: packing },
+            mult: { integerValue: String(mult || "1") },
             fabric: { stringValue: fabric },
+            work: { stringValue: work },
+            jari: { stringValue: jari },
+            pallu: { stringValue: pallu },
+            border: { stringValue: border },
+            blouse: { stringValue: blouse },
+            cut: { stringValue: cut },
             sku: { stringValue: sku },
             gridUrl: { stringValue: gridUrl },
             zoomUrl: { stringValue: zoomUrl },
@@ -6441,7 +6469,14 @@ window.submitNewProduct = async function() {
                         name: name,
                         price: parseFloat(price),
                         packing: packing,
+                        mult: parseFloat(mult || "1"),
                         fabric: fabric,
+                        work: work,
+                        jari: jari,
+                        pallu: pallu,
+                        border: border,
+                        blouse: blouse,
+                        cut: cut,
                         sku: sku,
                         gridUrl: gridUrl,
                         zoomUrl: zoomUrl
@@ -6461,7 +6496,14 @@ window.submitNewProduct = async function() {
             price: parseFloat(price),
             mrp: 0,
             packing: packing,
+            mult: parseFloat(mult || "1"),
             fabric: fabric,
+            work: work,
+            jari: jari,
+            pallu: pallu,
+            border: border,
+            blouse: blouse,
+            cut: cut,
             sku: sku,
             gridUrl: gridUrl,
             zoomUrl: zoomUrl,
