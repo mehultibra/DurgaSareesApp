@@ -205,12 +205,12 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
 
         // Save Share JPG Buffer to Firebase in Jpg folder
         const shareDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
-        const shareInputPath = finalGridUrl.replace(/^(Grid|Zoom)\//i, 'Jpg/') + shareDestName;
+        const shareInputPath = finalGridUrl.replace(/\/(Grid|Zoom)\/$/i, '/Jpg/') + shareDestName;
         await bucket.file(shareInputPath).save(shareBuffer, { metadata: { contentType: 'image/jpeg', metadata: { source: '888' } } });
 
         // Save Master Buffer to NAS input path mirroring Grid path
         const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
-        const masterInputPath = finalGridUrl.replace(/^(Grid|Zoom)\//i, 'Input/') + masterDestName;
+        const masterInputPath = finalGridUrl.replace(/\/(Grid|Zoom)\/$/i, '/Input/') + masterDestName;
         await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg', metadata: { source: '888' } } });
 
         console.log(`Success: Generated ${destFileName} at ${finalGridUrl} and ${finalZoomUrl}. Master saved to ${masterInputPath}`);

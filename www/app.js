@@ -1935,6 +1935,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         }
 
         var validFiles = [];
+        var designMap = {};
 
         items.forEach(item => {
             var fullPath = item.name; // item.name is from Grid bucket
@@ -1959,17 +1960,28 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 var zoomUrl = fbBase + zoomEncName + "?alt=media";
                 var designName = filename.substring(0, filename.lastIndexOf('.'));
 
-                validFiles.push({
+                // DEDUPLICATION: If we have multiple extensions for the same design, prefer .webp
+                if (designMap[designName]) {
+                    var existingExt = designMap[designName].ext;
+                    if (existingExt === '.webp' && ext !== '.webp') {
+                        return; // Keep existing webp, skip this jpg/png
+                    }
+                }
+
+                designMap[designName] = {
                     name: designName,
                     gridUrl: gridUrl,
                     url: zoomUrl,
                     isVideo: isVideo,
                     isImage: isImage,
                     isCoverImg: isCoverImg,
-                    timeCreated: item.timeCreated
-                });
+                    timeCreated: item.timeCreated,
+                    ext: ext
+                };
             }
         });
+        
+        validFiles = Object.values(designMap);
 
         // Hide cover/cover1 images from product page — they are only used for the main grid thumbnail
         var hasOtherDesigns = validFiles.some(f => !f.isCoverImg);
