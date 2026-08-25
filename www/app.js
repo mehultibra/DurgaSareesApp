@@ -6505,7 +6505,50 @@ window.saveProductDetails = async function() {
         btn.disabled = false;
     }
 };
+window.isSkuManuallyEdited = false;
+
+window.autoGenerateSku = function() {
+    if (window.isSkuManuallyEdited) return;
+    
+    var cat = document.getElementById('addProdCat').value || "";
+    var name = document.getElementById('addProdName').value || "";
+    if (!name) {
+        document.getElementById('addProdSku').value = "";
+        return;
+    }
+    
+    var prefix = "S"; 
+    var subCat = "GN"; 
+    var num = String(name).replace(/[^0-9]/g, ''); 
+    if (num === "") {
+        var hash = 0;
+        for (var i = 0; i < name.length; i++) {
+            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        num = Math.abs(hash).toString().substring(0, 3);
+        if (num.length < 3) num = Math.floor(100 + Math.random() * 900);
+    }
+    
+    if (cat) {
+        var cleanCat = cat.toUpperCase().trim();
+        if (cleanCat.indexOf("BLOUSE") > -1) prefix = "B"; 
+        else if (cleanCat.indexOf("SHIRT") > -1) prefix = "SH"; 
+        else if (cleanCat.indexOf("DRESS") > -1) prefix = "D";
+        
+        if (cleanCat.indexOf("TOPDYED") > -1 || cleanCat.indexOf("TOP DYED") > -1) subCat = "TD";
+        else if (cleanCat.indexOf("PRINT") > -1) subCat = "PR"; 
+        else if (cleanCat.indexOf("DYED") > -1 || cleanCat.indexOf("DYEING") > -1) subCat = "DY";
+        else if (cleanCat.indexOf("DIGITAL") > -1) subCat = "DP"; 
+        else if (cleanCat.indexOf("HANDLOOM") > -1) subCat = "HL"; 
+        else if (cleanCat.indexOf("SILK") > -1) subCat = "SK";
+        else subCat = cleanCat.substring(0, 2).replace(/[^A-Z]/g, '');
+    }
+    
+    document.getElementById('addProdSku').value = (prefix + subCat + num).toUpperCase();
+};
+
 window.openAddProductModal = function() {
+    window.isSkuManuallyEdited = false;
     // Populate categories
     var catSelect = document.getElementById('addProdCat');
     var catSet = new Set();

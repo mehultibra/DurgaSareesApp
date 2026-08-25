@@ -641,7 +641,7 @@
       <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px; max-height: 60vh; overflow-y: auto; padding-right: 5px;">
         <div>
           <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Category</label>
-          <select id="addProdCat" onchange="window.onAddProdCatChange()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"></select>
+          <select id="addProdCat" onchange="window.onAddProdCatChange(); if(window.autoGenerateSku) window.autoGenerateSku();" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"></select>
         </div>
         <div>
           <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Clone From (Optional)</label>
@@ -651,7 +651,7 @@
         </div>
         <div>
           <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Product Name</label>
-          <input type="text" id="addProdName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Enter Product Name">
+          <input type="text" id="addProdName" oninput="if(window.autoGenerateSku) window.autoGenerateSku()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="Enter Product Name">
         </div>
         <div style="display: flex; gap: 10px;">
           <div style="flex: 1;">
@@ -660,7 +660,7 @@
           </div>
           <div style="flex: 1;">
             <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">SKU</label>
-            <input type="text" id="addProdSku" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. BAN-1001">
+            <input type="text" id="addProdSku" oninput="window.isSkuManuallyEdited = true" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. BAN-1001">
           </div>
         </div>
         <div style="display: flex; gap: 10px;">
