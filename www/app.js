@@ -6325,6 +6325,7 @@ window.closeLiveAdmin = function() {
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
     }
+};
 
 // ====================================
 // PRODUCT DETAILS MODAL (VIEW / EDIT)
