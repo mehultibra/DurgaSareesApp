@@ -234,6 +234,8 @@ window.addEventListener('DOMContentLoaded', function () {
                         window.isAdminMode = !window.isAdminMode;
                         document.getElementById('appLogoImg').style.border = window.isAdminMode ? '2px solid red' : 'none';
                         document.getElementById('appLogoImg').style.borderRadius = '4px';
+                        var fabAdd = document.getElementById('fabAddProduct');
+                        if (fabAdd) fabAdd.style.display = window.isAdminMode ? 'flex' : 'none';
                         alert("Admin Mode: " + (window.isAdminMode ? "ON" : "OFF"));
                         if (typeof applyFilter === 'function') applyFilter();
                     } else {
@@ -602,6 +604,8 @@ async function checkAdminStatus(phone) {
                 localStorage.setItem('dsIsAdmin', 'true');
                 window.isSuperAdmin = true;
                 if(document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
+                var fabAdd = document.getElementById('fabAddProduct');
+                if (fabAdd) fabAdd.style.display = window.isAdminMode ? 'flex' : 'none';
             } else {
                 localStorage.setItem('dsIsAdmin', 'false');
                 window.isSuperAdmin = false;
@@ -6319,5 +6323,163 @@ window.closeLiveAdmin = function() {
     closeModals();
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
+    }
+};
+
+window.openAddProductModal = function() {
+    // Populate categories
+    var catSelect = document.getElementById('addProdCat');
+    var catSet = new Set();
+    window.allProducts.forEach(p => {
+        if (p.cat) catSet.add(p.cat);
+    });
+    var cats = Array.from(catSet).sort();
+    var catHtml = '<option value="">Select a Category...</option>';
+    cats.forEach(c => {
+        catHtml += `<option value="${c}">${c}</option>`;
+    });
+    catSelect.innerHTML = catHtml;
+
+    // Reset other fields
+    document.getElementById('addProdClone').innerHTML = '<option value="">Select a product to clone details...</option>';
+    document.getElementById('addProdName').value = '';
+    document.getElementById('addProdPrice').value = '';
+    document.getElementById('addProdPacking').value = '';
+    document.getElementById('addProdFabric').value = '';
+    document.getElementById('addProdSku').value = '';
+
+    openModal('addProductModal');
+};
+
+window.onAddProdCatChange = function() {
+    var cat = document.getElementById('addProdCat').value;
+    var cloneSelect = document.getElementById('addProdClone');
+    if (!cat) {
+        cloneSelect.innerHTML = '<option value="">Select a product to clone details...</option>';
+        return;
+    }
+    
+    var matches = window.allProducts.filter(p => p.cat === cat).sort((a,b) => a.name.localeCompare(b.name));
+    var html = '<option value="">(None - Blank Product)</option>';
+    matches.forEach(p => {
+        html += `<option value="${p.id}">${p.name}</option>`;
+    });
+    cloneSelect.innerHTML = html;
+};
+
+window.onAddProdCloneChange = function() {
+    var pid = document.getElementById('addProdClone').value;
+    if (!pid) return;
+    
+    var p = window.allProducts.find(x => x.id === pid);
+    if (p) {
+        document.getElementById('addProdPrice').value = p.price || '';
+        document.getElementById('addProdPacking').value = p.packing || '';
+        document.getElementById('addProdFabric').value = p.fabric || '';
+        document.getElementById('addProdSku').value = p.sku ? (p.sku + '-NEW') : '';
+    }
+};
+
+window.submitNewProduct = async function() {
+    if (!window.isSuperAdmin) return alert("Access Denied");
+    
+    var btn = event.currentTarget;
+    
+    var cat = document.getElementById('addProdCat').value.trim();
+    var name = document.getElementById('addProdName').value.trim();
+    var price = document.getElementById('addProdPrice').value.trim();
+    var packing = document.getElementById('addProdPacking').value.trim();
+    var fabric = document.getElementById('addProdFabric').value.trim();
+    var sku = document.getElementById('addProdSku').value.trim();
+    
+    if (!cat || !name || !price) {
+        return alert("Category, Name, and Price are required.");
+    }
+    
+    var gridUrl = "Images/" + cat + "/" + name + "/Grid";
+    var zoomUrl = "Images/" + cat + "/" + name + "/Zoom";
+    
+    var payload = {
+        fields: {
+            name: { stringValue: name },
+            cat: { stringValue: cat },
+            price: { integerValue: String(price) },
+            packing: { stringValue: packing },
+            fabric: { stringValue: fabric },
+            sku: { stringValue: sku },
+            gridUrl: { stringValue: gridUrl },
+            zoomUrl: { stringValue: zoomUrl },
+            stock: { mapValue: { fields: { DIRECT: { integerValue: "999" } } } }
+        }
+    };
+    
+    try {
+        btn.innerText = "Creating...";
+        btn.disabled = true;
+        
+        // 1. Create in Firestore
+        var fbRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }, 2);
+        
+        if (!fbRes.ok) throw new Error("Firestore Error: " + fbRes.status);
+        var fbData = await fbRes.json();
+        
+        var newDocId = fbData.name.split('/').pop();
+        
+        // 2. Transaction Safe: Notify Apps Script Webhook
+        if (window.DS_APP_SCRIPT_URL) {
+            try {
+                await fetch(window.DS_APP_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'createProduct',
+                        docId: newDocId,
+                        category: cat,
+                        name: name,
+                        price: parseFloat(price),
+                        packing: packing,
+                        fabric: fabric,
+                        sku: sku,
+                        gridUrl: gridUrl,
+                        zoomUrl: zoomUrl
+                    })
+                });
+            } catch(sheetErr) {
+                console.error("Sheet sync error (soft fail)", sheetErr);
+            }
+        }
+        
+        // 3. Instant Local UI Update
+        var newP = {
+            docId: newDocId,
+            id: "p_" + Date.now(),
+            name: name,
+            cat: cat,
+            price: parseFloat(price),
+            mrp: 0,
+            packing: packing,
+            fabric: fabric,
+            sku: sku,
+            gridUrl: gridUrl,
+            zoomUrl: zoomUrl,
+            stock: { DIRECT: 999 },
+            totalStock: 999
+        };
+        
+        window.allProducts.push(newP);
+        window.displayList = [...window.allProducts];
+        
+        closeModals();
+        alert("Product Created Successfully!");
+        if (typeof applyFilter === 'function') applyFilter();
+        
+    } catch (e) {
+        alert("Failed to create product: " + e.message);
+    } finally {
+        btn.innerHTML = '<i class="fas fa-save" style="margin-right: 6px;"></i> Create Product';
+        btn.disabled = false;
     }
 };
