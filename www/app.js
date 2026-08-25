@@ -697,6 +697,7 @@ function initApp() {
                     cut: f.cut ? f.cut.stringValue : "",
                     pallu: f.pallu ? f.pallu.stringValue : "",
                     blouse: f.blouse ? f.blouse.stringValue : "",
+                    work: f.work ? f.work.stringValue : "",
                     updateTime: f.latestImageAddedAt ? (f.latestImageAddedAt.timestampValue || f.latestImageAddedAt.stringValue) : (d.createTime || d.updateTime || "")
                 });
                 validCounter++;
