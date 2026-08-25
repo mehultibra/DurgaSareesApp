@@ -6514,6 +6514,8 @@ window.submitNewProduct = async function() {
         window.allProducts.push(newP);
         window.displayList = [...window.allProducts];
         
+        try { localStorage.setItem("dsOfflineProducts", JSON.stringify(window.allProducts)); } catch (e) { console.error("Failed to update offline storage", e); }
+        
         closeModals();
         alert("Product Created Successfully!");
         if (typeof applyFilter === 'function') applyFilter();
