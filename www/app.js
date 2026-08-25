@@ -5346,8 +5346,8 @@ window.confirmAdminUpload = async function () {
 
     var p = window.allProducts ? window.allProducts.find(x => x.id === window.tempCamPid) : null;
     if (p && (!p.gridUrl || p.gridUrl.trim() === "" || p.gridUrl.toLowerCase() === "none")) {
-        p.gridUrl = "Images/" + p.cat + "/" + p.name + "/Grid";
-        p.zoomUrl = "Images/" + p.cat + "/" + p.name + "/Zoom";
+        p.gridUrl = "Grid/" + p.cat + "/" + p.name + "/";
+        p.zoomUrl = "Zoom/" + p.cat + "/" + p.name + "/";
         var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + window.tempCamDocId + "?updateMask.fieldPaths=gridUrl&updateMask.fieldPaths=zoomUrl";
         fetch(patchUrl, {
             method: 'PATCH',
@@ -6651,8 +6651,8 @@ window.submitNewProduct = async function() {
         return alert("Category, Name, and Price are required.");
     }
     
-    var gridUrl = "Images/" + cat + "/" + name + "/Grid";
-    var zoomUrl = "Images/" + cat + "/" + name + "/Zoom";
+    var gridUrl = "Grid/" + cat + "/" + name + "/";
+    var zoomUrl = "Zoom/" + cat + "/" + name + "/";
     
     var payload = {
         fields: {

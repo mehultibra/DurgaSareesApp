@@ -203,14 +203,22 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         // Save Zoom Buffer to Firebase
         await bucket.file(`${finalZoomUrl}${destFileName}`).save(zoomBuffer, { metadata: { contentType: 'image/webp', metadata: { source: '888' } } });
 
-        // Save Share JPG Buffer to Firebase in Jpg folder
+        let shareInputPath;
+        let masterInputPath;
         const shareDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
-        const shareInputPath = finalGridUrl.replace(/\/(Grid|Zoom)\/$/i, '/Jpg/') + shareDestName;
+        const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
+        if (finalGridUrl.startsWith('Images/')) {
+            shareInputPath = finalGridUrl.replace(/\/(Grid|Zoom)\/$/i, '/Jpg/') + shareDestName;
+            masterInputPath = finalGridUrl.replace(/\/(Grid|Zoom)\/$/i, '/Input/') + masterDestName;
+        } else {
+            shareInputPath = finalGridUrl.replace(/^(Grid|Zoom)\//i, 'Jpg/Ready Designs/') + shareDestName;
+            masterInputPath = finalGridUrl.replace(/^(Grid|Zoom)\//i, 'Input/Ready Designs/') + masterDestName;
+        }
+        
+        // Save Share JPG Buffer to Firebase in Jpg folder
         await bucket.file(shareInputPath).save(shareBuffer, { metadata: { contentType: 'image/jpeg', metadata: { source: '888' } } });
 
         // Save Master Buffer to NAS input path mirroring Grid path
-        const masterDestName = designId.toLowerCase() === 'cover' ? 'cover.jpg' : `${designId}.jpg`;
-        const masterInputPath = finalGridUrl.replace(/\/(Grid|Zoom)\/$/i, '/Input/') + masterDestName;
         await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg', metadata: { source: '888' } } });
 
         console.log(`Success: Generated ${destFileName} at ${finalGridUrl} and ${finalZoomUrl}. Master saved to ${masterInputPath}`);
