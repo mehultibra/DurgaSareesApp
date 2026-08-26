@@ -3879,6 +3879,7 @@ function saveProductEdit(p) {
             if (window.DS_APP_SCRIPT_URL) {
                 fetch(window.DS_APP_SCRIPT_URL, {
                     method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                     body: JSON.stringify({
                         action: 'updateProductDetails',
                         productName: p.name,
@@ -4745,6 +4746,7 @@ function saveCartInlineEdit(productId, closeEdit = true) {
         if (window.DS_APP_SCRIPT_URL) {
             fetch(window.DS_APP_SCRIPT_URL, {
                 method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify({
                     action: 'updateProductDetails',
                     productName: matchP.name,
@@ -6696,6 +6698,7 @@ window.submitNewProduct = async function() {
             try {
                 await fetch(window.DS_APP_SCRIPT_URL, {
                     method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                     body: JSON.stringify({
                         action: 'createProduct',
                         docId: newDocId,
