@@ -4728,7 +4728,7 @@ function saveCartInlineEdit(productId, closeEdit = true) {
         var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
         var payload = {
             fields: {
-                price: { integerValue: newRate },
+                price: { integerValue: String(newRate) },
                 packing: { stringValue: newPacking }
             }
         };
@@ -6433,7 +6433,6 @@ window.saveProductDetails = async function() {
     var cut = document.getElementById('editProdCut').value.trim();
     
     var patchPayload = {
-        name: p.docId,
         fields: {
             price: { integerValue: String(price || "0") },
             sku: { stringValue: sku },
