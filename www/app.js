@@ -6454,12 +6454,11 @@ window.saveProductDetails = async function() {
     var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/" + p.docId + updateMask;
     
     try {
-        var token = await firebase.auth().currentUser.getIdToken();
-        var resp = await fetch(url, {
+        var resp = await window.fetchWithRetry(url, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(patchPayload)
-        });
+        }, 1);
         
         if (!resp.ok) {
             var err = await resp.text();
