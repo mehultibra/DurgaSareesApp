@@ -4728,7 +4728,7 @@ function saveCartInlineEdit(productId, closeEdit = true) {
         var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
         var payload = {
             fields: {
-                price: { integerValue: String(newRate) },
+                price: { doubleValue: Number(newRate) },
                 packing: { stringValue: newPacking }
             }
         };
@@ -6434,10 +6434,10 @@ window.saveProductDetails = async function() {
     
     var patchPayload = {
         fields: {
-            price: { integerValue: String(price || "0") },
+            price: { doubleValue: Number(price || 0) },
             sku: { stringValue: sku },
             packing: { stringValue: packing },
-            mult: { integerValue: String(mult || "1") },
+            mult: { doubleValue: Number(mult || 1) },
             fabric: { stringValue: fabric },
             work: { stringValue: work },
             jari: { stringValue: jari },
@@ -6450,7 +6450,7 @@ window.saveProductDetails = async function() {
     
     var updateMask = "?updateMask.fieldPaths=price&updateMask.fieldPaths=sku&updateMask.fieldPaths=packing&updateMask.fieldPaths=mult&updateMask.fieldPaths=fabric&updateMask.fieldPaths=work&updateMask.fieldPaths=jari&updateMask.fieldPaths=pallu&updateMask.fieldPaths=border&updateMask.fieldPaths=blouse&updateMask.fieldPaths=cut";
     
-    var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/" + p.docId + updateMask;
+    var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/Products/" + p.docId + updateMask;
     
     try {
         var resp = await window.fetchWithRetry(url, {
@@ -6658,9 +6658,9 @@ window.submitNewProduct = async function() {
         fields: {
             name: { stringValue: name },
             cat: { stringValue: cat },
-            price: { integerValue: String(price) },
+            price: { doubleValue: Number(price || 0) },
             packing: { stringValue: packing },
-            mult: { integerValue: String(mult || "1") },
+            mult: { doubleValue: Number(mult || 1) },
             fabric: { stringValue: fabric },
             work: { stringValue: work },
             jari: { stringValue: jari },
