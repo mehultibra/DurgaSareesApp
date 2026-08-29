@@ -5303,7 +5303,15 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
 
     try {
         // High Quality Native Camera or Gallery Selection
-        var photo = await Capacitor.Plugins.Camera.getPhoto({ quality: 100, allowEditing: false, resultType: 'uri', source: 'PROMPT' });
+        // High Quality Native Camera or Gallery Selection
+        var photo = await Capacitor.Plugins.Camera.getPhoto({ 
+            quality: 100, 
+            allowEditing: false, 
+            resultType: 'uri', 
+            source: 'PROMPT',
+            width: 2500, // Explicitly request high resolution
+            preserveAspectRatio: true 
+        });
 
         window.tempCamDocId = docId;
         window.tempCamPid = pid;
