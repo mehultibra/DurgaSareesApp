@@ -6277,14 +6277,26 @@ window.openLiveAdmin = function() {
                     let historyHtml = '';
                     if (d.historyMap && Object.keys(d.historyMap).length > 0) {
                         let sortedDates = Object.keys(d.historyMap).sort().reverse();
-                        sortedDates.forEach(date => {
-                            historyHtml += `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
+                        let visibleDates = sortedDates.slice(0, 2);
+                        let hiddenDates = sortedDates.slice(2);
+
+                        let renderDate = (date) => {
+                            let html = `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
                             for (let prodName in d.historyMap[date]) {
                                 let mins = parseFloat(d.historyMap[date][prodName]);
                                 let timeStr = mins < 1 ? Math.round(mins * 60) + " secs" : Math.floor(mins) + "m " + Math.round((mins % 1) * 60) + "s";
-                                historyHtml += `<div style="font-size:12px; color:#333; margin-left:8px;">&bull; ${prodName} (${timeStr})</div>`;
+                                html += `<div style="font-size:12px; color:#333; margin-left:8px;">&bull; ${prodName} (${timeStr})</div>`;
                             }
-                        });
+                            return html;
+                        };
+
+                        visibleDates.forEach(date => { historyHtml += renderDate(date); });
+
+                        if (hiddenDates.length > 0) {
+                            historyHtml += `<details><summary style="font-size:12px; color:var(--primary); cursor:pointer; margin-top:8px; font-weight:bold; outline:none;">Show Full History (${hiddenDates.length} more)</summary>`;
+                            hiddenDates.forEach(date => { historyHtml += renderDate(date); });
+                            historyHtml += `</details>`;
+                        }
                     } else if (d.recentHistory && d.recentHistory.length) {
                         historyHtml = `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${d.recentHistory.join(', ')}</div>`;
                     }
