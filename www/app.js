@@ -6277,24 +6277,42 @@ window.openLiveAdmin = function() {
                     let historyHtml = '';
                     if (d.historyMap && Object.keys(d.historyMap).length > 0) {
                         let sortedDates = Object.keys(d.historyMap).sort().reverse();
-                        let visibleDates = sortedDates.slice(0, 2);
-                        let hiddenDates = sortedDates.slice(2);
+                        let visibleHtml = '';
+                        let hiddenHtml = '';
+                        let entryCount = 0;
+                        let hiddenCount = 0;
 
-                        let renderDate = (date) => {
-                            let html = `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
+                        sortedDates.forEach(date => {
+                            let dateHeaderAdded = false;
+                            
                             for (let prodName in d.historyMap[date]) {
                                 let mins = parseFloat(d.historyMap[date][prodName]);
                                 let timeStr = mins < 1 ? Math.round(mins * 60) + " secs" : Math.floor(mins) + "m " + Math.round((mins % 1) * 60) + "s";
-                                html += `<div style="font-size:12px; color:#333; margin-left:8px;">&bull; ${prodName} (${timeStr})</div>`;
+                                
+                                let entryHtml = `<div style="font-size:12px; color:#333; margin-left:8px;">&bull; ${prodName} (${timeStr})</div>`;
+                                
+                                if (entryCount < 10) {
+                                    if (!dateHeaderAdded) {
+                                        visibleHtml += `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
+                                        dateHeaderAdded = true;
+                                    }
+                                    visibleHtml += entryHtml;
+                                    entryCount++;
+                                } else {
+                                    if (!dateHeaderAdded) {
+                                        hiddenHtml += `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
+                                        dateHeaderAdded = true;
+                                    }
+                                    hiddenHtml += entryHtml;
+                                    hiddenCount++;
+                                }
                             }
-                            return html;
-                        };
+                        });
 
-                        visibleDates.forEach(date => { historyHtml += renderDate(date); });
-
-                        if (hiddenDates.length > 0) {
-                            historyHtml += `<details><summary style="font-size:12px; color:var(--primary); cursor:pointer; margin-top:8px; font-weight:bold; outline:none;">Show Full History (${hiddenDates.length} more)</summary>`;
-                            hiddenDates.forEach(date => { historyHtml += renderDate(date); });
+                        historyHtml = visibleHtml;
+                        if (hiddenCount > 0) {
+                            historyHtml += `<details><summary style="font-size:12px; color:var(--primary); cursor:pointer; margin-top:8px; font-weight:bold; outline:none;">Show Full History (${hiddenCount} more entries)</summary>`;
+                            historyHtml += hiddenHtml;
                             historyHtml += `</details>`;
                         }
                     } else if (d.recentHistory && d.recentHistory.length) {
