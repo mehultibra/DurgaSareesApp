@@ -6119,7 +6119,18 @@ window.promptSetAsCover = async function(docId, pid, designId) {
 window.shareWhatsAppLink = async function() {
     if (!curProduct) return;
     var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
-    var textMsg = "Check out this design at Durga Sarees:\n\n" + link;
+    
+    var details = [];
+    if (curProduct.name) details.push("Name: " + curProduct.name);
+    if (curProduct.cat) details.push("Category: " + curProduct.cat);
+    if (curProduct.fabric && curProduct.fabric !== "None") details.push("Fabric: " + curProduct.fabric);
+    if (curProduct.work && curProduct.work !== "None") details.push("Work: " + curProduct.work);
+    if (curProduct.blouse && curProduct.blouse !== "None") details.push("Blouse: " + curProduct.blouse);
+    if (curProduct.cut && curProduct.cut !== "None") details.push("Cut: " + curProduct.cut);
+    if (curProduct.packing && curProduct.packing !== "None") details.push("Packing: " + curProduct.packing);
+    if (curProduct.sku && curProduct.sku !== "None") details.push("SKU: " + curProduct.sku);
+    
+    var textMsg = "Check out this design at Durga Sarees:\n\n" + details.join("\n") + "\n\n" + link;
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
         
@@ -6147,7 +6158,7 @@ window.shareWhatsAppLink = async function() {
             }
 
             var localFiles = [];
-            var maxShare = 6;
+            var maxShare = 1;
             var shareUrls = [];
             
             if (fileNames.length > 0) {
