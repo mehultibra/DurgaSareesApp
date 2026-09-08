@@ -1760,7 +1760,7 @@ window.recordTimeSpent = function() {
         if (!historyMap[today]) historyMap[today] = {};
         historyMap[today][curProduct.name] = (historyMap[today][curProduct.name] || 0) + spentMins;
         
-        let cutoff = Date.now() - (48 * 60 * 60 * 1000);
+        let cutoff = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days
         for (let dateKey in historyMap) {
             if (new Date(dateKey).getTime() < cutoff) {
                 delete historyMap[dateKey];
@@ -6289,7 +6289,7 @@ window.openLiveAdmin = function() {
             return;
         }
         
-        let fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+        let oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery";
         let queryPayload = {
             structuredQuery: {
@@ -6298,7 +6298,7 @@ window.openLiveAdmin = function() {
                     fieldFilter: {
                         field: { fieldPath: "lastActive" },
                         op: "GREATER_THAN_OR_EQUAL",
-                        value: { timestampValue: fortyEightHoursAgo.toISOString() }
+                        value: { timestampValue: oneWeekAgo.toISOString() }
                     }
                 },
                 orderBy: [{ field: { fieldPath: "lastActive" }, direction: "DESCENDING" }],
@@ -6325,7 +6325,7 @@ window.openLiveAdmin = function() {
                     let doc = resItem.document;
                     if (!doc || !doc.fields) return;
                     let d = parseFirestoreRest(doc.fields);
-                    if (!d.lastActive || d.lastActive.toDate() < fortyEightHoursAgo) return;
+                    if (!d.lastActive || d.lastActive.toDate() < oneWeekAgo) return;
                     sortedDocs.push({id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate()});
                 });
                 sortedDocs.sort((a,b) => b.time - a.time);
