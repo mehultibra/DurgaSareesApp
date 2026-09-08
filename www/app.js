@@ -348,28 +348,19 @@ async function checkForOTAUpdates() {
         if (latestVersion && latestVersion !== currentVersion) {
             console.log("OTA update available:", latestVersion);
             if (window.Capacitor && window.Capacitor.Plugins.CapacitorUpdater && updateUrl) {
-                // Native APK: use CapacitorUpdater
-                var versionData = await window.Capacitor.Plugins.CapacitorUpdater.download({
+                // Native APK: silently download update in background.
+                // Capgo automatically applies it on the NEXT cold start.
+                await window.Capacitor.Plugins.CapacitorUpdater.download({
                     url: updateUrl,
                     version: latestVersion
                 });
-                var oldVersion = currentVersion;
                 localStorage.setItem("dsOtaVersion", latestVersion);
-                if (oldVersion !== "builtin") {
-                    await window.Capacitor.Plugins.CapacitorUpdater.set(versionData);
-                } else {
-                    console.log("Skipping aggressive OTA reload on first launch.");
-                }
+                console.log("Update downloaded. Will apply on next restart.");
             } else {
-                // Web / WebView: force a hard reload to pick up new JS/HTML
-                // BUT skip reload on first launch (builtin) since the browser just downloaded the latest files natively.
-                var oldVersion = currentVersion;
+                // Web / WebView: just save the version. The user will naturally get the new files 
+                // the next time they refresh their browser tab.
                 localStorage.setItem("dsOtaVersion", latestVersion);
-                if (oldVersion !== "builtin") {
-                    location.reload(true);
-                } else {
-                    console.log("Skipping aggressive OTA reload on first launch.");
-                }
+                console.log("Web update available. Will apply on next page refresh.");
             }
         }
     } catch (e) {
@@ -1124,16 +1115,21 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var fileToFetch = targetFile ? targetFile : "cover.webp"; // Main grid: always try cover.webp first
 
     // If cache confirms cover is missing, jump straight to fallback map
-    if ((fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") && coverExistsMap[gridPath] === false) {
-        if (dsFallbackMap[gridPath]) {
-            fileToFetch = dsFallbackMap[gridPath];
+    if ((fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") && window.coverExistsMap && window.coverExistsMap[gridPath] === false) {
+        if (window.dsFallbackMap && window.dsFallbackMap[gridPath]) {
+            fileToFetch = window.dsFallbackMap[gridPath];
         } else {
             tryFolderListFallback();
             return;
         }
     }
+    
+    var actualUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
+    var lowResUrl = actualUrl;
 
-    var lowResUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
+    if (imgElement.src === actualUrl) {
+        return; // Prevent flicker on re-render if the image is already correct
+    }
 
     function showPlaceholder(err) {
         imgElement.src = window.dsMissingImage;
@@ -1397,6 +1393,27 @@ function refreshCardUI(pid) {
     updateCartHeader();
 }
 
+window.resolveImageUrlSync = function(p) {
+    var gridPath = p.gridUrl;
+    if (!gridPath || gridPath.trim() === "" || gridPath.toLowerCase() === "none") {
+        return window.dsMissingImage || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    }
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+    
+    var fileToFetch = p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : "cover.webp";
+    
+    if ((fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") && window.coverExistsMap && window.coverExistsMap[gridPath] === false) {
+        if (window.dsFallbackMap && window.dsFallbackMap[gridPath]) {
+            fileToFetch = window.dsFallbackMap[gridPath];
+        } else {
+            return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        }
+    }
+    return fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
+};
+
 function renderProductGrid(products) {
     const gridEl = document.getElementById("grid");
     if (!gridEl) return;
@@ -1496,11 +1513,13 @@ function renderProductGrid(products) {
             img.dataset.cropped = "true";
         };
 
+        var initialImgSrc = window.resolveImageUrlSync(p);
+
         htmlBuffer.push(`
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" crossorigin="anonymous" onload="if(window.autoCropImage) window.autoCropImage(this)" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="${esc(p.name)}">
+                <img id="${imgElementId}" crossorigin="anonymous" onload="if(window.autoCropImage) window.autoCropImage(this)" src="${initialImgSrc}" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
