@@ -1,0 +1,1 @@
+- Always automatically commit and push changes to git after completing a task or bugfix without waiting for the user to explicitly ask 'update git'.

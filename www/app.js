@@ -6798,7 +6798,10 @@ window.submitNewProduct = async function() {
             body: JSON.stringify(payload)
         }, 2);
         
-        if (!fbRes.ok) throw new Error("Firestore Error: " + fbRes.status);
+        if (!fbRes.ok) {
+            var fbErr = await fbRes.json();
+            throw new Error("Firestore " + fbRes.status + ": " + (fbErr.error ? fbErr.error.message : "Permission Denied. Check Rules."));
+        }
         var fbData = await fbRes.json();
         
         var newDocId = fbData.name.split('/').pop();
