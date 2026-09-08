@@ -3859,21 +3859,25 @@ function saveProductEdit(p) {
         if (p && p.docId) {
             showDevLog("Syncing Page: " + p.name + " -> Rate: " + p.price + " Pack: " + p.packing, false);
 
-            var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
-            var payload = {
-                fields: {
-                    price: { integerValue: p.price },
-                    packing: { stringValue: p.packing }
-                }
-            };
-
-            window.fetchWithRetry(fbUpdateUrl, {
+            // Firebase Live DB Update - Decoupled to support Granular RBAC
+            var fbUpdateUrlPrice = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=price";
+            window.fetchWithRetry(fbUpdateUrlPrice, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({ fields: { price: { integerValue: p.price } } })
             }, 1).then(res => {
-                if (res.ok) showDevLog("✅ Firebase Updated: " + p.name, false);
-                else showDevLog("❌ FB Err " + res.status + " - No Admin Perms?", true);
+                if (res.ok) showDevLog("✅ Firebase Price Updated: " + p.name, false);
+                else showDevLog("❌ FB Err " + res.status + " - No Admin Perms for Price?", true);
+            }).catch(err => showDevLog("FB Net Err: " + err.message, true));
+
+            var fbUpdateUrlPacking = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=packing";
+            window.fetchWithRetry(fbUpdateUrlPacking, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fields: { packing: { stringValue: p.packing } } })
+            }, 1).then(res => {
+                if (res.ok) showDevLog("✅ Firebase Packing Updated: " + p.name, false);
+                else showDevLog("❌ FB Err " + res.status + " - No Perms for Packing?", true);
             }).catch(err => showDevLog("FB Net Err: " + err.message, true));
 
             if (window.DS_APP_SCRIPT_URL) {
@@ -4724,22 +4728,25 @@ function saveCartInlineEdit(productId, closeEdit = true) {
     // 🚀 NEW: 2-WAY SYNC - FIREBASE & EXCEL WEBHOOK
     if (window.isSuperAdmin && window.isAdminMode && matchP && matchP.docId) {
         showDevLog("Syncing: " + matchP.name + " -> Rate: " + newRate + " Pack: " + newPacking, false);
-        // Firebase Live DB Update
-        var fbUpdateUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=packing";
-        var payload = {
-            fields: {
-                price: { doubleValue: Number(newRate) },
-                packing: { stringValue: newPacking }
-            }
-        };
-
-        window.fetchWithRetry(fbUpdateUrl, {
+        // Firebase Live DB Update - Decoupled to support Granular RBAC
+        var fbUpdateUrlPrice = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price";
+        window.fetchWithRetry(fbUpdateUrlPrice, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ fields: { price: { doubleValue: Number(newRate) } } })
         }, 1).then(res => {
-            if (res.ok) showDevLog("✅ Firebase Updated: " + matchP.name, false);
-            else showDevLog("❌ FB Err " + res.status + " - No Admin Perms?", true);
+            if (res.ok) showDevLog("✅ Firebase Price Updated", false);
+            else showDevLog("❌ FB Err " + res.status, true);
+        }).catch(err => showDevLog("FB Net Err: " + err.message, true));
+
+        var fbUpdateUrlPacking = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=packing";
+        window.fetchWithRetry(fbUpdateUrlPacking, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { packing: { stringValue: newPacking } } })
+        }, 1).then(res => {
+            if (res.ok) showDevLog("✅ Firebase Packing Updated", false);
+            else showDevLog("❌ FB Err " + res.status, true);
         }).catch(err => showDevLog("FB Net Err: " + err.message, true));
 
         // Excel Webhook Sync via Apps Script
@@ -6233,19 +6240,54 @@ window.openLiveAdmin = function() {
     var contentEl = document.getElementById('adminLiveContent');
     contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">Fetching live activity...</div>';
     
-    if (typeof firebase !== 'undefined' && firebase.firestore) {
-        window.liveAdminUnsubscribe = firebase.firestore().collection('LiveSessions')
-            .onSnapshot(snapshot => {
+    if (window.liveAdminInterval) clearInterval(window.liveAdminInterval);
+    
+    function parseFirestoreRest(fields) {
+        if (!fields) return {};
+        let result = {};
+        for (let k in fields) {
+            let v = fields[k];
+            if (v.stringValue !== undefined) result[k] = v.stringValue;
+            else if (v.integerValue !== undefined) result[k] = parseInt(v.integerValue);
+            else if (v.doubleValue !== undefined) result[k] = parseFloat(v.doubleValue);
+            else if (v.booleanValue !== undefined) result[k] = v.booleanValue;
+            else if (v.timestampValue !== undefined) {
+                let d = new Date(v.timestampValue);
+                d.toDate = () => d; 
+                result[k] = d;
+            }
+            else if (v.arrayValue !== undefined) {
+                result[k] = v.arrayValue.values ? v.arrayValue.values.map(x => x.stringValue !== undefined ? x.stringValue : x) : [];
+            }
+            else if (v.mapValue !== undefined) {
+                result[k] = parseFirestoreRest(v.mapValue.fields);
+            }
+        }
+        return result;
+    }
+
+    function fetchLiveData() {
+        if (document.getElementById('adminLiveModal').style.display === 'none') {
+            clearInterval(window.liveAdminInterval);
+            return;
+        }
+        
+        let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions";
+        window.fetchWithRetry(url, { method: 'GET' })
+            .then(res => res.json())
+            .then(snapshot => {
+                if (snapshot.error) throw new Error(snapshot.error.message);
+                
                 contentEl.innerHTML = '';
                 let hasLive = false;
                 let fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-                let fifteenMinsAgo = new Date(Date.now() - 15 * 60000);
                 
                 let sortedDocs = [];
-                snapshot.forEach(doc => {
-                    let d = doc.data();
+                let docs = snapshot.documents || [];
+                docs.forEach(doc => {
+                    let d = parseFirestoreRest(doc.fields);
                     if (!d.lastActive || d.lastActive.toDate() < fortyEightHoursAgo) return;
-                    sortedDocs.push({id: doc.id, data: d, time: d.lastActive.toDate()});
+                    sortedDocs.push({id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate()});
                 });
                 sortedDocs.sort((a,b) => b.time - a.time);
 
@@ -6366,14 +6408,21 @@ window.openLiveAdmin = function() {
                 if (!hasLive) {
                     contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 48 hours.</div>';
                 }
-            }, err => {
-                contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching live data.</div>';
+            }).catch(err => {
+                console.error("LiveSessions Fetch Error:", err);
+                contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching live data: ' + err.message + '</div>';
             });
     }
+    
+    // Initial fetch
+    fetchLiveData();
+    // Poll every 10 seconds
+    window.liveAdminInterval = setInterval(fetchLiveData, 10000);
 };
 
 window.closeLiveAdmin = function() {
     closeModals();
+    if (window.liveAdminInterval) clearInterval(window.liveAdminInterval);
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
     }

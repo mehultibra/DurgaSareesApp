@@ -251,13 +251,20 @@ exports.syncFromExcel = functions.https.onRequest(async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*');
     if (req.method === 'OPTIONS') {
         res.set('Access-Control-Allow-Methods', 'POST');
-        res.set('Access-Control-Allow-Headers', 'Content-Type');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
         res.status(204).send('');
         return;
     }
 
     if (req.method !== 'POST') {
         return res.status(405).send('Method Not Allowed');
+    }
+
+    // Secret API Key for Excel Sync
+    const API_KEY = "DS_EXCEL_SYNC_8899_SECURE";
+    if (req.headers['x-api-key'] !== API_KEY) {
+        console.error('Unauthorized sync attempt.');
+        return res.status(401).json({ error: 'Unauthorized' });
     }
 
     try {
@@ -293,6 +300,11 @@ exports.syncFromExcel = functions.https.onRequest(async (req, res) => {
 });
 
 exports.cleanupDuplicateJpgs = functions.https.onRequest(async (req, res) => {
+    const API_KEY = "DS_EXCEL_SYNC_8899_SECURE";
+    if (req.headers['x-api-key'] !== API_KEY) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const admin = require('firebase-admin');
     if (admin.apps.length === 0) admin.initializeApp();
 
