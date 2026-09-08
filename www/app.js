@@ -1553,9 +1553,25 @@ function updateCartHeader() {
     els.forEach(e => e.innerText = count);
     var floatBtn = document.getElementById('placeOrderFloat');
     if (floatBtn) {
-        floatBtn.style.display = count > 0 ? 'flex' : 'none';
+        if (typeof showOnlyFavs !== 'undefined' && showOnlyFavs) {
+            floatBtn.style.display = 'flex';
+            floatBtn.innerHTML = '<i class="fas fa-heart-broken"></i> <span>Clear Fav</span>';
+            floatBtn.onclick = function() { window.clearFavorites(); };
+        } else {
+            floatBtn.style.display = count > 0 ? 'flex' : 'none';
+            floatBtn.innerHTML = '<i class="fas fa-shopping-bag"></i> <span>Place Order</span>';
+            floatBtn.onclick = function() { openCart(); };
+        }
     }
 }
+
+window.clearFavorites = function() {
+    if (confirm("Are you sure you want to clear all favorites?")) {
+        favorites = {};
+        try { localStorage.setItem("dsFavs", JSON.stringify(favorites)); } catch (e) {}
+        if (typeof applyFilter === 'function') applyFilter();
+    }
+};
 
 
 // ====================================
@@ -4238,6 +4254,7 @@ window.toggleFavView = function () {
             favIcon.style.color = '';
         }
     }
+    updateCartHeader();
     applyFilter();
 };
 
@@ -6272,7 +6289,7 @@ window.openLiveAdmin = function() {
             return;
         }
         
-        let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions";
+        let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions?pageSize=1000";
         window.fetchWithRetry(url, { method: 'GET' })
             .then(res => res.json())
             .then(snapshot => {
@@ -6321,39 +6338,33 @@ window.openLiveAdmin = function() {
                         let sortedDates = Object.keys(d.historyMap).sort().reverse();
                         let visibleHtml = '';
                         let hiddenHtml = '';
-                        let entryCount = 0;
                         let hiddenCount = 0;
+                        let dateIndex = 0;
 
                         sortedDates.forEach(date => {
-                            let dateHeaderAdded = false;
+                            // Convert YYYY-MM-DD to DD/MM
+                            let dateParts = date.split('-');
+                            let shortDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}` : date;
                             
                             for (let prodName in d.historyMap[date]) {
                                 let mins = parseFloat(d.historyMap[date][prodName]);
-                                let timeStr = mins < 1 ? Math.round(mins * 60) + " secs" : Math.floor(mins) + "m " + Math.round((mins % 1) * 60) + "s";
+                                let timeStr = mins < 1 ? Math.round(mins * 60) + "s" : Math.floor(mins) + "m " + Math.round((mins % 1) * 60) + "s";
                                 
-                                let entryHtml = `<div style="font-size:12px; color:#333; margin-left:8px;">&bull; ${prodName} (${timeStr})</div>`;
+                                let entryHtml = `<div style="font-size:12px; color:#333; margin-left:4px; margin-top:2px;">&bull; <span style="color:#777; font-size:11px;">[${shortDate}]</span> ${prodName} (${timeStr})</div>`;
                                 
-                                if (entryCount < 10) {
-                                    if (!dateHeaderAdded) {
-                                        visibleHtml += `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
-                                        dateHeaderAdded = true;
-                                    }
+                                if (dateIndex < 2) {
                                     visibleHtml += entryHtml;
-                                    entryCount++;
                                 } else {
-                                    if (!dateHeaderAdded) {
-                                        hiddenHtml += `<div style="font-size:12px; color:#555; margin-top:6px; border-top:1px dashed #ccc; padding-top:4px;"><b>${date}:</b></div>`;
-                                        dateHeaderAdded = true;
-                                    }
                                     hiddenHtml += entryHtml;
                                     hiddenCount++;
                                 }
                             }
+                            dateIndex++;
                         });
 
                         historyHtml = visibleHtml;
                         if (hiddenCount > 0) {
-                            historyHtml += `<details><summary style="font-size:12px; color:var(--primary); cursor:pointer; margin-top:8px; font-weight:bold; outline:none;">Show Full History (${hiddenCount} more entries)</summary>`;
+                            historyHtml += `<details><summary style="font-size:12px; color:var(--primary); cursor:pointer; margin-top:6px; font-weight:bold; outline:none;">Show Older History (${hiddenCount} items)</summary>`;
                             historyHtml += hiddenHtml;
                             historyHtml += `</details>`;
                         }

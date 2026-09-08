@@ -1509,8 +1509,7 @@ window.triggerShare = async function (action) {
             return alert("No favorite items to share. Please mark some products as favorites first.");
         }
 
-        var shareType = await askShareTypeAsync();
-        if (!shareType) return;
+        var shareType = 'cover'; // Always use cover image for bulk favorite sharing
 
         var allHighResUrls = [];
         var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
