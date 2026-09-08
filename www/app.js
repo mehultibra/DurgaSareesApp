@@ -353,8 +353,13 @@ async function checkForOTAUpdates() {
                     url: updateUrl,
                     version: latestVersion
                 });
+                var oldVersion = currentVersion;
                 localStorage.setItem("dsOtaVersion", latestVersion);
-                await window.Capacitor.Plugins.CapacitorUpdater.set(versionData);
+                if (oldVersion !== "builtin") {
+                    await window.Capacitor.Plugins.CapacitorUpdater.set(versionData);
+                } else {
+                    console.log("Skipping aggressive OTA reload on first launch.");
+                }
             } else {
                 // Web / WebView: force a hard reload to pick up new JS/HTML
                 // BUT skip reload on first launch (builtin) since the browser just downloaded the latest files natively.
@@ -362,6 +367,8 @@ async function checkForOTAUpdates() {
                 localStorage.setItem("dsOtaVersion", latestVersion);
                 if (oldVersion !== "builtin") {
                     location.reload(true);
+                } else {
+                    console.log("Skipping aggressive OTA reload on first launch.");
                 }
             }
         }
