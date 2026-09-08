@@ -547,26 +547,21 @@ async function saveProfile() {
 
     document.getElementById('btnSaveProfile').innerText = "Saving...";
     try {
-        var token = "";
-        if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
-            token = await firebase.auth().currentUser.getIdToken();
-        }
-        var headers = {};
-        if (token) headers['Authorization'] = 'Bearer ' + token;
-
-        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
+        var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
             method: "POST",
-            headers: headers,
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(doc)
         });
         if (res.ok) {
             completeLogin(phone);
         } else {
-            err.innerText = "Error saving profile.";
+            var errData = await res.json();
+            console.error("Profile Save Error:", errData);
+            err.innerText = "Error saving profile: " + (errData.error ? errData.error.message : "");
             document.getElementById('btnSaveProfile').innerText = "SAVE & CONTINUE";
         }
     } catch (e) {
-        err.innerText = "Network error.";
+        err.innerText = "Network error: " + e.message;
         document.getElementById('btnSaveProfile').innerText = "SAVE & CONTINUE";
     }
 }
@@ -1773,6 +1768,8 @@ window.recordTimeSpent = function() {
 };
 
 function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
+    if (document.activeElement) document.activeElement.blur(); // Hide keyboard when opening a product
+    
     if (!skipShow) {
         cameFromDetail = false;
 
@@ -2511,6 +2508,8 @@ function updateLiveDetailHeader() {
 }
 
 function closeDetail(fromHistory) {
+    if (document.activeElement) document.activeElement.blur(); // Hide keyboard when returning to home
+
     var fab = document.getElementById('adminCamFab'); if (fab) fab.remove();
     var panel = document.getElementById('detailPanel');
     if (panel) {
@@ -4632,13 +4631,6 @@ async function saveCustomerDetails() {
 
     // Save to Firestore
     try {
-        var token = "";
-        if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
-            token = await firebase.auth().currentUser.getIdToken();
-        }
-        var headers = {};
-        if (token) headers['Authorization'] = 'Bearer ' + token;
-
         var doc = {
             fields: {
                 name: { stringValue: name },
@@ -4651,17 +4643,17 @@ async function saveCustomerDetails() {
 
         if (docId) {
             // Update existing
-            await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + docId + "?updateMask.fieldPaths=name&updateMask.fieldPaths=firm&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=phone", {
+            await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + docId + "?updateMask.fieldPaths=name&updateMask.fieldPaths=firm&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=phone", {
                 method: "PATCH",
-                headers: headers,
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(doc)
             });
         } else {
             // Create new
             doc.fields.createdAt = { timestampValue: new Date().toISOString() };
-            var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
+            var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
                 method: "POST",
-                headers: headers,
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(doc)
             });
             var data = await res.json();
