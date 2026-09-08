@@ -6289,19 +6289,41 @@ window.openLiveAdmin = function() {
             return;
         }
         
-        let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions?pageSize=1000";
-        window.fetchWithRetry(url, { method: 'GET' })
+        let fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+        let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery";
+        let queryPayload = {
+            structuredQuery: {
+                from: [{ collectionId: "LiveSessions" }],
+                where: {
+                    fieldFilter: {
+                        field: { fieldPath: "lastActive" },
+                        op: "GREATER_THAN_OR_EQUAL",
+                        value: { timestampValue: fortyEightHoursAgo.toISOString() }
+                    }
+                },
+                orderBy: [{ field: { fieldPath: "lastActive" }, direction: "DESCENDING" }],
+                limit: 1000
+            }
+        };
+
+        window.fetchWithRetry(url, { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(queryPayload)
+        })
             .then(res => res.json())
             .then(snapshot => {
+                if (snapshot.error && snapshot.error.length > 0) throw new Error(snapshot.error[0].message || snapshot.error.message);
                 if (snapshot.error) throw new Error(snapshot.error.message);
                 
                 contentEl.innerHTML = '';
                 let hasLive = false;
-                let fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
                 
                 let sortedDocs = [];
-                let docs = snapshot.documents || [];
-                docs.forEach(doc => {
+                let docs = snapshot || [];
+                docs.forEach(resItem => {
+                    let doc = resItem.document;
+                    if (!doc || !doc.fields) return;
                     let d = parseFirestoreRest(doc.fields);
                     if (!d.lastActive || d.lastActive.toDate() < fortyEightHoursAgo) return;
                     sortedDocs.push({id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate()});
