@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. Fetch the user's role from the centralized Settings/Roles document
+    function getRole() {
+      // Safely get the phone number (handles null if user logged in via email/anonymous)
+      let phone = request.auth != null ? request.auth.token.get('phone_number', '') : '';
+      
+      // If phone is empty, they cannot possibly have a role mapped in the Settings doc
+      if (phone == '') return null;
+      
+      let doc = get(/databases/$(database)/documents/Settings/Roles);
+      return doc != null ? doc.data.get(phone, null) : null;
+    }
+    
+    // 2. Role Checkers
+    function isAdmin() { return request.auth != null && getRole() == 'admin'; }
+    function isInventory() { return request.auth != null && getRole() == 'inventory'; }
+    function isPacking() { return request.auth != null && getRole() == 'packing'; }
+
+    // ==========================================
+    // PRODUCTS COLLECTION
+    // ==========================================
+    match /Products/{productId} {
+      // Anyone can view the catalog
+      allow read: if true;
+      
+      // Admins can do anything
+      allow write: if isAdmin();
+      
+      // Inventory can ONLY update stock-related fields
+      allow update: if isInventory() && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      'stock', 
+                      'updateTime', 
+                      'coverDesignId'
+                    ]);
+                    
+      // Packing can ONLY update packing details
+      allow update: if isPacking() && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      'packing'
+                    ]);
+    }
+
+    // ==========================================
+    // USERS COLLECTION
+    // ==========================================
+    match /Users/{userId} {
+      // Admins can view/edit all users
+      allow read, write: if isAdmin();
+      
+      // A user can create their own profile, or read/update their own profile
+      allow create: if request.auth != null && request.resource.data.get('phone', '') == request.auth.token.get('phone_number', 'UNMATCHABLE');
+      allow read, update: if request.auth != null && resource.data.get('phone', '') == request.auth.token.get('phone_number', 'UNMATCHABLE');
+    }
+
+    // ==========================================
+    // SETTINGS / ORDERS / EVERYTHING ELSE
+    // ==========================================
+    match /LiveSessions/{sessionId} {
+      allow read: if isAdmin();
+      allow write: if true;
+    }
+
+    match /{document=**} {
+      // Deny all access by default unless explicitly allowed above, 
+      // EXCEPT Admins who have god-mode over the entire database
+      allow read, write: if isAdmin();
+    }
+  }
+}

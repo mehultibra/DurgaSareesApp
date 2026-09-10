@@ -1162,8 +1162,8 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     // 🔄 LAST RESORT: Call Firebase list API to discover actual filenames
     function tryFolderListFallback() {
         // Check if we already cached the fallback filename — try IDB first
-        if (dsFallbackMap[gridPath]) {
-            var cachedFile = dsFallbackMap[gridPath];
+        if (window.dsFallbackMap[gridPath]) {
+            var cachedFile = window.dsFallbackMap[gridPath];
             var cachedUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cachedFile) + "?alt=media";
             getImageFromDB(cachedUrl).then(function (blob) {
                 if (blob) {
@@ -1172,7 +1172,13 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                     imgElement.dataset.tempBlobUrl = objUrl;
                 } else {
                     imgElement.src = cachedUrl;
-                    imgElement.onerror = function () { showPlaceholder(new Error("Cached fallback onerror triggered")); };
+                    imgElement.onerror = function () {
+                        // The cached fallback file is dead (e.g. admin deleted it). Clear it and try listing folder again.
+                        imgElement.onerror = null;
+                        delete window.dsFallbackMap[gridPath];
+                        saveFallbackMap();
+                        tryFolderListFallback(); 
+                    };
                 }
             });
             return;

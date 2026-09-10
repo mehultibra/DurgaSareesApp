@@ -125,5 +125,8 @@
         "*.local"
       ]
     }
-  ]
+  ],
+  "firestore": {
+    "rules": "firestore.rules"
+  }
 }
