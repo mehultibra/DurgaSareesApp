@@ -329,6 +329,34 @@ window.addEventListener('DOMContentLoaded', function () {
         // 🚀 Initialize Capgo OTA Updater
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
             try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
+            
+            // Apply any pending update instantly on cold boot
+            (async function() {
+                try {
+                    let pending = localStorage.getItem("dsPendingOta");
+                    if (pending) {
+                        let vData = JSON.parse(pending);
+                        localStorage.removeItem("dsPendingOta");
+                        await window.Capacitor.Plugins.CapacitorUpdater.set(vData);
+                    }
+                } catch(e) {}
+            })();
+
+            // Apply updates silently when app goes into background
+            if (window.Capacitor.Plugins.App) {
+                window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
+                    if (!state.isActive) {
+                        try {
+                            let pending = localStorage.getItem("dsPendingOta");
+                            if (pending) {
+                                let vData = JSON.parse(pending);
+                                localStorage.removeItem("dsPendingOta");
+                                window.Capacitor.Plugins.CapacitorUpdater.set(vData).catch(()=>{});
+                            }
+                        } catch(e) {}
+                    }
+                });
+            }
         }
 
     // Check for updates on ALL platforms (Native & Web)
@@ -338,7 +366,7 @@ window.addEventListener('DOMContentLoaded', function () {
 async function checkForOTAUpdates() {
     try {
         var response = await fetch("https://durga-sarees.web.app/version.json?t=" + new Date().getTime());
-        if (!response.ok) return; // version.json missing = no update available
+        if (!response.ok) return; 
         var data = await response.json();
         var latestVersion = data.version;
         var updateUrl = data.url;
@@ -348,17 +376,14 @@ async function checkForOTAUpdates() {
         if (latestVersion && latestVersion !== currentVersion) {
             console.log("OTA update available:", latestVersion);
             if (window.Capacitor && window.Capacitor.Plugins.CapacitorUpdater && updateUrl) {
-                // Native APK: silently download update in background.
-                // Capgo automatically applies it on the NEXT cold start.
-                await window.Capacitor.Plugins.CapacitorUpdater.download({
+                var versionData = await window.Capacitor.Plugins.CapacitorUpdater.download({
                     url: updateUrl,
                     version: latestVersion
                 });
                 localStorage.setItem("dsOtaVersion", latestVersion);
-                console.log("Update downloaded. Will apply on next restart.");
+                localStorage.setItem("dsPendingOta", JSON.stringify(versionData));
+                console.log("Update downloaded. Will apply silently on background or next restart.");
             } else {
-                // Web / WebView: just save the version. The user will naturally get the new files 
-                // the next time they refresh their browser tab.
                 localStorage.setItem("dsOtaVersion", latestVersion);
                 console.log("Web update available. Will apply on next page refresh.");
             }
