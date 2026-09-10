@@ -4187,9 +4187,11 @@ window.renderHorizontalCategories = function() {
     allProducts.forEach(p => {
         if (p.cat) {
             if (!cats[p.cat]) {
-                cats[p.cat] = p; // Store first product as representative image
-            } else if (!cats[p.cat].latestImageAddedAt && p.latestImageAddedAt) {
-                cats[p.cat] = p; // Prefer a product that definitely has images uploaded
+                cats[p.cat] = p;
+            } else if (!cats[p.cat].coverDesignId && p.coverDesignId) {
+                cats[p.cat] = p; // Strongly prefer products with a custom cover image set
+            } else if (!cats[p.cat].coverDesignId && !cats[p.cat].latestImageAddedAt && p.latestImageAddedAt) {
+                cats[p.cat] = p; // Next best: prefer products that have *some* images uploaded
             }
         }
     });
