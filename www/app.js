@@ -286,11 +286,11 @@ window.addEventListener('DOMContentLoaded', function () {
                 });
 
                 window.CapacitorFirebaseAuthentication.addListener('phoneCodeSent', (event) => {
+                    var btn = document.getElementById('btnSendOtp');
+                    if (btn) btn.innerText = "SEND OTP";
                     dsVerificationId = event.verificationId;
                     document.getElementById('loginBoxPhone').style.display = 'none';
                     document.getElementById('loginBoxOtp').style.display = 'block';
-                    var btn = document.getElementById('btnSendOtp');
-                    if (btn) btn.innerText = "SEND OTP";
                 });
 
                 window.CapacitorFirebaseAuthentication.addListener('phoneVerificationCompleted', (result) => {
@@ -661,6 +661,8 @@ function backToPhone() {
     document.getElementById('lErr').innerText = "";
     document.getElementById('lErrOtp').innerText = "";
     document.getElementById('lOtp').value = "";
+    var btn = document.getElementById('btnSendOtp');
+    if (btn) btn.innerText = "SEND OTP";
 }
 
 function initApp() {
@@ -4179,8 +4181,12 @@ window.renderHorizontalCategories = function() {
 
     var cats = {};
     allProducts.forEach(p => {
-        if (p.cat && !cats[p.cat]) {
-            cats[p.cat] = p; // Store first product as representative image
+        if (p.cat) {
+            if (!cats[p.cat]) {
+                cats[p.cat] = p; // Store first product as representative image
+            } else if (!cats[p.cat].latestImageAddedAt && p.latestImageAddedAt) {
+                cats[p.cat] = p; // Prefer a product that definitely has images uploaded
+            }
         }
     });
 
@@ -6345,39 +6351,64 @@ window.openLiveAdmin = function() {
     function parseFirestoreRest(fields) {
         if (!fields) return {};
         let result = {};
-        for (let k in fields) {
-            let v = fields[k];
-            if (v.stringValue !== undefined) result[k] = v.stringValue;
-            else if (v.integerValue !== undefined) result[k] = parseInt(v.integerValue);
-            else if (v.doubleValue !== undefined) result[k] = parseFloat(v.doubleValue);
-            else if (v.booleanValue !== undefined) result[k] = v.booleanValue;
-            else if (v.timestampValue !== undefined) {
-                let d = new Date(v.timestampValue);
-                d.toDate = () => d; 
-                result[k] = d;
-            }
-            else if (v.arrayValue !== undefined) {
-                result[k] = v.arrayValue.values ? v.arrayValue.values.map(x => x.stringValue !== undefined ? x.stringValue : x) : [];
-            }
-            else if (v.mapValue !== undefined) {
-                result[k] = parseFirestoreRest(v.mapValue.fields);
+        for (let key in fields) {
+            let type = Object.keys(fields[key])[0];
+            let val = fields[key][type];
+            if (type === 'timestampValue') {
+                result[key] = { toDate: () => new Date(val) };
+            } else if (type === 'integerValue') {
+                result[key] = parseInt(val, 10);
+            } else {
+                result[key] = val;
             }
         }
         return result;
     }
 
-    if (typeof firebase !== 'undefined' && firebase.firestore) {
-        window.liveAdminUnsubscribe = firebase.firestore().collection('LiveSessions')
-            .onSnapshot(snapshot => {
+    function fetchLiveData() {
+        if (document.getElementById('adminLiveModal').style.display === 'none') {
+            clearInterval(window.liveAdminInterval);
+            return;
+        }
+        
+        let oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery";
+        let queryPayload = {
+            structuredQuery: {
+                from: [{ collectionId: "LiveSessions" }],
+                where: {
+                    fieldFilter: {
+                        field: { fieldPath: "lastActive" },
+                        op: "GREATER_THAN_OR_EQUAL",
+                        value: { timestampValue: oneWeekAgo.toISOString() }
+                    }
+                },
+                orderBy: [{ field: { fieldPath: "lastActive" }, direction: "DESCENDING" }],
+                limit: 1000
+            }
+        };
+
+        window.fetchWithRetry(url, { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(queryPayload)
+        })
+            .then(res => res.json())
+            .then(snapshot => {
+                if (snapshot.error && snapshot.error.length > 0) throw new Error(snapshot.error[0].message || snapshot.error.message);
+                if (snapshot.error) throw new Error(snapshot.error.message);
+                
                 contentEl.innerHTML = '';
                 let hasLive = false;
-                let oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
                 
                 let sortedDocs = [];
-                snapshot.forEach(doc => {
-                    let d = doc.data();
+                let docs = snapshot || [];
+                docs.forEach(resItem => {
+                    let doc = resItem.document;
+                    if (!doc || !doc.fields) return;
+                    let d = parseFirestoreRest(doc.fields);
                     if (!d.lastActive || d.lastActive.toDate() < oneWeekAgo) return;
-                    sortedDocs.push({id: doc.id, data: d, time: d.lastActive.toDate()});
+                    sortedDocs.push({id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate()});
                 });
                 sortedDocs.sort((a,b) => b.time - a.time);
 
