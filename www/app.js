@@ -343,17 +343,21 @@ window.addEventListener('DOMContentLoaded', function () {
             })();
 
             // Apply updates silently when app goes into background
-            if (window.Capacitor.Plugins.App) {
-                window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
-                    if (!state.isActive) {
-                        try {
-                            let pending = localStorage.getItem("dsPendingOta");
-                            if (pending) {
+            if (window.Capacitor && window.Capacitor.Plugins.App) {
+                window.Capacitor.Plugins.App.addListener('appStateChange', async ({ isActive }) => {
+                    if (!isActive) {
+                        var loginScreen = document.getElementById('loginScreen');
+                        if (loginScreen && loginScreen.style.display !== 'none') {
+                            return; // Do not interrupt login/OTP flow
+                        }
+                        var pending = localStorage.getItem("dsPendingOta");
+                        if (pending && window.Capacitor.Plugins.CapacitorUpdater) {
+                            try {
                                 let vData = JSON.parse(pending);
                                 localStorage.removeItem("dsPendingOta");
                                 window.Capacitor.Plugins.CapacitorUpdater.set(vData).catch(()=>{});
-                            }
-                        } catch(e) {}
+                            } catch(e) {}
+                        }
                     }
                 });
             }
