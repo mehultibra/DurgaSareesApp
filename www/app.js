@@ -6328,50 +6328,18 @@ window.openLiveAdmin = function() {
         return result;
     }
 
-    function fetchLiveData() {
-        if (document.getElementById('adminLiveModal').style.display === 'none') {
-            clearInterval(window.liveAdminInterval);
-            return;
-        }
-        
-        let oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery";
-        let queryPayload = {
-            structuredQuery: {
-                from: [{ collectionId: "LiveSessions" }],
-                where: {
-                    fieldFilter: {
-                        field: { fieldPath: "lastActive" },
-                        op: "GREATER_THAN_OR_EQUAL",
-                        value: { timestampValue: oneWeekAgo.toISOString() }
-                    }
-                },
-                orderBy: [{ field: { fieldPath: "lastActive" }, direction: "DESCENDING" }],
-                limit: 1000
-            }
-        };
-
-        window.fetchWithRetry(url, { 
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(queryPayload)
-        })
-            .then(res => res.json())
-            .then(snapshot => {
-                if (snapshot.error && snapshot.error.length > 0) throw new Error(snapshot.error[0].message || snapshot.error.message);
-                if (snapshot.error) throw new Error(snapshot.error.message);
-                
+    if (typeof firebase !== 'undefined' && firebase.firestore) {
+        window.liveAdminUnsubscribe = firebase.firestore().collection('LiveSessions')
+            .onSnapshot(snapshot => {
                 contentEl.innerHTML = '';
                 let hasLive = false;
+                let oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
                 
                 let sortedDocs = [];
-                let docs = snapshot || [];
-                docs.forEach(resItem => {
-                    let doc = resItem.document;
-                    if (!doc || !doc.fields) return;
-                    let d = parseFirestoreRest(doc.fields);
+                snapshot.forEach(doc => {
+                    let d = doc.data();
                     if (!d.lastActive || d.lastActive.toDate() < oneWeekAgo) return;
-                    sortedDocs.push({id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate()});
+                    sortedDocs.push({id: doc.id, data: d, time: d.lastActive.toDate()});
                 });
                 sortedDocs.sort((a,b) => b.time - a.time);
 
@@ -6484,23 +6452,17 @@ window.openLiveAdmin = function() {
                     contentEl.insertAdjacentHTML('beforeend', html);
                 });
                 if (!hasLive) {
-                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 48 hours.</div>';
+                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 7 days.</div>';
                 }
-            }).catch(err => {
+            }, err => {
                 console.error("LiveSessions Fetch Error:", err);
                 contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching live data: ' + err.message + '</div>';
             });
     }
-    
-    // Initial fetch
-    fetchLiveData();
-    // Poll every 10 seconds
-    window.liveAdminInterval = setInterval(fetchLiveData, 10000);
 };
 
 window.closeLiveAdmin = function() {
     closeModals();
-    if (window.liveAdminInterval) clearInterval(window.liveAdminInterval);
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
     }
