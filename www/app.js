@@ -1127,8 +1127,20 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var actualUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
     var lowResUrl = actualUrl;
 
-    if (imgElement.src === actualUrl) {
-        return; // Prevent flicker on re-render if the image is already correct
+    if (imgElement.getAttribute('src') === actualUrl || imgElement.src === actualUrl) {
+        if (imgElement.complete && imgElement.naturalWidth === 0) {
+            // The synchronously injected URL already failed to load (e.g. 404).
+            // Manually trigger the network fallback sequence.
+            loadFromNetwork();
+        } else {
+            // It's still loading (or already loaded successfully).
+            // Attach an onerror handler just in case it fails later.
+            imgElement.onerror = function() {
+                imgElement.onerror = null;
+                loadFromNetwork();
+            };
+        }
+        return; // Prevent flicker by not blindly resetting imgElement.src
     }
 
     function showPlaceholder(err) {
