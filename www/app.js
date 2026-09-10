@@ -480,33 +480,40 @@ async function verifyOtp() {
 async function checkUserInFirestore(phone) {
     try {
         var token = "";
-        if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+        if (window.CapacitorFirebaseAuthentication) {
+            var tRes = await window.CapacitorFirebaseAuthentication.getIdToken();
+            if (tRes && tRes.token) token = tRes.token;
+        } else if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
             token = await firebase.auth().currentUser.getIdToken();
         }
         var headers = {};
         if (token) headers['Authorization'] = 'Bearer ' + token;
 
-        var query = {
-            structuredQuery: {
-                from: [{ collectionId: "Users" }],
-                where: {
-                    fieldFilter: {
-                        field: { fieldPath: "phone" },
-                        op: "EQUAL",
-                        value: { stringValue: phone }
-                    }
-                },
-                limit: 1
-            }
-        };
-        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
-            method: "POST",
-            headers: headers,
-            body: JSON.stringify(query)
-        });
-        var data = await res.json();
-        if (data && data.length > 0 && data[0].document) {
-            return true;
+        async function doQuery(p) {
+            var query = {
+                structuredQuery: {
+                    from: [{ collectionId: "Users" }],
+                    where: {
+                        fieldFilter: { field: { fieldPath: "phone" }, op: "EQUAL", value: { stringValue: p } }
+                    },
+                    limit: 1
+                }
+            };
+            var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+                method: "POST", headers: headers, body: JSON.stringify(query)
+            });
+            var data = await res.json();
+            if (data && data.length > 0 && data[0].document) return true;
+            return false;
+        }
+
+        var found = await doQuery(phone);
+        if (found) return true;
+        
+        var altPhone = phone.replace(/^\+91/, '');
+        if (phone !== altPhone) {
+            found = await doQuery(altPhone);
+            if (found) return true;
         }
         return false;
     } catch (e) {
