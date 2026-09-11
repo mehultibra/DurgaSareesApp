@@ -1165,21 +1165,37 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var actualUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
     var lowResUrl = actualUrl;
 
-    if (imgElement.getAttribute('src') === actualUrl || imgElement.src === actualUrl) {
-        if (imgElement.complete && imgElement.naturalWidth === 0) {
-            // The synchronously injected URL already failed to load (e.g. 404).
-            // Manually trigger the network fallback sequence.
-            loadFromNetwork();
+    var isNativeLoading = (imgElement.getAttribute('src') === actualUrl || imgElement.src === actualUrl);
+
+    // ALWAYS check IndexedDB to support Offline Mode.
+    // The previous bypass completely skipped IDB which broke offline caching.
+    getImageFromDB(actualUrl).then(function (blob) {
+        if (blob) {
+            var objectUrl = URL.createObjectURL(blob);
+            // Only inject the IDB blob if the native URL hasn't already finished loading.
+            // This prevents flicker for online users, but instantly loads for offline users!
+            if (!isNativeLoading || !imgElement.complete || imgElement.naturalWidth === 0) {
+                imgElement.src = objectUrl;
+            }
+            imgElement.dataset.tempBlobUrl = objectUrl;
+            if (window.coverExistsMap) window.coverExistsMap[gridPath] = true;
+            if (window.saveCoverExistsMap) window.saveCoverExistsMap();
         } else {
-            // It's still loading (or already loaded successfully).
-            // Attach an onerror handler just in case it fails later.
-            imgElement.onerror = function() {
-                imgElement.onerror = null;
+            // Not in IDB cache. Wait for the native network load to fail before trying fallbacks.
+            if (isNativeLoading) {
+                if (imgElement.complete && imgElement.naturalWidth === 0) {
+                    loadFromNetwork();
+                } else {
+                    imgElement.onerror = function() {
+                        imgElement.onerror = null;
+                        loadFromNetwork();
+                    };
+                }
+            } else {
                 loadFromNetwork();
-            };
+            }
         }
-        return; // Prevent flicker by not blindly resetting imgElement.src
-    }
+    });
 
     function showPlaceholder(err) {
         imgElement.src = window.dsMissingImage;
