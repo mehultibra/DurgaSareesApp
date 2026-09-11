@@ -1466,7 +1466,22 @@ function refreshCardUI(pid) {
 }
 
 window.resolveImageUrlSync = function(p) {
-    return window.dsMissingImage || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    var gridPath = p.gridUrl;
+    if (!gridPath || gridPath.trim() === "" || gridPath.toLowerCase() === "none") {
+        return window.dsMissingImage || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    }
+    var bucket = "durga-sarees.firebasestorage.app";
+    var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+    var fileToFetch = p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : "cover.webp";
+    if ((fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") && window.coverExistsMap && window.coverExistsMap[gridPath] === false) {
+        if (window.dsFallbackMap && window.dsFallbackMap[gridPath]) {
+            fileToFetch = window.dsFallbackMap[gridPath];
+        } else {
+            return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        }
+    }
+    return fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
 };
 
 function renderProductGrid(products) {
@@ -1569,12 +1584,13 @@ function renderProductGrid(products) {
         };
 
         var initialImgSrc = window.resolveImageUrlSync(p);
+        var base64Fallback = window.dsMissingImage || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
         htmlBuffer.push(`
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" crossorigin="anonymous" onload="if(window.autoCropImage) window.autoCropImage(this)" src="${initialImgSrc}" alt="${esc(p.name)}">
+                <img id="${imgElementId}" crossorigin="anonymous" onload="if(window.autoCropImage) window.autoCropImage(this)" onerror="this.onerror=null; this.src='${base64Fallback}';" src="${initialImgSrc}" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
