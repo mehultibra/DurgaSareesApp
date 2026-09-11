@@ -4324,6 +4324,7 @@ window.toggleSearch = function () {
         if (input.style.display === 'none' || input.style.display === '') {
             pushHistoryState('search');
             applyModalState('search');
+            input.focus();
         } else {
             history.back(); // This will trigger popstate which closes search
         }
@@ -4497,7 +4498,6 @@ function applyModalState(modal) {
         if (input && input.style.display !== 'block') {
             if (logo) logo.style.display = 'none';
             input.style.display = 'block';
-            input.focus();
         }
     } else {
         if (input && input.style.display === 'block') {
