@@ -1936,14 +1936,8 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             var logo = document.getElementById('appLogoImg');
             if (input && input.style.display !== 'none') {
                 input.style.display = 'none';
-                input.value = '';
                 if (logo) logo.style.display = 'block';
             }
-            var srch = document.getElementById('srch');
-            if (srch) {
-                srch.value = '';
-            }
-            applyFilter();
         }
     }
 
