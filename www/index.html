@@ -126,6 +126,7 @@
         <img src="logo.png" id="appLogoImg" onclick="goToHome()" style="cursor:pointer; max-width:100%; flex-shrink:0;">
         <input type="text" id="srchMainInput" placeholder="Search Saree Name or SKU..."
           onkeyup="doSearch(this.value); if(event.key === 'Enter') this.blur();"
+          onblur="if(window.closeEmptySearch) window.closeEmptySearch();"
           style="display:none; width: 100%; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background:#f5f5f6; font-size: 13px; outline: none;">
       </div>
       <div class="hdr-icons" style="display:flex; gap:12px; align-items:center; flex-shrink:0;">

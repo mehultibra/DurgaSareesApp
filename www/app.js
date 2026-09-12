@@ -4318,6 +4318,19 @@ window.clearPriceFilters = function () {
     applyFilter();
 };
 
+window.closeEmptySearch = function() {
+    var input = document.getElementById('srchMainInput');
+    if (input && input.value.trim() === '' && input.style.display !== 'none') {
+        setTimeout(function() {
+            // Only pop the state if we are STILL in the search state
+            // This prevents popping the 'detail' state if the user tapped a product
+            if (history.state && history.state.modal === 'search') {
+                history.back();
+            }
+        }, 150);
+    }
+};
+
 window.toggleSearch = function () {
     var input = document.getElementById('srchMainInput');
     if (input) {
