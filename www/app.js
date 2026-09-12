@@ -4520,6 +4520,16 @@ function applyModalState(modal) {
 
 window.addEventListener('popstate', function (e) {
     var state = e.state || {};
+    
+    // Auto-close empty search when returning from another view
+    if (state.modal === 'search') {
+        var input = document.getElementById('srchMainInput');
+        if (input && input.value.trim() === '') {
+            history.back();
+            return;
+        }
+    }
+    
     applyModalState(state.modal);
     updateAndroidBackState();
 });
