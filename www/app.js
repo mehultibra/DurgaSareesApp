@@ -6396,6 +6396,18 @@ window.openLiveAdmin = function() {
                 result[key] = { toDate: () => new Date(val) };
             } else if (type === 'integerValue') {
                 result[key] = parseInt(val, 10);
+            } else if (type === 'doubleValue') {
+                result[key] = parseFloat(val);
+            } else if (type === 'mapValue') {
+                result[key] = parseFirestoreRest(val.fields || {});
+            } else if (type === 'arrayValue') {
+                result[key] = (val.values || []).map(v => {
+                    let vType = Object.keys(v)[0];
+                    if (vType === 'mapValue') return parseFirestoreRest(v[vType].fields || {});
+                    if (vType === 'stringValue') return v[vType];
+                    if (vType === 'integerValue') return parseInt(v[vType], 10);
+                    return v[vType];
+                });
             } else {
                 result[key] = val;
             }
