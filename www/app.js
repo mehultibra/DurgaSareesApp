@@ -6442,11 +6442,15 @@ window.openLiveAdmin = function() {
                 let sortedDocs = [];
                 let docs = snapshot || [];
                 docs.forEach(resItem => {
-                    let doc = resItem.document;
-                    if (!doc || !doc.fields) return;
-                    let d = parseFirestoreRest(doc.fields);
-                    if (!d.lastActive || d.lastActive.toDate() < oneWeekAgo) return;
-                    sortedDocs.push({id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate()});
+                    try {
+                        let doc = resItem.document;
+                        if (!doc || !doc.fields) return;
+                        let d = parseFirestoreRest(doc.fields);
+                        if (!d.lastActive || typeof d.lastActive.toDate !== 'function' || d.lastActive.toDate() < oneWeekAgo) return;
+                        sortedDocs.push({id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate()});
+                    } catch (e) {
+                        console.error("Error parsing live doc:", e);
+                    }
                 });
                 sortedDocs.sort((a,b) => b.time - a.time);
 
@@ -6561,7 +6565,8 @@ window.openLiveAdmin = function() {
                 if (!hasLive) {
                     contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 7 days.</div>';
                 }
-            }, err => {
+            })
+            .catch(err => {
                 console.error("LiveSessions Fetch Error:", err);
                 contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching live data: ' + err.message + '</div>';
             });
