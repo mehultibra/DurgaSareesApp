@@ -6409,7 +6409,7 @@ window.openLiveAdmin = function() {
             return;
         }
         
-        let oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        let limitDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery";
         let queryPayload = {
             structuredQuery: {
@@ -6418,7 +6418,7 @@ window.openLiveAdmin = function() {
                     fieldFilter: {
                         field: { fieldPath: "lastActive" },
                         op: "GREATER_THAN_OR_EQUAL",
-                        value: { timestampValue: oneWeekAgo.toISOString() }
+                        value: { timestampValue: limitDate.toISOString() }
                     }
                 },
                 orderBy: [{ field: { fieldPath: "lastActive" }, direction: "DESCENDING" }],
@@ -6446,7 +6446,7 @@ window.openLiveAdmin = function() {
                         let doc = resItem.document;
                         if (!doc || !doc.fields) return;
                         let d = parseFirestoreRest(doc.fields);
-                        if (!d.lastActive || typeof d.lastActive.toDate !== 'function' || d.lastActive.toDate() < oneWeekAgo) return;
+                        if (!d.lastActive || typeof d.lastActive.toDate !== 'function' || d.lastActive.toDate() < limitDate) return;
                         sortedDocs.push({id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate()});
                     } catch (e) {
                         console.error("Error parsing live doc:", e);
@@ -6563,7 +6563,7 @@ window.openLiveAdmin = function() {
                     contentEl.insertAdjacentHTML('beforeend', html);
                 });
                 if (!hasLive) {
-                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 7 days.</div>';
+                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 30 days.</div>';
                 }
             })
             .catch(err => {
