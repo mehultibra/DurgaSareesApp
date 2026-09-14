@@ -6571,6 +6571,9 @@ window.openLiveAdmin = function() {
                 contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching live data: ' + err.message + '</div>';
             });
     }
+
+    fetchLiveData();
+    window.liveAdminInterval = setInterval(fetchLiveData, 15000);
 };
 
 window.closeLiveAdmin = function() {
