@@ -1,0 +1,75 @@
+[debug] [2026-09-14T10:52:18.048Z] ----------------------------------------------------------------------
+[debug] [2026-09-14T10:52:18.051Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\DELLNEW\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules --non-interactive
+[debug] [2026-09-14T10:52:18.051Z] CLI Version:   15.22.3
+[debug] [2026-09-14T10:52:18.051Z] Platform:      win32
+[debug] [2026-09-14T10:52:18.051Z] Node Version:  v24.16.0
+[debug] [2026-09-14T10:52:18.052Z] Detected Agent: antigravity
+[debug] [2026-09-14T10:52:18.052Z] Time:          Mon Sep 14 2026 16:22:18 GMT+0530 (India Standard Time)
+[debug] [2026-09-14T10:52:18.052Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-14T10:52:19.952Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-14T10:52:19.952Z] > authorizing via signed-in user (mehultibra@gmail.com)
+[debug] [2026-09-14T10:52:19.952Z] [iam] checking project durga-sarees for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-09-14T10:52:19.953Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:19.954Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:19.955Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/durga-sarees:testIamPermissions [none]
+[debug] [2026-09-14T10:52:19.955Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/durga-sarees:testIamPermissions  x-goog-user-project=durga-sarees
+[debug] [2026-09-14T10:52:19.955Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/durga-sarees:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-09-14T10:52:28.991Z] *** [apiv2] error from fetch(https://cloudresourcemanager.googleapis.com/v1/projects/durga-sarees:testIamPermissions, {"headers":{},"method":"POST","body":"{\"permissions\":[\"datastore.indexes.create\",\"datastore.indexes.delete\",\"datastore.indexes.list\",\"datastore.indexes.update\",\"firebase.projects.get\"]}"}): FetchError: request to https://cloudresourcemanager.googleapis.com/v1/projects/durga-sarees:testIamPermissions failed, reason: getaddrinfo ENOTFOUND cloudresourcemanager.googleapis.com
+[debug] [2026-09-14T10:52:28.992Z] [iam] error while checking permissions, command may fail: Failed to make request to https://cloudresourcemanager.googleapis.com/v1/projects/durga-sarees:testIamPermissions
+[info] 
+[info] === Deploying to 'durga-sarees'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-09-14T10:52:28.997Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:28.997Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:28.998Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default) [none]
+[debug] [2026-09-14T10:52:29.161Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default) 200
+[debug] [2026-09-14T10:52:29.161Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default) {"name":"projects/durga-sarees/databases/(default)","uid":"2391c033-9442-41b8-9420-f2304e56cb6f","createTime":"2026-06-04T05:23:57.012680Z","updateTime":"2026-06-04T05:23:57.012680Z","locationId":"asia-south1","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-09-14T09:52:27.249109Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"j","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","enhancedTextSearchQueryMode":"ENHANCED_QUERY_MODE_ENABLED","etag":"IJO579bz7ZYDMMOShr/LhpUD"}
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-09-14T10:52:29.166Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:29.167Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:29.167Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/durga-sarees:test [none]
+[debug] [2026-09-14T10:52:29.167Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/durga-sarees:test [omitted]
+[debug] [2026-09-14T10:52:29.774Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/durga-sarees:test 200
+[debug] [2026-09-14T10:52:29.775Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/durga-sarees:test {}
+[info] +  cloud.firestore: rules file firestore.rules compiled successfully 
+[debug] [2026-09-14T10:52:29.776Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:29.776Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:29.777Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/durga-sarees/releases pageSize=10&pageToken=
+[debug] [2026-09-14T10:52:30.118Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/durga-sarees/releases 200
+[debug] [2026-09-14T10:52:30.118Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/durga-sarees/releases {"releases":[{"name":"projects/durga-sarees/releases/cloud.firestore","rulesetName":"projects/durga-sarees/rulesets/6b31c3d8-db5e-45e7-a57a-e952745706f5","createTime":"2026-06-04T05:24:02.851064Z","updateTime":"2026-09-07T14:25:42.648614Z"},{"name":"projects/durga-sarees/releases/firebase.storage/durga-sarees.firebasestorage.app","rulesetName":"projects/durga-sarees/rulesets/c4ac3a78-8ecf-4b5b-b08d-67045fa99058","createTime":"2026-06-04T05:35:35.170254Z","updateTime":"2026-06-19T11:36:31.828455Z"}]}
+[debug] [2026-09-14T10:52:30.132Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:30.132Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:30.132Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/durga-sarees/rulesets/6b31c3d8-db5e-45e7-a57a-e952745706f5 [none]
+[debug] [2026-09-14T10:52:31.549Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/durga-sarees/rulesets/6b31c3d8-db5e-45e7-a57a-e952745706f5 200
+[debug] [2026-09-14T10:52:31.550Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/durga-sarees/rulesets/6b31c3d8-db5e-45e7-a57a-e952745706f5 [omitted]
+[info] i  firestore: uploading rules firestore.rules... 
+[debug] [2026-09-14T10:52:31.552Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:31.552Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:31.552Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/durga-sarees/rulesets [none]
+[debug] [2026-09-14T10:52:31.552Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/durga-sarees/rulesets [omitted]
+[debug] [2026-09-14T10:52:32.968Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/durga-sarees/rulesets 200
+[debug] [2026-09-14T10:52:32.968Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/durga-sarees/rulesets {"name":"projects/durga-sarees/rulesets/5394e996-f4dc-4cde-9151-ef173745ed03","source":{"files":[{"content":"rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    \n    // 1. Fetch the user's role from the centralized Settings/Roles document\n    function getRole() {\n      return (request.auth != null && request.auth.token.phone_number != null && exists(/databases/$(database)/documents/Settings/Roles))\n             ? get(/databases/$(database)/documents/Settings/Roles).data.get(request.auth.token.phone_number, null)\n             : null;\n    }\n    \n    // 2. Role Checkers\n    function isAdmin() { return request.auth != null && getRole() == 'admin'; }\n    function isInventory() { return request.auth != null && getRole() == 'inventory'; }\n    function isPacking() { return request.auth != null && getRole() == 'packing'; }\n\n    // ==========================================\n    // PRODUCTS COLLECTION\n    // ==========================================\n    match /Products/{productId} {\n      // Anyone can view the catalog\n      allow read: if true;\n      \n      // Admins can do anything\n      allow write: if isAdmin();\n      \n      // Inventory can ONLY update stock-related fields\n      allow update: if isInventory() && \n                    request.resource.data.diff(resource.data).affectedKeys().hasOnly([\n                      'stock', \n                      'updateTime', \n                      'coverDesignId'\n                    ]);\n                    \n      // Packing can ONLY update packing details\n      allow update: if isPacking() && \n                    request.resource.data.diff(resource.data).affectedKeys().hasOnly([\n                      'packing'\n                    ]);\n    }\n\n    // ==========================================\n    // USERS COLLECTION\n    // ==========================================\n    match /Users/{userId} {\n      // Admins can view/edit all users\n      allow read, write: if isAdmin();\n      \n      // A user can create their own profile, or read/update their own profile\n      allow create: if request.auth != null && request.resource.data.get('phone', '') == request.auth.token.get('phone_number', 'UNMATCHABLE');\n      allow read, update: if request.auth != null && resource.data.get('phone', '') == request.auth.token.get('phone_number', 'UNMATCHABLE');\n    }\n\n    // ==========================================\n    // SETTINGS / ORDERS / EVERYTHING ELSE\n    // ==========================================\n    match /LiveSessions/{sessionId} {\n      allow read: if isAdmin();\n      allow write: if true;\n    }\n\n    match /{document=**} {\n      // Deny all access by default unless explicitly allowed above, \n      // EXCEPT Admins who have god-mode over the entire database\n      allow read, write: if isAdmin();\n    }\n  }\n}\n","name":"firestore.rules"}]},"createTime":"2026-09-14T10:52:30.925103Z","metadata":{"services":["cloud.firestore"]}}
+[debug] [2026-09-14T10:52:32.968Z] [rules] created ruleset projects/durga-sarees/rulesets/5394e996-f4dc-4cde-9151-ef173745ed03
+[debug] [2026-09-14T10:52:32.968Z] [rules] releasing cloud.firestore with ruleset projects/durga-sarees/rulesets/5394e996-f4dc-4cde-9151-ef173745ed03
+[debug] [2026-09-14T10:52:32.969Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:32.969Z] Checked if tokens are valid: true, expires at: 1789386651498
+[debug] [2026-09-14T10:52:32.969Z] >>> [apiv2][query] PATCH https://firebaserules.googleapis.com/v1/projects/durga-sarees/releases/cloud.firestore [none]
+[debug] [2026-09-14T10:52:32.969Z] >>> [apiv2][body] PATCH https://firebaserules.googleapis.com/v1/projects/durga-sarees/releases/cloud.firestore {"release":{"name":"projects/durga-sarees/releases/cloud.firestore","rulesetName":"projects/durga-sarees/rulesets/5394e996-f4dc-4cde-9151-ef173745ed03"}}
+[debug] [2026-09-14T10:52:34.381Z] <<< [apiv2][status] PATCH https://firebaserules.googleapis.com/v1/projects/durga-sarees/releases/cloud.firestore 200
+[debug] [2026-09-14T10:52:34.381Z] <<< [apiv2][body] PATCH https://firebaserules.googleapis.com/v1/projects/durga-sarees/releases/cloud.firestore {"name":"projects/durga-sarees/releases/cloud.firestore","rulesetName":"projects/durga-sarees/rulesets/5394e996-f4dc-4cde-9151-ef173745ed03","createTime":"2026-06-04T05:24:02.851064Z","updateTime":"2026-09-14T10:52:32.340208Z"}
+[debug] [2026-09-14T10:52:34.381Z] [rules] updated release projects/durga-sarees/releases/cloud.firestore
+[info] +  firestore: released rules firestore.rules to cloud.firestore 
+[info] 
+[info] +  Deploy complete! 
+[info] 
+[info] Project Console: https://console.firebase.google.com/project/durga-sarees/overview
+[debug] [2026-09-14T10:52:43.422Z] Error: Timed out.
+    at Timeout.<anonymous> (C:\Users\DELLNEW\AppData\Roaming\npm\node_modules\firebase-tools\lib\utils.js:313:49)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.

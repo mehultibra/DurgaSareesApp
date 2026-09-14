@@ -4,14 +4,9 @@ service cloud.firestore {
     
     // 1. Fetch the user's role from the centralized Settings/Roles document
     function getRole() {
-      // Safely get the phone number (handles null if user logged in via email/anonymous)
-      let phone = request.auth != null ? request.auth.token.get('phone_number', '') : '';
-      
-      // If phone is empty, they cannot possibly have a role mapped in the Settings doc
-      if (phone == '') return null;
-      
-      let doc = get(/databases/$(database)/documents/Settings/Roles);
-      return doc != null ? doc.data.get(phone, null) : null;
+      return (request.auth != null && request.auth.token.phone_number != null && exists(/databases/$(database)/documents/Settings/Roles))
+             ? get(/databases/$(database)/documents/Settings/Roles).data.get(request.auth.token.phone_number, null)
+             : null;
     }
     
     // 2. Role Checkers
