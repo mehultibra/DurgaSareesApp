@@ -3577,10 +3577,13 @@ async function syncImages(silent = false) {
             var f = d.fields || {};
             var name = f.name ? f.name.stringValue : "";
             var gridUrl = f.gridUrl ? f.gridUrl.stringValue : "";
+            var zoomUrl = f.zoomUrl ? f.zoomUrl.stringValue : "";
+            var coverDesignId = f.coverDesignId ? f.coverDesignId.stringValue : "";
+            var docId = d.name ? d.name.split('/').pop() : "";
             var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
             if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed"
                 && !isWix && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
-                productsToSync.push({ name, gridUrl });
+                productsToSync.push({ name, gridUrl, zoomUrl, coverDesignId, docId });
             }
         });
 
