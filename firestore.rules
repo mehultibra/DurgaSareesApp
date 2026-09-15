@@ -47,8 +47,8 @@ service cloud.firestore {
       allow read, write: if isAdmin();
       
       // A user can create their own profile, or read/update their own profile
-      allow create: if request.auth != null && request.resource.data.get('phone', '') == request.auth.token.get('phone_number', 'UNMATCHABLE');
-      allow read, update: if request.auth != null && resource.data.get('phone', '') == request.auth.token.get('phone_number', 'UNMATCHABLE');
+      allow create: if request.auth != null && request.resource.data.phone == request.auth.token.phone_number;
+      allow read, update: if request.auth != null && resource.data.phone == request.auth.token.phone_number;
     }
 
     // ==========================================
