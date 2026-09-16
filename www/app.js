@@ -5687,7 +5687,7 @@ function previewLabel(type) {
 
         var btnEdit = document.getElementById('btnEditStickerLayout');
         if (btnEdit) {
-            btnEdit.style.display = window.isAdminMode ? 'block' : 'none';
+            btnEdit.style.display = window.isSuperAdmin ? 'block' : 'none';
         }
 
         if (typeof renderStickerTemplate === 'function') {
