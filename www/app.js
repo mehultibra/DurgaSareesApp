@@ -6248,7 +6248,10 @@ window.shareWhatsAppLink = async function() {
     var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
     
     var details = [];
-    if (curProduct.ready) details.push(`Designs : *${curProduct.ready}*`);
+    if (curProduct.ready) {
+        var readyCount = curProduct.ready.split(',').filter(s => s.trim().length > 0).length;
+        if (readyCount > 0) details.push(`Designs : *${readyCount}*`);
+    }
     if (curProduct.mult) details.push(`Colours : ${curProduct.mult} Selected Colour Matching`);
     details.push("");
     
@@ -6283,7 +6286,7 @@ window.shareWhatsAppLink = async function() {
     var textMsg = `*${curProduct.name}*\n\n` + details.join("\n");
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
-        document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing Share...</div>');
+        document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing HD Image...</div>');
 
         try {
             var coverSrc = "";
