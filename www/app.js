@@ -3581,9 +3581,18 @@ async function syncImages(silent = false) {
             var coverDesignId = f.coverDesignId ? f.coverDesignId.stringValue : "";
             var docId = d.name ? d.name.split('/').pop() : "";
             var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
+            
+            var stock = {};
+            if (f.stock && f.stock.mapValue && f.stock.mapValue.fields) {
+                var sf = f.stock.mapValue.fields;
+                for (var key in sf) {
+                    stock[key] = parseInt(sf[key].integerValue || "0", 10);
+                }
+            }
+
             if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed"
                 && !isWix && gridUrl && gridUrl.trim() !== "" && gridUrl.toLowerCase() !== "none") {
-                productsToSync.push({ name, gridUrl, zoomUrl, coverDesignId, docId });
+                productsToSync.push({ name, gridUrl, zoomUrl, coverDesignId, docId, stock });
             }
         });
 
@@ -3852,9 +3861,30 @@ async function syncImages(silent = false) {
                      var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                      var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
                      
-                     async function handleZoomImage(fname, isCover) {
-                         var stockKey = isCover ? 'Cover' : fname;
-                         var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
+                     // Sort exactly as UI does to match stock indices
+                     var sortedFiles = Array.from(p._folderFiles);
+                     if (p.coverDesignId && p.coverDesignId !== "None") {
+                         var cleanCover = p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                         sortedFiles.sort((a, b) => {
+                             var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                             var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                             if (aClean === cleanCover) return -1;
+                             if (bClean === cleanCover) return 1;
+                             return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                         });
+                     } else {
+                         sortedFiles.sort((a, b) => {
+                             var possible = ["cover", "cover1", "01", "1"];
+                             var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                             var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                             if (possible.includes(aClean)) return -1;
+                             if (possible.includes(bClean)) return 1;
+                             return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                         });
+                     }
+
+                     async function handleZoomImage(fname, index) {
+                         var curStock = p.stock && p.stock[String(index)] !== undefined ? p.stock[String(index)] : 0;
                          var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
                          var existing = await checkImageInDB(zoomImgUrl);
 
@@ -3876,11 +3906,8 @@ async function syncImages(silent = false) {
                          }
                      }
 
-                     var coverFile = p._folderFiles[0];
-                     await handleZoomImage(coverFile, true);
-                     var remainingFiles = p._folderFiles.filter(f => f !== coverFile);
-                     for (var fname of remainingFiles) {
-                         await handleZoomImage(fname, false);
+                     for (var iFile = 0; iFile < sortedFiles.length; iFile++) {
+                         await handleZoomImage(sortedFiles[iFile], iFile);
                      }
                  }));
                  // Yield the main thread to keep UI smooth
