@@ -5685,16 +5685,19 @@ function previewLabel(type) {
         stickerContainer.style.display = 'block';
         canvasContainer.style.display = 'none';
 
-        // Pre-fill the editable fields with current product data
-        document.getElementById('stkProduct').innerText = curProduct.name || 'Product Name';
-        document.getElementById('stkPrice').innerText = '\u20b9' + (curProduct.price || '0');
-        document.getElementById('stkDesign').innerText = '00';
-        document.getElementById('stkFabric').innerText = curProduct.fabric || 'Standard Fabric';
-        document.getElementById('stkCut').innerText = curProduct.cut || '6.30 Mtr';
+        var btnEdit = document.getElementById('btnEditStickerLayout');
+        if (btnEdit) {
+            btnEdit.style.display = window.isAdmin ? 'block' : 'none';
+        }
+
+        if (typeof renderStickerTemplate === 'function') {
+            renderStickerTemplate('stickerTemplate', false);
+        }
 
         var prodImg = document.getElementById('img_' + curProduct.id);
         if (prodImg && prodImg.src) {
-            document.getElementById('stkProductImg').src = prodImg.src;
+            var stkProductImg = document.getElementById('stkProductImg');
+            if (stkProductImg) stkProductImg.src = prodImg.src;
         }
 
         // Generate QR code (encodes SKU so it can be scanned)

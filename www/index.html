@@ -495,7 +495,8 @@
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=3"></script>
-  <script src="./app.js?v=64"></script>
+  <script src="./app.js?v=65"></script>
+  <script src="./sticker_editor.js?v=1"></script>
 
   <div id="adminCameraPreviewModal"
     style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
@@ -550,35 +551,68 @@
       
       <!-- Live Sticker Preview (visible, editable) -->
       <div id="stickerPreviewContainer" style="display:none; margin: 15px 0;">
-        <div style="font-size: 11px; color: #888; text-align:center; margin-bottom: 6px;">Tap any field to edit before printing</div>
-        <div id="stickerTemplate" style="width: 440px; height: 220px; background: white; color: black; font-family: 'Arial', sans-serif; display: flex; align-items: center; justify-content: space-between; padding: 8px; box-sizing: border-box; border: 2px dashed #ccc; margin: 0 auto; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-            <!-- COLUMN 1: Aspect-Ratio Image Box -->
-            <div style="width: 100px; height: 200px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #f5f5f6; border: 1px solid #eee; border-radius: 2px; flex-shrink: 0;">
-                <img id="stkProductImg" style="max-width: 100%; max-height: 100%; object-fit: contain;" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
-            </div>
-        
-            <!-- COLUMN 2: Text Metadata Block (Zero Spacing Matrix) -->
-            <div style="display: flex; flex-direction: column; justify-content: space-between; flex: 1; min-width: 0; height: 200px; padding: 0 10px; box-sizing: border-box;">
-                <div style="display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0;">
-                    <div style="font-size: 20px; font-weight: bold; line-height: 1.1; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;">DURGA SAREES</div>
-                    <div id="stkProduct" contenteditable="true" style="font-size: 15px; font-weight: bold; color: #111; outline: none; border-bottom: 1px dashed transparent; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Product Name</div>
-                    <div id="stkFabric" contenteditable="true" style="font-size: 12px; color: #444; outline: none; border-bottom: 1px dashed transparent; line-height: 1.1; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Fabric Details</div>
-                    <div id="stkCut" contenteditable="true" style="font-size: 12px; color: #555; font-style: italic; outline: none; border-bottom: 1px dashed transparent; line-height: 1.1; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Cut Details</div>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 0; margin-top: auto;">
-                    <div id="stkPrice" contenteditable="true" style="font-size: 18px; font-weight: bold; color: #000; outline: none; border-bottom: 1px dashed transparent; line-height: 1.1;">₹000</div>
-                    <div id="stkDesign" contenteditable="true" style="font-size: 60px; font-weight: 900; line-height: 0.9; margin-top: 2px; outline: none; border-bottom: 1px dashed transparent; color: #000;">00</div>
-                </div>
-            </div>
-        
-            <!-- COLUMN 3: Static QR Code -->
-            <div id="stkQRCode" style="width: 110px; height: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-left: auto;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+            <div style="font-size: 11px; color: #888;">Tap any field to edit before printing</div>
+            <button id="btnEditStickerLayout" onclick="openStickerEditor()" style="display:none; padding: 4px 8px; font-size: 11px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor:pointer;"><i class="fas fa-edit"></i> Edit Layout</button>
+        </div>
+        <div id="stickerTemplate" style="width: 440px; height: 220px; background: white; color: black; font-family: 'Arial', sans-serif; position: relative; box-sizing: border-box; border: 2px dashed #ccc; margin: 0 auto; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); overflow: hidden;">
+            <!-- Content will be injected dynamically by renderStickerTemplate() -->
         </div>
       </div>
 
       <!-- Canvas Preview Container (barcode / tag) -->
       <div id="printPreviewCanvasContainer" style="margin: 15px 0; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); padding: 10px;">
+        <canvas id="printCanvas" style="max-width: 100%; border: 1px solid #ddd;"></canvas>
       </div>
+
+      <div style="display:flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; background: #fff; padding: 10px; border-radius: 6px;">
+          <div style="font-weight:bold;">Copies:</div>
+          <button onclick="changePrintCopies(-1)" style="padding: 8px 12px; font-size: 16px; border: 1px solid #ccc; background: #eee; cursor:pointer;">-</button>
+          <div id="printCopiesCount" style="font-size: 16px; font-weight: bold; width: 30px; text-align: center;">1</div>
+          <button onclick="changePrintCopies(1)" style="padding: 8px 12px; font-size: 16px; border: 1px solid #ccc; background: #eee; cursor:pointer;">+</button>
+      </div>
+      
+      <button onclick="confirmPrint()" style="width: 100%; padding: 12px; background: #2196f3; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; margin-top: 10px;"><i class="fas fa-print"></i> Print</button>
+    </div>
+  </div>
+
+  <!-- STICKER EDITOR MODAL -->
+  <div id="stickerEditorModal" class="action-modal" style="display:none; z-index: 6000;" onclick="closeStickerEditor()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="display: flex; flex-direction: column; align-items: center; background: #f0f0f0; max-height: 95vh; overflow-y: auto; width: 95%; max-width: 800px;">
+      <div class="modal-title" style="width: 100%; text-align: left;">Sticker Layout Editor <i class="fas fa-times" onclick="closeStickerEditor()"></i></div>
+      
+      <div style="display: flex; flex-wrap: wrap; width: 100%; gap: 15px; margin-top: 10px;">
+        <!-- Canvas Area -->
+        <div style="flex: 1; min-width: 300px; display: flex; flex-direction: column; align-items: center; overflow: auto; padding: 10px; background: #fff; border-radius: 6px; box-shadow: inset 0 0 10px rgba(0,0,0,0.1);">
+            <div id="stickerEditorCanvas" style="background: white; position: relative; box-sizing: border-box; border: 1px solid #000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); overflow: hidden;">
+                <!-- Draggable elements injected here -->
+            </div>
+            <div style="font-size: 11px; color: #666; margin-top: 10px;"><i class="fas fa-hand-pointer"></i> Drag elements to move. Click to select.</div>
+        </div>
+
+        <!-- Properties Panel -->
+        <div style="width: 250px; background: #fff; padding: 15px; border-radius: 6px; font-size: 13px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px;">Canvas Size</div>
+            <div style="display: flex; gap: 5px;">
+                <div><label style="font-size:10px;">Width</label><input type="number" id="seCanvasW" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div><label style="font-size:10px;">Height</label><input type="number" id="seCanvasH" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+            </div>
+
+            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Elements</div>
+            <div id="seElementToggles" style="display: flex; flex-direction: column; gap: 4px;">
+                <!-- Checkboxes injected here -->
+            </div>
+
+            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Selected Element</div>
+            <div id="seSelectedProps" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="color:#888; font-style:italic;">None selected</div>
+            </div>
+
+            <button onclick="saveStickerLayout()" style="margin-top: auto; padding: 10px; background: #4caf50; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;"><i class="fas fa-save"></i> Save Layout</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
       <div style="display:flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; background: #fff; padding: 10px; border-radius: 6px;">
           <div style="font-weight:bold;">Copies:</div>
