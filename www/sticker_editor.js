@@ -19,6 +19,7 @@ let startX, startY, initialElemX, initialElemY;
 
 async function loadStickerLayout() {
     try {
+        if (!window.firebase || !firebase.apps || firebase.apps.length === 0) return;
         const doc = await firebase.firestore().collection('Settings').doc('StickerTemplate').get();
         if (doc.exists) {
             const data = doc.data();
@@ -306,9 +307,7 @@ async function saveStickerLayout() {
     }
 }
 
-// Ensure load is called early
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', loadStickerLayout);
-} else {
+// Load lazily so it doesn't interrupt initial product fetching
+setTimeout(() => {
     loadStickerLayout();
-}
+}, 3000);
