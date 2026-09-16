@@ -6288,17 +6288,44 @@ window.shareWhatsAppLink = async function() {
         try {
             var coverSrc = "";
             
-            // Prioritize the currently open zoom image if Fullscreen modal is active
+            // 1. Prioritize the currently open zoom image if Fullscreen modal is active
             var fsModal = document.getElementById('fsModal');
             var fsImg = document.getElementById('fsImg');
             if (fsModal && fsModal.style.display === 'flex' && fsImg && fsImg.src && !fsImg.src.endsWith(window.dsMissingImage)) {
                 coverSrc = fsImg.getAttribute('data-zoom-url') || fsImg.src;
-            } else {
-                var gridImg = document.getElementById("img_" + curProduct.id);
-                if (gridImg && gridImg.src) coverSrc = gridImg.src;
-                if (!coverSrc) {
-                    var dtImg = document.getElementById("design_img_" + curProduct.id + "_DIRECT");
-                    if (dtImg && dtImg.src) coverSrc = dtImg.src;
+            } 
+            
+            // 2. Or grab the first HD zoom image from the Product Details gallery
+            if (!coverSrc) {
+                var firstDesignImg = document.getElementById("design_img_" + curProduct.id + "_0");
+                if (firstDesignImg && firstDesignImg.getAttribute('data-zoom-url')) {
+                    coverSrc = firstDesignImg.getAttribute('data-zoom-url');
+                }
+            }
+
+            // 3. Or use the coverDesignId to construct the HD URL directly!
+            if (!coverSrc && curProduct.coverDesignId && curProduct.coverDesignId !== "None") {
+                var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
+                var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encPath + "%2F" + encodeURIComponent(curProduct.coverDesignId) + "?alt=media";
+            }
+            
+            // 4. Last resort: We must list the directory to find a design image
+            if (!coverSrc) {
+                var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
+                var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+                var listUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?prefix=" + listPrefix + "&delimiter=/";
+                var listRes = await fetch(listUrl);
+                if (listRes.ok) {
+                    var data = await listRes.json();
+                    var items = data.items || [];
+                    if (items.length > 0) {
+                        var fileNames = items.map(item => item.name.substring(item.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+                        if (fileNames.length > 0) {
+                            var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
+                            coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encPath + "%2F" + encodeURIComponent(fileNames[0]) + "?alt=media";
+                        }
+                    }
                 }
             }
 
