@@ -6248,127 +6248,81 @@ window.shareWhatsAppLink = async function() {
     var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
     
     var details = [];
-    if (curProduct.name) details.push("Name: " + curProduct.name);
-    if (curProduct.cat) details.push("Category: " + curProduct.cat);
-    if (curProduct.fabric && curProduct.fabric !== "None") details.push("Fabric: " + curProduct.fabric);
-    if (curProduct.work && curProduct.work !== "None") details.push("Work: " + curProduct.work);
-    if (curProduct.blouse && curProduct.blouse !== "None") details.push("Blouse: " + curProduct.blouse);
-    if (curProduct.cut && curProduct.cut !== "None") details.push("Cut: " + curProduct.cut);
-    if (curProduct.packing && curProduct.packing !== "None") details.push("Packing: " + curProduct.packing);
-    if (curProduct.sku && curProduct.sku !== "None") details.push("SKU: " + curProduct.sku);
+    if (curProduct.ready) details.push(`Designs : *${curProduct.ready}*`);
+    if (curProduct.mult) details.push(`Colours : ${curProduct.mult} Selected Colour Matching`);
+    details.push("");
     
-    var textMsg = "Check out this design at Durga Sarees:\n\n" + details.join("\n") + "\n\n" + link;
+    var fabricJari = [];
+    if (curProduct.fabric && curProduct.fabric !== "None") fabricJari.push(curProduct.fabric);
+    if (curProduct.jari && curProduct.jari !== "None") fabricJari.push(curProduct.jari);
+    if (fabricJari.length > 0) details.push(`Fabric : ${fabricJari.join(' , ')}`);
+    
+    if (curProduct.border && curProduct.border !== "None") details.push(`Border : ${curProduct.border}`);
+    if (curProduct.blouse && curProduct.blouse !== "None") details.push(`Blouse : ${curProduct.blouse}`);
+    if (curProduct.pallu && curProduct.pallu !== "None") details.push(`Pallu : ${curProduct.pallu}`);
+    if (curProduct.work && curProduct.work !== "None") details.push(`Work : ${curProduct.work}`);
+    if (curProduct.cut && curProduct.cut !== "None") details.push(`Cut : ${curProduct.cut}`);
+    
+    details.push("");
+    details.push(`Check Ready Stock Designs here >>`);
+    details.push(link);
+    details.push("");
+    
+    details.push(`Special Price`);
+    var pricePacking = [];
+    if (curProduct.price) pricePacking.push(`${curProduct.price}/-`);
+    if (curProduct.packing && curProduct.packing !== "None") pricePacking.push(curProduct.packing);
+    if (pricePacking.length > 0) details.push(`*${pricePacking.join(' ')}*`);
+    
+    details.push("");
+    details.push("**Limited Stock");
+    details.push("");
+    details.push("Thank You,");
+    details.push("*Durga Sarees, Surat*");
+    
+    var textMsg = `*${curProduct.name}*\n\n` + details.join("\n");
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
-        
-        document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing HD Images...</div>');
+        document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing Share...</div>');
 
         try {
-            var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-            var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-            var listUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?prefix=" + listPrefix + "&delimiter=/";
-            
-            var cachedItems = window.dsFolderCache[listUrl];
-            var fileNames = [];
-            
-            if (cachedItems && cachedItems.length > 0) {
-                fileNames = cachedItems.map(item => item.name.substring(item.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+            var coverSrc = "";
+            var gridImg = document.getElementById("img_" + curProduct.id);
+            if (gridImg && gridImg.src) coverSrc = gridImg.src;
+            if (!coverSrc) {
+                var dtImg = document.getElementById("design_img_" + curProduct.id + "_DIRECT");
+                if (dtImg && dtImg.src) coverSrc = dtImg.src;
+            }
+
+            if (!coverSrc) {
+                throw new Error("No image found to share");
+            }
+
+            var base64data = "";
+            if (coverSrc.startsWith("data:")) {
+                base64data = coverSrc;
             } else {
-                var listRes = await fetch(listUrl);
-                if (listRes.ok) {
-                    var data = await listRes.json();
-                    cachedItems = data.items || [];
-                    window.dsFolderCache[listUrl] = cachedItems;
-                    try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch(e){}
-                    fileNames = cachedItems.map(item => item.name.substring(item.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
-                }
-            }
-
-            var localFiles = [];
-            var maxShare = 1;
-            var shareUrls = [];
-            
-            if (fileNames.length > 0) {
-                var sorted = [];
-                for (var i = 0; i < fileNames.length; i++) {
-                    var fn = typeof fileNames[i] === 'string' ? fileNames[i] : fileNames[i].name;
-                    if (/^(cover|cover1)\./i.test(fn)) sorted.unshift(fn);
-                    else sorted.push(fn);
-                }
-                
-                for (var i = 0; i < Math.min(sorted.length, maxShare); i++) {
-                    var zoomUrl = "";
-                    if (typeof window.resolveCorrectUrl === 'function') {
-                        zoomUrl = await window.resolveCorrectUrl(curProduct, sorted[i]);
-                    } else {
-                        var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                        zoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encPath + "%2F" + encodeURIComponent(sorted[i]) + "?alt=media";
-                    }
-                    if (zoomUrl) shareUrls.push(zoomUrl);
-                }
-            }
-            
-            if (shareUrls.length === 0) {
-                var coverSrc = "";
-                var gridImg = document.getElementById("img_" + curProduct.id);
-                if (gridImg && gridImg.src && !gridImg.src.startsWith("data:")) coverSrc = gridImg.src;
-                if (!coverSrc) {
-                    var dtImg = document.getElementById("design_img_" + curProduct.id + "_DIRECT");
-                    if (dtImg && dtImg.src && !dtImg.src.startsWith("data:")) coverSrc = dtImg.src;
-                }
-                if (coverSrc) shareUrls.push(coverSrc);
-            }
-
-            var downloadPromises = shareUrls.map(async (url, idx) => {
-                var res = await fetch(url);
+                var res = await fetch(coverSrc);
                 var blob = await res.blob();
-                var base64data = await new Promise((resolve) => {
+                base64data = await new Promise((resolve) => {
                     var reader = new FileReader();
                     reader.readAsDataURL(blob);
                     reader.onloadend = () => resolve(reader.result);
                 });
-                var pathName = "share_" + Date.now() + "_" + idx + ".jpg";
-                var writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
-                    path: pathName,
-                    data: base64data,
-                    directory: 'CACHE'
-                });
-                return writeRes.uri;
+            }
+
+            var pathName = "share_" + Date.now() + ".jpg";
+            var writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
+                path: pathName,
+                data: base64data,
+                directory: 'CACHE'
             });
 
-            localFiles = await Promise.all(downloadPromises);
-
-            if (localFiles.length > 0) {
-                let shareOptions = {
-                    title: curProduct.name,
-                    files: localFiles
-                };
-
-                if (localFiles.length > 1) {
-                    try {
-                        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(textMsg);
-                        else {
-                            var ta = document.createElement("textarea"); ta.value = textMsg; document.body.appendChild(ta);
-                            ta.focus(); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-                        }
-                        
-                        var toastId = 'copyToast_' + Date.now();
-                        var toastHtml = `<div id="${toastId}" style="position:fixed; top:40%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.9); color:#fff; padding:16px 24px; border-radius:8px; font-size:16px; font-weight:bold; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:10000; display:flex; flex-direction:column; gap:8px; pointer-events:none;">
-                            <i class="fas fa-check-circle" style="font-size:28px; color:#4caf50;"></i>
-                            <span>Link Copied!</span>
-                            <span style="font-size:13px; font-weight:normal; color:#ddd;">Please paste it into WhatsApp<br>after images appear.</span>
-                        </div>`;
-                        document.body.insertAdjacentHTML('beforeend', toastHtml);
-                        setTimeout(() => { var t = document.getElementById(toastId); if(t) t.remove(); }, 5000);
-                    } catch(e) {}
-                } else {
-                    shareOptions.text = textMsg;
-                }
-
-                await window.Capacitor.Plugins.Share.share(shareOptions);
-            } else {
-                throw new Error("No images available to share.");
-            }
+            await window.Capacitor.Plugins.Share.share({
+                title: curProduct.name,
+                text: textMsg,
+                files: [writeRes.uri]
+            });
 
         } catch (e) {
             console.error("Share error:", e);
