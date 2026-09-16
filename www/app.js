@@ -6287,11 +6287,19 @@ window.shareWhatsAppLink = async function() {
 
         try {
             var coverSrc = "";
-            var gridImg = document.getElementById("img_" + curProduct.id);
-            if (gridImg && gridImg.src) coverSrc = gridImg.src;
-            if (!coverSrc) {
-                var dtImg = document.getElementById("design_img_" + curProduct.id + "_DIRECT");
-                if (dtImg && dtImg.src) coverSrc = dtImg.src;
+            
+            // Prioritize the currently open zoom image if Fullscreen modal is active
+            var fsModal = document.getElementById('fsModal');
+            var fsImg = document.getElementById('fsImg');
+            if (fsModal && fsModal.style.display === 'flex' && fsImg && fsImg.src && !fsImg.src.endsWith(window.dsMissingImage)) {
+                coverSrc = fsImg.getAttribute('data-zoom-url') || fsImg.src;
+            } else {
+                var gridImg = document.getElementById("img_" + curProduct.id);
+                if (gridImg && gridImg.src) coverSrc = gridImg.src;
+                if (!coverSrc) {
+                    var dtImg = document.getElementById("design_img_" + curProduct.id + "_DIRECT");
+                    if (dtImg && dtImg.src) coverSrc = dtImg.src;
+                }
             }
 
             if (!coverSrc) {
