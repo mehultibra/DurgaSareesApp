@@ -3861,8 +3861,7 @@ async function syncImages(silent = false) {
             // Yield the main thread to keep UI smooth
             await new Promise(resolve => setTimeout(resolve, 50));
         }
-
-        if (bootScreen && !silent) bootScreen.style.display = 'none';
+        if (bootScreen) bootScreen.style.display = 'none';
         window.isSyncing = false;
         if (syncIcon) syncIcon.classList.remove('fa-spin');
 
@@ -3974,7 +3973,7 @@ async function syncImages(silent = false) {
     } catch (err) {
         window.isSyncing = false;
         if (syncIcon) syncIcon.classList.remove('fa-spin');
-        if (bootScreen && !silent) bootScreen.style.display = 'none';
+        if (bootScreen) bootScreen.style.display = 'none';
         if (!silent) alert("Sync error: " + err.message);
         initApp();
     }
