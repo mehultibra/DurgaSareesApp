@@ -24,7 +24,7 @@ window.dsMasterCache = {};
 try {
     var storedMaster = localStorage.getItem("dsMasterCache");
     if (storedMaster) window.dsMasterCache = JSON.parse(storedMaster);
-} catch(e) {}
+} catch (e) { }
 
 // --- ERROR LOGGING ---
 window.globalErrorLog = JSON.parse(localStorage.getItem('dsGlobalErrors') || '[]');
@@ -78,62 +78,62 @@ var activeUser = null;
 window.livePresenceHistory = [];
 
 function getActiveUserId() {
-  if (activeUser && activeUser !== "null" && activeUser !== "undefined") return activeUser;
-  let uid = localStorage.getItem('app_session_uid');
-  if (!uid) {
-    uid = 'guest_' + Math.random().toString(36).substring(2, 11);
-    localStorage.setItem('app_session_uid', uid);
-  }
-  return uid;
+    if (activeUser && activeUser !== "null" && activeUser !== "undefined") return activeUser;
+    let uid = localStorage.getItem('app_session_uid');
+    if (!uid) {
+        uid = 'guest_' + Math.random().toString(36).substring(2, 11);
+        localStorage.setItem('app_session_uid', uid);
+    }
+    return uid;
 }
 
 let presenceTimeout = null;
 let lastPresencePush = 0;
-window.updateLivePresence = function(productId, force = false) {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-  
-  let now = Date.now();
-  if (!force && now - lastPresencePush < 15000) return;
-  lastPresencePush = now;
-  
-  try {
-    if (typeof firebase === 'undefined' || !firebase.firestore) return;
-    const uid = getActiveUserId();
-      
-      let totalQty = 0;
-      let totalVal = 0;
-      let cartSummary = [];
-      for (let k in cart) {
-        if (cart[k] && cart[k].qty > 0) {
-          totalQty += Number(cart[k].qty);
-          let rate = (cart[k].p && cart[k].p.price) ? Number(cart[k].p.price) : 0;
-          totalVal += Number(cart[k].qty) * rate;
-          cartSummary.push(`${cart[k].p ? cart[k].p.name : 'Saree'} (${cart[k].design}): ${cart[k].qty} pcs`);
+window.updateLivePresence = function (productId, force = false) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+    let now = Date.now();
+    if (!force && now - lastPresencePush < 15000) return;
+    lastPresencePush = now;
+
+    try {
+        if (typeof firebase === 'undefined' || !firebase.firestore) return;
+        const uid = getActiveUserId();
+
+        let totalQty = 0;
+        let totalVal = 0;
+        let cartSummary = [];
+        for (let k in cart) {
+            if (cart[k] && cart[k].qty > 0) {
+                totalQty += Number(cart[k].qty);
+                let rate = (cart[k].p && cart[k].p.price) ? Number(cart[k].p.price) : 0;
+                totalVal += Number(cart[k].qty) * rate;
+                cartSummary.push(`${cart[k].p ? cart[k].p.name : 'Saree'} (${cart[k].design}): ${cart[k].qty} pcs`);
+            }
         }
-      }
-      let cd = {};
-      try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || "{}"); } catch(e){}
-      let customerName = cd.name || cd.firm || "Guest";
-      let customerStation = cd.station || "Unknown";
-      
-      let historyMap = {};
-      try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch(e){}
+        let cd = {};
+        try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || "{}"); } catch (e) { }
+        let customerName = cd.name || cd.firm || "Guest";
+        let customerStation = cd.station || "Unknown";
 
-      const payload = {
-        user: uid,
-        currentProduct: productId || null,
-        customerName: customerName,
-        customerStation: customerStation,
-        historyMap: historyMap,
-        cartCount: totalQty,
-        cartValue: totalVal,
-        cartSummary: cartSummary,
-        lastActive: firebase.firestore.FieldValue.serverTimestamp()
-      };
+        let historyMap = {};
+        try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch (e) { }
 
-      firebase.firestore().collection('LiveSessions').doc(uid).set(payload, { merge: true })
-        .catch(err => console.warn("Live presence sync skipped:", err));
-    } catch(e) {}
+        const payload = {
+            user: uid,
+            currentProduct: productId || null,
+            customerName: customerName,
+            customerStation: customerStation,
+            historyMap: historyMap,
+            cartCount: totalQty,
+            cartValue: totalVal,
+            cartSummary: cartSummary,
+            lastActive: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        firebase.firestore().collection('LiveSessions').doc(uid).set(payload, { merge: true })
+            .catch(err => console.warn("Live presence sync skipped:", err));
+    } catch (e) { }
 };
 var activeCategories = [];
 var activePriceFilters = [];
@@ -195,173 +195,173 @@ window.addEventListener('DOMContentLoaded', function () {
 
 
 
-        // Header scroll effect
-        var gridWrap = document.getElementById('gridWrapper');
-        if (gridWrap) {
-            gridWrap.addEventListener('scroll', function () {
-                var hdr = document.querySelector('.hdr');
-                var metaTheme = document.querySelector('meta[name="theme-color"]');
-                if (!hdr) return;
-                
-                if (this.scrollTop > 20) {
-                    hdr.style.backgroundColor = '#ffffff';
-                    hdr.style.borderBottom = '1px solid #eee';
-                    if (metaTheme) metaTheme.setAttribute('content', '#ffffff');
+    // Header scroll effect
+    var gridWrap = document.getElementById('gridWrapper');
+    if (gridWrap) {
+        gridWrap.addEventListener('scroll', function () {
+            var hdr = document.querySelector('.hdr');
+            var metaTheme = document.querySelector('meta[name="theme-color"]');
+            if (!hdr) return;
+
+            if (this.scrollTop > 20) {
+                hdr.style.backgroundColor = '#ffffff';
+                hdr.style.borderBottom = '1px solid #eee';
+                if (metaTheme) metaTheme.setAttribute('content', '#ffffff');
+            } else {
+                hdr.style.backgroundColor = 'transparent';
+                hdr.style.borderBottom = 'none';
+                if (metaTheme) metaTheme.setAttribute('content', '#ffffff');
+            }
+        });
+    }
+    try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
+    try { cart = JSON.parse(localStorage.getItem("dsCart")) || {}; } catch (e) { }
+    try { favorites = JSON.parse(localStorage.getItem("dsFavs")) || {}; } catch (e) { }
+
+    var loginScreen = document.getElementById('loginScreen');
+    var appBody = document.getElementById('appBody');
+
+    var logoImg = document.getElementById('appLogoImg');
+    if (logoImg) {
+        var tapTimeout = null;
+        logoImg.addEventListener('click', function () {
+            window.adminTapCount++;
+            clearTimeout(tapTimeout);
+            tapTimeout = setTimeout(() => { window.adminTapCount = 0; }, 1500);
+            if (window.adminTapCount === 3) {
+                window.adminTapCount = 0;
+                if (window.isSuperAdmin) {
+                    window.isAdminMode = !window.isAdminMode;
+                    document.getElementById('appLogoImg').style.border = window.isAdminMode ? '2px solid red' : 'none';
+                    document.getElementById('appLogoImg').style.borderRadius = '4px';
+                    var fabAdd = document.getElementById('fabAddProduct');
+                    if (fabAdd) fabAdd.style.display = window.isAdminMode ? 'flex' : 'none';
+                    alert("Admin Mode: " + (window.isAdminMode ? "ON" : "OFF"));
+                    if (typeof applyFilter === 'function') applyFilter();
                 } else {
-                    hdr.style.backgroundColor = 'transparent';
-                    hdr.style.borderBottom = 'none';
-                    if (metaTheme) metaTheme.setAttribute('content', '#ffffff');
+                    alert("Access Denied: Not an Administrator.");
+                }
+            }
+        });
+    }
+
+    // ALWAYS initialize Firebase Web SDK for Firestore support on Native
+    initFirebaseGlobally();
+
+    var guestPid = new URLSearchParams(window.location.search).get('pid');
+
+    if (activeUser && activeUser !== "null" && activeUser !== "undefined") {
+        if (loginScreen && appBody) {
+            loginScreen.style.display = 'none';
+            appBody.style.display = 'flex';
+            checkAdminStatus(activeUser);
+            setTimeout(initApp, 100);
+        }
+    } else if (guestPid) {
+        window.isGuestMode = true;
+        if (loginScreen && appBody) {
+            loginScreen.style.display = 'none';
+            appBody.style.display = 'flex';
+            setTimeout(initApp, 100);
+        }
+    } else {
+        if (loginScreen && appBody) {
+            loginScreen.style.display = 'flex';
+            appBody.style.display = 'none';
+        }
+    }
+
+    if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+        if (window.CapacitorFirebaseAuthentication) {
+            window.CapacitorFirebaseAuthentication.addListener('authStateChange', (user) => {
+                if (user && user.phoneNumber) {
+                    try { localStorage.setItem("dsUserToken", user.phoneNumber); } catch (e) { }
+                    activeUser = user.phoneNumber;
+                    if (loginScreen && appBody && loginScreen.style.display !== 'none') {
+                        loginScreen.style.display = 'none';
+                        appBody.style.display = 'flex';
+                        initApp();
+                    }
+                }
+            });
+
+            window.CapacitorFirebaseAuthentication.addListener('phoneCodeSent', (event) => {
+                var btn = document.getElementById('btnSendOtp');
+                if (btn) btn.innerText = "SEND OTP";
+                dsVerificationId = event.verificationId;
+                document.getElementById('loginBoxPhone').style.display = 'none';
+                document.getElementById('loginBoxOtp').style.display = 'block';
+            });
+
+            window.CapacitorFirebaseAuthentication.addListener('phoneVerificationCompleted', (result) => {
+                const user = result.user;
+                if (user) {
+                    var inputPhone = document.getElementById('lPhone').value.trim();
+                    var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
+                    var phoneStr = user.phoneNumber || (inputPhone.startsWith('+') ? inputPhone : countryCode + inputPhone);
+
+                    checkUserInFirestore(phoneStr).then(function (exists) {
+                        if (exists) {
+                            completeLogin(phoneStr);
+                        } else {
+                            document.getElementById('loginBoxOtp').style.display = 'none';
+                            document.getElementById('loginBoxRegister').style.display = 'block';
+                            window.pendingUserPhone = phoneStr;
+                        }
+                    });
+                }
+            });
+
+            window.CapacitorFirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
+                var errEl = document.getElementById('lErr');
+                if (errEl) errEl.innerText = "❌ Verification Failed: " + event.message;
+                var errElOtp = document.getElementById('lErrOtp');
+                if (errElOtp) errElOtp.innerText = "❌ " + event.message;
+                var btn = document.getElementById('btnSendOtp');
+                if (btn) btn.innerText = "SEND OTP";
+            });
+        }
+    }
+
+    setupEditableFields();
+    setupFsGestures();
+
+    // 🚀 Initialize Capgo OTA Updater
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
+        try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
+
+        // Apply any pending update instantly on cold boot
+        (async function () {
+            try {
+                let pending = localStorage.getItem("dsPendingOta");
+                if (pending) {
+                    let vData = JSON.parse(pending);
+                    localStorage.removeItem("dsPendingOta");
+                    await window.Capacitor.Plugins.CapacitorUpdater.set(vData);
+                }
+            } catch (e) { }
+        })();
+
+        // Apply updates silently when app goes into background
+        if (window.Capacitor && window.Capacitor.Plugins.App) {
+            window.Capacitor.Plugins.App.addListener('appStateChange', async ({ isActive }) => {
+                if (!isActive) {
+                    var loginScreen = document.getElementById('loginScreen');
+                    if (loginScreen && loginScreen.style.display !== 'none') {
+                        return; // Do not interrupt login/OTP flow
+                    }
+                    var pending = localStorage.getItem("dsPendingOta");
+                    if (pending && window.Capacitor.Plugins.CapacitorUpdater) {
+                        try {
+                            let vData = JSON.parse(pending);
+                            localStorage.removeItem("dsPendingOta");
+                            window.Capacitor.Plugins.CapacitorUpdater.set(vData).catch(() => { });
+                        } catch (e) { }
+                    }
                 }
             });
         }
-        try { activeUser = localStorage.getItem("dsUserToken"); } catch (e) { }
-        try { cart = JSON.parse(localStorage.getItem("dsCart")) || {}; } catch (e) { }
-        try { favorites = JSON.parse(localStorage.getItem("dsFavs")) || {}; } catch (e) { }
-
-        var loginScreen = document.getElementById('loginScreen');
-        var appBody = document.getElementById('appBody');
-
-        var logoImg = document.getElementById('appLogoImg');
-        if (logoImg) {
-            var tapTimeout = null;
-            logoImg.addEventListener('click', function () {
-                window.adminTapCount++;
-                clearTimeout(tapTimeout);
-                tapTimeout = setTimeout(() => { window.adminTapCount = 0; }, 1500);
-                if (window.adminTapCount === 3) {
-                    window.adminTapCount = 0;
-                    if (window.isSuperAdmin) {
-                        window.isAdminMode = !window.isAdminMode;
-                        document.getElementById('appLogoImg').style.border = window.isAdminMode ? '2px solid red' : 'none';
-                        document.getElementById('appLogoImg').style.borderRadius = '4px';
-                        var fabAdd = document.getElementById('fabAddProduct');
-                        if (fabAdd) fabAdd.style.display = window.isAdminMode ? 'flex' : 'none';
-                        alert("Admin Mode: " + (window.isAdminMode ? "ON" : "OFF"));
-                        if (typeof applyFilter === 'function') applyFilter();
-                    } else {
-                        alert("Access Denied: Not an Administrator.");
-                    }
-                }
-            });
-        }
-
-        // ALWAYS initialize Firebase Web SDK for Firestore support on Native
-        initFirebaseGlobally();
-
-        var guestPid = new URLSearchParams(window.location.search).get('pid');
-
-        if (activeUser && activeUser !== "null" && activeUser !== "undefined") {
-            if (loginScreen && appBody) {
-                loginScreen.style.display = 'none';
-                appBody.style.display = 'flex';
-                checkAdminStatus(activeUser);
-                setTimeout(initApp, 100);
-            }
-        } else if (guestPid) {
-            window.isGuestMode = true;
-            if (loginScreen && appBody) {
-                loginScreen.style.display = 'none';
-                appBody.style.display = 'flex';
-                setTimeout(initApp, 100);
-            }
-        } else {
-            if (loginScreen && appBody) {
-                loginScreen.style.display = 'flex';
-                appBody.style.display = 'none';
-            }
-        }
-
-        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            if (window.CapacitorFirebaseAuthentication) {
-                window.CapacitorFirebaseAuthentication.addListener('authStateChange', (user) => {
-                    if (user && user.phoneNumber) {
-                        try { localStorage.setItem("dsUserToken", user.phoneNumber); } catch (e) { }
-                        activeUser = user.phoneNumber;
-                        if (loginScreen && appBody && loginScreen.style.display !== 'none') {
-                            loginScreen.style.display = 'none';
-                            appBody.style.display = 'flex';
-                            initApp();
-                        }
-                    }
-                });
-
-                window.CapacitorFirebaseAuthentication.addListener('phoneCodeSent', (event) => {
-                    var btn = document.getElementById('btnSendOtp');
-                    if (btn) btn.innerText = "SEND OTP";
-                    dsVerificationId = event.verificationId;
-                    document.getElementById('loginBoxPhone').style.display = 'none';
-                    document.getElementById('loginBoxOtp').style.display = 'block';
-                });
-
-                window.CapacitorFirebaseAuthentication.addListener('phoneVerificationCompleted', (result) => {
-                    const user = result.user;
-                    if (user) {
-                        var inputPhone = document.getElementById('lPhone').value.trim();
-                        var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
-                        var phoneStr = user.phoneNumber || (inputPhone.startsWith('+') ? inputPhone : countryCode + inputPhone);
-
-                        checkUserInFirestore(phoneStr).then(function (exists) {
-                            if (exists) {
-                                completeLogin(phoneStr);
-                            } else {
-                                document.getElementById('loginBoxOtp').style.display = 'none';
-                                document.getElementById('loginBoxRegister').style.display = 'block';
-                                window.pendingUserPhone = phoneStr;
-                            }
-                        });
-                    }
-                });
-
-                window.CapacitorFirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
-                    var errEl = document.getElementById('lErr');
-                    if (errEl) errEl.innerText = "❌ Verification Failed: " + event.message;
-                    var errElOtp = document.getElementById('lErrOtp');
-                    if (errElOtp) errElOtp.innerText = "❌ " + event.message;
-                    var btn = document.getElementById('btnSendOtp');
-                    if (btn) btn.innerText = "SEND OTP";
-                });
-            }
-        }
-
-        setupEditableFields();
-        setupFsGestures();
-
-        // 🚀 Initialize Capgo OTA Updater
-        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
-            try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
-            
-            // Apply any pending update instantly on cold boot
-            (async function() {
-                try {
-                    let pending = localStorage.getItem("dsPendingOta");
-                    if (pending) {
-                        let vData = JSON.parse(pending);
-                        localStorage.removeItem("dsPendingOta");
-                        await window.Capacitor.Plugins.CapacitorUpdater.set(vData);
-                    }
-                } catch(e) {}
-            })();
-
-            // Apply updates silently when app goes into background
-            if (window.Capacitor && window.Capacitor.Plugins.App) {
-                window.Capacitor.Plugins.App.addListener('appStateChange', async ({ isActive }) => {
-                    if (!isActive) {
-                        var loginScreen = document.getElementById('loginScreen');
-                        if (loginScreen && loginScreen.style.display !== 'none') {
-                            return; // Do not interrupt login/OTP flow
-                        }
-                        var pending = localStorage.getItem("dsPendingOta");
-                        if (pending && window.Capacitor.Plugins.CapacitorUpdater) {
-                            try {
-                                let vData = JSON.parse(pending);
-                                localStorage.removeItem("dsPendingOta");
-                                window.Capacitor.Plugins.CapacitorUpdater.set(vData).catch(()=>{});
-                            } catch(e) {}
-                        }
-                    }
-                });
-            }
-        }
+    }
 
     // Check for updates on ALL platforms (Native & Web)
     setTimeout(checkForOTAUpdates, 2000);
@@ -370,7 +370,7 @@ window.addEventListener('DOMContentLoaded', function () {
 async function checkForOTAUpdates() {
     try {
         var response = await fetch("https://durga-sarees.web.app/version.json?t=" + new Date().getTime());
-        if (!response.ok) return; 
+        if (!response.ok) return;
         var data = await response.json();
         var latestVersion = data.version;
         var updateUrl = data.url;
@@ -513,7 +513,7 @@ async function checkUserInFirestore(phone) {
 
         var found = await doQuery(phone);
         if (found) return true;
-        
+
         var altPhone = phone.replace(/^\+91/, '');
         if (phone !== altPhone) {
             found = await doQuery(altPhone);
@@ -572,6 +572,23 @@ async function saveProfile() {
     }
 
     var phone = window.pendingUserPhone;
+    if (!phone) {
+        if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
+            phone = firebase.auth().currentUser.phoneNumber;
+        } else if (window.dsCustomerDetails && window.dsCustomerDetails.phone) {
+            phone = window.dsCustomerDetails.phone;
+        } else {
+            // Very last resort: pull from localstorage if strictly available
+            phone = localStorage.getItem("dsUserPhone") || "";
+        }
+    }
+    
+    // Ensure we don't send undefined, otherwise Firestore Rules fail
+    if (!phone) {
+        err.innerText = "Error: Phone number is missing. Please login again.";
+        return;
+    }
+
     var doc = {
         fields: {
             name: { stringValue: name },
@@ -622,7 +639,7 @@ async function checkAdminStatus(phone) {
         var data = await res.json();
         if (data && data.length > 0 && data[0].document) {
             var f = data[0].document.fields;
-            
+
             // Cache identity so it is immediately available for the Live Analytics engine
             let userProfile = {
                 name: f.name ? f.name.stringValue : "",
@@ -636,13 +653,13 @@ async function checkAdminStatus(phone) {
             if (f.isAdmin && f.isAdmin.booleanValue === true) {
                 localStorage.setItem('dsIsAdmin', 'true');
                 window.isSuperAdmin = true;
-                if(document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
+                if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
                 var fabAdd = document.getElementById('fabAddProduct');
                 if (fabAdd) fabAdd.style.display = window.isAdminMode ? 'flex' : 'none';
             } else {
                 localStorage.setItem('dsIsAdmin', 'false');
                 window.isSuperAdmin = false;
-                if(document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'none';
+                if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'none';
             }
         }
     } catch (e) {
@@ -771,7 +788,7 @@ function initApp() {
             if (!window.isGuestMode) {
                 history.replaceState(null, '', window.location.pathname);
             }
-            setTimeout(() => { if(typeof openDetail === 'function') openDetail(pidParam); }, 500);
+            setTimeout(() => { if (typeof openDetail === 'function') openDetail(pidParam); }, 500);
         }
     }
 
@@ -797,7 +814,7 @@ function initApp() {
                 try {
                     localStorage.setItem("dsMasterCache", JSON.stringify(data.cache));
                     window.dsMasterCache = data.cache;
-                } catch(e) {}
+                } catch (e) { }
             }
         }).catch(e => console.log("Master cache fetch failed:", e));
 
@@ -816,7 +833,7 @@ function initApp() {
 
                 if (newDataStr !== oldDataStr) {
                     try { localStorage.setItem("dsOfflineProducts", newDataStr); } catch (e) { }
-                    
+
                     if (loadedFromCache) {
                         // Force UI update to show the new data fetched from Firebase
                         processProducts(docs);
@@ -1161,7 +1178,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
             return;
         }
     }
-    
+
     var actualUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
     var lowResUrl = actualUrl;
 
@@ -1186,7 +1203,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 if (imgElement.complete && imgElement.naturalWidth === 0) {
                     loadFromNetwork();
                 } else {
-                    imgElement.onerror = function() {
+                    imgElement.onerror = function () {
                         imgElement.onerror = null;
                         loadFromNetwork();
                     };
@@ -1231,7 +1248,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                         imgElement.onerror = null;
                         delete window.dsFallbackMap[gridPath];
                         saveFallbackMap();
-                        tryFolderListFallback(); 
+                        tryFolderListFallback();
                     };
                 }
             });
@@ -1465,7 +1482,7 @@ function refreshCardUI(pid) {
     updateCartHeader();
 }
 
-window.resolveImageUrlSync = function(p) {
+window.resolveImageUrlSync = function (p) {
     var gridPath = p.gridUrl;
     if (!gridPath || gridPath.trim() === "" || gridPath.toLowerCase() === "none") {
         return window.dsMissingImage || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
@@ -1530,45 +1547,45 @@ function renderProductGrid(products) {
         var bHtml = totalQty > 0 ? `<div class="item-qty-badge" id="badge-${p.id}">${totalQty} in cart</div>` : `<div class="item-qty-badge" id="badge-${p.id}" style="display:none;"></div>`;
 
         // Advanced Auto-Cropper: Scans image pixels to dynamically remove white borders and text overlay
-        window.autoCropImage = function(img) {
+        window.autoCropImage = function (img) {
             if (img.dataset.cropped === "true") return;
             if (!img.complete || img.naturalWidth === 0) return;
             if (img.src.includes('data:image')) return;
-            
+
             var canvas = document.createElement('canvas');
             var ctx = canvas.getContext('2d');
             canvas.width = img.naturalWidth;
             canvas.height = img.naturalHeight;
-            
+
             try {
                 ctx.drawImage(img, 0, 0);
                 var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            } catch(e) { return; } // Silently fail on CORS
-            
+            } catch (e) { return; } // Silently fail on CORS
+
             var w = canvas.width, h = canvas.height;
             var top = 0, bottom = h;
-            
+
             // Scan for top content (ignore rows that are >60% white)
-            for (var y = 0; y < h; y+=2) {
+            for (var y = 0; y < h; y += 2) {
                 var bg = 0, chk = 0;
-                for (var x = 0; x < w; x+=5) {
+                for (var x = 0; x < w; x += 5) {
                     var i = (y * w + x) * 4;
-                    if (imgData[i] > 230 && imgData[i+1] > 230 && imgData[i+2] > 230) bg++;
+                    if (imgData[i] > 230 && imgData[i + 1] > 230 && imgData[i + 2] > 230) bg++;
                     chk++;
                 }
                 if (bg / chk < 0.6) { top = y; break; }
             }
             // Scan for bottom content
-            for (var y = h - 1; y >= 0; y-=2) {
+            for (var y = h - 1; y >= 0; y -= 2) {
                 var bg = 0, chk = 0;
-                for (var x = 0; x < w; x+=5) {
+                for (var x = 0; x < w; x += 5) {
                     var i = (y * w + x) * 4;
-                    if (imgData[i] > 230 && imgData[i+1] > 230 && imgData[i+2] > 230) bg++;
+                    if (imgData[i] > 230 && imgData[i + 1] > 230 && imgData[i + 2] > 230) bg++;
                     chk++;
                 }
                 if (bg / chk < 0.6) { bottom = y; break; }
             }
-            
+
             var contentH = bottom - top;
             if (contentH > 0 && contentH < h) {
                 var scale = Math.min(h / contentH, 1.35); // Max 35% zoom
@@ -1652,19 +1669,19 @@ function updateCartHeader() {
         if (typeof showOnlyFavs !== 'undefined' && showOnlyFavs) {
             floatBtn.style.display = 'flex';
             floatBtn.innerHTML = '<i class="fas fa-heart-broken"></i> <span>Clear Fav</span>';
-            floatBtn.onclick = function() { window.clearFavorites(); };
+            floatBtn.onclick = function () { window.clearFavorites(); };
         } else {
             floatBtn.style.display = count > 0 ? 'flex' : 'none';
             floatBtn.innerHTML = '<i class="fas fa-shopping-bag"></i> <span>Place Order</span>';
-            floatBtn.onclick = function() { openCart(); };
+            floatBtn.onclick = function () { openCart(); };
         }
     }
 }
 
-window.clearFavorites = function() {
+window.clearFavorites = function () {
     if (confirm("Are you sure you want to clear all favorites?")) {
         favorites = {};
-        try { localStorage.setItem("dsFavs", JSON.stringify(favorites)); } catch (e) {}
+        try { localStorage.setItem("dsFavs", JSON.stringify(favorites)); } catch (e) { }
         if (typeof applyFilter === 'function') applyFilter();
     }
 };
@@ -1843,26 +1860,26 @@ function fetchZoomNatively(zoomUrl, imgEl) {
     tempImg.src = zoomUrl;
 }
 
-window.recordTimeSpent = function() {
+window.recordTimeSpent = function () {
     if (window.viewStartTime && typeof curProduct !== 'undefined' && curProduct) {
         let spentMins = (Date.now() - window.viewStartTime) / 60000;
         let today = new Date().toISOString().split('T')[0];
         let historyMap = {};
-        try { 
-            let parsed = JSON.parse(localStorage.getItem('dsLiveHistory')); 
+        try {
+            let parsed = JSON.parse(localStorage.getItem('dsLiveHistory'));
             if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) historyMap = parsed;
-        } catch(e){}
-        
+        } catch (e) { }
+
         if (!historyMap[today]) historyMap[today] = {};
         historyMap[today][curProduct.name] = (historyMap[today][curProduct.name] || 0) + spentMins;
-        
+
         let cutoff = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days
         for (let dateKey in historyMap) {
             if (new Date(dateKey).getTime() < cutoff) {
                 delete historyMap[dateKey];
             }
         }
-        
+
         localStorage.setItem('dsLiveHistory', JSON.stringify(historyMap));
         window.viewStartTime = null;
     }
@@ -1870,7 +1887,7 @@ window.recordTimeSpent = function() {
 
 function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     if (document.activeElement) document.activeElement.blur(); // Hide keyboard when opening a product
-    
+
     if (!skipShow) {
         cameFromDetail = false;
 
@@ -1902,7 +1919,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             if (bNav) bNav.style.display = 'none';
             var detailBottom = document.getElementById('detailBottomRow');
             if (detailBottom) detailBottom.style.display = 'none';
-            
+
             // Hide back buttons in the detail panel header
             var slHdr = detailPanel ? detailPanel.querySelector('.sl-hdr') : null;
             if (slHdr) slHdr.style.display = 'none';
@@ -1946,7 +1963,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     }
 
     window.updateLivePresence(productId);
-    
+
     var p = allProducts.find(x => x.id === productId || x.docId === productId);
     if (!p) return;
     curProduct = p;
@@ -2088,7 +2105,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 };
             }
         });
-        
+
         validFiles = Object.values(designMap);
 
         // Hide cover/cover1 images from product page — they are only used for the main grid thumbnail
@@ -2104,15 +2121,15 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             if (stockA !== stockB) {
                 return stockB - stockA; // Highest stock first
             }
-            
+
             // Sort by newly added images first
             var timeA = a.timeCreated ? new Date(a.timeCreated).getTime() : 0;
             var timeB = b.timeCreated ? new Date(b.timeCreated).getTime() : 0;
-            
+
             if (timeA !== timeB) {
                 return timeB - timeA; // Newest first
             }
-            
+
             var numA = parseInt(a.name.replace(/\D/g, ''));
             var numB = parseInt(b.name.replace(/\D/g, ''));
             if (isNaN(numA)) numA = 0;
@@ -2254,16 +2271,16 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             }
 
             // 🚀 JIT PRIORITY SYNC & CLEANUP (Runs asynchronously in background)
-            (async function() {
+            (async function () {
                 var folderFiles = items.map(item => item.name.substring(item.name.lastIndexOf('/') + 1))
-                                       .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+                    .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
                 if (folderFiles.length === 0) return;
 
                 var bucket = "durga-sarees.firebasestorage.app";
                 var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
                 var cleanGrid = decodeURIComponent(String(p.gridUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
                 var encGridPath = cleanGrid.split('/').map(s => encodeURIComponent(s)).join('%2F');
-                
+
                 var encZoomPath = "";
                 if (p.zoomUrl && String(p.zoomUrl).toLowerCase() !== "none" && p.zoomUrl !== p.gridUrl) {
                     var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
@@ -2305,7 +2322,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                             } else {
                                 // AUTO-HEALING GHOST METADATA
                                 var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=coverDesignId";
-                                fetch(patchUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { coverDesignId: { stringValue: "" } } }) }).catch(e=>{});
+                                fetch(patchUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { coverDesignId: { stringValue: "" } } }) }).catch(e => { });
                                 p.coverDesignId = ""; // Clear locally
                             }
                         }
@@ -2314,7 +2331,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                             var foundCover = folderFiles.find(f => possibleCovers.includes(f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase()));
                             coverFile = foundCover || folderFiles[0];
                         }
-                        
+
                         var isCover = (fname === coverFile);
                         var stockKey = isCover ? 'Cover' : fname;
                         var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
@@ -2329,7 +2346,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                                         var zBlob = await zRes.blob();
                                         if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
                                     }
-                                } catch (e) {}
+                                } catch (e) { }
                             }
                         } else {
                             if (existing) {
@@ -2351,10 +2368,10 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 }
                 processFolderItems(fallbackItems);
             } else {
-                 if (typeof onRenderComplete === 'function') {
-                     onRenderComplete();
-                     onRenderComplete = null;
-                 }
+                if (typeof onRenderComplete === 'function') {
+                    onRenderComplete();
+                    onRenderComplete = null;
+                }
             }
         });
 
@@ -2481,10 +2498,10 @@ window.changeQty = function (pid, designId, amount) {
     if (cartText) cartText.innerText = newQ + ' pcs';
     var cartInp = document.getElementById('ie_qty_' + pid + '_' + designId);
     if (cartInp) cartInp.value = newQ;
-    
+
     // Update global cart headers/badges
     if (typeof updateCartHeader === 'function') updateCartHeader();
-    
+
     // Update Cart Panel Total Bottom Bar if cart is open
     var cartPanel = document.getElementById('cartPanel');
     if (cartPanel && cartPanel.classList.contains('open')) {
@@ -2537,10 +2554,10 @@ window.setExactQty = function (pid, designId, value) {
     if (cartText) cartText.innerText = newQ + ' pcs';
     var cartInp = document.getElementById('ie_qty_' + pid + '_' + designId);
     if (cartInp) cartInp.value = newQ;
-    
+
     // Update global cart headers/badges
     if (typeof updateCartHeader === 'function') updateCartHeader();
-    
+
     // Update Cart Panel Total Bottom Bar if cart is open
     var cartPanel = document.getElementById('cartPanel');
     if (cartPanel && cartPanel.classList.contains('open')) {
@@ -2641,7 +2658,7 @@ function closeDetail(fromHistory) {
     if (slBody) slBody.style.display = 'block';
 
     window.recordTimeSpent();
-    
+
     if (typeof window.updateLivePresence === 'function') {
         window.updateLivePresence(null, true);
     }
@@ -2695,21 +2712,21 @@ function setupFsGestures() {
         if (!deck) return '';
         var cards = Array.from(deck.querySelectorAll('.swipe-card')).filter(c => c.style.display !== 'none');
         if (cards.length === 0) return '';
-        
+
         var targetIdx = fsIndex + offset;
         if (targetIdx < 0) targetIdx = cards.length - 1;
         if (targetIdx >= cards.length) targetIdx = 0;
-        
+
         var card = cards[targetIdx];
         if (!card) return '';
         var img = card.querySelector('img');
         if (!img) return '';
         var chosenSrc = img.src;
         if (chosenSrc.includes("data:image/svg+xml")) {
-             var dId = card.getAttribute('data-design');
-             var pId = window.curProduct ? window.curProduct.id : '';
-             var cartImgSrc = window.getCartImgSrc ? window.getCartImgSrc(pId, dId) : '';
-             if (cartImgSrc) chosenSrc = cartImgSrc;
+            var dId = card.getAttribute('data-design');
+            var pId = window.curProduct ? window.curProduct.id : '';
+            var cartImgSrc = window.getCartImgSrc ? window.getCartImgSrc(pId, dId) : '';
+            if (cartImgSrc) chosenSrc = cartImgSrc;
         }
         return chosenSrc;
     }
@@ -2798,7 +2815,7 @@ function setupFsGestures() {
             // Smooth gallery swipe dragging
             var diffX = e.touches[0].clientX - startTouchX;
             var diffY = e.touches[0].clientY - startTouchY;
-            
+
             // Start horizontal swipe smoothly
             if (isSwipeDragging || (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 5)) {
                 isSwipeDragging = true;
@@ -2807,7 +2824,7 @@ function setupFsGestures() {
                     wrapper.style.transition = 'none';
                     wrapper.style.transform = `translate3d(${diffX}px, 0, 0)`;
                 }
-                
+
                 var prevImg = document.getElementById('fsImgPrev');
                 var nextImg = document.getElementById('fsImgNext');
                 if (diffX > 0 && prevImg && prevImg.style.display === 'none') {
@@ -2852,8 +2869,8 @@ function setupFsGestures() {
                     if (wrapper) {
                         wrapper.style.transition = 'transform 0.15s ease-out';
                         wrapper.style.transform = `translate3d(0, 0, 0)`;
-                        setTimeout(() => { 
-                            wrapper.style.transition = 'none'; 
+                        setTimeout(() => {
+                            wrapper.style.transition = 'none';
                             var pImg = document.getElementById('fsImgPrev');
                             var nImg = document.getElementById('fsImgNext');
                             if (pImg) pImg.style.display = 'none';
@@ -3001,7 +3018,7 @@ function openFs(arg1, arg2, arg3, arg4) {
                 var dir = window.fsSwipeDirection;
                 var currentX = window.fsSwipeCurrentX || 0;
                 var wrapper = document.getElementById('fsSliderWrapper');
-                
+
                 if (wrapper) {
                     var sideImg = dir > 0 ? document.getElementById('fsImgPrev') : document.getElementById('fsImgNext');
                     if (sideImg) {
@@ -3011,14 +3028,14 @@ function openFs(arg1, arg2, arg3, arg4) {
 
                     var duration = '0.15s';
                     var targetX = dir * window.innerWidth;
-                    
+
                     wrapper.style.transition = 'none';
                     wrapper.style.transform = `translate3d(${currentX}px, 0, 0)`;
                     void wrapper.offsetWidth;
-                    
+
                     wrapper.style.transition = `transform ${duration} ease-out`;
                     wrapper.style.transform = `translate3d(${targetX}px, 0, 0)`;
-                    
+
                     setTimeout(() => {
                         wrapper.style.transition = 'none';
                         wrapper.style.transform = 'translate3d(0, 0, 0)';
@@ -3031,7 +3048,7 @@ function openFs(arg1, arg2, arg3, arg4) {
                 } else {
                     fsImg.src = chosenSrc;
                 }
-                
+
                 window.fsSwipeDirection = 0;
                 window.fsSwipeCurrentX = 0;
             } else {
@@ -3041,7 +3058,7 @@ function openFs(arg1, arg2, arg3, arg4) {
                 fsImg.style.transition = '';
                 fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
                 fsImg.src = chosenSrc;
-                
+
                 var wrapper = document.getElementById('fsSliderWrapper');
                 if (wrapper) {
                     wrapper.style.transition = 'none';
@@ -3083,7 +3100,7 @@ function closeFs() {
         fsVideo.pause();
         fsVideo.src = '';
     }
-    
+
     // Refresh Cart Live with scroll preservation
     var cartPanel = document.getElementById('cartPanel');
     if (cartPanel && cartPanel.classList.contains('open')) {
@@ -3095,7 +3112,7 @@ function closeFs() {
         }
         if (!isEditingAny && typeof openCart === 'function') openCart(true);
     }
-    
+
     history.back();
 }
 
@@ -3128,15 +3145,15 @@ window.openCartFsFromCache = function (pId, dId, gridUrl) {
         fsImg.src = cartImgSrc || window.dsMissingImage;
         fsImg.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
     }
-    
+
     curProduct = pItem;
     fsDesignId = dId;
-    
+
     if (fsTitle) {
         var dName = dId === 'DIRECT' ? "Cover" : dId;
         fsTitle.innerText = pItem.name + " - " + dName + " (Loading...)";
     }
-    
+
     if (fsModal && fsModal.style.display !== 'flex') {
         fsModal.style.display = 'flex';
         pushHistoryState('fs'); // 🛡️ TRAPS BACK BUTTON
@@ -3275,31 +3292,31 @@ function openCart(preserveScroll) {
                                     // Not found in cache. Use Firebase List API to dynamically find the correct filename!
                                     var listPrefix = encGridPath + "%2F";
                                     var listUrl = fbBase + "?prefix=" + listPrefix + "&delimiter=/";
-                                    
+
                                     if (!window.folderListCache) window.folderListCache = {};
-                                    
+
                                     var fetchPromise;
                                     if (window.folderListCache[listUrl]) {
                                         fetchPromise = Promise.resolve(window.folderListCache[listUrl]);
                                     } else {
-                                        fetchPromise = fetch(listUrl).then(function(res) {
+                                        fetchPromise = fetch(listUrl).then(function (res) {
                                             if (res.ok) return res.json();
                                             throw new Error("List HTTP " + res.status);
-                                        }).then(function(data) {
-                                            var files = (data.items || []).map(function(item) {
+                                        }).then(function (data) {
+                                            var files = (data.items || []).map(function (item) {
                                                 return item.name.substring(item.name.lastIndexOf('/') + 1);
-                                            }).filter(function(f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
+                                            }).filter(function (f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
                                             window.folderListCache[listUrl] = files;
                                             return files;
                                         });
                                     }
-                                    
-                                    fetchPromise.then(function(folderFiles) {
+
+                                    fetchPromise.then(function (folderFiles) {
                                         if (folderFiles.length === 0) throw new Error("Folder empty");
-                                        
+
                                         var targetFile = null;
                                         var targetNum = parseInt(String(safeDesignLabel).replace(/\D/g, ''));
-                                        
+
                                         if (!isNaN(targetNum)) {
                                             for (var i = 0; i < folderFiles.length; i++) {
                                                 var f = folderFiles[i];
@@ -3321,18 +3338,18 @@ function openCart(preserveScroll) {
                                             }
                                         }
                                         if (!targetFile) targetFile = folderFiles[0];
-                                        
+
                                         var finalUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(targetFile) + "?alt=media";
-                                        return fetch(finalUrl).then(function(r) {
+                                        return fetch(finalUrl).then(function (r) {
                                             if (r.ok) {
-                                                return r.blob().then(function(blob) {
+                                                return r.blob().then(function (blob) {
                                                     imgEl.src = URL.createObjectURL(blob);
                                                     saveImageToDB(finalUrl, blob);
                                                 });
                                             }
                                             throw new Error("HTTP " + r.status);
                                         });
-                                    }).catch(function() {
+                                    }).catch(function () {
                                         imgEl.src = fallbackSVG;
                                     });
                                     return;
@@ -3561,7 +3578,7 @@ async function syncImages(silent = false) {
     coverExistsMap = {};
     try { localStorage.removeItem("dsCoverExists"); } catch (e) { }
     if (!window.dsFolderCache) {
-        try { window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {}; } catch(e) { window.dsFolderCache = {}; }
+        try { window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {}; } catch (e) { window.dsFolderCache = {}; }
     }
     window.syncReportResults = [];
 
@@ -3581,7 +3598,7 @@ async function syncImages(silent = false) {
             var coverDesignId = f.coverDesignId ? f.coverDesignId.stringValue : "";
             var docId = d.name ? d.name.split('/').pop() : "";
             var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
-            
+
             var stock = {};
             if (f.stock && f.stock.mapValue && f.stock.mapValue.fields) {
                 var sf = f.stock.mapValue.fields;
@@ -3682,7 +3699,7 @@ async function syncImages(silent = false) {
                         } else {
                             // AUTO-HEALING GHOST METADATA (listSuccess is already true here)
                             var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=coverDesignId";
-                            fetch(patchUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { coverDesignId: { stringValue: "" } } }) }).catch(e=>{});
+                            fetch(patchUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { coverDesignId: { stringValue: "" } } }) }).catch(e => { });
                             p.coverDesignId = ""; // Clear locally
                         }
                     }
@@ -3692,7 +3709,7 @@ async function syncImages(silent = false) {
                         coverFile = foundCover || folderFiles[0];
                     }
                     var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-                    
+
                     var remoteItem = listData.items.find(it => it.name.endsWith("/" + coverFile));
                     var remoteTime = remoteItem && remoteItem.updated ? new Date(remoteItem.updated).getTime() : 0;
                     if (!window.dsCoverTimeCache) window.dsCoverTimeCache = JSON.parse(localStorage.getItem("dsCoverTimeCache") || "{}");
@@ -3703,7 +3720,7 @@ async function syncImages(silent = false) {
                         encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
                     }
 
-                    var designKeys = {}; 
+                    var designKeys = {};
                     folderFiles.forEach(f => {
                         var gridKey = fbBase + encGridPath + "%2F" + encodeURIComponent(f) + "?alt=media";
                         designKeys[gridKey] = gridKey;
@@ -3716,7 +3733,7 @@ async function syncImages(silent = false) {
                     // ── 2. Cleanup: Delete from DB keys NOT in Firebase anymore (Grid + Zoom) ──
                     var prefixesToClean = [fbBase + encGridPath + "%2F"];
                     if (encZoomPath) prefixesToClean.push(fbBase + encZoomPath + "%2F");
-                    
+
                     for (var prefix of prefixesToClean) {
                         var cachedKeys = await listDBKeysForPrefix(prefix);
                         for (var ck of cachedKeys) {
@@ -3755,10 +3772,10 @@ async function syncImages(silent = false) {
                                     if (typeof window.logAppError === 'function') window.logAppError('Sync Corrupt Image', coverFile + " | " + p.name);
                                     downloaded = false;
                                 } else {
-                                    await saveImageToDB(p.gridUrl, coverBlob); 
-                                    await saveImageToDB(coverUrl, coverBlob); 
+                                    await saveImageToDB(p.gridUrl, coverBlob);
+                                    await saveImageToDB(coverUrl, coverBlob);
                                     window.dsCoverTimeCache[p.gridUrl] = remoteTime;
-                                    try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
+                                    try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
                                     downloaded = true;
                                 }
                             } else {
@@ -3778,11 +3795,11 @@ async function syncImages(silent = false) {
                             await Promise.all(fBatch.map(async (fname) => {
                                 var designUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
                                 var existing = await checkImageInDB(designUrl);
-                                
+
                                 var remoteDesignItem = listData.items.find(it => it.name.endsWith("/" + fname));
                                 var remoteDesignTime = remoteDesignItem && remoteDesignItem.updated ? new Date(remoteDesignItem.updated).getTime() : 0;
                                 var localDesignTime = window.dsCoverTimeCache[designUrl] || 0;
-                                
+
                                 if (!existing || localDesignTime < remoteDesignTime) {
                                     if (existing) {
                                         console.log("[SYNC] Updating stale inner image:", fname);
@@ -3802,7 +3819,7 @@ async function syncImages(silent = false) {
                                             } else {
                                                 await saveImageToDB(designUrl, dBlob);
                                                 window.dsCoverTimeCache[designUrl] = remoteDesignTime;
-                                                try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
+                                                try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
                                             }
                                         } else {
                                             window.logAppError('AUDITOR: Sync Engine Failure', `Missing File: HTTP ${dRes.status} | ${fname} | ${p.name}`);
@@ -3850,68 +3867,68 @@ async function syncImages(silent = false) {
         if (syncIcon) syncIcon.classList.remove('fa-spin');
 
         // 🚀 PHASE 2: SILENT BACKGROUND ZOOM SYNC & OUT-OF-STOCK CLEANUP
-        (async function() {
+        (async function () {
             var zBatchSize = 10;
             for (var i = 0; i < productsToSync.length; i += zBatchSize) {
-                 var batch = productsToSync.slice(i, i + zBatchSize);
-                 await Promise.all(batch.map(async (p) => {
-                     if (!p._folderFiles || p._folderFiles.length === 0) return;
-                     if (!p.zoomUrl || String(p.zoomUrl).toLowerCase() === "none" || p.zoomUrl === p.gridUrl) return;
+                var batch = productsToSync.slice(i, i + zBatchSize);
+                await Promise.all(batch.map(async (p) => {
+                    if (!p._folderFiles || p._folderFiles.length === 0) return;
+                    if (!p.zoomUrl || String(p.zoomUrl).toLowerCase() === "none" || p.zoomUrl === p.gridUrl) return;
 
-                     var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
-                     var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
-                     
-                     // Sort exactly as UI does to match stock indices
-                     var sortedFiles = Array.from(p._folderFiles);
-                     if (p.coverDesignId && p.coverDesignId !== "None") {
-                         var cleanCover = p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                         sortedFiles.sort((a, b) => {
-                             var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                             var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                             if (aClean === cleanCover) return -1;
-                             if (bClean === cleanCover) return 1;
-                             return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
-                         });
-                     } else {
-                         sortedFiles.sort((a, b) => {
-                             var possible = ["cover", "cover1", "01", "1"];
-                             var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                             var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                             if (possible.includes(aClean)) return -1;
-                             if (possible.includes(bClean)) return 1;
-                             return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
-                         });
-                     }
+                    var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                    var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
 
-                     async function handleZoomImage(fname, index) {
-                         var curStock = p.stock && p.stock[String(index)] !== undefined ? p.stock[String(index)] : 0;
-                         var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                         var existing = await checkImageInDB(zoomImgUrl);
+                    // Sort exactly as UI does to match stock indices
+                    var sortedFiles = Array.from(p._folderFiles);
+                    if (p.coverDesignId && p.coverDesignId !== "None") {
+                        var cleanCover = p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                        sortedFiles.sort((a, b) => {
+                            var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                            var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                            if (aClean === cleanCover) return -1;
+                            if (bClean === cleanCover) return 1;
+                            return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                        });
+                    } else {
+                        sortedFiles.sort((a, b) => {
+                            var possible = ["cover", "cover1", "01", "1"];
+                            var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                            var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                            if (possible.includes(aClean)) return -1;
+                            if (possible.includes(bClean)) return 1;
+                            return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                        });
+                    }
 
-                         if (curStock > 0) {
-                             if (existing) return;
-                             try {
-                                 var zRes = await window.fetchWithRetry(zoomImgUrl, {}, 2);
-                                 if (zRes.ok) {
-                                     var zBlob = await zRes.blob();
-                                     if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
-                                 }
-                             } catch (e) {}
-                         } else {
-                             // OUT OF STOCK - DELETE ZOOM
-                             if (existing) {
-                                 await deleteImageFromDB(zoomImgUrl);
-                                 console.log("[SYNC Phase 2] Deleted out-of-stock zoom cache:", fname);
-                             }
-                         }
-                     }
+                    async function handleZoomImage(fname, index) {
+                        var curStock = p.stock && p.stock[String(index)] !== undefined ? p.stock[String(index)] : 0;
+                        var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                        var existing = await checkImageInDB(zoomImgUrl);
 
-                     for (var iFile = 0; iFile < sortedFiles.length; iFile++) {
-                         await handleZoomImage(sortedFiles[iFile], iFile);
-                     }
-                 }));
-                 // Yield the main thread to keep UI smooth
-                 await new Promise(resolve => setTimeout(resolve, 50));
+                        if (curStock > 0) {
+                            if (existing) return;
+                            try {
+                                var zRes = await window.fetchWithRetry(zoomImgUrl, {}, 2);
+                                if (zRes.ok) {
+                                    var zBlob = await zRes.blob();
+                                    if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
+                                }
+                            } catch (e) { }
+                        } else {
+                            // OUT OF STOCK - DELETE ZOOM
+                            if (existing) {
+                                await deleteImageFromDB(zoomImgUrl);
+                                console.log("[SYNC Phase 2] Deleted out-of-stock zoom cache:", fname);
+                            }
+                        }
+                    }
+
+                    for (var iFile = 0; iFile < sortedFiles.length; iFile++) {
+                        await handleZoomImage(sortedFiles[iFile], iFile);
+                    }
+                }));
+                // Yield the main thread to keep UI smooth
+                await new Promise(resolve => setTimeout(resolve, 50));
             }
         })();
 
@@ -4153,12 +4170,12 @@ function handleHardwareBack() {
             }
         } else {
             backButtonPressedOnce = true;
-            
+
             // Show disappearing toast message
             var toastId = 'exitToast_' + Date.now();
             var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(40,40,40,0.95); color:#fff; padding:12px 24px; border-radius:30px; font-size:14px; box-shadow:0 4px 15px rgba(0,0,0,0.4); z-index:999999; text-align:center; transition: opacity 0.3s; pointer-events:none;">Press back again to exit</div>`;
             document.body.insertAdjacentHTML('beforeend', toastHtml);
-            
+
             if (backButtonTimer) clearTimeout(backButtonTimer);
             backButtonTimer = setTimeout(() => {
                 backButtonPressedOnce = false;
@@ -4218,7 +4235,7 @@ window.doSearch = function (val) {
     }
 };
 
-window.renderHorizontalCategories = function() {
+window.renderHorizontalCategories = function () {
     var stripEl = document.getElementById('horizontalCategoryStrip');
     if (!stripEl) return;
 
@@ -4242,7 +4259,7 @@ window.renderHorizontalCategories = function() {
         var activeClass = activeCategories.includes(cat) ? 'active' : '';
         var p = cats[cat];
         var imgId = 'cat-circle-img-' + encodeURIComponent(cat).replace(/[^a-zA-Z0-9]/g, '');
-        
+
         html += `
         <div class="cat-circle-item ${activeClass}" onclick="toggleCategoryFilter(null, '${esc(cat)}')">
             <div class="cat-circle-img-wrap">
@@ -4250,11 +4267,11 @@ window.renderHorizontalCategories = function() {
             </div>
             <div class="cat-circle-label">${esc(cat)}</div>
         </div>`;
-        
+
         // Schedule image render
         setTimeout(() => {
             var el = document.getElementById(imgId);
-            if(el && window.renderWebpFromFolder) window.renderWebpFromFolder(el, p.gridUrl, null, p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : null);
+            if (el && window.renderWebpFromFolder) window.renderWebpFromFolder(el, p.gridUrl, null, p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : null);
         }, 10);
     });
 
@@ -4310,7 +4327,7 @@ window.toggleCategoryFilter = function (element, cat) {
     if (window.renderHorizontalCategories) window.renderHorizontalCategories();
 };
 
-window.clearCategoryFilter = function() {
+window.clearCategoryFilter = function () {
     activeCategories = [];
     applyFilter();
     if (window.renderHorizontalCategories) window.renderHorizontalCategories();
@@ -4342,10 +4359,10 @@ window.clearPriceFilters = function () {
     applyFilter();
 };
 
-window.closeEmptySearch = function() {
+window.closeEmptySearch = function () {
     var input = document.getElementById('srchMainInput');
     if (input && input.value.trim() === '' && input.style.display !== 'none') {
-        setTimeout(function() {
+        setTimeout(function () {
             // Only pop the state if we are STILL in the search state
             // This prevents popping the 'detail' state if the user tapped a product
             if (history.state && history.state.modal === 'search') {
@@ -4557,7 +4574,7 @@ function applyModalState(modal) {
 
 window.addEventListener('popstate', function (e) {
     var state = e.state || {};
-    
+
     // Auto-close empty search when returning from another view
     if (state.modal === 'search') {
         var input = document.getElementById('srchMainInput');
@@ -4566,7 +4583,7 @@ window.addEventListener('popstate', function (e) {
             return;
         }
     }
-    
+
     applyModalState(state.modal);
     updateAndroidBackState();
 });
@@ -5296,7 +5313,7 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         }, 1);
-        
+
         if (res.ok) {
             if (element) element.style.backgroundColor = '#c8e6c9'; // Green (Success)
             var p = allProducts.find(x => x.id === pid);
@@ -5318,7 +5335,7 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
                         p.totalStock = 999;
                     }
                 }
-                
+
                 // Immediately refresh the main page card UI
                 if (typeof refreshCardUI === 'function') {
                     refreshCardUI(pid);
@@ -5474,13 +5491,13 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
     try {
         // High Quality Native Camera or Gallery Selection
         // High Quality Native Camera or Gallery Selection
-        var photo = await Capacitor.Plugins.Camera.getPhoto({ 
-            quality: 100, 
-            allowEditing: false, 
-            resultType: 'uri', 
+        var photo = await Capacitor.Plugins.Camera.getPhoto({
+            quality: 100,
+            allowEditing: false,
+            resultType: 'uri',
             source: 'PROMPT',
             width: 2500, // Explicitly request high resolution
-            preserveAspectRatio: true 
+            preserveAspectRatio: true
         });
 
         window.tempCamDocId = docId;
@@ -5518,7 +5535,7 @@ window.confirmAdminUpload = async function () {
     var modal = document.getElementById('adminCameraPreviewModal');
     var designInput = document.getElementById('adminDesignNumberInput');
     var finalDesignId = (designInput && designInput.value) ? designInput.value.trim().toUpperCase() : "02";
-    
+
     var bypassCb = document.getElementById('adminBypassCloudinary');
     var bypass = bypassCb ? bypassCb.checked : false;
 
@@ -5593,7 +5610,7 @@ window.processCameraOutbox = async function () {
                 var fileData = await Capacitor.Plugins.Filesystem.readFile({ path: item.fileUri });
                 var res = await fetch(`data:image/jpeg;base64,${fileData.data}`);
                 var blob = await res.blob();
-                
+
                 var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
 
                 var uploadRes = await window.fetchWithRetry(uploadUrl, {
@@ -6067,13 +6084,13 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App
                         window.pendingDeepLinkPid = pid;
                     }
                 }
-            } catch(e) {}
+            } catch (e) { }
         }
     });
 }
 
 
-window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
+window.promptRenameDesign = async function (docId, pid, oldDesignId, imgUrl) {
     if (!window.isAdminMode) return;
     var p = allProducts.find(x => x.id === pid);
     if (!p) return;
@@ -6082,12 +6099,12 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
     if (!newDesignId || newDesignId.trim() === "" || newDesignId.trim() === oldDesignId) return;
     newDesignId = newDesignId.trim().toUpperCase();
 
-    if(!imgUrl) {
+    if (!imgUrl) {
         alert("Error: Could not find image URL to rename.");
         return;
     }
 
-    document.body.insertAdjacentHTML('beforeend', '<div id="renamingLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Renaming '+oldDesignId+' to '+newDesignId+'...</div>');
+    document.body.insertAdjacentHTML('beforeend', '<div id="renamingLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Renaming ' + oldDesignId + ' to ' + newDesignId + '...</div>');
 
     try {
         var folders = [];
@@ -6104,7 +6121,7 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
 
         var uploadPromises = folders.map(async (folderPath) => {
             var cleanFolder = String(folderPath).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-            
+
             // Try .webp first
             var oldFileName = encodeURIComponent(oldDesignId + ".webp");
             var oldFileUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + oldFileName + "?alt=media";
@@ -6135,18 +6152,18 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
             }, 1);
 
             await window.fetchWithRetry(delUrl, { method: 'DELETE' }, 1).catch(e => console.log("Failed to delete", delUrl));
-            
+
             // Clean up any accidental .jpg copies made during previous buggy version if this was a .webp
             if (ext === ".webp" && folderPath !== "Uploads/Raw") {
                 var accidentalJpg = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + cleanFolder + "%2F" + encodeURIComponent(newDesignId + ".jpg");
-                window.fetchWithRetry(accidentalJpg, { method: 'DELETE' }, 1).catch(()=>{});
+                window.fetchWithRetry(accidentalJpg, { method: 'DELETE' }, 1).catch(() => { });
             }
         });
 
         await Promise.all(uploadPromises);
 
         var curStock = p.stock && p.stock[oldDesignId] !== undefined ? p.stock[oldDesignId] : 999;
-        
+
         // Add both old and new fields to updateMask. Omitting the old field from 'fields' will delete it.
         var isCoverRenamed = false;
         var cleanCoverId = p.coverDesignId ? String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() : '';
@@ -6157,7 +6174,7 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
 
         var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock.%60" + encodeURIComponent(newDesignId) + "%60&updateMask.fieldPaths=stock.%60" + encodeURIComponent(oldDesignId) + "%60&updateMask.fieldPaths=updateTime";
         if (isCoverRenamed) fsUrl += "&updateMask.fieldPaths=coverDesignId";
-        
+
         var payloadFields = {
             stock: {
                 mapValue: {
@@ -6178,8 +6195,8 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields: payloadFields })
         }, 3);
-        
-        if(!fsRes.ok) throw new Error("Failed to update Firestore stock");
+
+        if (!fsRes.ok) throw new Error("Failed to update Firestore stock");
 
         // Update active shopping cart to prevent ghost references
         var oldCartKey = p.id + '_' + oldDesignId;
@@ -6188,21 +6205,21 @@ window.promptRenameDesign = async function(docId, pid, oldDesignId, imgUrl) {
             cartItem.design = newDesignId;
             cart[p.id + '_' + newDesignId] = cartItem;
             delete cart[oldCartKey];
-            try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) {}
+            try { localStorage.setItem("dsCart", JSON.stringify(cart)); } catch (e) { }
             if (typeof updateCartHeader === 'function') updateCartHeader();
         }
 
         alert("Successfully renamed design " + oldDesignId + " to " + newDesignId + "!");
-        if(typeof applyFilter === 'function') applyFilter();
-    } catch(e) {
+        if (typeof applyFilter === 'function') applyFilter();
+    } catch (e) {
         alert("Error renaming design: " + e.message);
     } finally {
         var ldr = document.getElementById('renamingLoader');
-        if(ldr) ldr.remove();
+        if (ldr) ldr.remove();
     }
 };
 
-window.promptSetAsCover = async function(docId, pid, designId) {
+window.promptSetAsCover = async function (docId, pid, designId) {
     if (!confirm("Are you sure you want to set " + designId + " as the new cover image?")) {
         return;
     }
@@ -6213,7 +6230,7 @@ window.promptSetAsCover = async function(docId, pid, designId) {
         return;
     }
 
-    document.body.insertAdjacentHTML('beforeend', '<div id="coverLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Setting '+designId+' as Cover...</div>');
+    document.body.insertAdjacentHTML('beforeend', '<div id="coverLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Setting ' + designId + ' as Cover...</div>');
 
     var oldCoverId = p.coverDesignId;
     // Optimistic UI Update
@@ -6245,7 +6262,7 @@ window.promptSetAsCover = async function(docId, pid, designId) {
         }
         if (window.dsCoverTimeCache) {
             delete window.dsCoverTimeCache[p.gridUrl];
-            try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) {}
+            try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
         }
 
         if (typeof window.deleteImageFromDB === 'function') {
@@ -6255,27 +6272,27 @@ window.promptSetAsCover = async function(docId, pid, designId) {
         }
 
         alert("Successfully set " + designId + " as the new cover!");
-        
-        // Refresh the UI
-        if(typeof applyFilter === 'function') applyFilter();
 
-    } catch(e) {
+        // Refresh the UI
+        if (typeof applyFilter === 'function') applyFilter();
+
+    } catch (e) {
         // Optimistic Revert
         p.coverDesignId = oldCoverId;
-        if(typeof applyFilter === 'function') applyFilter();
+        if (typeof applyFilter === 'function') applyFilter();
         alert("Error setting cover: " + e.message + ". Reverted to previous cover.");
     } finally {
         var ldr = document.getElementById('coverLoader');
-        if(ldr) ldr.remove();
+        if (ldr) ldr.remove();
     }
 };
 
-window.shareWhatsAppLink = async function() {
+window.shareWhatsAppLink = async function () {
     if (!curProduct) return;
     var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
-    
+
     var details = [];
-    
+
     var readyCount = 0;
     if (curProduct.stock) {
         for (var k in curProduct.stock) {
@@ -6284,66 +6301,65 @@ window.shareWhatsAppLink = async function() {
     } else if (curProduct.ready) {
         readyCount = curProduct.ready.split(',').filter(s => s.trim().length > 0).length;
     }
-    
+
     if (readyCount > 0) {
         details.push(`Designs : *${readyCount}*`);
-        details.push("");
     }
-    
+
     if (curProduct.mult) {
         details.push(`Colours : ${curProduct.mult} Selected Colour Matching`);
         details.push("");
     }
-    
+
     var fabricJari = [];
     if (curProduct.fabric && curProduct.fabric !== "None") fabricJari.push(curProduct.fabric);
     if (curProduct.jari && curProduct.jari !== "None") fabricJari.push(curProduct.jari);
     if (fabricJari.length > 0) {
-        details.push(`Fabric : ${fabricJari.join(' , ')}`);
+        details.push(`Fabric : ${fabricJari.join(' & ')}`);
         details.push("");
     }
-    
+
     if (curProduct.border && curProduct.border !== "None") {
         details.push(`Border : ${curProduct.border}`);
         details.push("");
     }
-    
+
     if (curProduct.blouse && curProduct.blouse !== "None") {
         details.push(`Blouse : ${curProduct.blouse}`);
         details.push("");
     }
-    
+
     if (curProduct.pallu && curProduct.pallu !== "None") {
         details.push(`Pallu : ${curProduct.pallu}`);
         details.push("");
     }
-    
+
     if (curProduct.work && curProduct.work !== "None") {
         details.push(`Work : ${curProduct.work}`);
         details.push("");
     }
-    
+
     if (curProduct.cut && curProduct.cut !== "None") {
         details.push(`Cut : ${curProduct.cut}`);
         details.push("");
     }
-    
-    details.push(`Check Ready Stock Designs here >>`);
+
+    details.push(`Check Ready Stock Designs here`);
     details.push(link);
     details.push("");
-    
+
     details.push(`Special Price`);
     var pricePacking = [];
     if (curProduct.price) pricePacking.push(`${curProduct.price}/-`);
     if (curProduct.packing && curProduct.packing !== "None") pricePacking.push(curProduct.packing);
     if (pricePacking.length > 0) details.push(`*${pricePacking.join(' ')}*`);
-    
+
     details.push("");
     details.push("**Limited Stock");
     details.push("");
     details.push("Thank You,");
     details.push("*Durga Sarees, Surat*");
-    
+
     var textMsg = `*${curProduct.name}*\n\n` + details.join("\n");
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
@@ -6351,14 +6367,14 @@ window.shareWhatsAppLink = async function() {
 
         try {
             var coverSrc = "";
-            
+
             // 1. Prioritize the currently open zoom image if Fullscreen modal is active
             var fsModal = document.getElementById('fsModal');
             var fsImg = document.getElementById('fsImg');
             if (fsModal && fsModal.style.display === 'flex' && fsImg && fsImg.src && !fsImg.src.endsWith(window.dsMissingImage)) {
                 coverSrc = fsImg.getAttribute('data-zoom-url') || fsImg.src;
-            } 
-            
+            }
+
             // 2. Or grab the first HD zoom image from the Product Details gallery
             if (!coverSrc) {
                 var firstDesignImg = document.getElementById("design_img_" + curProduct.id + "_0");
@@ -6373,7 +6389,7 @@ window.shareWhatsAppLink = async function() {
                 var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
                 coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encPath + "%2F" + encodeURIComponent(curProduct.coverDesignId) + "?alt=media";
             }
-            
+
             // 4. Last resort: We must list the directory to find a design image
             if (!coverSrc) {
                 var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
@@ -6441,13 +6457,13 @@ window.shareWhatsAppLink = async function() {
     }
 };
 
-window.openLiveAdmin = function() {
+window.openLiveAdmin = function () {
     openModal('adminLiveModal');
     var contentEl = document.getElementById('adminLiveContent');
     contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">Fetching live activity...</div>';
-    
+
     if (window.liveAdminInterval) clearInterval(window.liveAdminInterval);
-    
+
     function parseFirestoreRest(fields) {
         if (!fields) return {};
         let result = {};
@@ -6482,7 +6498,7 @@ window.openLiveAdmin = function() {
             clearInterval(window.liveAdminInterval);
             return;
         }
-        
+
         let limitDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery";
         let queryPayload = {
@@ -6500,7 +6516,7 @@ window.openLiveAdmin = function() {
             }
         };
 
-        window.fetchWithRetry(url, { 
+        window.fetchWithRetry(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(queryPayload)
@@ -6509,10 +6525,10 @@ window.openLiveAdmin = function() {
             .then(snapshot => {
                 if (snapshot.error && snapshot.error.length > 0) throw new Error(snapshot.error[0].message || snapshot.error.message);
                 if (snapshot.error) throw new Error(snapshot.error.message);
-                
+
                 contentEl.innerHTML = '';
                 let hasLive = false;
-                
+
                 let sortedDocs = [];
                 let docs = snapshot || [];
                 docs.forEach(resItem => {
@@ -6521,32 +6537,32 @@ window.openLiveAdmin = function() {
                         if (!doc || !doc.fields) return;
                         let d = parseFirestoreRest(doc.fields);
                         if (!d.lastActive || typeof d.lastActive.toDate !== 'function' || d.lastActive.toDate() < limitDate) return;
-                        sortedDocs.push({id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate()});
+                        sortedDocs.push({ id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate() });
                     } catch (e) {
                         console.error("Error parsing live doc:", e);
                     }
                 });
-                sortedDocs.sort((a,b) => b.time - a.time);
+                sortedDocs.sort((a, b) => b.time - a.time);
 
                 sortedDocs.forEach(item => {
                     hasLive = true;
                     let d = item.data;
                     let docId = item.id;
                     let isGuest = docId.startsWith('guest_');
-                    
+
                     let isLiveNow = d.lastActive && (Date.now() - d.lastActive.toDate().getTime() < 60000); // 1 minute strict
-                    let lastSeenStr = d.lastActive ? d.lastActive.toDate().toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true}) : "Unknown";
-                    let statusBadge = isLiveNow 
+                    let lastSeenStr = d.lastActive ? d.lastActive.toDate().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : "Unknown";
+                    let statusBadge = isLiveNow
                         ? `<span style="background:#4caf50; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🟢 Live Now</span>`
                         : `<span style="background:#9e9e9e; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🕒 Last seen: ${lastSeenStr}</span>`;
 
-                    let actionsHtml = isGuest 
+                    let actionsHtml = isGuest
                         ? `<span style="background:#e0e0e0; color:#555; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold;">Guest Visitor</span>`
                         : `<div style="display:flex; gap:8px;">
                              <a href="tel:${docId}" style="background:#1976d2; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fas fa-phone"></i> Call</a>
                              <a href="https://wa.me/${docId.replace(/\D/g, '')}" target="_blank" style="background:#25D366; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fab fa-whatsapp"></i> WA</a>
                            </div>`;
-                    
+
                     let viewingProduct = 'None';
                     if (d.currentProduct) {
                         let p = allProducts.find(x => x.id === d.currentProduct || x.docId === d.currentProduct);
@@ -6565,13 +6581,13 @@ window.openLiveAdmin = function() {
                             // Convert YYYY-MM-DD to DD/MM
                             let dateParts = date.split('-');
                             let shortDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}` : date;
-                            
+
                             for (let prodName in d.historyMap[date]) {
                                 let mins = parseFloat(d.historyMap[date][prodName]);
                                 let timeStr = mins < 1 ? Math.round(mins * 60) + "s" : Math.floor(mins) + "m " + Math.round((mins % 1) * 60) + "s";
-                                
+
                                 let entryHtml = `<div style="font-size:12px; color:#333; margin-left:4px; margin-top:2px;">&bull; <span style="color:#777; font-size:11px;">[${shortDate}]</span> ${prodName} (${timeStr})</div>`;
-                                
+
                                 if (dateIndex < 2) {
                                     visibleHtml += entryHtml;
                                 } else {
@@ -6591,7 +6607,7 @@ window.openLiveAdmin = function() {
                     } else if (d.recentHistory && d.recentHistory.length) {
                         historyHtml = `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${d.recentHistory.join(', ')}</div>`;
                     }
-                    
+
                     let namePortion = (d.customerName && d.customerName !== "Guest") ? d.customerName : (isGuest ? "Guest" : docId);
                     let stationPortion = (d.customerStation && d.customerStation !== "Unknown") ? ' - ' + d.customerStation : '';
                     let dispName = namePortion + stationPortion;
@@ -6600,22 +6616,22 @@ window.openLiveAdmin = function() {
                     if (dispName === docId && !window.adminCustomerCache[docId] && !isGuest) {
                         window.adminCustomerCache[docId] = "fetching";
                         fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + docId)
-                        .then(res => res.json())
-                        .then(uDoc => {
-                            if (uDoc && uDoc.fields) {
-                                let f = uDoc.fields;
-                                let uName = f.name ? f.name.stringValue : "";
-                                let uStation = f.station ? f.station.stringValue : "";
-                                window.adminCustomerCache[docId] = uName ? (uName + (uStation ? ' - ' + uStation : '')) : docId;
-                                let safeId = docId.replace(/\+/g, '');
-                                let el = document.getElementById('admin_name_' + safeId);
-                                if (el) el.innerText = window.adminCustomerCache[docId];
-                                let subEl = document.getElementById('admin_sub_' + safeId);
-                                if (subEl && window.adminCustomerCache[docId] !== docId) {
-                                    subEl.innerHTML = `<span style="font-size:12px; color:#888;">${docId}</span>`;
+                            .then(res => res.json())
+                            .then(uDoc => {
+                                if (uDoc && uDoc.fields) {
+                                    let f = uDoc.fields;
+                                    let uName = f.name ? f.name.stringValue : "";
+                                    let uStation = f.station ? f.station.stringValue : "";
+                                    window.adminCustomerCache[docId] = uName ? (uName + (uStation ? ' - ' + uStation : '')) : docId;
+                                    let safeId = docId.replace(/\+/g, '');
+                                    let el = document.getElementById('admin_name_' + safeId);
+                                    if (el) el.innerText = window.adminCustomerCache[docId];
+                                    let subEl = document.getElementById('admin_sub_' + safeId);
+                                    if (subEl && window.adminCustomerCache[docId] !== docId) {
+                                        subEl.innerHTML = `<span style="font-size:12px; color:#888;">${docId}</span>`;
+                                    }
                                 }
-                            }
-                        }).catch(()=>{});
+                            }).catch(() => { });
                     } else if (window.adminCustomerCache[docId] && window.adminCustomerCache[docId] !== "fetching") {
                         dispName = window.adminCustomerCache[docId];
                     }
@@ -6650,7 +6666,7 @@ window.openLiveAdmin = function() {
     window.liveAdminInterval = setInterval(fetchLiveData, 15000);
 };
 
-window.closeLiveAdmin = function() {
+window.closeLiveAdmin = function () {
     closeModals();
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
@@ -6660,19 +6676,19 @@ window.closeLiveAdmin = function() {
 // ====================================
 // PRODUCT DETAILS MODAL (VIEW / EDIT)
 // ====================================
-window.openProductDetailsModal = function(pid, event) {
+window.openProductDetailsModal = function (pid, event) {
     if (event) event.stopPropagation();
-    
+
     var p = allProducts.find(x => x.id === pid);
     if (!p) return;
-    
+
     var cv = document.getElementById('pdCustomerView');
     var av = document.getElementById('pdAdminView');
-    
+
     if (window.isAdminMode) {
         cv.style.display = 'none';
         av.style.display = 'flex';
-        
+
         document.getElementById('editProdId').value = p.id;
         document.getElementById('editProdCat').value = p.cat || '';
         document.getElementById('editProdName').value = p.name || '';
@@ -6687,11 +6703,11 @@ window.openProductDetailsModal = function(pid, event) {
         document.getElementById('editProdBorder').value = p.border || '';
         document.getElementById('editProdBlouse').value = p.blouse || '';
         document.getElementById('editProdCut').value = p.cut || '';
-        
+
     } else {
         av.style.display = 'none';
         cv.style.display = 'flex';
-        
+
         var fields = [
             { label: 'Category', val: p.cat },
             { label: 'Fabric', val: p.fabric },
@@ -6704,7 +6720,7 @@ window.openProductDetailsModal = function(pid, event) {
             { label: 'Packing', val: p.packing },
             { label: 'SKU', val: p.sku }
         ];
-        
+
         var html = '';
         fields.forEach(f => {
             if (f.val && String(f.val).trim() !== "") {
@@ -6716,10 +6732,10 @@ window.openProductDetailsModal = function(pid, event) {
             }
         });
         if (html === '') html = '<div style="text-align:center; color:#999;">No detailed specifications available.</div>';
-        
+
         cv.innerHTML = html;
     }
-    
+
     if (typeof pushModalState === 'function') {
         pushModalState('productDetailsModal');
     } else {
@@ -6727,15 +6743,15 @@ window.openProductDetailsModal = function(pid, event) {
     }
 };
 
-window.saveProductDetails = async function() {
+window.saveProductDetails = async function () {
     var pid = document.getElementById('editProdId').value;
     var p = allProducts.find(x => x.id === pid);
     if (!p) return;
-    
+
     var btn = document.getElementById('pdSaveBtn');
     btn.innerText = "Saving...";
     btn.disabled = true;
-    
+
     var price = document.getElementById('editProdPrice').value.trim();
     var sku = document.getElementById('editProdSku').value.trim();
     var packing = document.getElementById('editProdPacking').value.trim();
@@ -6747,7 +6763,7 @@ window.saveProductDetails = async function() {
     var border = document.getElementById('editProdBorder').value.trim();
     var blouse = document.getElementById('editProdBlouse').value.trim();
     var cut = document.getElementById('editProdCut').value.trim();
-    
+
     var patchPayload = {
         fields: {
             price: { doubleValue: Number(price || 0) },
@@ -6763,23 +6779,23 @@ window.saveProductDetails = async function() {
             cut: { stringValue: cut }
         }
     };
-    
+
     var updateMask = "?updateMask.fieldPaths=price&updateMask.fieldPaths=sku&updateMask.fieldPaths=packing&updateMask.fieldPaths=mult&updateMask.fieldPaths=fabric&updateMask.fieldPaths=work&updateMask.fieldPaths=jari&updateMask.fieldPaths=pallu&updateMask.fieldPaths=border&updateMask.fieldPaths=blouse&updateMask.fieldPaths=cut";
-    
+
     var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/Products/" + p.docId + updateMask;
-    
+
     try {
         var resp = await window.fetchWithRetry(url, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(patchPayload)
         }, 1);
-        
+
         if (!resp.ok) {
             var err = await resp.text();
             throw new Error(err);
         }
-        
+
         // 1. Update Local Memory
         p.price = parseFloat(price) || 0;
         p.sku = sku;
@@ -6792,13 +6808,13 @@ window.saveProductDetails = async function() {
         p.border = border;
         p.blouse = blouse;
         p.cut = cut;
-        
-        try { localStorage.setItem("dsOfflineProducts", JSON.stringify(window.allProducts)); } catch(e){}
-        
+
+        try { localStorage.setItem("dsOfflineProducts", JSON.stringify(window.allProducts)); } catch (e) { }
+
         // 2. Refresh UI
         refreshCardUI(p.id);
         if (typeof applyFilter === 'function') applyFilter();
-        
+
         // 3. Sync to Google Apps Script (Webhook)
         if (window.DS_APP_SCRIPT_URL) {
             fetch(window.DS_APP_SCRIPT_URL, {
@@ -6822,10 +6838,10 @@ window.saveProductDetails = async function() {
                 })
             }).catch(e => console.error("Apps Script Sync Failed", e));
         }
-        
+
         closeModals();
         alert("Product Details Updated Successfully!");
-        
+
     } catch (error) {
         alert("Failed to update product: " + error.message);
     } finally {
@@ -6835,19 +6851,19 @@ window.saveProductDetails = async function() {
 };
 window.isSkuManuallyEdited = false;
 
-window.autoGenerateSku = function() {
+window.autoGenerateSku = function () {
     if (window.isSkuManuallyEdited) return;
-    
+
     var cat = document.getElementById('addProdCat').value || "";
     var name = document.getElementById('addProdName').value || "";
     if (!name) {
         document.getElementById('addProdSku').value = "";
         return;
     }
-    
-    var prefix = "S"; 
-    var subCat = "GN"; 
-    var num = String(name).replace(/[^0-9]/g, ''); 
+
+    var prefix = "S";
+    var subCat = "GN";
+    var num = String(name).replace(/[^0-9]/g, '');
     if (num === "") {
         var hash = 0;
         for (var i = 0; i < name.length; i++) {
@@ -6856,26 +6872,26 @@ window.autoGenerateSku = function() {
         num = Math.abs(hash).toString().substring(0, 3);
         if (num.length < 3) num = Math.floor(100 + Math.random() * 900);
     }
-    
+
     if (cat) {
         var cleanCat = cat.toUpperCase().trim();
-        if (cleanCat.indexOf("BLOUSE") > -1) prefix = "B"; 
-        else if (cleanCat.indexOf("SHIRT") > -1) prefix = "SH"; 
+        if (cleanCat.indexOf("BLOUSE") > -1) prefix = "B";
+        else if (cleanCat.indexOf("SHIRT") > -1) prefix = "SH";
         else if (cleanCat.indexOf("DRESS") > -1) prefix = "D";
-        
+
         if (cleanCat.indexOf("TOPDYED") > -1 || cleanCat.indexOf("TOP DYED") > -1) subCat = "TD";
-        else if (cleanCat.indexOf("PRINT") > -1) subCat = "PR"; 
+        else if (cleanCat.indexOf("PRINT") > -1) subCat = "PR";
         else if (cleanCat.indexOf("DYED") > -1 || cleanCat.indexOf("DYEING") > -1) subCat = "DY";
-        else if (cleanCat.indexOf("DIGITAL") > -1) subCat = "DP"; 
-        else if (cleanCat.indexOf("HANDLOOM") > -1) subCat = "HL"; 
+        else if (cleanCat.indexOf("DIGITAL") > -1) subCat = "DP";
+        else if (cleanCat.indexOf("HANDLOOM") > -1) subCat = "HL";
         else if (cleanCat.indexOf("SILK") > -1) subCat = "SK";
         else subCat = cleanCat.substring(0, 2).replace(/[^A-Z]/g, '');
     }
-    
+
     document.getElementById('addProdSku').value = (prefix + subCat + num).toUpperCase();
 };
 
-window.openAddProductModal = function() {
+window.openAddProductModal = function () {
     window.isSkuManuallyEdited = false;
     // Populate categories
     var catSelect = document.getElementById('addProdCat');
@@ -6908,15 +6924,15 @@ window.openAddProductModal = function() {
     openModal('addProductModal');
 };
 
-window.onAddProdCatChange = function() {
+window.onAddProdCatChange = function () {
     var cat = document.getElementById('addProdCat').value;
     var cloneSelect = document.getElementById('addProdClone');
     if (!cat) {
         cloneSelect.innerHTML = '<option value="">Select a product to clone details...</option>';
         return;
     }
-    
-    var matches = window.allProducts.filter(p => p.cat === cat).sort((a,b) => a.name.localeCompare(b.name));
+
+    var matches = window.allProducts.filter(p => p.cat === cat).sort((a, b) => a.name.localeCompare(b.name));
     var html = '<option value="">(None - Blank Product)</option>';
     matches.forEach(p => {
         html += `<option value="${p.id}">${p.name}</option>`;
@@ -6924,10 +6940,10 @@ window.onAddProdCatChange = function() {
     cloneSelect.innerHTML = html;
 };
 
-window.onAddProdCloneChange = function() {
+window.onAddProdCloneChange = function () {
     var pid = document.getElementById('addProdClone').value;
     if (!pid) return;
-    
+
     var p = window.allProducts.find(x => x.id === pid);
     if (p) {
         document.getElementById('addProdPrice').value = p.price || '';
@@ -6944,11 +6960,11 @@ window.onAddProdCloneChange = function() {
     }
 };
 
-window.submitNewProduct = async function() {
+window.submitNewProduct = async function () {
     if (!window.isSuperAdmin) return alert("Access Denied");
-    
+
     var btn = event.currentTarget;
-    
+
     var cat = document.getElementById('addProdCat').value.trim();
     var name = document.getElementById('addProdName').value.trim();
     var price = document.getElementById('addProdPrice').value.trim();
@@ -6962,14 +6978,14 @@ window.submitNewProduct = async function() {
     var blouse = document.getElementById('addProdBlouse').value.trim();
     var cut = document.getElementById('addProdCut').value.trim();
     var sku = document.getElementById('addProdSku').value.trim();
-    
+
     if (!cat || !name || !price) {
         return alert("Category, Name, and Price are required.");
     }
-    
+
     var gridUrl = "Grid/" + cat + "/" + name + "/";
     var zoomUrl = "Zoom/" + cat + "/" + name + "/";
-    
+
     var payload = {
         fields: {
             name: { stringValue: name },
@@ -6990,26 +7006,26 @@ window.submitNewProduct = async function() {
             stock: { mapValue: { fields: { DIRECT: { integerValue: "999" } } } }
         }
     };
-    
+
     try {
         btn.innerText = "Creating...";
         btn.disabled = true;
-        
+
         // 1. Create in Firestore
         var fbRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         }, 2);
-        
+
         if (!fbRes.ok) {
             var fbErr = await fbRes.json();
             throw new Error("Firestore " + fbRes.status + ": " + (fbErr.error ? fbErr.error.message : "Permission Denied. Check Rules."));
         }
         var fbData = await fbRes.json();
-        
+
         var newDocId = fbData.name.split('/').pop();
-        
+
         // 2. Transaction Safe: Notify Apps Script Webhook
         if (window.DS_APP_SCRIPT_URL) {
             try {
@@ -7036,11 +7052,11 @@ window.submitNewProduct = async function() {
                         zoomUrl: zoomUrl
                     })
                 });
-            } catch(sheetErr) {
+            } catch (sheetErr) {
                 console.error("Sheet sync error (soft fail)", sheetErr);
             }
         }
-        
+
         // 3. Instant Local UI Update
         var newP = {
             docId: newDocId,
@@ -7064,16 +7080,16 @@ window.submitNewProduct = async function() {
             stock: { DIRECT: 999 },
             totalStock: 999
         };
-        
+
         window.allProducts.push(newP);
         window.displayList = [...window.allProducts];
-        
+
         try { localStorage.setItem("dsOfflineProducts", JSON.stringify(window.allProducts)); } catch (e) { console.error("Failed to update offline storage", e); }
-        
+
         closeModals();
         alert("Product Created Successfully!");
         if (typeof applyFilter === 'function') applyFilter();
-        
+
     } catch (e) {
         alert("Failed to create product: " + e.message);
     } finally {
