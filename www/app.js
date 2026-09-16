@@ -6275,25 +6275,59 @@ window.shareWhatsAppLink = async function() {
     var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
     
     var details = [];
-    if (curProduct.ready) {
-        var readyCount = curProduct.ready.split(',').filter(s => s.trim().length > 0).length;
-        if (readyCount > 0) details.push(`Designs : *${readyCount}*`);
+    
+    var readyCount = 0;
+    if (curProduct.stock) {
+        for (var k in curProduct.stock) {
+            if (curProduct.stock[k] > 0) readyCount++;
+        }
+    } else if (curProduct.ready) {
+        readyCount = curProduct.ready.split(',').filter(s => s.trim().length > 0).length;
     }
-    if (curProduct.mult) details.push(`Colours : ${curProduct.mult} Selected Colour Matching`);
-    details.push("");
+    
+    if (readyCount > 0) {
+        details.push(`Designs : *${readyCount}*`);
+        details.push("");
+    }
+    
+    if (curProduct.mult) {
+        details.push(`Colours : ${curProduct.mult} Selected Colour Matching`);
+        details.push("");
+    }
     
     var fabricJari = [];
     if (curProduct.fabric && curProduct.fabric !== "None") fabricJari.push(curProduct.fabric);
     if (curProduct.jari && curProduct.jari !== "None") fabricJari.push(curProduct.jari);
-    if (fabricJari.length > 0) details.push(`Fabric : ${fabricJari.join(' , ')}`);
+    if (fabricJari.length > 0) {
+        details.push(`Fabric : ${fabricJari.join(' , ')}`);
+        details.push("");
+    }
     
-    if (curProduct.border && curProduct.border !== "None") details.push(`Border : ${curProduct.border}`);
-    if (curProduct.blouse && curProduct.blouse !== "None") details.push(`Blouse : ${curProduct.blouse}`);
-    if (curProduct.pallu && curProduct.pallu !== "None") details.push(`Pallu : ${curProduct.pallu}`);
-    if (curProduct.work && curProduct.work !== "None") details.push(`Work : ${curProduct.work}`);
-    if (curProduct.cut && curProduct.cut !== "None") details.push(`Cut : ${curProduct.cut}`);
+    if (curProduct.border && curProduct.border !== "None") {
+        details.push(`Border : ${curProduct.border}`);
+        details.push("");
+    }
     
-    details.push("");
+    if (curProduct.blouse && curProduct.blouse !== "None") {
+        details.push(`Blouse : ${curProduct.blouse}`);
+        details.push("");
+    }
+    
+    if (curProduct.pallu && curProduct.pallu !== "None") {
+        details.push(`Pallu : ${curProduct.pallu}`);
+        details.push("");
+    }
+    
+    if (curProduct.work && curProduct.work !== "None") {
+        details.push(`Work : ${curProduct.work}`);
+        details.push("");
+    }
+    
+    if (curProduct.cut && curProduct.cut !== "None") {
+        details.push(`Cut : ${curProduct.cut}`);
+        details.push("");
+    }
+    
     details.push(`Check Ready Stock Designs here >>`);
     details.push(link);
     details.push("");
@@ -6367,8 +6401,14 @@ window.shareWhatsAppLink = async function() {
             if (coverSrc.startsWith("data:")) {
                 base64data = coverSrc;
             } else {
-                var res = await fetch(coverSrc);
-                var blob = await res.blob();
+                var blob = null;
+                if (typeof window.getImageFromDB === 'function') {
+                    blob = await window.getImageFromDB(coverSrc);
+                }
+                if (!blob) {
+                    var res = await fetch(coverSrc);
+                    blob = await res.blob();
+                }
                 base64data = await new Promise((resolve) => {
                     var reader = new FileReader();
                     reader.readAsDataURL(blob);
