@@ -115,7 +115,6 @@ function renderStickerTemplate(containerId, isEditor = false) {
     });
 }
 
-// Drag & Drop
 function startDrag(e, id) {
     selectedElementId = id;
     isDragging = true;
@@ -126,7 +125,14 @@ function startDrag(e, id) {
     initialElemX = el.x;
     initialElemY = el.y;
     
-    renderStickerTemplate('stickerEditorCanvas', true);
+    // Manually update borders instead of re-rendering the whole canvas
+    window.stickerLayout.elements.forEach(x => {
+        const div = document.getElementById('editor_' + x.id);
+        if (div) {
+            div.style.border = x.id === id ? '2px solid blue' : '1px dashed transparent';
+        }
+    });
+    
     updatePropertiesPanel();
 }
 
@@ -147,13 +153,11 @@ document.addEventListener('touchmove', (e) => {
 document.addEventListener('mouseup', () => {
     if (isDragging) {
         isDragging = false;
-        renderStickerTemplate('stickerEditorCanvas', true);
     }
 });
 document.addEventListener('touchend', () => {
     if (isDragging) {
         isDragging = false;
-        renderStickerTemplate('stickerEditorCanvas', true);
     }
 });
 
@@ -244,7 +248,10 @@ function updatePropertiesPanel() {
         range.style.width = '100%';
         range.oninput = (e) => {
             el.fontSize = parseInt(e.target.value);
-            renderStickerTemplate('stickerEditorCanvas', true);
+            const domEl = document.getElementById('editor_' + el.id);
+            if (domEl) {
+                domEl.style.fontSize = el.fontSize + 'px';
+            }
         };
         wrapper.appendChild(document.createTextNode('Font Size: '));
         wrapper.appendChild(range);
@@ -258,7 +265,8 @@ function updatePropertiesPanel() {
             txt.style.marginTop = '4px';
             txt.oninput = (e) => {
                 el.text = e.target.value;
-                renderStickerTemplate('stickerEditorCanvas', true);
+                const domEl = document.getElementById('editor_' + el.id);
+                if (domEl) domEl.innerText = el.text;
             };
             wrapper.appendChild(txt);
         }
@@ -274,7 +282,8 @@ function updatePropertiesPanel() {
         wInp.placeholder = 'W';
         wInp.oninput = (e) => {
             el.w = parseInt(e.target.value) || 10;
-            renderStickerTemplate('stickerEditorCanvas', true);
+            const domEl = document.getElementById('editor_' + el.id);
+            if (domEl) domEl.style.width = el.w + 'px';
         };
         
         const hInp = document.createElement('input');
@@ -284,7 +293,8 @@ function updatePropertiesPanel() {
         hInp.placeholder = 'H';
         hInp.oninput = (e) => {
             el.h = parseInt(e.target.value) || 10;
-            renderStickerTemplate('stickerEditorCanvas', true);
+            const domEl = document.getElementById('editor_' + el.id);
+            if (domEl) domEl.style.height = el.h + 'px';
         };
         
         row.appendChild(wInp);
