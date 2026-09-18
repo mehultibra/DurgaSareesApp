@@ -16,7 +16,7 @@ jobs:
           SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DURGA_SAREES }}
         run: |
           date > www/build-time.txt
-          VERSION_TIME=$(date +"%d %b %Y %H:%M")
+          VERSION_TIME=$(TZ="Asia/Kolkata" date +"%d %b %Y %I:%M %p")
           HASH=$(git rev-parse --short HEAD)
           echo "{\"version\": \"$VERSION_TIME\", \"url\": \"https://durga-sarees.web.app/update.zip?v=$HASH\"}" > www/version.json
           
