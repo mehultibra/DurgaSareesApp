@@ -177,7 +177,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
         container.appendChild(div);
     });
 
-    // Add margin overlay
+    // Add margin overlay (corner crop marks)
     if (isEditor && (window.stickerLayout.marginTop || window.stickerLayout.marginRight || window.stickerLayout.marginBottom || window.stickerLayout.marginLeft)) {
         const marginOverlay = document.createElement('div');
         marginOverlay.style.position = 'absolute';
@@ -185,10 +185,24 @@ function renderStickerTemplate(containerId, isEditor = false) {
         marginOverlay.style.right = (window.stickerLayout.marginRight || 0) + 'px';
         marginOverlay.style.bottom = (window.stickerLayout.marginBottom || 0) + 'px';
         marginOverlay.style.left = (window.stickerLayout.marginLeft || 0) + 'px';
-        marginOverlay.style.border = '2px dashed red';
-        marginOverlay.style.background = 'rgba(255, 0, 0, 0.05)';
         marginOverlay.style.pointerEvents = 'none';
         marginOverlay.style.zIndex = '1000';
+        
+        const corners = [
+            { top: '0', left: '0', borderTop: '2px solid red', borderLeft: '2px solid red' },
+            { top: '0', right: '0', borderTop: '2px solid red', borderRight: '2px solid red' },
+            { bottom: '0', left: '0', borderBottom: '2px solid red', borderLeft: '2px solid red' },
+            { bottom: '0', right: '0', borderBottom: '2px solid red', borderRight: '2px solid red' }
+        ];
+        corners.forEach(c => {
+            const corner = document.createElement('div');
+            corner.style.position = 'absolute';
+            corner.style.width = '15px';
+            corner.style.height = '15px';
+            Object.assign(corner.style, c);
+            marginOverlay.appendChild(corner);
+        });
+        
         container.appendChild(marginOverlay);
     }
 

@@ -5722,6 +5722,19 @@ function previewLabel(type) {
             btnEdit.style.display = window.isSuperAdmin ? 'block' : 'none';
         }
 
+        var sel = document.getElementById('stickerTemplateSelect');
+        if (sel && window.stickerLayoutsMap) {
+            sel.innerHTML = '';
+            Object.keys(window.stickerLayoutsMap).forEach(k => {
+                var opt = document.createElement('option');
+                opt.value = k;
+                opt.innerText = k;
+                if (k === (window.currentTemplateName || "Default")) opt.selected = true;
+                sel.appendChild(opt);
+            });
+            sel.style.display = Object.keys(window.stickerLayoutsMap).length > 1 ? 'block' : 'none';
+        }
+
         if (typeof renderStickerTemplate === 'function') {
             renderStickerTemplate('stickerTemplate', false);
         }
@@ -5949,7 +5962,9 @@ function loadPrinters() {
     });
 
     // Auto-select the last used IP for this type
-    var lastIp = window.currentPrintType === 'barcode' ? localStorage.getItem("dsBarcodePrinterIp") : localStorage.getItem("dsTagPrinterIp");
+    var lastIp = window.currentPrintType === 'barcode' ? localStorage.getItem("dsBarcodePrinterIp") : 
+                 (window.currentPrintType === 'tag' ? localStorage.getItem("dsTagPrinterIp") : 
+                 localStorage.getItem("dsStickerPrinterIp_" + (window.currentTemplateName || "Default")));
 
     if (lastIp) {
         var foundIdx = printers.findIndex(p => p.ip === lastIp);
@@ -6007,7 +6022,8 @@ function savePrinter() {
 
     // Set as default for this type
     if (window.currentPrintType === 'barcode') localStorage.setItem("dsBarcodePrinterIp", ip);
-    else localStorage.setItem("dsTagPrinterIp", ip);
+    else if (window.currentPrintType === 'tag') localStorage.setItem("dsTagPrinterIp", ip);
+    else localStorage.setItem("dsStickerPrinterIp_" + (window.currentTemplateName || "Default"), ip);
 
     loadPrinters();
     alert("Printer saved!");
