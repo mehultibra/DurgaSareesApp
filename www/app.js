@@ -5726,9 +5726,12 @@ function previewLabel(type) {
         if (sel && window.stickerLayoutsMap) {
             sel.innerHTML = '';
             Object.keys(window.stickerLayoutsMap).forEach(k => {
+                var layout = window.stickerLayoutsMap[k];
+                var w_mm = Math.round((layout.width || 440) / 8);
+                var h_mm = Math.round((layout.height || 220) / 8);
                 var opt = document.createElement('option');
                 opt.value = k;
-                opt.innerText = k;
+                opt.innerText = `${k} (${w_mm}x${h_mm}mm)`;
                 if (k === (window.currentTemplateName || "Default")) opt.selected = true;
                 sel.appendChild(opt);
             });
