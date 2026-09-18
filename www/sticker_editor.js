@@ -57,10 +57,27 @@ function populateTemplateDropdown() {
 }
 
 window.changeStickerTemplate = function(name) {
-    if (window.stickerLayoutsMap[name]) {
+    if (window.stickerLayoutsMap && window.stickerLayoutsMap[name]) {
         window.currentTemplateName = name;
         window.stickerLayout = JSON.parse(JSON.stringify(window.stickerLayoutsMap[name]));
-        renderStickerTemplate('stickerTemplate', false);
+        
+        // If in Print Modal, also restore preferred printer and update preview canvas
+        const pm = document.getElementById('printPreviewModal');
+        if (pm && pm.style.display !== 'none') {
+            renderStickerTemplate('stickerTemplate', false);
+            
+            if (typeof updateStickerCanvasScale === 'function') {
+                updateStickerCanvasScale('stickerTemplate');
+            }
+            
+            // Restore preferred printer for this layout using app.js method
+            if (typeof loadPrinters === 'function') {
+                loadPrinters();
+            }
+        } else {
+            // In editor mode
+            renderStickerTemplate('stickerEditorCanvas', true);
+        }
     }
 };
 
@@ -410,14 +427,15 @@ function updateStickerCanvasScale(targetId) {
             window.stickerScale = 1;
         }
         canvas.style.transform = `scale(${window.stickerScale})`;
-        // Center the scaled canvas
-        canvas.style.transformOrigin = 'top center';
-        canvas.style.marginBottom = (window.stickerLayout.height * (window.stickerScale - 1)) + 'px';
+        canvas.style.transformOrigin = 'top left';
         
-        // If scaled down, ensure the wrapper doesn't act wider than the scaled canvas
-        if (window.stickerScale < 1 && cid === 'stickerEditorCanvas') {
-             canvas.style.marginLeft = 'auto';
-             canvas.style.marginRight = 'auto';
+        if (cid === 'stickerEditorCanvas') {
+            // Apply negative margins to shrink the DOM layout bounding box to the scaled size!
+            // This prevents flexbox from overflowing and causing scroll bugs on mobile
+            canvas.style.marginRight = (window.stickerLayout.width * (window.stickerScale - 1)) + 'px';
+            canvas.style.marginBottom = (window.stickerLayout.height * (window.stickerScale - 1)) + 'px';
+        } else {
+            canvas.style.marginBottom = (window.stickerLayout.height * (window.stickerScale - 1)) + 'px';
         }
     }
 }
