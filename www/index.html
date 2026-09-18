@@ -553,6 +553,36 @@
           <input type="text" id="editTagCut" placeholder="Cut Info (e.g. CUT 6 MTR)" onkeyup="updateLiveLabel()" style="width:100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
       </div>
       
+      <!-- NEW FORMAT SETUP MODAL -->
+  <div id="newStickerFormatModal" class="action-modal" style="display:none; z-index: 7000;" onclick="closeNewStickerFormatModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="display: flex; flex-direction: column; align-items: center; background: #fff; max-height: 90vh; overflow-y: auto; width: 95%; max-width: 400px; padding: 20px; gap: 15px;">
+        <div class="modal-title" style="width: 100%; text-align: left; margin-bottom: 0;">New Format Setup <i class="fas fa-times" onclick="closeNewStickerFormatModal()"></i></div>
+        
+        <div style="width:100%;">
+            <label style="font-weight:bold; font-size:12px;">Format Name</label>
+            <input type="text" id="newFmtName" placeholder="e.g. Small Label" style="width:100%; padding:8px; margin-top:4px; border:1px solid #ccc; border-radius:4px;">
+        </div>
+
+        <div style="width:100%; display:flex; gap:10px;">
+            <div style="flex:1;"><label style="font-weight:bold; font-size:12px;">Width (mm)</label><input type="number" id="newFmtW" value="50" style="width:100%; padding:8px; margin-top:4px; border:1px solid #ccc; border-radius:4px;"></div>
+            <div style="flex:1;"><label style="font-weight:bold; font-size:12px;">Height (mm)</label><input type="number" id="newFmtH" value="25" style="width:100%; padding:8px; margin-top:4px; border:1px solid #ccc; border-radius:4px;"></div>
+            <div style="flex:1;"><label style="font-weight:bold; font-size:12px;">Gap (mm)</label><input type="number" id="newFmtGap" value="3" style="width:100%; padding:8px; margin-top:4px; border:1px solid #ccc; border-radius:4px;"></div>
+        </div>
+
+        <div style="width:100%;"><label style="font-weight:bold; font-size:12px;">Margins (mm)</label></div>
+        <div style="width:100%; display:flex; gap:5px;">
+            <input type="number" id="newFmtMT" placeholder="Top" value="2" style="flex:1; padding:6px; border:1px solid #ccc; border-radius:4px;">
+            <input type="number" id="newFmtMR" placeholder="Right" value="2" style="flex:1; padding:6px; border:1px solid #ccc; border-radius:4px;">
+            <input type="number" id="newFmtMB" placeholder="Bottom" value="2" style="flex:1; padding:6px; border:1px solid #ccc; border-radius:4px;">
+            <input type="number" id="newFmtML" placeholder="Left" value="2" style="flex:1; padding:6px; border:1px solid #ccc; border-radius:4px;">
+        </div>
+
+        <button onclick="saveNewStickerFormat()" style="width: 100%; padding: 12px; background: #4caf50; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top:10px;">Create Format</button>
+    </div>
+  </div>
+
+  <div id="printIframeContainer" style="display:none;"></div>
+
       <!-- Live Sticker Preview (visible, editable) -->
       <div id="stickerPreviewContainer" style="display:none; margin: 15px 0; width: 100%; max-width: 100%; overflow: hidden;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
@@ -603,19 +633,21 @@
                 <button onclick="addNewStickerFormat()" style="padding: 4px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;"><i class="fas fa-plus"></i></button>
             </div>
 
-            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Canvas Size (mm)</div>
-            <div style="display: flex; gap: 5px;">
-                <div><label style="font-size:10px;">Width (mm)</label><input type="number" id="seCanvasW_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-                <div><label style="font-size:10px;">Height (mm)</label><input type="number" id="seCanvasH_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-                <div><label style="font-size:10px;">Gap (mm)</label><input type="number" id="seGap_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-            </div>
+            <div id="sePageSetup" style="display:none;">
+                <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Canvas Size (mm)</div>
+                <div style="display: flex; gap: 5px;">
+                    <div><label style="font-size:10px;">Width (mm)</label><input type="number" id="seCanvasW_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                    <div><label style="font-size:10px;">Height (mm)</label><input type="number" id="seCanvasH_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                    <div><label style="font-size:10px;">Gap (mm)</label><input type="number" id="seGap_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                </div>
 
-            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Margins (mm)</div>
-            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                <div style="width: 45%;"><label style="font-size:10px;">Top (mm)</label><input type="number" id="seMarginT_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-                <div style="width: 45%;"><label style="font-size:10px;">Right (mm)</label><input type="number" id="seMarginR_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-                <div style="width: 45%;"><label style="font-size:10px;">Bottom (mm)</label><input type="number" id="seMarginB_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-                <div style="width: 45%;"><label style="font-size:10px;">Left (mm)</label><input type="number" id="seMarginL_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Margins (mm)</div>
+                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                    <div style="width: 45%;"><label style="font-size:10px;">Top (mm)</label><input type="number" id="seMarginT_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                    <div style="width: 45%;"><label style="font-size:10px;">Right (mm)</label><input type="number" id="seMarginR_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                    <div style="width: 45%;"><label style="font-size:10px;">Bottom (mm)</label><input type="number" id="seMarginB_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                    <div style="width: 45%;"><label style="font-size:10px;">Left (mm)</label><input type="number" id="seMarginL_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                </div>
             </div>
 
             <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Elements</div>

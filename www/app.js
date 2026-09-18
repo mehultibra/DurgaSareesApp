@@ -5742,12 +5742,7 @@ function previewLabel(type) {
             renderStickerTemplate('stickerTemplate', false);
         }
 
-        var prodImg = document.getElementById('img_' + curProduct.id);
-        if (prodImg && prodImg.src) {
-            var stkProductImg = document.getElementById('stkProductImg');
-            if (stkProductImg) stkProductImg.src = prodImg.src;
-        }
-
+        // (Removed stkProductImg injection)
         // Generate QR code (encodes SKU so it can be scanned)
         var qrEl = document.getElementById('stkQRCode');
         if (qrEl) {

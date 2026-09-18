@@ -2,7 +2,6 @@ window.stickerLayout = {
     width: 440,
     height: 220,
     elements: [
-        { id: "stkProductImg", type: "image", visible: true, x: 8, y: 10, w: 100, h: 200 },
         { id: "stkTitle", type: "text", visible: true, x: 118, y: 10, fontSize: 20, fontWeight: "bold", text: "DURGA SAREES" },
         { id: "stkProduct", type: "text", visible: true, x: 118, y: 35, fontSize: 15, fontWeight: "bold", field: "name" },
         { id: "stkFabric", type: "text", visible: true, x: 118, y: 55, fontSize: 12, field: "fabric" },
@@ -411,7 +410,7 @@ function updateStickerCanvasScale(targetId) {
             window.stickerScale = 1;
         }
         canvas.style.transform = `scale(${window.stickerScale})`;
-        canvas.style.transformOrigin = 'top center';
+        canvas.style.transformOrigin = 'top left';
         canvas.style.marginBottom = (window.stickerLayout.height * (window.stickerScale - 1)) + 'px';
     }
 }
@@ -437,15 +436,49 @@ function updateStickerCanvasSize() {
 }
 
 function addNewStickerFormat() {
-    const name = prompt("Enter new format name:");
-    if (!name || name.trim() === '') return;
-    if (window.stickerLayoutsMap[name]) {
-        alert("Format already exists!");
+    document.getElementById('newStickerFormatModal').style.display = 'flex';
+}
+
+function closeNewStickerFormatModal() {
+    document.getElementById('newStickerFormatModal').style.display = 'none';
+}
+
+function saveNewStickerFormat() {
+    const name = document.getElementById('newFmtName').value.trim();
+    if (!name) {
+        alert("Please enter a format name!");
         return;
     }
-    const newLayout = JSON.parse(JSON.stringify(window.stickerLayout));
+    if (window.stickerLayoutsMap && window.stickerLayoutsMap[name]) {
+        alert("Format already exists! Choose a different name.");
+        return;
+    }
+    
+    const w = parseFloat(document.getElementById('newFmtW').value) || 50;
+    const h = parseFloat(document.getElementById('newFmtH').value) || 25;
+    const gap = parseFloat(document.getElementById('newFmtGap').value) || 3;
+    const mt = parseFloat(document.getElementById('newFmtMT').value) || 0;
+    const mr = parseFloat(document.getElementById('newFmtMR').value) || 0;
+    const mb = parseFloat(document.getElementById('newFmtMB').value) || 0;
+    const ml = parseFloat(document.getElementById('newFmtML').value) || 0;
+
+    // Use current layout as base for elements
+    const newLayout = JSON.parse(JSON.stringify(window.stickerLayout || { elements: [] }));
+    newLayout.width = Math.round(w * 8);
+    newLayout.height = Math.round(h * 8);
+    newLayout.gap_mm = gap;
+    newLayout.marginTop = Math.round(mt * 8);
+    newLayout.marginRight = Math.round(mr * 8);
+    newLayout.marginBottom = Math.round(mb * 8);
+    newLayout.marginLeft = Math.round(ml * 8);
+
+    if (!window.stickerLayoutsMap) window.stickerLayoutsMap = {};
     window.stickerLayoutsMap[name] = newLayout;
+    
+    closeNewStickerFormatModal();
     changeStickerTemplate(name);
+    // Auto-save the new layout to Firebase immediately
+    saveStickerLayout(true); 
 }
 
 function updatePropertiesPanel() {
