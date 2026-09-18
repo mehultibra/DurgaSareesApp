@@ -410,8 +410,15 @@ function updateStickerCanvasScale(targetId) {
             window.stickerScale = 1;
         }
         canvas.style.transform = `scale(${window.stickerScale})`;
-        canvas.style.transformOrigin = 'top left';
+        // Center the scaled canvas
+        canvas.style.transformOrigin = 'top center';
         canvas.style.marginBottom = (window.stickerLayout.height * (window.stickerScale - 1)) + 'px';
+        
+        // If scaled down, ensure the wrapper doesn't act wider than the scaled canvas
+        if (window.stickerScale < 1 && cid === 'stickerEditorCanvas') {
+             canvas.style.marginLeft = 'auto';
+             canvas.style.marginRight = 'auto';
+        }
     }
 }
 window.addEventListener('resize', () => {
