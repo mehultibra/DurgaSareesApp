@@ -553,10 +553,10 @@
           <input type="text" id="editTagCut" placeholder="Cut Info (e.g. CUT 6 MTR)" onkeyup="updateLiveLabel()" style="width:100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
       </div>
       
-      <!-- NEW FORMAT SETUP MODAL -->
+      <!-- FORMAT SETUP MODAL -->
   <div id="newStickerFormatModal" class="action-modal" style="display:none; z-index: 7000;" onclick="closeNewStickerFormatModal()">
     <div class="modal-content" onclick="event.stopPropagation()" style="display: flex; flex-direction: column; align-items: center; background: #fff; max-height: 90vh; overflow-y: auto; width: 95%; max-width: 400px; padding: 20px; gap: 15px;">
-        <div class="modal-title" style="width: 100%; text-align: left; margin-bottom: 0;">New Format Setup <i class="fas fa-times" onclick="closeNewStickerFormatModal()"></i></div>
+        <div class="modal-title" style="width: 100%; text-align: left; margin-bottom: 0;"><span id="fmtModalTitle">Format Setup</span> <i class="fas fa-times" onclick="closeNewStickerFormatModal()"></i></div>
         
         <div style="width:100%;">
             <label style="font-weight:bold; font-size:12px;">Format Name</label>
@@ -577,7 +577,7 @@
             <input type="number" id="newFmtML" placeholder="Left" value="2" style="flex:1; padding:6px; border:1px solid #ccc; border-radius:4px;">
         </div>
 
-        <button onclick="saveNewStickerFormat()" style="width: 100%; padding: 12px; background: #4caf50; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top:10px;">Create Format</button>
+        <button id="fmtModalBtn" onclick="saveNewStickerFormat()" style="width: 100%; padding: 12px; background: #4caf50; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top:10px;">Save Format</button>
     </div>
   </div>
 
@@ -629,8 +629,10 @@
         <div style="width: 250px; background: #fff; padding: 15px; border-radius: 6px; font-size: 13px; display: flex; flex-direction: column; gap: 10px;">
             <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px;">Active Format</div>
             <div style="display: flex; gap: 5px;">
-                <select id="seActiveFormatSelect" onchange="changeStickerTemplate(this.value)" style="flex: 1; padding: 4px;"></select>
-                <button onclick="addNewStickerFormat()" style="padding: 4px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;"><i class="fas fa-plus"></i></button>
+                <select id="seActiveFormatSelect" onchange="changeStickerTemplate(this.value)" style="flex: 1; padding: 4px; min-width: 0;"></select>
+                <button onclick="editStickerFormatSetup()" style="padding: 4px 8px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer;" title="Edit Format Setup"><i class="fas fa-cog"></i></button>
+                <button onclick="addNewStickerFormat()" style="padding: 4px 8px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;" title="Add New Format"><i class="fas fa-plus"></i></button>
+                <button onclick="deleteStickerFormat()" style="padding: 4px 8px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;" title="Delete Format"><i class="fas fa-trash"></i></button>
             </div>
 
             <div id="sePageSetup" style="display:none;">

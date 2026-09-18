@@ -435,8 +435,48 @@ function updateStickerCanvasSize() {
     updateStickerCanvasScale('stickerEditorCanvas');
 }
 
+window.isEditingStickerSetup = false;
+window.oldFormatName = "";
+
 function addNewStickerFormat() {
+    window.isEditingStickerSetup = false;
+    document.getElementById('fmtModalTitle').innerText = "New Format Setup";
+    document.getElementById('fmtModalBtn').innerText = "Create Format";
+    document.getElementById('newFmtName').value = "";
     document.getElementById('newStickerFormatModal').style.display = 'flex';
+}
+
+function editStickerFormatSetup() {
+    if (!window.stickerLayout || !window.currentTemplateName) return;
+    window.isEditingStickerSetup = true;
+    window.oldFormatName = window.currentTemplateName;
+    document.getElementById('fmtModalTitle').innerText = "Edit Format Setup";
+    document.getElementById('fmtModalBtn').innerText = "Update Format";
+    
+    document.getElementById('newFmtName').value = window.currentTemplateName;
+    document.getElementById('newFmtW').value = Math.round((window.stickerLayout.width || 440) / 8);
+    document.getElementById('newFmtH').value = Math.round((window.stickerLayout.height || 220) / 8);
+    document.getElementById('newFmtGap').value = window.stickerLayout.gap_mm || 0;
+    
+    document.getElementById('newFmtMT').value = Math.round((window.stickerLayout.marginTop || 0) / 8);
+    document.getElementById('newFmtMR').value = Math.round((window.stickerLayout.marginRight || 0) / 8);
+    document.getElementById('newFmtMB').value = Math.round((window.stickerLayout.marginBottom || 0) / 8);
+    document.getElementById('newFmtML').value = Math.round((window.stickerLayout.marginLeft || 0) / 8);
+    
+    document.getElementById('newStickerFormatModal').style.display = 'flex';
+}
+
+function deleteStickerFormat() {
+    if (!window.stickerLayoutsMap || Object.keys(window.stickerLayoutsMap).length <= 1) {
+        alert("Cannot delete the only layout.");
+        return;
+    }
+    if (confirm("Delete format '" + window.currentTemplateName + "'?")) {
+        delete window.stickerLayoutsMap[window.currentTemplateName];
+        const nextKey = Object.keys(window.stickerLayoutsMap)[0];
+        changeStickerTemplate(nextKey);
+        saveStickerLayout(true);
+    }
 }
 
 function closeNewStickerFormatModal() {
@@ -449,8 +489,14 @@ function saveNewStickerFormat() {
         alert("Please enter a format name!");
         return;
     }
-    if (window.stickerLayoutsMap && window.stickerLayoutsMap[name]) {
+    
+    if (!window.isEditingStickerSetup && window.stickerLayoutsMap && window.stickerLayoutsMap[name]) {
         alert("Format already exists! Choose a different name.");
+        return;
+    }
+    
+    if (window.isEditingStickerSetup && name !== window.oldFormatName && window.stickerLayoutsMap && window.stickerLayoutsMap[name]) {
+        alert("Format name already exists!");
         return;
     }
     
@@ -462,7 +508,6 @@ function saveNewStickerFormat() {
     const mb = parseFloat(document.getElementById('newFmtMB').value) || 0;
     const ml = parseFloat(document.getElementById('newFmtML').value) || 0;
 
-    // Use current layout as base for elements
     const newLayout = JSON.parse(JSON.stringify(window.stickerLayout || { elements: [] }));
     newLayout.width = Math.round(w * 8);
     newLayout.height = Math.round(h * 8);
@@ -473,6 +518,11 @@ function saveNewStickerFormat() {
     newLayout.marginLeft = Math.round(ml * 8);
 
     if (!window.stickerLayoutsMap) window.stickerLayoutsMap = {};
+    
+    if (window.isEditingStickerSetup && name !== window.oldFormatName) {
+        delete window.stickerLayoutsMap[window.oldFormatName];
+    }
+    
     window.stickerLayoutsMap[name] = newLayout;
     
     closeNewStickerFormatModal();
