@@ -10,9 +10,24 @@ service cloud.firestore {
     }
     
     // 2. Role Checkers
-    function isAdmin() { return request.auth != null && getRole() == 'admin'; }
+    function isSuperAdmin() {
+      return request.auth != null && (request.auth.token.phone_number == '+919425032549' || request.auth.token.phone_number == '+919302632549');
+    }
+    function isAdmin() { return request.auth != null && (isSuperAdmin() || getRole() == 'admin'); }
     function isInventory() { return request.auth != null && getRole() == 'inventory'; }
     function isPacking() { return request.auth != null && getRole() == 'packing'; }
+
+    // ==========================================
+    // SETTINGS COLLECTION
+    // ==========================================
+    match /settings/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    match /Settings/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
 
     // ==========================================
     // PRODUCTS COLLECTION
@@ -52,7 +67,7 @@ service cloud.firestore {
     }
 
     // ==========================================
-    // SETTINGS / ORDERS / EVERYTHING ELSE
+    // ORDERS / EVERYTHING ELSE
     // ==========================================
     match /LiveSessions/{sessionId} {
       allow read: if isAdmin();
