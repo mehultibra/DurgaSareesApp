@@ -603,6 +603,14 @@
                 <div><label style="font-size:10px;">Height</label><input type="number" id="seCanvasH" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
             </div>
 
+            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Margins (Printable Area)</div>
+            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                <div style="width: 45%;"><label style="font-size:10px;">Top</label><input type="number" id="seMarginT" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div style="width: 45%;"><label style="font-size:10px;">Right</label><input type="number" id="seMarginR" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div style="width: 45%;"><label style="font-size:10px;">Bottom</label><input type="number" id="seMarginB" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div style="width: 45%;"><label style="font-size:10px;">Left</label><input type="number" id="seMarginL" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+            </div>
+
             <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Elements</div>
             <div id="seElementToggles" style="display: flex; flex-direction: column; gap: 4px;">
                 <!-- Checkboxes injected here -->

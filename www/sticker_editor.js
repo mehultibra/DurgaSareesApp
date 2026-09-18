@@ -173,6 +173,21 @@ function renderStickerTemplate(containerId, isEditor = false) {
         container.appendChild(div);
     });
 
+    // Add margin overlay
+    if (isEditor && (window.stickerLayout.marginTop || window.stickerLayout.marginRight || window.stickerLayout.marginBottom || window.stickerLayout.marginLeft)) {
+        const marginOverlay = document.createElement('div');
+        marginOverlay.style.position = 'absolute';
+        marginOverlay.style.top = (window.stickerLayout.marginTop || 0) + 'px';
+        marginOverlay.style.right = (window.stickerLayout.marginRight || 0) + 'px';
+        marginOverlay.style.bottom = (window.stickerLayout.marginBottom || 0) + 'px';
+        marginOverlay.style.left = (window.stickerLayout.marginLeft || 0) + 'px';
+        marginOverlay.style.border = '2px dashed red';
+        marginOverlay.style.background = 'rgba(255, 0, 0, 0.05)';
+        marginOverlay.style.pointerEvents = 'none';
+        marginOverlay.style.zIndex = '1000';
+        container.appendChild(marginOverlay);
+    }
+
     // Auto Shrink-to-Fit (must run after appending to DOM for layout calculation)
     setTimeout(() => {
         window.stickerLayout.elements.forEach(el => {
@@ -295,6 +310,11 @@ function openStickerEditor() {
     document.getElementById('seCanvasW').value = window.stickerLayout.width;
     document.getElementById('seCanvasH').value = window.stickerLayout.height;
     
+    document.getElementById('seMarginT').value = window.stickerLayout.marginTop || 0;
+    document.getElementById('seMarginR').value = window.stickerLayout.marginRight || 0;
+    document.getElementById('seMarginB').value = window.stickerLayout.marginBottom || 0;
+    document.getElementById('seMarginL').value = window.stickerLayout.marginLeft || 0;
+    
     const tplNameInput = document.getElementById('seTemplateName');
     const tplDefInput = document.getElementById('seTemplateDefault');
     if (tplNameInput) tplNameInput.value = window.currentTemplateName || "Default";
@@ -321,7 +341,17 @@ function openStickerEditor() {
             el.visible = e.target.checked;
             renderStickerTemplate('stickerEditorCanvas', true);
         };
+        lbl.appendChild(chk);
+        lbl.appendChild(document.createTextNode(el.id));
+        toggles.appendChild(lbl);
+    });
+    
+    updatePropertiesPanel();
     renderStickerTemplate('stickerEditorCanvas', true);
+    
+    setTimeout(() => {
+        updateStickerCanvasScale('stickerEditorCanvas');
+    }, 100);
 }
 
 function closeStickerEditor() {
@@ -329,10 +359,40 @@ function closeStickerEditor() {
     renderStickerTemplate('stickerTemplate', false);
 }
 
+window.stickerScale = 1;
+function updateStickerCanvasScale(targetId) {
+    const cid = targetId || 'stickerEditorCanvas';
+    const canvas = document.getElementById(cid);
+    if (!canvas) return;
+    const parent = canvas.parentElement;
+    if (parent) {
+        const availableWidth = parent.clientWidth - (cid === 'stickerEditorCanvas' ? 20 : 0); 
+        if (window.stickerLayout.width > availableWidth) {
+            window.stickerScale = availableWidth / window.stickerLayout.width;
+        } else {
+            window.stickerScale = 1;
+        }
+        canvas.style.transform = `scale(${window.stickerScale})`;
+        canvas.style.transformOrigin = 'top center';
+        canvas.style.marginBottom = (window.stickerLayout.height * (window.stickerScale - 1)) + 'px';
+    }
+}
+window.addEventListener('resize', () => {
+    updateStickerCanvasScale('stickerEditorCanvas');
+    updateStickerCanvasScale('stickerTemplate');
+});
+
 function updateStickerCanvasSize() {
     window.stickerLayout.width = parseInt(document.getElementById('seCanvasW').value) || 440;
     window.stickerLayout.height = parseInt(document.getElementById('seCanvasH').value) || 220;
+    
+    window.stickerLayout.marginTop = parseInt(document.getElementById('seMarginT').value) || 0;
+    window.stickerLayout.marginRight = parseInt(document.getElementById('seMarginR').value) || 0;
+    window.stickerLayout.marginBottom = parseInt(document.getElementById('seMarginB').value) || 0;
+    window.stickerLayout.marginLeft = parseInt(document.getElementById('seMarginL').value) || 0;
+    
     renderStickerTemplate('stickerEditorCanvas', true);
+    updateStickerCanvasScale('stickerEditorCanvas');
 }
 
 function updatePropertiesPanel() {

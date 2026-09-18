@@ -5734,16 +5734,24 @@ function previewLabel(type) {
 
         // Generate QR code (encodes SKU so it can be scanned)
         var qrEl = document.getElementById('stkQRCode');
-        qrEl.innerHTML = '';
-        if (window.QRCode) {
-            var productUrl = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
-            new QRCode(qrEl, {
-                text: productUrl,
-                width: 100,
-                height: 100,
-                correctLevel: QRCode.CorrectLevel.M
-            });
+        if (qrEl) {
+            qrEl.innerHTML = '';
+            if (window.QRCode) {
+                var productUrl = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
+                new QRCode(qrEl, {
+                    text: productUrl,
+                    width: 100,
+                    height: 100,
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            }
         }
+        
+        setTimeout(() => {
+            if (typeof updateStickerCanvasScale === 'function') {
+                updateStickerCanvasScale('stickerTemplate');
+            }
+        }, 100);
 
         loadPrinters();
         openModal('printPreviewModal');
