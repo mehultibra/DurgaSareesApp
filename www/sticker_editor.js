@@ -76,13 +76,17 @@ function renderStickerTemplate(containerId, isEditor = false) {
 
     window.stickerLayout.elements.forEach(el => {
         if (!el.visible && !isEditor) return;
+        if (!el.visible) return; // Hide completely in editor too
 
         const div = document.createElement('div');
         div.id = (isEditor ? 'editor_' : 'print_') + el.id;
         div.style.position = 'absolute';
         div.style.left = el.x + 'px';
         div.style.top = el.y + 'px';
-        if (!el.visible) div.style.opacity = '0.3';
+        // Scale padding if element uses padding
+        if (el.padding) {
+            div.style.padding = el.padding + 'px';
+        }
 
         if (isEditor) {
             div.style.cursor = 'move';
