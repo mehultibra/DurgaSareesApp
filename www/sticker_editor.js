@@ -132,8 +132,19 @@ function renderStickerTemplate(containerId, isEditor = false) {
             div.style.fontWeight = el.fontWeight || 'normal';
             div.style.fontStyle = el.fontStyle || 'normal';
             div.style.textDecoration = el.textDecoration || 'none';
-            div.style.whiteSpace = 'nowrap';
             div.style.color = '#000';
+            
+            if (el.multiline) {
+                div.style.whiteSpace = 'pre-wrap';
+                div.style.textAlign = 'center';
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.justifyContent = 'center';
+                if (el.w) div.style.width = el.w + 'px';
+                if (el.h) div.style.height = el.h + 'px';
+            } else {
+                div.style.whiteSpace = 'nowrap';
+            }
             
             let rawVal = el.text || '';
             let defVal = '';
@@ -631,6 +642,7 @@ function updatePropertiesPanel() {
         fmtRow.appendChild(createToggle('B', 'fontWeight', 'bold', 'normal'));
         fmtRow.appendChild(createToggle('I', 'fontStyle', 'italic', 'normal'));
         fmtRow.appendChild(createToggle('U', 'textDecoration', 'underline', 'none'));
+        fmtRow.appendChild(createToggle('M', 'multiline', true, false));
         wrapper.appendChild(fmtRow);
         
         const prefixInp = document.createElement('input');
@@ -673,38 +685,40 @@ function updatePropertiesPanel() {
             };
             wrapper.appendChild(txt);
         }
-    } else {
-        const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.gap = '5px';
-        
-        const wInp = document.createElement('input');
-        wInp.type = 'number';
-        wInp.value = el.w;
-        wInp.style.width = '100%';
-        wInp.placeholder = 'W';
-        wInp.oninput = (e) => {
-            el.w = parseInt(e.target.value) || 10;
-            const domEl = document.getElementById('editor_' + el.id);
-            if (domEl) domEl.style.width = el.w + 'px';
-        };
-        
-        const hInp = document.createElement('input');
-        hInp.type = 'number';
-        hInp.value = el.h;
-        hInp.style.width = '100%';
-        hInp.placeholder = 'H';
-        hInp.oninput = (e) => {
-            el.h = parseInt(e.target.value) || 10;
-            const domEl = document.getElementById('editor_' + el.id);
-            if (domEl) domEl.style.height = el.h + 'px';
-        };
-        
-        row.appendChild(wInp);
-        row.appendChild(hInp);
-        wrapper.appendChild(document.createTextNode('Size (W x H):'));
-        wrapper.appendChild(row);
     }
+    
+    // Width and Height inputs available for ALL elements
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '5px';
+    row.style.marginTop = '8px';
+    
+    const wInp = document.createElement('input');
+    wInp.type = 'number';
+    wInp.value = el.w || '';
+    wInp.style.width = '100%';
+    wInp.placeholder = 'W';
+    wInp.oninput = (e) => {
+        el.w = parseInt(e.target.value) || 0;
+        const domEl = document.getElementById('editor_' + el.id);
+        if (domEl && el.w) domEl.style.width = el.w + 'px';
+    };
+    
+    const hInp = document.createElement('input');
+    hInp.type = 'number';
+    hInp.value = el.h || '';
+    hInp.style.width = '100%';
+    hInp.placeholder = 'H';
+    hInp.oninput = (e) => {
+        el.h = parseInt(e.target.value) || 0;
+        const domEl = document.getElementById('editor_' + el.id);
+        if (domEl && el.h) domEl.style.height = el.h + 'px';
+    };
+    
+    row.appendChild(wInp);
+    row.appendChild(hInp);
+    wrapper.appendChild(document.createTextNode('Size Box (W x H):'));
+    wrapper.appendChild(row);
     
     panel.appendChild(wrapper);
 }
