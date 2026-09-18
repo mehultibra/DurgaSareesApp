@@ -666,7 +666,8 @@ async function saveStickerLayout() {
         populateTemplateDropdown();
         alert("Sticker Layout '" + tplName + "' saved successfully!");
     } catch(e) {
-        alert("Error saving: " + e.message);
+        console.error("FULL ERROR OBJECT:", e);
+        alert("Error saving: " + e.message + " | Code: " + e.code);
     }
 }
 
