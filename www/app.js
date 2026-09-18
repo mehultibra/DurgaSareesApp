@@ -365,6 +365,20 @@ window.addEventListener('DOMContentLoaded', function () {
 
     // Check for updates on ALL platforms (Native & Web)
     setTimeout(checkForOTAUpdates, 2000);
+    
+    // Set Version Display
+    setTimeout(async () => {
+        let displayStr = "Web";
+        if (window.Capacitor && window.Capacitor.Plugins.App) {
+            try {
+                let info = await window.Capacitor.Plugins.App.getInfo();
+                displayStr = "App v" + info.version;
+            } catch(e) {}
+        }
+        let otaVer = localStorage.getItem("dsOtaVersion") || "builtin";
+        let verEl = document.getElementById("appVersionDisplay");
+        if (verEl) verEl.innerText = displayStr + " (OTA: " + otaVer + ")";
+    }, 1000);
 });
 
 async function checkForOTAUpdates() {
