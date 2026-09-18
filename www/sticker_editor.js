@@ -325,13 +325,30 @@ function updateElementSize(dx, dy) {
 
 function openStickerEditor() {
     document.getElementById('stickerEditorModal').style.display = 'flex';
-    document.getElementById('seCanvasW').value = window.stickerLayout.width;
-    document.getElementById('seCanvasH').value = window.stickerLayout.height;
     
-    document.getElementById('seMarginT').value = window.stickerLayout.marginTop || 0;
-    document.getElementById('seMarginR').value = window.stickerLayout.marginRight || 0;
-    document.getElementById('seMarginB').value = window.stickerLayout.marginBottom || 0;
-    document.getElementById('seMarginL').value = window.stickerLayout.marginLeft || 0;
+    // Populate dropdown
+    const sel = document.getElementById('seActiveFormatSelect');
+    if (sel && window.stickerLayoutsMap) {
+        sel.innerHTML = '';
+        Object.keys(window.stickerLayoutsMap).forEach(k => {
+            var opt = document.createElement('option');
+            opt.value = k;
+            opt.innerText = k;
+            if (k === (window.currentTemplateName || "Default")) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
+    document.getElementById('seCanvasW_mm').value = Math.round((window.stickerLayout.width || 440) / 8);
+    document.getElementById('seCanvasH_mm').value = Math.round((window.stickerLayout.height || 220) / 8);
+    
+    document.getElementById('seMarginT_mm').value = Math.round((window.stickerLayout.marginTop || 0) / 8);
+    document.getElementById('seMarginR_mm').value = Math.round((window.stickerLayout.marginRight || 0) / 8);
+    document.getElementById('seMarginB_mm').value = Math.round((window.stickerLayout.marginBottom || 0) / 8);
+    document.getElementById('seMarginL_mm').value = Math.round((window.stickerLayout.marginLeft || 0) / 8);
+    
+    const gapEl = document.getElementById('seGap_mm');
+    if (gapEl) gapEl.value = window.stickerLayout.gap_mm || 0;
     
     const tplNameInput = document.getElementById('seTemplateName');
     const tplDefInput = document.getElementById('seTemplateDefault');
@@ -401,16 +418,31 @@ window.addEventListener('resize', () => {
 });
 
 function updateStickerCanvasSize() {
-    window.stickerLayout.width = parseInt(document.getElementById('seCanvasW').value) || 440;
-    window.stickerLayout.height = parseInt(document.getElementById('seCanvasH').value) || 220;
+    window.stickerLayout.width = Math.round((parseFloat(document.getElementById('seCanvasW_mm').value) || 55) * 8);
+    window.stickerLayout.height = Math.round((parseFloat(document.getElementById('seCanvasH_mm').value) || 27.5) * 8);
     
-    window.stickerLayout.marginTop = parseInt(document.getElementById('seMarginT').value) || 0;
-    window.stickerLayout.marginRight = parseInt(document.getElementById('seMarginR').value) || 0;
-    window.stickerLayout.marginBottom = parseInt(document.getElementById('seMarginB').value) || 0;
-    window.stickerLayout.marginLeft = parseInt(document.getElementById('seMarginL').value) || 0;
+    window.stickerLayout.marginTop = Math.round((parseFloat(document.getElementById('seMarginT_mm').value) || 0) * 8);
+    window.stickerLayout.marginRight = Math.round((parseFloat(document.getElementById('seMarginR_mm').value) || 0) * 8);
+    window.stickerLayout.marginBottom = Math.round((parseFloat(document.getElementById('seMarginB_mm').value) || 0) * 8);
+    window.stickerLayout.marginLeft = Math.round((parseFloat(document.getElementById('seMarginL_mm').value) || 0) * 8);
+    
+    const gapEl = document.getElementById('seGap_mm');
+    if (gapEl) window.stickerLayout.gap_mm = parseFloat(gapEl.value) || 0;
     
     renderStickerTemplate('stickerEditorCanvas', true);
     updateStickerCanvasScale('stickerEditorCanvas');
+}
+
+function addNewStickerFormat() {
+    const name = prompt("Enter new format name:");
+    if (!name || name.trim() === '') return;
+    if (window.stickerLayoutsMap[name]) {
+        alert("Format already exists!");
+        return;
+    }
+    const newLayout = JSON.parse(JSON.stringify(window.stickerLayout));
+    window.stickerLayoutsMap[name] = newLayout;
+    changeStickerTemplate(name);
 }
 
 function updatePropertiesPanel() {

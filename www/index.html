@@ -597,18 +597,25 @@
 
         <!-- Properties Panel -->
         <div style="width: 250px; background: #fff; padding: 15px; border-radius: 6px; font-size: 13px; display: flex; flex-direction: column; gap: 10px;">
-            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px;">Canvas Size</div>
+            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px;">Active Format</div>
             <div style="display: flex; gap: 5px;">
-                <div><label style="font-size:10px;">Width</label><input type="number" id="seCanvasW" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-                <div><label style="font-size:10px;">Height</label><input type="number" id="seCanvasH" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <select id="seActiveFormatSelect" onchange="changeStickerTemplate(this.value)" style="flex: 1; padding: 4px;"></select>
+                <button onclick="addNewStickerFormat()" style="padding: 4px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;"><i class="fas fa-plus"></i></button>
             </div>
 
-            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Margins (Printable Area)</div>
+            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Canvas Size (mm)</div>
+            <div style="display: flex; gap: 5px;">
+                <div><label style="font-size:10px;">Width (mm)</label><input type="number" id="seCanvasW_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div><label style="font-size:10px;">Height (mm)</label><input type="number" id="seCanvasH_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div><label style="font-size:10px;">Gap (mm)</label><input type="number" id="seGap_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+            </div>
+
+            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Margins (mm)</div>
             <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                <div style="width: 45%;"><label style="font-size:10px;">Top</label><input type="number" id="seMarginT" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-                <div style="width: 45%;"><label style="font-size:10px;">Right</label><input type="number" id="seMarginR" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-                <div style="width: 45%;"><label style="font-size:10px;">Bottom</label><input type="number" id="seMarginB" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
-                <div style="width: 45%;"><label style="font-size:10px;">Left</label><input type="number" id="seMarginL" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div style="width: 45%;"><label style="font-size:10px;">Top (mm)</label><input type="number" id="seMarginT_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div style="width: 45%;"><label style="font-size:10px;">Right (mm)</label><input type="number" id="seMarginR_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div style="width: 45%;"><label style="font-size:10px;">Bottom (mm)</label><input type="number" id="seMarginB_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
+                <div style="width: 45%;"><label style="font-size:10px;">Left (mm)</label><input type="number" id="seMarginL_mm" onchange="updateStickerCanvasSize()" style="width:100%; padding:4px;"></div>
             </div>
 
             <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 5px;">Elements</div>
@@ -621,8 +628,8 @@
                 <div style="color:#888; font-style:italic;">None selected</div>
             </div>
 
-            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: auto;">Save Template</div>
-            <input type="text" id="seTemplateName" placeholder="Template Name (e.g. Default)" style="width: 100%; padding: 6px; margin-top: 5px;">
+            <div style="font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: auto;">Format Name</div>
+            <input type="text" id="seTemplateName" placeholder="Format Name" style="width: 100%; padding: 6px; margin-top: 5px;" readonly>
             <label style="font-size: 11px; display: flex; align-items: center; gap: 5px; margin-top: 5px;">
                 <input type="checkbox" id="seTemplateDefault"> Set as Default
             </label>
