@@ -27,7 +27,7 @@ jobs:
           
           echo "$SA_JSON" > sa.json
           export GOOGLE_APPLICATION_CREDENTIALS=sa.json
-          OUTPUT=$(npx firebase-tools deploy --only hosting,firestore:rules --project durga-sarees --non-interactive -m "Auto-deployed via GitHub Actions" 2>&1) || EXIT_CODE=$?
+          OUTPUT=$(npx firebase-tools deploy --only hosting --project durga-sarees --non-interactive -m "Auto-deployed via GitHub Actions" 2>&1) || EXIT_CODE=$?
           echo "$OUTPUT"
           if [ "${EXIT_CODE:-0}" -ne 0 ]; then
             if echo "$OUTPUT" | grep -q "is the current active version"; then
