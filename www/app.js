@@ -5731,7 +5731,7 @@ function previewLabel(type) {
                 var h_mm = Math.round((layout.height || 220) / 8);
                 var opt = document.createElement('option');
                 opt.value = k;
-                opt.innerText = `${k} (${w_mm}x${h_mm}mm)`;
+                opt.innerText = k;
                 if (k === (window.currentTemplateName || "Default")) opt.selected = true;
                 sel.appendChild(opt);
             });

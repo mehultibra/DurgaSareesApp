@@ -131,6 +131,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
             div.style.fontSize = el.fontSize + 'px';
             div.style.fontWeight = el.fontWeight || 'normal';
             div.style.fontStyle = el.fontStyle || 'normal';
+            div.style.textDecoration = el.textDecoration || 'none';
             div.style.whiteSpace = 'nowrap';
             div.style.color = '#000';
             
@@ -191,6 +192,17 @@ function renderStickerTemplate(containerId, isEditor = false) {
         }
 
         container.appendChild(div);
+        
+        // Generate QR Code if it's the QR element and not in editor
+        if (el.type === 'qr' && !isEditor && window.QRCode && window.curProduct) {
+            const productUrl = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(window.curProduct.docId || window.curProduct.id);
+            new window.QRCode(div, {
+                text: productUrl,
+                width: el.w,
+                height: el.h,
+                correctLevel: window.QRCode.CorrectLevel.M
+            });
+        }
     });
 
     // Add margin overlay (corner crop marks)
@@ -591,6 +603,35 @@ function updatePropertiesPanel() {
         };
         wrapper.appendChild(document.createTextNode('Font Size: '));
         wrapper.appendChild(range);
+        
+        // Formatting options
+        const fmtRow = document.createElement('div');
+        fmtRow.style.display = 'flex';
+        fmtRow.style.gap = '10px';
+        fmtRow.style.marginTop = '8px';
+        fmtRow.style.marginBottom = '8px';
+        
+        const createToggle = (label, prop, trueVal, falseVal) => {
+            const lbl = document.createElement('label');
+            lbl.style.display = 'flex';
+            lbl.style.alignItems = 'center';
+            lbl.style.gap = '3px';
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.checked = el[prop] === trueVal;
+            chk.onchange = (e) => {
+                el[prop] = e.target.checked ? trueVal : falseVal;
+                renderStickerTemplate('stickerEditorCanvas', true);
+            };
+            lbl.appendChild(chk);
+            lbl.appendChild(document.createTextNode(label));
+            return lbl;
+        };
+        
+        fmtRow.appendChild(createToggle('B', 'fontWeight', 'bold', 'normal'));
+        fmtRow.appendChild(createToggle('I', 'fontStyle', 'italic', 'normal'));
+        fmtRow.appendChild(createToggle('U', 'textDecoration', 'underline', 'none'));
+        wrapper.appendChild(fmtRow);
         
         const prefixInp = document.createElement('input');
         prefixInp.type = 'text';
