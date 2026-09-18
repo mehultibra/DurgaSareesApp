@@ -5704,8 +5704,9 @@ function previewLabel(type) {
         var qrEl = document.getElementById('stkQRCode');
         qrEl.innerHTML = '';
         if (window.QRCode) {
+            var productUrl = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
             new QRCode(qrEl, {
-                text: curProduct.sku || curProduct.name || 'DS',
+                text: productUrl,
                 width: 100,
                 height: 100,
                 correctLevel: QRCode.CorrectLevel.M

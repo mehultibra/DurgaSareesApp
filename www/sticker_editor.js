@@ -16,6 +16,9 @@ window.stickerLayout = {
 let selectedElementId = null;
 let isDragging = false;
 let startX, startY, initialElemX, initialElemY;
+window.stickerLayoutsMap = { "Default": window.stickerLayout };
+window.currentTemplateName = "Default";
+window.defaultTemplateName = "Default";
 
 async function loadStickerLayout() {
     try {
@@ -23,12 +26,43 @@ async function loadStickerLayout() {
         const doc = await firebase.firestore().collection('Settings').doc('StickerTemplate').get();
         if (doc.exists) {
             const data = doc.data();
-            if (data && data.layout) {
+            if (data.layouts) {
+                window.stickerLayoutsMap = data.layouts;
+                window.defaultTemplateName = data.defaultLayoutName || Object.keys(data.layouts)[0];
+                window.currentTemplateName = window.defaultTemplateName;
+                window.stickerLayout = JSON.parse(JSON.stringify(window.stickerLayoutsMap[window.currentTemplateName]));
+            } else if (data.layout) {
                 window.stickerLayout = data.layout;
+                window.stickerLayoutsMap = { "Default": data.layout };
+                window.currentTemplateName = "Default";
             }
+            populateTemplateDropdown();
         }
     } catch(e) { console.error("Failed to load sticker layout", e); }
 }
+
+function populateTemplateDropdown() {
+    const sel = document.getElementById('stickerTemplateSelect');
+    if (!sel) return;
+    sel.innerHTML = '';
+    const keys = Object.keys(window.stickerLayoutsMap);
+    keys.forEach(k => {
+        const opt = document.createElement('option');
+        opt.value = k;
+        opt.innerText = k;
+        if (k === window.currentTemplateName) opt.selected = true;
+        sel.appendChild(opt);
+    });
+    sel.style.display = keys.length > 0 ? 'block' : 'none';
+}
+
+window.changeStickerTemplate = function(name) {
+    if (window.stickerLayoutsMap[name]) {
+        window.currentTemplateName = name;
+        window.stickerLayout = JSON.parse(JSON.stringify(window.stickerLayoutsMap[name]));
+        renderStickerTemplate('stickerTemplate', false);
+    }
+};
 
 function renderStickerTemplate(containerId, isEditor = false) {
     const container = document.getElementById(containerId);
@@ -63,15 +97,23 @@ function renderStickerTemplate(containerId, isEditor = false) {
             div.style.whiteSpace = 'nowrap';
             div.style.color = '#000';
             
-            let val = el.text || '';
-            if (el.field === 'name') val = window.curProduct?.name || 'Product Name';
-            if (el.field === 'fabric') val = window.curProduct?.fabric || 'Fabric Details';
-            if (el.field === 'cut') val = window.curProduct?.cut || 'Cut Details';
-            if (el.field === 'price') val = (el.prefix||'') + (window.curProduct?.price || '000');
-            if (el.field === 'design') val = '00';
-
-            div.innerText = val;
+            let rawVal = el.text || '';
+            let defVal = '';
+            if (el.field === 'name') { rawVal = window.curProduct?.name; defVal = 'Product Name'; }
+            if (el.field === 'fabric') { rawVal = window.curProduct?.fabric; defVal = 'Fabric Details'; }
+            if (el.field === 'cut') { rawVal = window.curProduct?.cut; defVal = 'Cut Details'; }
+            if (el.field === 'price') { rawVal = window.curProduct?.price; defVal = '000'; }
+            if (el.field === 'design') { rawVal = window.curProduct?.sku || window.curProduct?.design; defVal = 'Design No'; }
             
+            if (!rawVal && isEditor) rawVal = defVal; // fallback for editor preview
+            
+            if (rawVal && String(rawVal).trim() !== '') {
+                div.innerText = (el.prefix || '') + rawVal + (el.suffix || '');
+                div.style.display = 'block';
+            } else {
+                div.innerText = '';
+                div.style.display = 'none'; // Hide completely if blank
+            }
             if (!isEditor) {
                 div.contentEditable = "true";
                 div.style.outline = "none";
@@ -113,6 +155,30 @@ function renderStickerTemplate(containerId, isEditor = false) {
 
         container.appendChild(div);
     });
+
+    // Auto Shrink-to-Fit (must run after appending to DOM for layout calculation)
+    setTimeout(() => {
+        window.stickerLayout.elements.forEach(el => {
+            if (el.type !== 'text' || !el.w) return;
+            
+            const div = document.getElementById((isEditor ? 'editor_' : 'print_') + el.id);
+            if (!div || div.style.display === 'none') return;
+            
+            // Constrain text to bounding box to prevent overlapping
+            div.style.width = el.w + 'px';
+            if (el.h) div.style.height = el.h + 'px';
+            div.style.overflow = 'hidden';
+            
+            // Shrink font size if it overflows
+            let currentFontSize = el.fontSize || 14;
+            div.style.fontSize = currentFontSize + 'px'; // Reset to default
+            
+            while ((div.scrollWidth > el.w || (el.h && div.scrollHeight > el.h)) && currentFontSize > 6) {
+                currentFontSize--;
+                div.style.fontSize = currentFontSize + 'px';
+            }
+        });
+    }, 10);
 }
 
 function startDrag(e, id) {
@@ -178,6 +244,16 @@ function openStickerEditor() {
     document.getElementById('stickerEditorModal').style.display = 'flex';
     document.getElementById('seCanvasW').value = window.stickerLayout.width;
     document.getElementById('seCanvasH').value = window.stickerLayout.height;
+    
+    const tplNameInput = document.getElementById('seTemplateName');
+    const tplDefInput = document.getElementById('seTemplateDefault');
+    if (tplNameInput) tplNameInput.value = window.currentTemplateName || "Default";
+    if (tplDefInput) {
+        // We need to know what the default is in the DB.
+        // Actually, we store defaultLayoutName globally in loadStickerLayout? Wait, I didn't store it globally.
+        // Let's store window.defaultTemplateName globally too.
+        tplDefInput.checked = (window.currentTemplateName === window.defaultTemplateName);
+    }
     
     selectedElementId = null;
     
@@ -256,6 +332,32 @@ function updatePropertiesPanel() {
         wrapper.appendChild(document.createTextNode('Font Size: '));
         wrapper.appendChild(range);
         
+        const prefixInp = document.createElement('input');
+        prefixInp.type = 'text';
+        prefixInp.value = el.prefix || '';
+        prefixInp.placeholder = 'Prefix (e.g. Rs. )';
+        prefixInp.style.width = '100%';
+        prefixInp.style.padding = '4px';
+        prefixInp.style.marginTop = '4px';
+        prefixInp.oninput = (e) => {
+            el.prefix = e.target.value;
+            renderStickerTemplate('stickerEditorCanvas', true);
+        };
+        wrapper.appendChild(prefixInp);
+
+        const suffixInp = document.createElement('input');
+        suffixInp.type = 'text';
+        suffixInp.value = el.suffix || '';
+        suffixInp.placeholder = 'Suffix (e.g. /-)';
+        suffixInp.style.width = '100%';
+        suffixInp.style.padding = '4px';
+        suffixInp.style.marginTop = '4px';
+        suffixInp.oninput = (e) => {
+            el.suffix = e.target.value;
+            renderStickerTemplate('stickerEditorCanvas', true);
+        };
+        wrapper.appendChild(suffixInp);
+        
         if (el.text !== undefined) {
             const txt = document.createElement('input');
             txt.type = 'text';
@@ -308,10 +410,26 @@ function updatePropertiesPanel() {
 
 async function saveStickerLayout() {
     try {
+        const nameInput = document.getElementById('seTemplateName');
+        const defInput = document.getElementById('seTemplateDefault');
+        let tplName = (nameInput && nameInput.value.trim() !== '') ? nameInput.value.trim() : "Default";
+        
+        window.stickerLayoutsMap[tplName] = JSON.parse(JSON.stringify(window.stickerLayout));
+        window.currentTemplateName = tplName;
+        
+        if (defInput && defInput.checked) {
+            window.defaultTemplateName = tplName;
+        } else if (!window.defaultTemplateName) {
+            window.defaultTemplateName = tplName;
+        }
+
         await firebase.firestore().collection('Settings').doc('StickerTemplate').set({
-            layout: window.stickerLayout
+            layouts: window.stickerLayoutsMap,
+            defaultLayoutName: window.defaultTemplateName
         }, { merge: true });
-        alert("Sticker Layout saved successfully!");
+        
+        populateTemplateDropdown();
+        alert("Sticker Layout '" + tplName + "' saved successfully!");
     } catch(e) {
         alert("Error saving: " + e.message);
     }
