@@ -15,7 +15,8 @@ window.stickerLayout = {
 
 let selectedElementId = null;
 let isDragging = false;
-let startX, startY, initialElemX, initialElemY;
+let isResizing = false;
+let startX, startY, initialElemX, initialElemY, initialElemW, initialElemH;
 window.stickerLayoutsMap = { "Default": window.stickerLayout };
 window.currentTemplateName = "Default";
 window.defaultTemplateName = "Default";
@@ -86,8 +87,24 @@ function renderStickerTemplate(containerId, isEditor = false) {
         if (isEditor) {
             div.style.cursor = 'move';
             div.style.border = selectedElementId === el.id ? '2px solid blue' : '1px dashed transparent';
-            div.onmousedown = (e) => { e.preventDefault(); startDrag(e, el.id); };
-            div.ontouchstart = (e) => { e.preventDefault(); startDrag(e.touches[0], el.id); };
+            div.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); startDrag(e, el.id); };
+            div.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); startDrag(e.touches[0], el.id); };
+
+            if (el.w) {
+                const handle = document.createElement('div');
+                handle.style.position = 'absolute';
+                handle.style.right = '-5px';
+                handle.style.bottom = '-5px';
+                handle.style.width = '10px';
+                handle.style.height = '10px';
+                handle.style.background = 'blue';
+                handle.style.cursor = 'se-resize';
+                handle.style.display = selectedElementId === el.id ? 'block' : 'none';
+                handle.id = 'resize_' + el.id;
+                handle.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e, el.id); };
+                handle.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e.touches[0], el.id); };
+                div.appendChild(handle);
+            }
         }
 
         if (el.type === 'text') {
@@ -194,37 +211,50 @@ function startDrag(e, id) {
     // Manually update borders instead of re-rendering the whole canvas
     window.stickerLayout.elements.forEach(x => {
         const div = document.getElementById('editor_' + x.id);
-        if (div) {
-            div.style.border = x.id === id ? '2px solid blue' : '1px dashed transparent';
-        }
+        const handle = document.getElementById('resize_' + x.id);
+        if (div) div.style.border = x.id === id ? '2px solid blue' : '1px dashed transparent';
+        if (handle) handle.style.display = x.id === id ? 'block' : 'none';
     });
     
     updatePropertiesPanel();
 }
 
+function startResize(e, id) {
+    selectedElementId = id;
+    isResizing = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    
+    const el = window.stickerLayout.elements.find(x => x.id === id);
+    initialElemW = el.w || 100;
+    initialElemH = el.h || 20;
+    
+    updatePropertiesPanel();
+}
+
 document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    updateElementPosition(dx, dy);
+    if (!isDragging && !isResizing) return;
+    const dx = (e.clientX - startX) / (window.stickerScale || 1);
+    const dy = (e.clientY - startY) / (window.stickerScale || 1);
+    if (isDragging) updateElementPosition(dx, dy);
+    if (isResizing) updateElementSize(dx, dy);
 });
 
 document.addEventListener('touchmove', (e) => {
-    if (!isDragging) return;
-    const dx = e.touches[0].clientX - startX;
-    const dy = e.touches[0].clientY - startY;
-    updateElementPosition(dx, dy);
+    if (!isDragging && !isResizing) return;
+    const dx = (e.touches[0].clientX - startX) / (window.stickerScale || 1);
+    const dy = (e.touches[0].clientY - startY) / (window.stickerScale || 1);
+    if (isDragging) updateElementPosition(dx, dy);
+    if (isResizing) updateElementSize(dx, dy);
 });
 
 document.addEventListener('mouseup', () => {
-    if (isDragging) {
-        isDragging = false;
-    }
+    isDragging = false;
+    isResizing = false;
 });
 document.addEventListener('touchend', () => {
-    if (isDragging) {
-        isDragging = false;
-    }
+    isDragging = false;
+    isResizing = false;
 });
 
 function updateElementPosition(dx, dy) {
@@ -237,6 +267,26 @@ function updateElementPosition(dx, dy) {
             domEl.style.left = el.x + 'px';
             domEl.style.top = el.y + 'px';
         }
+    }
+}
+
+function updateElementSize(dx, dy) {
+    const el = window.stickerLayout.elements.find(x => x.id === selectedElementId);
+    if (el) {
+        el.w = Math.max(20, initialElemW + dx);
+        if (el.h) el.h = Math.max(10, initialElemH + dy);
+        
+        const domEl = document.getElementById('editor_' + el.id);
+        if (domEl) {
+            domEl.style.width = el.w + 'px';
+            if (el.h) domEl.style.height = el.h + 'px';
+        }
+        
+        // Also update inputs in properties panel
+        const wInp = document.getElementById('seSizeW_' + el.id);
+        const hInp = document.getElementById('seSizeH_' + el.id);
+        if (wInp) wInp.value = el.w;
+        if (hInp && el.h) hInp.value = el.h;
     }
 }
 
@@ -260,28 +310,17 @@ function openStickerEditor() {
     const toggles = document.getElementById('seElementToggles');
     toggles.innerHTML = '';
     window.stickerLayout.elements.forEach(el => {
-        const div = document.createElement('div');
-        div.style.display = 'flex';
-        div.style.alignItems = 'center';
-        div.style.gap = '5px';
-        
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = el.visible;
-        cb.onchange = (e) => {
+        const lbl = document.createElement('label');
+        lbl.style.display = 'flex';
+        lbl.style.alignItems = 'center';
+        lbl.style.gap = '5px';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = el.visible;
+        chk.onchange = (e) => {
             el.visible = e.target.checked;
             renderStickerTemplate('stickerEditorCanvas', true);
         };
-        
-        const lbl = document.createElement('span');
-        lbl.innerText = el.id.replace('stk', '');
-        
-        div.appendChild(cb);
-        div.appendChild(lbl);
-        toggles.appendChild(div);
-    });
-
-    updatePropertiesPanel();
     renderStickerTemplate('stickerEditorCanvas', true);
 }
 
