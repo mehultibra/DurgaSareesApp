@@ -430,21 +430,39 @@ async function sendOtp() {
     if (btn) btn.innerText = "Sending...";
     if (errEl) errEl.innerText = "";
 
-    try {
-        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            if (!window.CapacitorFirebaseAuthentication) throw new Error("Firebase Auth Plugin missing");
-            await window.CapacitorFirebaseAuthentication.signInWithPhoneNumber({
-                phoneNumber: phone
-            });
-            // Note: The UI will transition to the OTP screen when the 'phoneCodeSent' event fires
-        } else {
-            // Web fallback
-            if (typeof firebase === 'undefined') throw new Error("Firebase Web SDK missing");
-            webConfirmationResult = await firebase.auth().signInWithPhoneNumber(phone, window.recaptchaVerifier);
-            document.getElementById('loginBoxPhone').style.display = 'none';
-            document.getElementById('loginBoxOtp').style.display = 'block';
-            if (btn) btn.innerText = "SEND OTP";
+    async function attemptSignIn(retriesLeft) {
+        try {
+            if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+                if (!window.CapacitorFirebaseAuthentication) throw new Error("Firebase Auth Plugin missing");
+                await window.CapacitorFirebaseAuthentication.signInWithPhoneNumber({
+                    phoneNumber: phone
+                });
+                // Note: The UI will transition to the OTP screen when the 'phoneCodeSent' event fires
+            } else {
+                // Web fallback
+                if (typeof firebase === 'undefined') throw new Error("Firebase Web SDK missing");
+                webConfirmationResult = await firebase.auth().signInWithPhoneNumber(phone, window.recaptchaVerifier);
+                document.getElementById('loginBoxPhone').style.display = 'none';
+                document.getElementById('loginBoxOtp').style.display = 'block';
+                if (btn) btn.innerText = "SEND OTP";
+            }
+        } catch (err) {
+            let errMsg = (err.message || "").toLowerCase();
+            let isPlayError = errMsg.includes("google play") || errMsg.includes("internal error") || errMsg.includes("reinstalling");
+            
+            if (isPlayError && retriesLeft > 0) {
+                console.log("Caught Play Integrity error. Retrying in 2.5s...", err);
+                if (errEl) errEl.innerText = "Initializing secure connection... Please wait.";
+                await new Promise(resolve => setTimeout(resolve, 2500));
+                return attemptSignIn(retriesLeft - 1);
+            } else {
+                throw err;
+            }
         }
+    }
+
+    try {
+        await attemptSignIn(2); // Allow up to 2 retries (total ~5 seconds) for Play Services to initialize
     } catch (err) {
         if (errEl) errEl.innerText = "❌ " + (err.message || "Failed to send OTP");
         if (btn) btn.innerText = "SEND OTP";
