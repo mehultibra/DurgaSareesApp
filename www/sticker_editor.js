@@ -632,7 +632,7 @@ function editStickerFormatSetup() {
     document.getElementById('fmtModalBtn').innerText = "Update Format Size";
     
     document.getElementById('newFmtName').value = window.oldFormatName;
-    document.getElementById('newFmtName').readOnly = true; // Don't let them rename the format to avoid breaking other layouts
+    document.getElementById('newFmtName').readOnly = false; 
     
     document.getElementById('newFmtW').value = Math.round((window.stickerLayout.width || 440) / 8);
     document.getElementById('newFmtH').value = Math.round((window.stickerLayout.height || 220) / 8);
@@ -677,9 +677,11 @@ function saveNewStickerFormat() {
         formatName = w + "x" + h + "mm";
     }
 
-    if (!window.isEditingStickerSetup && window.stickerFormatsMap && window.stickerFormatsMap[formatName]) {
-        alert("A format with this name already exists!");
-        return;
+    if (window.stickerFormatsMap && window.stickerFormatsMap[formatName]) {
+        if (!window.isEditingStickerSetup || formatName !== window.oldFormatName) {
+            alert("A format with this name already exists! Choose a different name.");
+            return;
+        }
     }
 
     const fmt = {
@@ -691,9 +693,19 @@ function saveNewStickerFormat() {
     if (!window.stickerFormatsMap) window.stickerFormatsMap = {};
     window.stickerFormatsMap[formatName] = fmt;
     
-    // Set the current layout to use this new/edited format
-    if (window.currentTemplateName && window.stickerLayoutsMap[window.currentTemplateName]) {
-        window.stickerLayoutsMap[window.currentTemplateName].formatId = formatName;
+    // If they renamed an existing format, update all layouts that used the old name and delete the old name
+    if (window.isEditingStickerSetup && formatName !== window.oldFormatName) {
+        Object.keys(window.stickerLayoutsMap).forEach(layoutName => {
+            if (window.stickerLayoutsMap[layoutName].formatId === window.oldFormatName) {
+                window.stickerLayoutsMap[layoutName].formatId = formatName;
+            }
+        });
+        delete window.stickerFormatsMap[window.oldFormatName];
+    } else {
+        // Just setting the current layout to use this new format (if creating new)
+        if (!window.isEditingStickerSetup && window.currentTemplateName && window.stickerLayoutsMap[window.currentTemplateName]) {
+            window.stickerLayoutsMap[window.currentTemplateName].formatId = formatName;
+        }
     }
 
     closeNewStickerFormatModal();
