@@ -380,13 +380,31 @@ function renderStickerTemplate(containerId, isEditor = false) {
             if (el.h) div.style.height = el.h + 'px';
             div.style.overflow = 'hidden';
             
-            // Shrink font size if it overflows
+            // Smart Auto Shrink & Alignment
             let currentFontSize = el.fontSize || 14;
-            div.style.fontSize = currentFontSize + 'px'; // Reset to default
+            div.style.fontSize = currentFontSize + 'px';
+            div.style.whiteSpace = 'nowrap'; // force single line initially
+            div.style.textAlign = 'center';
+            div.style.justifyContent = 'center';
             
-            while ((div.scrollWidth > el.w || (el.h && div.scrollHeight > el.h)) && currentFontSize > 6) {
+            // Try to shrink it to fit on one line (stop at size 9 if multiline, otherwise go down to 6)
+            let minSingleLineSize = el.multiline ? 9 : 6;
+            while (div.scrollWidth > el.w && currentFontSize > minSingleLineSize) {
                 currentFontSize--;
                 div.style.fontSize = currentFontSize + 'px';
+            }
+            
+            // If it STILL doesn't fit on one line and multiline is enabled, wrap it and align left
+            if (div.scrollWidth > el.w && el.multiline) {
+                div.style.whiteSpace = 'pre-wrap';
+                div.style.textAlign = 'left';
+                div.style.justifyContent = 'flex-start'; // Align to left side
+                
+                // Now it's wrapped, check if it's too tall. If so, shrink further.
+                while (el.h && div.scrollHeight > el.h && currentFontSize > 6) {
+                    currentFontSize--;
+                    div.style.fontSize = currentFontSize + 'px';
+                }
             }
         });
     }, 10);
