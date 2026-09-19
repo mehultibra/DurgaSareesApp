@@ -5923,7 +5923,7 @@ function confirmPrint() {
         });
 
         setTimeout(function () {
-            html2canvas(tpl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(function (canvas) {
+            html2canvas(tpl, { scale: 1, useCORS: true, backgroundColor: '#ffffff' }).then(function (canvas) {
                 // Restore the preview styling
                 tpl.style.border = origBorder;
                 tpl.style.boxShadow = origBoxShadow;

@@ -677,7 +677,11 @@
 
       <div style="display:flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; background: #fff; padding: 10px; border-radius: 6px;">
           <div style="font-weight:bold;">Copies:</div>
-          <input type="number" id="printQtyInput" value="1" min="1" max="100" style="width: 60px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; text-align: center; font-weight: bold;">
+          <div style="display:flex; align-items:center; gap: 5px;">
+              <button onclick="var el=document.getElementById('printQtyInput'); el.value = Math.max(1, parseInt(el.value || 1)-1);" style="padding:8px 15px; background:#eee; border:1px solid #ccc; border-radius:4px; font-weight:bold; font-size:16px;">-</button>
+              <input type="number" id="printQtyInput" value="1" min="1" max="100" style="width: 60px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; text-align: center; font-weight: bold;">
+              <button onclick="var el=document.getElementById('printQtyInput'); el.value = Math.min(100, parseInt(el.value || 1)+1);" style="padding:8px 15px; background:#eee; border:1px solid #ccc; border-radius:4px; font-weight:bold; font-size:16px;">+</button>
+          </div>
       </div>
       
       <div style="display:flex; width: 100%; gap: 10px; margin-top: 15px;">
