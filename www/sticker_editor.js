@@ -86,6 +86,11 @@ function buildCurrentStickerLayout() {
         ...format,
         elements: JSON.parse(JSON.stringify(layout.elements))
     };
+    
+    const formatLbl = document.getElementById('editorFormatLabel');
+    if (formatLbl) {
+        formatLbl.innerText = "(Format: " + layout.formatId + ")";
+    }
 }
 
 function populateTemplateDropdown() {
@@ -108,15 +113,15 @@ window.changeStickerTemplate = function(name) {
         window.currentTemplateName = name;
         buildCurrentStickerLayout();
         
+        const formatLbl = document.getElementById('editorFormatLabel');
+        if (formatLbl) {
+            const layout = window.stickerLayoutsMap[name];
+            formatLbl.innerText = layout ? "(Format: " + layout.formatId + ")" : "";
+        }
+
         // If in Print Modal, also restore preferred printer and update preview canvas
         const pm = document.getElementById('printPreviewModal');
         if (pm && pm.style.display !== 'none') {
-            const formatLbl = document.getElementById('printPreviewFormatLabel');
-            if (formatLbl) {
-                const layout = window.stickerLayoutsMap[name];
-                formatLbl.innerText = layout ? layout.formatId : "";
-            }
-            
             renderStickerTemplate('stickerTemplate', false);
             
             if (typeof updateStickerCanvasScale === 'function') {

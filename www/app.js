@@ -5734,12 +5734,6 @@ function previewLabel(type) {
                 sel.appendChild(opt);
             });
             sel.style.display = Object.keys(window.stickerLayoutsMap).length > 1 ? 'block' : 'none';
-            
-            var formatLbl = document.getElementById('printPreviewFormatLabel');
-            if (formatLbl) {
-                var initialLayout = window.stickerLayoutsMap[window.currentTemplateName];
-                formatLbl.innerText = initialLayout ? initialLayout.formatId : "";
-            }
         }
 
         if (typeof renderStickerTemplate === 'function') {
@@ -5865,6 +5859,14 @@ function updateLiveLabel() {
     });
 }
 
+window.changePrintQty = function(delta) {
+    var el = document.getElementById('printQtyInput');
+    if (el) {
+        var v = parseInt(el.value || 1) + delta;
+        el.value = Math.max(1, Math.min(100, v));
+    }
+}
+
 function confirmPrint() {
     var PRINTER_IP = document.getElementById('printerIpInput').value.trim();
     if (!PRINTER_IP) { alert("Please enter a Printer IP!"); return; }
@@ -5915,11 +5917,15 @@ function confirmPrint() {
         // ── STICKER: render the live contenteditable template ─────────────
         var tpl = document.getElementById('stickerTemplate');
 
-        // Temporarily hide the dashed preview border and focus indicators
+        // Temporarily hide the dashed preview border, focus indicators, and transform scaling
         var origBorder = tpl.style.border;
         var origBoxShadow = tpl.style.boxShadow;
+        var origTransform = tpl.style.transform;
+        
         tpl.style.border = 'none';
         tpl.style.boxShadow = 'none';
+        tpl.style.transform = 'none';
+        
         // Also hide any active focus underlines on contenteditable fields
         ['stkProduct', 'stkPrice', 'stkDesign', 'stkFabric', 'stkCut'].forEach(function (id) {
             var el = document.getElementById(id);
@@ -5931,11 +5937,13 @@ function confirmPrint() {
                 // Restore the preview styling
                 tpl.style.border = origBorder;
                 tpl.style.boxShadow = origBoxShadow;
+                tpl.style.transform = origTransform;
                 window.currentPrintCanvas = canvas;
                 doSendCanvas(canvas);
             }).catch(function (err) {
                 tpl.style.border = origBorder;
                 tpl.style.boxShadow = origBoxShadow;
+                tpl.style.transform = origTransform;
                 btn.innerText = "Render Error";
                 btn.disabled = false;
                 alert("Could not render sticker: " + err.message);
