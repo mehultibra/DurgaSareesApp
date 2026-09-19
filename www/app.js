@@ -6067,6 +6067,11 @@ function generateTSPL(canvas, type, qty) {
             // RGB to Grayscale
             var gray = (r * 0.299 + g * 0.587 + b * 0.114);
             var isBlack = gray < 128; // Simple threshold
+            
+            // Fix inverted color specifically for sticker printers
+            if (type === 'sticker') {
+                isBlack = !isBlack;
+            }
 
             if (isBlack) {
                 var byteIndex = (y * widthBytes) + Math.floor(x / 8);
@@ -6081,11 +6086,24 @@ function generateTSPL(canvas, type, qty) {
     if (type === 'barcode') {
         headerStr += "SIZE 72 mm, 48 mm\n";
         headerStr += "GAP 3 mm, 0 mm\n";
+    } else if (type === 'sticker') {
+        // Sticker dynamic size from window.stickerLayout (converted to mm)
+        var stkW = window.stickerLayout ? Math.round(window.stickerLayout.width / 8) : 55;
+        var stkH = window.stickerLayout ? Math.round(window.stickerLayout.height / 8) : 25;
+        var stkGap = window.stickerLayout ? (window.stickerLayout.gap_mm || 0) : 3;
+        headerStr += "SIZE " + stkW + " mm, " + stkH + " mm\n";
+        headerStr += "GAP " + stkGap + " mm, 0 mm\n";
     } else {
         headerStr += "SIZE 78 mm, 57 mm\n";
         headerStr += "GAP 0 mm, 0 mm\n"; // Continuous tearable
     }
-    headerStr += "DIRECTION 0\n";
+    
+    if (type === 'sticker') {
+        headerStr += "DIRECTION 1\n"; // 180 degree rotate for stickers
+    } else {
+        headerStr += "DIRECTION 0\n";
+    }
+    
     headerStr += "CLS\n";
 
     // BITMAP X,Y,width_bytes,height,mode,bitmap_data
