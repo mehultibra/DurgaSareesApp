@@ -256,14 +256,16 @@ function renderStickerTemplate(containerId, isEditor = false) {
             div.style.textDecoration = el.textDecoration || 'none';
             div.style.color = '#000';
             
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.justifyContent = 'center';
+            div.style.textAlign = 'center';
+            if (el.w) div.style.width = el.w + 'px';
+            if (el.h) div.style.height = el.h + 'px';
+            div.style.overflow = 'hidden';
+            
             if (el.multiline) {
                 div.style.whiteSpace = 'pre-wrap';
-                div.style.textAlign = 'center';
-                div.style.display = 'flex';
-                div.style.alignItems = 'center';
-                div.style.justifyContent = 'center';
-                if (el.w) div.style.width = el.w + 'px';
-                if (el.h) div.style.height = el.h + 'px';
             } else {
                 div.style.whiteSpace = 'nowrap';
             }
@@ -372,42 +374,53 @@ function renderStickerTemplate(containerId, isEditor = false) {
         window.stickerLayout.elements.forEach(el => {
             if (el.type !== 'text' || !el.w) return;
             
-            const div = document.getElementById((isEditor ? 'editor_' : 'print_') + el.id);
-            if (!div || div.style.display === 'none') return;
+            const divEdit = document.getElementById('editor_' + el.id);
+            if (divEdit && divEdit.style.display !== 'none') autoFitTextElement(divEdit, el);
             
-            // Constrain text to bounding box to prevent overlapping
-            div.style.width = el.w + 'px';
-            if (el.h) div.style.height = el.h + 'px';
-            div.style.overflow = 'hidden';
-            
-            // Smart Auto Shrink & Alignment
-            let currentFontSize = el.fontSize || 14;
-            div.style.fontSize = currentFontSize + 'px';
-            div.style.whiteSpace = 'nowrap'; // force single line initially
-            div.style.textAlign = 'center';
-            div.style.justifyContent = 'center';
-            
-            // Try to shrink it to fit on one line (stop at size 9 if multiline, otherwise go down to 6)
-            let minSingleLineSize = el.multiline ? 9 : 6;
-            while (div.scrollWidth > el.w && currentFontSize > minSingleLineSize) {
-                currentFontSize--;
-                div.style.fontSize = currentFontSize + 'px';
-            }
-            
-            // If it STILL doesn't fit on one line and multiline is enabled, wrap it and align left
-            if (div.scrollWidth > el.w && el.multiline) {
-                div.style.whiteSpace = 'pre-wrap';
-                div.style.textAlign = 'left';
-                div.style.justifyContent = 'flex-start'; // Align to left side
+            const divPrint = document.getElementById('print_' + el.id);
+            if (divPrint && divPrint.style.display !== 'none') {
+                autoFitTextElement(divPrint, el);
                 
-                // Now it's wrapped, check if it's too tall. If so, shrink further.
-                while (el.h && div.scrollHeight > el.h && currentFontSize > 6) {
-                    currentFontSize--;
-                    div.style.fontSize = currentFontSize + 'px';
-                }
+                // Bind live auto-shrink for live editing in print preview!
+                divPrint.addEventListener('input', () => {
+                    autoFitTextElement(divPrint, el);
+                });
             }
         });
     }, 10);
+}
+
+function autoFitTextElement(div, el) {
+    if (!div || !el.w) return;
+    
+    // Constrain text to bounding box to prevent overlapping
+    div.style.width = el.w + 'px';
+    if (el.h) div.style.height = el.h + 'px';
+    div.style.overflow = 'hidden';
+    
+    // Reset to default
+    let currentFontSize = el.fontSize || 14;
+    div.style.fontSize = currentFontSize + 'px';
+    div.style.whiteSpace = 'nowrap';
+    div.style.textAlign = 'center';
+    div.style.justifyContent = 'center';
+    
+    let minSingleLineSize = el.multiline ? 9 : 6;
+    while (div.scrollWidth > el.w && currentFontSize > minSingleLineSize) {
+        currentFontSize--;
+        div.style.fontSize = currentFontSize + 'px';
+    }
+    
+    if (div.scrollWidth > el.w && el.multiline) {
+        div.style.whiteSpace = 'pre-wrap';
+        div.style.textAlign = 'left';
+        div.style.justifyContent = 'flex-start';
+        
+        while (el.h && div.scrollHeight > el.h && currentFontSize > 6) {
+            currentFontSize--;
+            div.style.fontSize = currentFontSize + 'px';
+        }
+    }
 }
 
 function startDrag(e, id) {
