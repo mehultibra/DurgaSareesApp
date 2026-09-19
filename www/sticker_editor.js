@@ -16,7 +16,8 @@ let selectedElementId = null;
 let isDragging = false;
 let isResizing = false;
 let startX, startY, initialElemX, initialElemY, initialElemW, initialElemH;
-window.stickerLayoutsMap = { "Default": window.stickerLayout };
+window.stickerFormatsMap = { "55x25mm": { width: 440, height: 220, gap_mm: 3 } };
+window.stickerLayoutsMap = { "Default": { formatId: "55x25mm", elements: window.stickerLayout.elements } };
 window.currentTemplateName = "Default";
 window.defaultTemplateName = "Default";
 
@@ -26,19 +27,65 @@ async function loadStickerLayout() {
         const doc = await firebase.firestore().collection('Settings').doc('StickerTemplate').get();
         if (doc.exists) {
             const data = doc.data();
-            if (data.layouts) {
+            
+            if (data.formats && data.layouts) {
+                window.stickerFormatsMap = data.formats;
                 window.stickerLayoutsMap = data.layouts;
                 window.defaultTemplateName = data.defaultLayoutName || Object.keys(data.layouts)[0];
-                window.currentTemplateName = window.defaultTemplateName;
-                window.stickerLayout = JSON.parse(JSON.stringify(window.stickerLayoutsMap[window.currentTemplateName]));
+            } else if (data.layouts) {
+                // Legacy Schema Migration
+                let newFormats = {};
+                let newLayouts = {};
+                for (let k in data.layouts) {
+                    let old = data.layouts[k];
+                    let w_mm = Math.round((old.width || 440) / 8);
+                    let h_mm = Math.round((old.height || 220) / 8);
+                    let fmtName = w_mm + "x" + h_mm + "mm";
+                    
+                    if (!newFormats[fmtName]) {
+                        newFormats[fmtName] = {
+                            width: old.width || 440, height: old.height || 220, gap_mm: old.gap_mm || 0,
+                            marginTop: old.marginTop || 0, marginRight: old.marginRight || 0,
+                            marginBottom: old.marginBottom || 0, marginLeft: old.marginLeft || 0
+                        };
+                    }
+                    newLayouts[k] = { formatId: fmtName, elements: old.elements || [] };
+                }
+                window.stickerFormatsMap = newFormats;
+                window.stickerLayoutsMap = newLayouts;
+                window.defaultTemplateName = data.defaultLayoutName || Object.keys(newLayouts)[0];
+                saveStickerLayout(true); // Auto-save migrated schema
             } else if (data.layout) {
-                window.stickerLayout = data.layout;
-                window.stickerLayoutsMap = { "Default": data.layout };
-                window.currentTemplateName = "Default";
+                // Ultra legacy migration
+                let old = data.layout;
+                let fmtName = Math.round((old.width || 440)/8) + "x" + Math.round((old.height || 220)/8) + "mm";
+                window.stickerFormatsMap = { [fmtName]: { width: old.width||440, height: old.height||220, gap_mm: old.gap_mm||0 } };
+                window.stickerLayoutsMap = { "Default": { formatId: fmtName, elements: old.elements || [] } };
+                window.defaultTemplateName = "Default";
+                saveStickerLayout(true);
             }
+            
+            window.currentTemplateName = window.defaultTemplateName;
+            buildCurrentStickerLayout();
             populateTemplateDropdown();
+        } else {
+            buildCurrentStickerLayout();
         }
     } catch(e) { console.error("Failed to load sticker layout", e); }
+}
+
+function buildCurrentStickerLayout() {
+    if (!window.stickerLayoutsMap || !window.stickerFormatsMap) return;
+    const layout = window.stickerLayoutsMap[window.currentTemplateName];
+    if (!layout) return;
+    const format = window.stickerFormatsMap[layout.formatId];
+    if (!format) return;
+    
+    // Combine them into a single window.stickerLayout object so the rest of the app doesn't break
+    window.stickerLayout = {
+        ...format,
+        elements: JSON.parse(JSON.stringify(layout.elements))
+    };
 }
 
 function populateTemplateDropdown() {
@@ -59,11 +106,17 @@ function populateTemplateDropdown() {
 window.changeStickerTemplate = function(name) {
     if (window.stickerLayoutsMap && window.stickerLayoutsMap[name]) {
         window.currentTemplateName = name;
-        window.stickerLayout = JSON.parse(JSON.stringify(window.stickerLayoutsMap[name]));
+        buildCurrentStickerLayout();
         
         // If in Print Modal, also restore preferred printer and update preview canvas
         const pm = document.getElementById('printPreviewModal');
         if (pm && pm.style.display !== 'none') {
+            const formatLbl = document.getElementById('printPreviewFormatLabel');
+            if (formatLbl) {
+                const layout = window.stickerLayoutsMap[name];
+                formatLbl.innerText = layout ? layout.formatId : "";
+            }
+            
             renderStickerTemplate('stickerTemplate', false);
             
             if (typeof updateStickerCanvasScale === 'function') {
@@ -468,6 +521,7 @@ window.addEventListener('resize', () => {
 });
 
 function updateStickerCanvasSize() {
+    // Only used to update the shared stickerLayout preview bounds before saving
     window.stickerLayout.width = Math.round((parseFloat(document.getElementById('seCanvasW_mm').value) || 55) * 8);
     window.stickerLayout.height = Math.round((parseFloat(document.getElementById('seCanvasH_mm').value) || 27.5) * 8);
     
@@ -497,11 +551,16 @@ function addNewStickerFormat() {
 function editStickerFormatSetup() {
     if (!window.stickerLayout || !window.currentTemplateName) return;
     window.isEditingStickerSetup = true;
-    window.oldFormatName = window.currentTemplateName;
-    document.getElementById('fmtModalTitle').innerText = "Edit Format Setup";
-    document.getElementById('fmtModalBtn').innerText = "Update Format";
+    const curLayout = window.stickerLayoutsMap[window.currentTemplateName];
+    if (!curLayout) return;
+    window.oldFormatName = curLayout.formatId; // Format Name
     
-    document.getElementById('newFmtName').value = window.currentTemplateName;
+    document.getElementById('fmtModalTitle').innerText = "Edit Format Size";
+    document.getElementById('fmtModalBtn').innerText = "Update Format Size";
+    
+    document.getElementById('newFmtName').value = window.oldFormatName;
+    document.getElementById('newFmtName').readOnly = true; // Don't let them rename the format to avoid breaking other layouts
+    
     document.getElementById('newFmtW').value = Math.round((window.stickerLayout.width || 440) / 8);
     document.getElementById('newFmtH').value = Math.round((window.stickerLayout.height || 220) / 8);
     document.getElementById('newFmtGap').value = window.stickerLayout.gap_mm || 0;
@@ -519,7 +578,7 @@ function deleteStickerFormat() {
         alert("Cannot delete the only layout.");
         return;
     }
-    if (confirm("Delete format '" + window.currentTemplateName + "'?")) {
+    if (confirm("Delete layout '" + window.currentTemplateName + "'?")) {
         delete window.stickerLayoutsMap[window.currentTemplateName];
         const nextKey = Object.keys(window.stickerLayoutsMap)[0];
         changeStickerTemplate(nextKey);
@@ -532,22 +591,6 @@ function closeNewStickerFormatModal() {
 }
 
 function saveNewStickerFormat() {
-    const name = document.getElementById('newFmtName').value.trim();
-    if (!name) {
-        alert("Please enter a format name!");
-        return;
-    }
-    
-    if (!window.isEditingStickerSetup && window.stickerLayoutsMap && window.stickerLayoutsMap[name]) {
-        alert("Format already exists! Choose a different name.");
-        return;
-    }
-    
-    if (window.isEditingStickerSetup && name !== window.oldFormatName && window.stickerLayoutsMap && window.stickerLayoutsMap[name]) {
-        alert("Format name already exists!");
-        return;
-    }
-    
     const w = parseFloat(document.getElementById('newFmtW').value) || 50;
     const h = parseFloat(document.getElementById('newFmtH').value) || 25;
     const gap = parseFloat(document.getElementById('newFmtGap').value) || 3;
@@ -556,26 +599,44 @@ function saveNewStickerFormat() {
     const mb = parseFloat(document.getElementById('newFmtMB').value) || 0;
     const ml = parseFloat(document.getElementById('newFmtML').value) || 0;
 
-    const newLayout = JSON.parse(JSON.stringify(window.stickerLayout || { elements: [] }));
-    newLayout.width = Math.round(w * 8);
-    newLayout.height = Math.round(h * 8);
-    newLayout.gap_mm = gap;
-    newLayout.marginTop = Math.round(mt * 8);
-    newLayout.marginRight = Math.round(mr * 8);
-    newLayout.marginBottom = Math.round(mb * 8);
-    newLayout.marginLeft = Math.round(ml * 8);
+    let formatName = w + "x" + h + "mm";
+    if (document.getElementById('newFmtName').value.trim() && !window.isEditingStickerSetup) {
+        formatName = document.getElementById('newFmtName').value.trim();
+    } else if (window.isEditingStickerSetup) {
+        formatName = window.oldFormatName;
+    }
 
-    if (!window.stickerLayoutsMap) window.stickerLayoutsMap = {};
-    
-    if (window.isEditingStickerSetup && name !== window.oldFormatName) {
-        delete window.stickerLayoutsMap[window.oldFormatName];
+    if (!window.isEditingStickerSetup && window.stickerFormatsMap && window.stickerFormatsMap[formatName]) {
+        alert("A format with this size/name already exists!");
+        return;
+    }
+
+    const fmt = {
+        width: Math.round(w * 8), height: Math.round(h * 8), gap_mm: gap,
+        marginTop: Math.round(mt * 8), marginRight: Math.round(mr * 8),
+        marginBottom: Math.round(mb * 8), marginLeft: Math.round(ml * 8)
+    };
+
+    if (!window.stickerFormatsMap) window.stickerFormatsMap = {};
+    window.stickerFormatsMap[formatName] = fmt;
+
+    if (!window.isEditingStickerSetup) {
+        // Create a new blank layout for this new format
+        const newLayoutName = formatName + " Layout";
+        if (!window.stickerLayoutsMap) window.stickerLayoutsMap = {};
+        window.stickerLayoutsMap[newLayoutName] = {
+            formatId: formatName,
+            elements: JSON.parse(JSON.stringify(window.stickerLayout.elements || []))
+        };
+        closeNewStickerFormatModal();
+        changeStickerTemplate(newLayoutName);
+    } else {
+        // Just updated the existing format, rebuild layout to reflect new sizes
+        closeNewStickerFormatModal();
+        buildCurrentStickerLayout();
+        renderStickerTemplate('stickerEditorCanvas', true);
     }
     
-    window.stickerLayoutsMap[name] = newLayout;
-    
-    closeNewStickerFormatModal();
-    changeStickerTemplate(name);
-    // Auto-save the new layout to Firebase immediately
     saveStickerLayout(true); 
 }
 
@@ -723,13 +784,19 @@ function updatePropertiesPanel() {
     panel.appendChild(wrapper);
 }
 
-async function saveStickerLayout() {
+async function saveStickerLayout(skipAlert = false) {
     try {
         const nameInput = document.getElementById('seTemplateName');
         const defInput = document.getElementById('seTemplateDefault');
-        let tplName = (nameInput && nameInput.value.trim() !== '') ? nameInput.value.trim() : "Default";
+        let tplName = (nameInput && nameInput.value.trim() !== '') ? nameInput.value.trim() : window.currentTemplateName;
         
-        window.stickerLayoutsMap[tplName] = JSON.parse(JSON.stringify(window.stickerLayout));
+        const oldFormatId = window.stickerLayoutsMap[window.currentTemplateName]?.formatId || Object.keys(window.stickerFormatsMap)[0];
+        
+        window.stickerLayoutsMap[tplName] = {
+            formatId: oldFormatId,
+            elements: JSON.parse(JSON.stringify(window.stickerLayout.elements || []))
+        };
+        
         window.currentTemplateName = tplName;
         
         if (defInput && defInput.checked) {
@@ -739,15 +806,16 @@ async function saveStickerLayout() {
         }
 
         await firebase.firestore().collection('Settings').doc('StickerTemplate').set({
+            formats: window.stickerFormatsMap,
             layouts: window.stickerLayoutsMap,
             defaultLayoutName: window.defaultTemplateName
         }, { merge: true });
         
+        if (!skipAlert) alert("Layout Saved successfully!");
         populateTemplateDropdown();
-        alert("Sticker Layout '" + tplName + "' saved successfully!");
     } catch(e) {
-        console.error("FULL ERROR OBJECT:", e);
-        alert("Error saving: " + e.message + " | Code: " + e.code);
+        console.error("Failed to save layout", e);
+        if (!skipAlert) alert("Error saving layout!");
     }
 }
 

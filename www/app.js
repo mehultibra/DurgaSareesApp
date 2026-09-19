@@ -5727,8 +5727,6 @@ function previewLabel(type) {
             sel.innerHTML = '';
             Object.keys(window.stickerLayoutsMap).forEach(k => {
                 var layout = window.stickerLayoutsMap[k];
-                var w_mm = Math.round((layout.width || 440) / 8);
-                var h_mm = Math.round((layout.height || 220) / 8);
                 var opt = document.createElement('option');
                 opt.value = k;
                 opt.innerText = k;
@@ -5736,6 +5734,12 @@ function previewLabel(type) {
                 sel.appendChild(opt);
             });
             sel.style.display = Object.keys(window.stickerLayoutsMap).length > 1 ? 'block' : 'none';
+            
+            var formatLbl = document.getElementById('printPreviewFormatLabel');
+            if (formatLbl) {
+                var initialLayout = window.stickerLayoutsMap[window.currentTemplateName];
+                formatLbl.innerText = initialLayout ? initialLayout.formatId : "";
+            }
         }
 
         if (typeof renderStickerTemplate === 'function') {
