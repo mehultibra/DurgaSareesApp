@@ -404,113 +404,135 @@ function autoFitTextElement(div, el) {
     // Compute effective width - required for the algorithm to work
     const effectiveW = el.w || Math.max(50, (window.stickerLayout?.width || 440) - el.x - 5);
     const effectiveH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
-    // Work with a normalized el object that always has w and h
-    el = Object.assign({}, el, { w: effectiveW, h: effectiveH });
+    const targetW = effectiveW;
+    const targetH = effectiveH;
     
-    // Store original text state
+    // Get font properties from div
+    const computedStyle = window.getComputedStyle(div);
+    const fontFamily = computedStyle.fontFamily || 'Arial, sans-serif';
+    const fontWeight = el.fontWeight || computedStyle.fontWeight || 'normal';
+    const fontStyle = el.fontStyle || computedStyle.fontStyle || 'normal';
+    const text = div.innerText || div.textContent || '';
+    
+    if (!text.trim()) return; // Nothing to fit
+    
     let currentFontSize = parseInt(el.fontSize, 10) || 14;
-    let minSingleLineSize = 6; 
-    let targetH = el.h || 24; // If legacy element has no height, assume 24px bounding box to prevent overlapping!
+    const minFontSize = 6;
     
-    // Reset any previous transform or shifted bounds
-    div.style.transform = 'none';
-    div.style.left = el.x + 'px';
-    div.style.top = el.y + 'px';
-    
-    // 1. Measure raw horizontal width using max-content
-    div.style.display = 'block';
-    div.style.width = 'max-content';
-    div.style.height = 'auto';
-    div.style.whiteSpace = 'nowrap';
-    div.style.overflow = 'visible';
-    div.style.fontSize = currentFontSize + 'px';
-    
-    // If it's hidden (e.g. modal is closed), we can't measure it! Wait and retry.
-    if (div.offsetWidth === 0) {
-        setTimeout(() => autoFitTextElement(div, el), 50);
-        return;
+    // ── STEP 1: Create an OFF-SCREEN scratch div for reliable measurement ──
+    // Using body-level div avoids ALL parent overflow:hidden / max-content issues!
+    let scratch = document.getElementById('_autofit_scratch');
+    if (!scratch) {
+        scratch = document.createElement('div');
+        scratch.id = '_autofit_scratch';
+        scratch.style.position = 'fixed';
+        scratch.style.visibility = 'hidden';
+        scratch.style.pointerEvents = 'none';
+        scratch.style.zIndex = '-9999';
+        scratch.style.top = '-9999px';
+        scratch.style.left = '-9999px';
+        document.body.appendChild(scratch);
     }
+    scratch.style.whiteSpace = 'nowrap';
+    scratch.style.padding = '0';
+    scratch.style.margin = '0';
+    scratch.style.border = 'none';
+    scratch.style.lineHeight = '1.2';
+    scratch.style.fontStyle = fontStyle;
+    scratch.style.fontWeight = fontWeight;
+    scratch.style.fontFamily = fontFamily;
+    scratch.innerText = text;
     
-    // Shrink horizontally until the text naturally fits inside el.w (or hits browser limits)
-    let lastWidth = div.offsetWidth;
-    while (div.offsetWidth > el.w && currentFontSize > minSingleLineSize) {
+    // ── STEP 2: Binary search for best single-line font size ──
+    scratch.style.whiteSpace = 'nowrap';
+    scratch.style.width = 'auto';
+    scratch.style.fontSize = currentFontSize + 'px';
+    
+    // Shrink font until text fits in targetW (single line)
+    while (scratch.offsetWidth > targetW && currentFontSize > minFontSize) {
         currentFontSize--;
-        div.style.fontSize = currentFontSize + 'px';
-        if (div.offsetWidth === lastWidth) break; // Chrome/Android minimum font size limit hit!
-        lastWidth = div.offsetWidth;
+        scratch.style.fontSize = currentFontSize + 'px';
     }
     
+    let singleLineFits = scratch.offsetWidth <= targetW;
+    let finalFontSize = currentFontSize;
     let isWrapped = false;
-    let rawWidth = div.offsetWidth;
     
-    // 2. See if we need to wrap
-    if (rawWidth > el.w && el.multiline) {
+    // ── STEP 3: If still too wide but multiline is allowed, try wrapping ──
+    if (!singleLineFits && el.multiline) {
+        // Reset to original and try wrapping
+        finalFontSize = parseInt(el.fontSize, 10) || 14;
+        scratch.style.fontSize = finalFontSize + 'px';
+        scratch.style.whiteSpace = 'pre-wrap';
+        scratch.style.width = targetW + 'px';
         isWrapped = true;
-        div.style.whiteSpace = 'pre-wrap';
-        div.style.width = el.w + 'px'; // force wrap within boundary!
-        rawWidth = div.offsetWidth; // re-measure wrapped width (should be ~el.w)
+        
+        // Shrink until wrapped text height fits in targetH
+        while (scratch.offsetHeight > targetH && finalFontSize > minFontSize) {
+            finalFontSize--;
+            scratch.style.fontSize = finalFontSize + 'px';
+        }
     }
     
-    // 3. Measure raw vertical height
-    div.style.height = 'max-content';
-    let lastHeight = div.offsetHeight;
-    
-    // Shrink vertically if the text is taller than the bounding box
-    while (div.offsetHeight > targetH && currentFontSize > minSingleLineSize) {
-        currentFontSize--;
-        div.style.fontSize = currentFontSize + 'px';
-        if (div.offsetHeight === lastHeight) break; // Chrome minimum font size limit hit!
-        lastHeight = div.offsetHeight;
+    // ── STEP 4: Measure final dimensions ──
+    scratch.style.fontSize = finalFontSize + 'px';
+    if (isWrapped) {
+        scratch.style.whiteSpace = 'pre-wrap';
+        scratch.style.width = targetW + 'px';
+    } else {
+        scratch.style.whiteSpace = 'nowrap';
+        scratch.style.width = 'auto';
     }
+    const rawW = scratch.offsetWidth;
+    const rawH = scratch.offsetHeight;
     
-    let rawHeight = div.offsetHeight;
+    // ── STEP 5: Compute scale fallback if browser font clamping stopped us ──
+    let scaleX = rawW > targetW ? targetW / rawW : 1;
+    let scaleY = rawH > targetH ? targetH / rawH : 1;
+    const finalScale = Math.min(scaleX, scaleY);
     
-    // 4. Transform Scale Fallback! 
-    // If it STILL overflows (because of browser font limits or long words), aggressively scale it!
-    let scaleX = 1;
-    let scaleY = 1;
-    
-    if (rawWidth > el.w) scaleX = el.w / rawWidth;
-    if (rawHeight > targetH) scaleY = targetH / rawHeight;
-    
-    let finalScale = Math.min(scaleX, scaleY);
+    // ── STEP 6: Apply to the REAL div ──
+    div.style.transform = 'none';
+    div.style.fontSize = finalFontSize + 'px';
+    div.style.position = 'absolute';
+    div.style.overflow = 'visible';
+    div.style.lineHeight = '1.2';
     
     if (finalScale < 1) {
+        // Scale down to fit
+        div.style.whiteSpace = isWrapped ? 'pre-wrap' : 'nowrap';
+        div.style.width = (isWrapped ? targetW : rawW) + 'px';
+        div.style.height = rawH + 'px';
         div.style.transform = `scale(${finalScale})`;
-        
-        if (isWrapped) {
-            div.style.transformOrigin = 'left center';
-            div.style.left = el.x + 'px';
-            div.style.top = (el.y + (targetH - rawHeight) / 2) + 'px';
-        } else {
-            div.style.transformOrigin = 'center center';
-            div.style.left = (el.x + (el.w - rawWidth) / 2) + 'px';
-            div.style.top = (el.y + (targetH - rawHeight) / 2) + 'px';
+        div.style.transformOrigin = isWrapped ? 'top left' : 'top center';
+        // Center vertically within the target box
+        const scaledH = rawH * finalScale;
+        div.style.left = el.x + 'px';
+        div.style.top = (el.y + (targetH - scaledH) / 2) + 'px';
+        if (!isWrapped) {
+            const scaledW = rawW * finalScale;
+            div.style.left = (el.x + (targetW - scaledW) / 2) + 'px';
         }
     } else {
-        // If no scale, restore standard box size to enable normal flex centering
-        div.style.width = el.w + 'px';
+        // No scale needed — center the text inside the box
+        div.style.width = targetW + 'px';
         div.style.height = targetH + 'px';
         div.style.left = el.x + 'px';
         div.style.top = el.y + 'px';
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.justifyContent = isWrapped ? 'flex-start' : 'center';
+        div.style.textAlign = isWrapped ? 'left' : 'center';
+        div.style.whiteSpace = isWrapped ? 'pre-wrap' : 'nowrap';
+        return; // Return early — display flex handles centering already
     }
     
-    // 5. Restore proper alignment formatting
-    div.style.display = 'flex';
-    div.style.alignItems = 'center';
-    div.style.overflow = 'visible'; // Never clip, because we mathematically guaranteed it fits via scale!
-    
-    if (isWrapped) {
-        div.style.whiteSpace = 'pre-wrap';
-        div.style.textAlign = 'left';
-        div.style.justifyContent = 'flex-start';
-        if (finalScale < 1) div.style.transformOrigin = 'left center';
-    } else {
-        div.style.whiteSpace = 'nowrap';
-        div.style.textAlign = 'center';
-        div.style.justifyContent = 'center';
-    }
+    // For scaled divs, use block display
+    div.style.display = 'block';
+    div.style.textAlign = isWrapped ? 'left' : 'center';
 }
+    
+
 
 function startDrag(e, id) {
     selectedElementId = id;
