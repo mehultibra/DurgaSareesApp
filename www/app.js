@@ -1547,6 +1547,13 @@ function renderProductGrid(products) {
         // --- ADMIN & INVENTORY: OUT OF STOCK TO BOTTOM ---
         if (a.totalStock === 0 && b.totalStock > 0) return 1;
         if (b.totalStock === 0 && a.totalStock > 0) return -1;
+        
+        // --- NO DESIGNS (NO IMAGES OR ONLY COVER) TO BOTTOM (Before Out of Stock) ---
+        var aHasDesigns = a.stock && Object.keys(a.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0;
+        var bHasDesigns = b.stock && Object.keys(b.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0;
+        
+        if (!aHasDesigns && bHasDesigns) return 1;
+        if (aHasDesigns && !bHasDesigns) return -1;
 
         // --- BROKEN IMAGES: JUST ABOVE OUT OF STOCK ---
         window.brokenImagesMap = window.brokenImagesMap || {};
