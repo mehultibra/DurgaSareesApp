@@ -371,27 +371,41 @@ function renderStickerTemplate(containerId, isEditor = false) {
 
     // Auto Shrink-to-Fit (must run after appending to DOM for layout calculation)
     setTimeout(() => {
+        const containerW = window.stickerLayout.width || 440;
+        const containerH = window.stickerLayout.height || 220;
+        
         window.stickerLayout.elements.forEach(el => {
-            if (el.type !== 'text' || !el.w) return;
+            if (el.type !== 'text') return;
+            
+            // Compute effective width: use stored el.w, or derive from sticker canvas right edge.
+            // This ensures even old elements with no explicit width get shrink-to-fit!
+            const effectiveW = el.w || Math.max(50, containerW - el.x - 5);
+            const effectiveH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
+            const elWithBounds = Object.assign({}, el, { w: effectiveW, h: effectiveH });
             
             const divEdit = document.getElementById('editor_' + el.id);
-            if (divEdit && divEdit.style.display !== 'none') autoFitTextElement(divEdit, el);
+            if (divEdit && divEdit.style.display !== 'none') autoFitTextElement(divEdit, elWithBounds);
             
             const divPrint = document.getElementById('print_' + el.id);
             if (divPrint && divPrint.style.display !== 'none') {
-                autoFitTextElement(divPrint, el);
+                autoFitTextElement(divPrint, elWithBounds);
                 
                 // Bind live auto-shrink for live editing in print preview!
-                divPrint.addEventListener('input', () => {
-                    autoFitTextElement(divPrint, el);
-                });
+                divPrint.removeEventListener('input', divPrint._fitHandler);
+                divPrint._fitHandler = () => autoFitTextElement(divPrint, elWithBounds);
+                divPrint.addEventListener('input', divPrint._fitHandler);
             }
         });
-    }, 10);
+    }, 50);
 }
 
 function autoFitTextElement(div, el) {
-    if (!div || !el.w) return;
+    if (!div) return;
+    // Compute effective width - required for the algorithm to work
+    const effectiveW = el.w || Math.max(50, (window.stickerLayout?.width || 440) - el.x - 5);
+    const effectiveH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
+    // Work with a normalized el object that always has w and h
+    el = Object.assign({}, el, { w: effectiveW, h: effectiveH });
     
     // Store original text state
     let currentFontSize = parseInt(el.fontSize, 10) || 14;
