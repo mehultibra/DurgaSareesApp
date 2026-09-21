@@ -393,54 +393,55 @@ function renderStickerTemplate(containerId, isEditor = false) {
 function autoFitTextElement(div, el) {
     if (!div || !el.w) return;
     
+    // Constrain bounding box
     div.style.width = el.w + 'px';
     if (el.h) div.style.height = el.h + 'px';
-    div.style.overflow = 'hidden';
     
-    // Force nowrap BEFORE reading innerText so we don't capture visual wrapping!
-    div.style.whiteSpace = 'nowrap';
-    
+    // Store original text state
     let currentFontSize = el.fontSize || 14;
     let minSingleLineSize = el.multiline ? 9 : 6;
     
-    // innerText captures <br> and <div> as \n, which is what we want for explicit enters.
-    // Since we forced nowrap, it will NOT include visual CSS wrapping \n.
-    let text = (div.innerText || div.textContent || "").replace(/\n$/, "");
-    let lines = text.split('\n');
-    let hasNewlines = lines.length > 1;
-    
-    let canvas = window.textMeasureCanvas || (window.textMeasureCanvas = document.createElement("canvas"));
-    let context = canvas.getContext("2d");
-    
-    let maxLineWidth = 0;
-    while (currentFontSize > minSingleLineSize) {
-        let fontParts = [];
-        if (el.fontStyle && el.fontStyle !== 'normal') fontParts.push(el.fontStyle);
-        if (el.fontWeight && el.fontWeight !== 'normal') fontParts.push(el.fontWeight);
-        fontParts.push(currentFontSize + "px Arial");
-        context.font = fontParts.join(" ");
-                maxLineWidth = 0;
-        for (let line of lines) {
-            let w = context.measureText(line).width;
-            if (w > maxLineWidth) maxLineWidth = w;
-        }
-        if (maxLineWidth <= el.w) {
-            break;
-        }
-        currentFontSize--;
-    }
-    
+    // Temporarily force DOM into a state where scrollWidth can be accurately measured
+    div.style.display = 'block';
+    div.style.whiteSpace = 'nowrap';
+    div.style.textAlign = 'left';
+    // Remove flex properties temporarily
+    div.style.justifyContent = 'flex-start';
+    div.style.alignItems = 'flex-start';
+    div.style.overflow = 'auto';
     div.style.fontSize = currentFontSize + 'px';
     
-    if ((maxLineWidth > el.w || hasNewlines) && el.multiline) {
+    // 1. Shrink horizontally
+    while (div.scrollWidth > el.w && currentFontSize > minSingleLineSize) {
+        currentFontSize--;
+        div.style.fontSize = currentFontSize + 'px';
+    }
+    
+    let isWrapped = false;
+    
+    // 2. Wrap if still too wide and multiline is allowed
+    if (div.scrollWidth > el.w && el.multiline) {
+        isWrapped = true;
+        div.style.whiteSpace = 'pre-wrap';
+    } else {
+        div.style.whiteSpace = 'nowrap'; // Prepare for vertical check
+    }
+    
+    // 3. Shrink vertically if needed (catches explicit newlines or wrapped text)
+    while (el.h && div.scrollHeight > el.h && currentFontSize > 6) {
+        currentFontSize--;
+        div.style.fontSize = currentFontSize + 'px';
+    }
+    
+    // Restore proper display properties
+    div.style.display = 'flex';
+    div.style.alignItems = 'center';
+    div.style.overflow = 'hidden'; // clip anything that still escapes
+    
+    if (isWrapped) {
         div.style.whiteSpace = 'pre-wrap';
         div.style.textAlign = 'left';
         div.style.justifyContent = 'flex-start';
-        
-        while (el.h && div.scrollHeight > el.h && currentFontSize > 6) {
-            currentFontSize--;
-            div.style.fontSize = currentFontSize + 'px';
-        }
     } else {
         div.style.whiteSpace = 'nowrap';
         div.style.textAlign = 'center';
