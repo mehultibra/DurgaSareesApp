@@ -4552,11 +4552,16 @@ function applyModalState(modal) {
     }
 
     // 2. Sync Detail Panel
+    let isActionModal = false;
+    actionModals.forEach(m => { if (m.id === modal) isActionModal = true; });
+    
     if (modal === 'detail' || modal === 'fs') {
         if (detailPanel && !detailPanel.classList.contains('open')) {
             detailPanel.classList.add('open');
         }
-    } else {
+    } else if (!isActionModal) {
+        // Only close the detail panel if we are navigating to a top-level view (home, cart, search)
+        // If we are just restoring an action modal overlay, leave the detail panel open!
         if (detailPanel && detailPanel.classList.contains('open')) {
             if (typeof closeDetail === 'function') closeDetail(true);
         }
