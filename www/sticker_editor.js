@@ -412,46 +412,51 @@ function autoFitTextElement(div, el) {
     const minFontSize = 6;
     const isMultiline = !!el.multiline;
 
-    // Phase 1: Give div a fixed size with overflow:hidden
-    // scrollWidth reports full content width when overflow is NOT visible
+    // Phase 1: Try to fit on a SINGLE line first
     div.style.position = 'absolute';
     div.style.left = el.x + 'px';
     div.style.top  = el.y + 'px';
     div.style.width = targetW + 'px';
-    div.style.height = isMultiline ? '' : targetH + 'px'; // auto height for multiline to measure scrollHeight accurately
+    div.style.height = ''; 
     div.style.overflow = 'hidden';
-    div.style.whiteSpace = isMultiline ? 'pre-wrap' : 'nowrap';
+    div.style.whiteSpace = 'nowrap'; // Force single line initially
     div.style.display = 'block';
     div.style.transform = 'none';
     div.style.fontSize = fontSize + 'px';
 
-    // Phase 2: Shrink font pixel by pixel until text fits
-    // For single line, we care about scrollWidth > targetW
-    // For multiline, we care about scrollHeight > targetH (and scrollWidth > targetW)
-    while ((div.scrollWidth > targetW || (isMultiline && div.scrollHeight > targetH)) && fontSize > minFontSize) {
+    // Shrink font pixel by pixel until single-line text fits
+    while (div.scrollWidth > targetW && fontSize > minFontSize) {
         fontSize--;
         div.style.fontSize = fontSize + 'px';
     }
 
-    // Phase 3: Scale fallback if browser font clamping stopped shrinking
-    // (Android WebView won't go below ~8px regardless of CSS)
-    let scaleX = div.scrollWidth > targetW ? (targetW / div.scrollWidth) : 1;
-    let scaleY = div.scrollHeight > targetH ? (targetH / div.scrollHeight) : 1;
+    // Phase 2: If we hit minFontSize and it STILL overflows horizontally
+    let finalWhiteSpace = 'nowrap';
+    if (div.scrollWidth > targetW && isMultiline) {
+        // It didn't fit on one line at minFontSize, so allow wrapping to multiple lines
+        finalWhiteSpace = 'pre-wrap';
+        div.style.whiteSpace = finalWhiteSpace;
+    }
+
+    // Phase 3: Scale fallback for any remaining overflow (horizontal or vertical)
+    let scaleX = 1, scaleY = 1;
+    if (div.scrollWidth > targetW) scaleX = targetW / div.scrollWidth;
+    if (div.scrollHeight > targetH) scaleY = targetH / div.scrollHeight;
     let scale = Math.min(scaleX, scaleY, 1);
 
-    // Phase 4: Apply final display styles — keep overflow:hidden to prevent bleeding
+    // Phase 4: Apply final display styles
     div.style.display = 'flex';
     div.style.alignItems = 'center';
-    div.style.justifyContent = isMultiline ? 'flex-start' : 'center';
-    div.style.textAlign = isMultiline ? 'left' : 'center';
+    div.style.justifyContent = (finalWhiteSpace === 'pre-wrap') ? 'flex-start' : 'center';
+    div.style.textAlign = (finalWhiteSpace === 'pre-wrap') ? 'left' : 'center';
     div.style.overflow = 'hidden';     // Always hidden — text must not bleed outside box!
-    div.style.whiteSpace = isMultiline ? 'pre-wrap' : 'nowrap';
+    div.style.whiteSpace = finalWhiteSpace;
     div.style.width = targetW + 'px';
     div.style.height = targetH + 'px';
 
     if (scale < 0.99) {
         div.style.transform = 'scale(' + scale + ')';
-        div.style.transformOrigin = isMultiline ? 'left center' : 'center center';
+        div.style.transformOrigin = (finalWhiteSpace === 'pre-wrap') ? 'left center' : 'center center';
     } else {
         div.style.transform = 'none';
     }
