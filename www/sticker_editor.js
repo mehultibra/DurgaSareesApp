@@ -394,8 +394,9 @@ function autoFitTextElement(div, el) {
     if (!div || !el.w) return;
     
     // Store original text state
-    let currentFontSize = el.fontSize || 14;
+    let currentFontSize = parseInt(el.fontSize, 10) || 14;
     let minSingleLineSize = 6; 
+    let targetH = el.h || 24; // If legacy element has no height, assume 24px bounding box to prevent overlapping!
     
     // Reset any previous transform or shifted bounds
     div.style.transform = 'none';
@@ -409,6 +410,12 @@ function autoFitTextElement(div, el) {
     div.style.whiteSpace = 'nowrap';
     div.style.overflow = 'visible';
     div.style.fontSize = currentFontSize + 'px';
+    
+    // If it's hidden (e.g. modal is closed), we can't measure it! Wait and retry.
+    if (div.offsetWidth === 0) {
+        setTimeout(() => autoFitTextElement(div, el), 50);
+        return;
+    }
     
     // Shrink horizontally until the text naturally fits inside el.w (or hits browser limits)
     let lastWidth = div.offsetWidth;
@@ -435,7 +442,7 @@ function autoFitTextElement(div, el) {
     let lastHeight = div.offsetHeight;
     
     // Shrink vertically if the text is taller than the bounding box
-    while (el.h && div.offsetHeight > el.h && currentFontSize > minSingleLineSize) {
+    while (div.offsetHeight > targetH && currentFontSize > minSingleLineSize) {
         currentFontSize--;
         div.style.fontSize = currentFontSize + 'px';
         if (div.offsetHeight === lastHeight) break; // Chrome minimum font size limit hit!
@@ -450,7 +457,7 @@ function autoFitTextElement(div, el) {
     let scaleY = 1;
     
     if (rawWidth > el.w) scaleX = el.w / rawWidth;
-    if (el.h && rawHeight > el.h) scaleY = el.h / rawHeight;
+    if (rawHeight > targetH) scaleY = targetH / rawHeight;
     
     let finalScale = Math.min(scaleX, scaleY);
     
@@ -460,16 +467,16 @@ function autoFitTextElement(div, el) {
         if (isWrapped) {
             div.style.transformOrigin = 'left center';
             div.style.left = el.x + 'px';
-            div.style.top = (el.y + (el.h - rawHeight) / 2) + 'px';
+            div.style.top = (el.y + (targetH - rawHeight) / 2) + 'px';
         } else {
             div.style.transformOrigin = 'center center';
             div.style.left = (el.x + (el.w - rawWidth) / 2) + 'px';
-            div.style.top = (el.y + (el.h - rawHeight) / 2) + 'px';
+            div.style.top = (el.y + (targetH - rawHeight) / 2) + 'px';
         }
     } else {
         // If no scale, restore standard box size to enable normal flex centering
         div.style.width = el.w + 'px';
-        div.style.height = el.h ? el.h + 'px' : 'auto';
+        div.style.height = targetH + 'px';
         div.style.left = el.x + 'px';
         div.style.top = el.y + 'px';
     }
