@@ -411,43 +411,39 @@ function autoFitTextElement(div, el) {
     let fontSize = parseInt(el.fontSize, 10) || 14;
     const minFontSize = 6;
 
-    // ── Phase 1: Set up div for scrollWidth measurement ──
-    // CRITICAL: overflow MUST be 'hidden' (not 'visible') for scrollWidth to report
-    // the true content width beyond the element's own box!
+    // Phase 1: Give div a fixed size with overflow:hidden
+    // scrollWidth reports full content width when overflow is NOT visible
+    div.style.position = 'absolute';
+    div.style.left = el.x + 'px';
+    div.style.top  = el.y + 'px';
+    div.style.width = targetW + 'px';
+    div.style.height = targetH + 'px';
+    div.style.overflow = 'hidden';
     div.style.whiteSpace = 'nowrap';
-    div.style.width = targetW + 'px';   // Fixed width to measure against
-    div.style.height = '';
-    div.style.overflow = 'hidden';      // Required for scrollWidth to reflect full content width
     div.style.display = 'block';
-    div.style.fontSize = fontSize + 'px';
     div.style.transform = 'none';
+    div.style.fontSize = fontSize + 'px';
 
-    // ── Phase 2: Shrink font until scrollWidth fits in targetW ──
-    // scrollWidth > clientWidth means text overflows the box
+    // Phase 2: Shrink font pixel by pixel until text fits
+    // scrollWidth > targetW means the text content is wider than the box
     while (div.scrollWidth > targetW && fontSize > minFontSize) {
         fontSize--;
         div.style.fontSize = fontSize + 'px';
     }
 
-    // ── Phase 3: Final scale fallback if browser font clamping stopped us ──
-    // (Android WebView stops reducing font below ~8px regardless of CSS)
-    const finalW = div.scrollWidth;
-    const finalH = div.scrollHeight;
-    let scale = 1;
-    if (finalW > targetW) scale = Math.min(scale, targetW / finalW);
-    if (finalH > targetH) scale = Math.min(scale, targetH / finalH);
+    // Phase 3: Scale fallback if browser font clamping stopped shrinking
+    // (Android WebView won't go below ~8px regardless of CSS)
+    let scale = div.scrollWidth > targetW ? (targetW / div.scrollWidth) : 1;
 
-    // ── Phase 4: Apply final styles ──
-    div.style.width  = targetW + 'px';
-    div.style.height = targetH + 'px';
-    div.style.overflow = 'visible'; // Now safe — scale or font handles containment
-    div.style.whiteSpace = 'nowrap';
+    // Phase 4: Apply final display styles — keep overflow:hidden to prevent bleeding
     div.style.display = 'flex';
     div.style.alignItems = 'center';
     div.style.justifyContent = 'center';
     div.style.textAlign = 'center';
-    div.style.left = el.x + 'px';
-    div.style.top  = el.y  + 'px';
+    div.style.overflow = 'hidden';     // Always hidden — text must not bleed outside box!
+    div.style.whiteSpace = 'nowrap';
+    div.style.width = targetW + 'px';
+    div.style.height = targetH + 'px';
 
     if (scale < 0.99) {
         div.style.transform = 'scale(' + scale + ')';
