@@ -414,8 +414,12 @@ function autoFitTextElement(div, el) {
     
     let maxLineWidth = 0;
     while (currentFontSize > minSingleLineSize) {
-        context.font = (el.fontStyle || 'normal') + " " + (el.fontWeight || 'normal') + " " + currentFontSize + "px Arial";
-        maxLineWidth = 0;
+        let fontParts = [];
+        if (el.fontStyle && el.fontStyle !== 'normal') fontParts.push(el.fontStyle);
+        if (el.fontWeight && el.fontWeight !== 'normal') fontParts.push(el.fontWeight);
+        fontParts.push(currentFontSize + "px Arial");
+        context.font = fontParts.join(" ");
+                maxLineWidth = 0;
         for (let line of lines) {
             let w = context.measureText(line).width;
             if (w > maxLineWidth) maxLineWidth = w;
