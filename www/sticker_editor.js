@@ -400,6 +400,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
 }
 
 function autoFitTextElement(div, el) {
+    try {
     if (!div) return;
     // Compute effective width - required for the algorithm to work
     const effectiveW = el.w || Math.max(50, (window.stickerLayout?.width || 440) - el.x - 5);
@@ -420,17 +421,18 @@ function autoFitTextElement(div, el) {
     const minFontSize = 6;
     
     // ── STEP 1: Create an OFF-SCREEN scratch div for reliable measurement ──
-    // Using body-level div avoids ALL parent overflow:hidden / max-content issues!
+    // Use position:absolute + opacity:0 so the browser MUST lay it out (fixed off-screen can return 0 on Android)
     let scratch = document.getElementById('_autofit_scratch');
     if (!scratch) {
         scratch = document.createElement('div');
         scratch.id = '_autofit_scratch';
-        scratch.style.position = 'fixed';
-        scratch.style.visibility = 'hidden';
+        scratch.style.position = 'absolute';
+        scratch.style.opacity = '0';
         scratch.style.pointerEvents = 'none';
         scratch.style.zIndex = '-9999';
-        scratch.style.top = '-9999px';
-        scratch.style.left = '-9999px';
+        scratch.style.top = '0';
+        scratch.style.left = '0';
+        scratch.style.maxWidth = 'none';
         document.body.appendChild(scratch);
     }
     scratch.style.whiteSpace = 'nowrap';
@@ -530,6 +532,7 @@ function autoFitTextElement(div, el) {
     // For scaled divs, use block display
     div.style.display = 'block';
     div.style.textAlign = isWrapped ? 'left' : 'center';
+    } catch(e) { console.error('[autoFitTextElement] error:', e, el?.id); }
 }
     
 
