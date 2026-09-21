@@ -393,50 +393,48 @@ function renderStickerTemplate(containerId, isEditor = false) {
 function autoFitTextElement(div, el) {
     if (!div || !el.w) return;
     
-    // Constrain bounding box
-    div.style.width = el.w + 'px';
-    if (el.h) div.style.height = el.h + 'px';
-    
     // Store original text state
     let currentFontSize = el.fontSize || 14;
-    let minSingleLineSize = el.multiline ? 9 : 6;
+    let minSingleLineSize = 6; // Aggressively shrink down to 6 for a universal format!
     
-    // Temporarily force DOM into a state where scrollWidth can be accurately measured
+    // 1. Measure raw horizontal width using max-content
     div.style.display = 'block';
+    div.style.width = 'max-content';
+    div.style.height = 'auto';
     div.style.whiteSpace = 'nowrap';
-    div.style.textAlign = 'left';
-    // Remove flex properties temporarily
-    div.style.justifyContent = 'flex-start';
-    div.style.alignItems = 'flex-start';
-    div.style.overflow = 'auto';
+    div.style.overflow = 'visible';
     div.style.fontSize = currentFontSize + 'px';
     
-    // 1. Shrink horizontally
-    while (div.scrollWidth > el.w && currentFontSize > minSingleLineSize) {
+    // Shrink horizontally until the text naturally fits inside el.w
+    while (div.offsetWidth > el.w && currentFontSize > minSingleLineSize) {
         currentFontSize--;
         div.style.fontSize = currentFontSize + 'px';
     }
     
     let isWrapped = false;
     
-    // 2. Wrap if still too wide and multiline is allowed
+    // 2. Lock the width to the bounding box and see if we need to wrap
+    div.style.width = el.w + 'px';
+    
     if (div.scrollWidth > el.w && el.multiline) {
         isWrapped = true;
         div.style.whiteSpace = 'pre-wrap';
-    } else {
-        div.style.whiteSpace = 'nowrap'; // Prepare for vertical check
     }
     
-    // 3. Shrink vertically if needed (catches explicit newlines or wrapped text)
-    while (el.h && div.scrollHeight > el.h && currentFontSize > 6) {
+    // 3. Measure raw vertical height
+    div.style.height = 'max-content';
+    
+    // Shrink vertically if the text is taller than the bounding box
+    while (el.h && div.offsetHeight > el.h && currentFontSize > 6) {
         currentFontSize--;
         div.style.fontSize = currentFontSize + 'px';
     }
     
-    // Restore proper display properties
+    // Restore proper final bounding box constraints
+    div.style.height = el.h ? el.h + 'px' : 'auto';
     div.style.display = 'flex';
     div.style.alignItems = 'center';
-    div.style.overflow = 'hidden'; // clip anything that still escapes
+    div.style.overflow = 'hidden';
     
     if (isWrapped) {
         div.style.whiteSpace = 'pre-wrap';
