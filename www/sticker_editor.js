@@ -397,9 +397,14 @@ function autoFitTextElement(div, el) {
     if (el.h) div.style.height = el.h + 'px';
     div.style.overflow = 'hidden';
     
+    // Force nowrap BEFORE reading innerText so we don't capture visual wrapping!
+    div.style.whiteSpace = 'nowrap';
+    
     let currentFontSize = el.fontSize || 14;
     let minSingleLineSize = el.multiline ? 9 : 6;
     
+    // innerText captures <br> and <div> as \n, which is what we want for explicit enters.
+    // Since we forced nowrap, it will NOT include visual CSS wrapping \n.
     let text = (div.innerText || div.textContent || "").replace(/\n$/, "");
     let lines = text.split('\n');
     let hasNewlines = lines.length > 1;
@@ -409,7 +414,7 @@ function autoFitTextElement(div, el) {
     
     let maxLineWidth = 0;
     while (currentFontSize > minSingleLineSize) {
-        context.font = (el.fontWeight || 'normal') + " " + (el.fontStyle || 'normal') + " " + currentFontSize + "px Arial";
+        context.font = (el.fontStyle || 'normal') + " " + (el.fontWeight || 'normal') + " " + currentFontSize + "px Arial";
         maxLineWidth = 0;
         for (let line of lines) {
             let w = context.measureText(line).width;
