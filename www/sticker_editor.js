@@ -395,7 +395,12 @@ function autoFitTextElement(div, el) {
     
     // Store original text state
     let currentFontSize = el.fontSize || 14;
-    let minSingleLineSize = 6; // Aggressively shrink down to 6 for a universal format!
+    let minSingleLineSize = 6; 
+    
+    // Reset any previous transform or shifted bounds
+    div.style.transform = 'none';
+    div.style.left = el.x + 'px';
+    div.style.top = el.y + 'px';
     
     // 1. Measure raw horizontal width using max-content
     div.style.display = 'block';
@@ -405,41 +410,80 @@ function autoFitTextElement(div, el) {
     div.style.overflow = 'visible';
     div.style.fontSize = currentFontSize + 'px';
     
-    // Shrink horizontally until the text naturally fits inside el.w
+    // Shrink horizontally until the text naturally fits inside el.w (or hits browser limits)
+    let lastWidth = div.offsetWidth;
     while (div.offsetWidth > el.w && currentFontSize > minSingleLineSize) {
         currentFontSize--;
         div.style.fontSize = currentFontSize + 'px';
+        if (div.offsetWidth === lastWidth) break; // Chrome/Android minimum font size limit hit!
+        lastWidth = div.offsetWidth;
     }
     
     let isWrapped = false;
+    let rawWidth = div.offsetWidth;
     
-    // 2. Lock the width to the bounding box and see if we need to wrap
-    div.style.width = el.w + 'px';
-    
-    if (div.scrollWidth > el.w && el.multiline) {
+    // 2. See if we need to wrap
+    if (rawWidth > el.w && el.multiline) {
         isWrapped = true;
         div.style.whiteSpace = 'pre-wrap';
+        div.style.width = el.w + 'px'; // force wrap within boundary!
+        rawWidth = div.offsetWidth; // re-measure wrapped width (should be ~el.w)
     }
     
     // 3. Measure raw vertical height
     div.style.height = 'max-content';
+    let lastHeight = div.offsetHeight;
     
     // Shrink vertically if the text is taller than the bounding box
-    while (el.h && div.offsetHeight > el.h && currentFontSize > 6) {
+    while (el.h && div.offsetHeight > el.h && currentFontSize > minSingleLineSize) {
         currentFontSize--;
         div.style.fontSize = currentFontSize + 'px';
+        if (div.offsetHeight === lastHeight) break; // Chrome minimum font size limit hit!
+        lastHeight = div.offsetHeight;
     }
     
-    // Restore proper final bounding box constraints
-    div.style.height = el.h ? el.h + 'px' : 'auto';
+    let rawHeight = div.offsetHeight;
+    
+    // 4. Transform Scale Fallback! 
+    // If it STILL overflows (because of browser font limits or long words), aggressively scale it!
+    let scaleX = 1;
+    let scaleY = 1;
+    
+    if (rawWidth > el.w) scaleX = el.w / rawWidth;
+    if (el.h && rawHeight > el.h) scaleY = el.h / rawHeight;
+    
+    let finalScale = Math.min(scaleX, scaleY);
+    
+    if (finalScale < 1) {
+        div.style.transform = `scale(${finalScale})`;
+        
+        if (isWrapped) {
+            div.style.transformOrigin = 'left center';
+            div.style.left = el.x + 'px';
+            div.style.top = (el.y + (el.h - rawHeight) / 2) + 'px';
+        } else {
+            div.style.transformOrigin = 'center center';
+            div.style.left = (el.x + (el.w - rawWidth) / 2) + 'px';
+            div.style.top = (el.y + (el.h - rawHeight) / 2) + 'px';
+        }
+    } else {
+        // If no scale, restore standard box size to enable normal flex centering
+        div.style.width = el.w + 'px';
+        div.style.height = el.h ? el.h + 'px' : 'auto';
+        div.style.left = el.x + 'px';
+        div.style.top = el.y + 'px';
+    }
+    
+    // 5. Restore proper alignment formatting
     div.style.display = 'flex';
     div.style.alignItems = 'center';
-    div.style.overflow = 'hidden';
+    div.style.overflow = 'visible'; // Never clip, because we mathematically guaranteed it fits via scale!
     
     if (isWrapped) {
         div.style.whiteSpace = 'pre-wrap';
         div.style.textAlign = 'left';
         div.style.justifyContent = 'flex-start';
+        if (finalScale < 1) div.style.transformOrigin = 'left center';
     } else {
         div.style.whiteSpace = 'nowrap';
         div.style.textAlign = 'center';
