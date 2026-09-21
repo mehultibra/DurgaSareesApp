@@ -402,139 +402,63 @@ function renderStickerTemplate(containerId, isEditor = false) {
 function autoFitTextElement(div, el) {
     try {
     if (!div) return;
-    // Compute effective width - required for the algorithm to work
-    const effectiveW = el.w || Math.max(50, (window.stickerLayout?.width || 440) - el.x - 5);
-    const effectiveH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
-    const targetW = effectiveW;
-    const targetH = effectiveH;
-    
-    // Get font properties from div
-    const computedStyle = window.getComputedStyle(div);
-    const fontFamily = computedStyle.fontFamily || 'Arial, sans-serif';
-    const fontWeight = el.fontWeight || computedStyle.fontWeight || 'normal';
-    const fontStyle = el.fontStyle || computedStyle.fontStyle || 'normal';
     const text = div.innerText || div.textContent || '';
-    
-    if (!text.trim()) return; // Nothing to fit
-    
-    let currentFontSize = parseInt(el.fontSize, 10) || 14;
+    if (!text.trim()) return;
+
+    // Effective target box dimensions
+    const targetW = el.w || Math.max(50, (window.stickerLayout?.width || 440) - el.x - 5);
+    const targetH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
+    let fontSize = parseInt(el.fontSize, 10) || 14;
     const minFontSize = 6;
-    
-    // ── STEP 1: Create an OFF-SCREEN scratch div for reliable measurement ──
-    // Use position:absolute + opacity:0 so the browser MUST lay it out (fixed off-screen can return 0 on Android)
-    let scratch = document.getElementById('_autofit_scratch');
-    if (!scratch) {
-        scratch = document.createElement('div');
-        scratch.id = '_autofit_scratch';
-        scratch.style.position = 'absolute';
-        scratch.style.opacity = '0';
-        scratch.style.pointerEvents = 'none';
-        scratch.style.zIndex = '-9999';
-        scratch.style.top = '0';
-        scratch.style.left = '0';
-        scratch.style.maxWidth = 'none';
-        document.body.appendChild(scratch);
-    }
-    scratch.style.whiteSpace = 'nowrap';
-    scratch.style.padding = '0';
-    scratch.style.margin = '0';
-    scratch.style.border = 'none';
-    scratch.style.lineHeight = '1.2';
-    scratch.style.fontStyle = fontStyle;
-    scratch.style.fontWeight = fontWeight;
-    scratch.style.fontFamily = fontFamily;
-    scratch.innerText = text;
-    
-    // ── STEP 2: Binary search for best single-line font size ──
-    scratch.style.whiteSpace = 'nowrap';
-    scratch.style.width = 'auto';
-    scratch.style.fontSize = currentFontSize + 'px';
-    
-    // Shrink font until text fits in targetW (single line)
-    while (scratch.offsetWidth > targetW && currentFontSize > minFontSize) {
-        currentFontSize--;
-        scratch.style.fontSize = currentFontSize + 'px';
-    }
-    
-    let singleLineFits = scratch.offsetWidth <= targetW;
-    let finalFontSize = currentFontSize;
-    let isWrapped = false;
-    
-    // ── STEP 3: If still too wide but multiline is allowed, try wrapping ──
-    if (!singleLineFits && el.multiline) {
-        // Reset to original and try wrapping
-        finalFontSize = parseInt(el.fontSize, 10) || 14;
-        scratch.style.fontSize = finalFontSize + 'px';
-        scratch.style.whiteSpace = 'pre-wrap';
-        scratch.style.width = targetW + 'px';
-        isWrapped = true;
-        
-        // Shrink until wrapped text height fits in targetH
-        while (scratch.offsetHeight > targetH && finalFontSize > minFontSize) {
-            finalFontSize--;
-            scratch.style.fontSize = finalFontSize + 'px';
-        }
-    }
-    
-    // ── STEP 4: Measure final dimensions ──
-    scratch.style.fontSize = finalFontSize + 'px';
-    if (isWrapped) {
-        scratch.style.whiteSpace = 'pre-wrap';
-        scratch.style.width = targetW + 'px';
-    } else {
-        scratch.style.whiteSpace = 'nowrap';
-        scratch.style.width = 'auto';
-    }
-    const rawW = scratch.offsetWidth;
-    const rawH = scratch.offsetHeight;
-    
-    // ── STEP 5: Compute scale fallback if browser font clamping stopped us ──
-    let scaleX = rawW > targetW ? targetW / rawW : 1;
-    let scaleY = rawH > targetH ? targetH / rawH : 1;
-    const finalScale = Math.min(scaleX, scaleY);
-    
-    // ── STEP 6: Apply to the REAL div ──
+
+    // ── Phase 1: Prepare div for single-line scrollWidth measurement ──
+    // scrollWidth = actual content width (IGNORES overflow:hidden on parent!)
+    div.style.whiteSpace = 'nowrap';
+    div.style.width = '';           // Remove explicit width so content can expand freely
+    div.style.height = '';
+    div.style.overflow = 'visible'; // Override local hidden so scrollWidth expands
+    div.style.display = 'block';    // block + no width = stretches to content
+    div.style.fontSize = fontSize + 'px';
     div.style.transform = 'none';
-    div.style.fontSize = finalFontSize + 'px';
-    div.style.position = 'absolute';
-    div.style.overflow = 'visible';
-    div.style.lineHeight = '1.2';
-    
-    if (finalScale < 1) {
-        // Scale down to fit
-        div.style.whiteSpace = isWrapped ? 'pre-wrap' : 'nowrap';
-        div.style.width = (isWrapped ? targetW : rawW) + 'px';
-        div.style.height = rawH + 'px';
-        div.style.transform = `scale(${finalScale})`;
-        div.style.transformOrigin = isWrapped ? 'top left' : 'top center';
-        // Center vertically within the target box
-        const scaledH = rawH * finalScale;
-        div.style.left = el.x + 'px';
-        div.style.top = (el.y + (targetH - scaledH) / 2) + 'px';
-        if (!isWrapped) {
-            const scaledW = rawW * finalScale;
-            div.style.left = (el.x + (targetW - scaledW) / 2) + 'px';
-        }
-    } else {
-        // No scale needed — center the text inside the box
-        div.style.width = targetW + 'px';
-        div.style.height = targetH + 'px';
-        div.style.left = el.x + 'px';
-        div.style.top = el.y + 'px';
-        div.style.display = 'flex';
-        div.style.alignItems = 'center';
-        div.style.justifyContent = isWrapped ? 'flex-start' : 'center';
-        div.style.textAlign = isWrapped ? 'left' : 'center';
-        div.style.whiteSpace = isWrapped ? 'pre-wrap' : 'nowrap';
-        return; // Return early — display flex handles centering already
+
+    // ── Phase 2: Shrink font until single-line text fits in targetW ──
+    // Use scrollWidth — it reports full content width even when parent clips
+    while (div.scrollWidth > targetW && fontSize > minFontSize) {
+        fontSize--;
+        div.style.fontSize = fontSize + 'px';
     }
-    
-    // For scaled divs, use block display
-    div.style.display = 'block';
-    div.style.textAlign = isWrapped ? 'left' : 'center';
-    } catch(e) { console.error('[autoFitTextElement] error:', e, el?.id); }
+
+    // ── Phase 3: Final scale fallback if browser font clamping stopped us ──
+    // (Android WebView stops reducing font below ~8px regardless of CSS)
+    const finalW = div.scrollWidth;
+    const finalH = div.scrollHeight;
+    let scale = 1;
+    if (finalW > targetW) scale = Math.min(scale, targetW / finalW);
+    if (finalH > targetH) scale = Math.min(scale, targetH / finalH);
+
+    // ── Phase 4: Apply final styles to the real div ──
+    div.style.width  = targetW + 'px';
+    div.style.height = targetH + 'px';
+    div.style.overflow = 'visible'; // scale handles containment now
+    div.style.whiteSpace = 'nowrap';
+    div.style.display = 'flex';
+    div.style.alignItems = 'center';
+    div.style.justifyContent = 'center';
+    div.style.textAlign = 'center';
+    div.style.left = el.x + 'px';
+    div.style.top  = el.y  + 'px';
+
+    if (scale < 0.99) {
+        div.style.transform = 'scale(' + scale + ')';
+        div.style.transformOrigin = 'center center';
+    } else {
+        div.style.transform = 'none';
+    }
+
+    } catch(e) { console.error('[autoFitTextElement]', e, el?.id); }
 }
-    
+
+
 
 
 function startDrag(e, id) {
