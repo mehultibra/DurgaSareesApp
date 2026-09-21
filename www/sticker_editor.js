@@ -410,6 +410,7 @@ function autoFitTextElement(div, el) {
     const targetH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
     let fontSize = parseInt(el.fontSize, 10) || 14;
     const minFontSize = 6;
+    const isMultiline = !!el.multiline;
 
     // Phase 1: Give div a fixed size with overflow:hidden
     // scrollWidth reports full content width when overflow is NOT visible
@@ -417,37 +418,40 @@ function autoFitTextElement(div, el) {
     div.style.left = el.x + 'px';
     div.style.top  = el.y + 'px';
     div.style.width = targetW + 'px';
-    div.style.height = targetH + 'px';
+    div.style.height = isMultiline ? '' : targetH + 'px'; // auto height for multiline to measure scrollHeight accurately
     div.style.overflow = 'hidden';
-    div.style.whiteSpace = 'nowrap';
+    div.style.whiteSpace = isMultiline ? 'pre-wrap' : 'nowrap';
     div.style.display = 'block';
     div.style.transform = 'none';
     div.style.fontSize = fontSize + 'px';
 
     // Phase 2: Shrink font pixel by pixel until text fits
-    // scrollWidth > targetW means the text content is wider than the box
-    while (div.scrollWidth > targetW && fontSize > minFontSize) {
+    // For single line, we care about scrollWidth > targetW
+    // For multiline, we care about scrollHeight > targetH (and scrollWidth > targetW)
+    while ((div.scrollWidth > targetW || (isMultiline && div.scrollHeight > targetH)) && fontSize > minFontSize) {
         fontSize--;
         div.style.fontSize = fontSize + 'px';
     }
 
     // Phase 3: Scale fallback if browser font clamping stopped shrinking
     // (Android WebView won't go below ~8px regardless of CSS)
-    let scale = div.scrollWidth > targetW ? (targetW / div.scrollWidth) : 1;
+    let scaleX = div.scrollWidth > targetW ? (targetW / div.scrollWidth) : 1;
+    let scaleY = div.scrollHeight > targetH ? (targetH / div.scrollHeight) : 1;
+    let scale = Math.min(scaleX, scaleY, 1);
 
     // Phase 4: Apply final display styles — keep overflow:hidden to prevent bleeding
     div.style.display = 'flex';
     div.style.alignItems = 'center';
-    div.style.justifyContent = 'center';
-    div.style.textAlign = 'center';
+    div.style.justifyContent = isMultiline ? 'flex-start' : 'center';
+    div.style.textAlign = isMultiline ? 'left' : 'center';
     div.style.overflow = 'hidden';     // Always hidden — text must not bleed outside box!
-    div.style.whiteSpace = 'nowrap';
+    div.style.whiteSpace = isMultiline ? 'pre-wrap' : 'nowrap';
     div.style.width = targetW + 'px';
     div.style.height = targetH + 'px';
 
     if (scale < 0.99) {
         div.style.transform = 'scale(' + scale + ')';
-        div.style.transformOrigin = 'center center';
+        div.style.transformOrigin = isMultiline ? 'left center' : 'center center';
     } else {
         div.style.transform = 'none';
     }
