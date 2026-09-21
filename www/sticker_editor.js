@@ -393,25 +393,37 @@ function renderStickerTemplate(containerId, isEditor = false) {
 function autoFitTextElement(div, el) {
     if (!div || !el.w) return;
     
-    // Constrain text to bounding box to prevent overlapping
     div.style.width = el.w + 'px';
     if (el.h) div.style.height = el.h + 'px';
     div.style.overflow = 'hidden';
     
-    // Reset to default
     let currentFontSize = el.fontSize || 14;
-    div.style.fontSize = currentFontSize + 'px';
-    div.style.whiteSpace = 'nowrap';
-    div.style.textAlign = 'center';
-    div.style.justifyContent = 'center';
-    
     let minSingleLineSize = el.multiline ? 9 : 6;
-    while (div.scrollWidth > el.w && currentFontSize > minSingleLineSize) {
+    
+    let text = (div.innerText || div.textContent || "").replace(/\n$/, "");
+    let lines = text.split('\n');
+    let hasNewlines = lines.length > 1;
+    
+    let canvas = window.textMeasureCanvas || (window.textMeasureCanvas = document.createElement("canvas"));
+    let context = canvas.getContext("2d");
+    
+    let maxLineWidth = 0;
+    while (currentFontSize > minSingleLineSize) {
+        context.font = (el.fontWeight || 'normal') + " " + (el.fontStyle || 'normal') + " " + currentFontSize + "px Arial";
+        maxLineWidth = 0;
+        for (let line of lines) {
+            let w = context.measureText(line).width;
+            if (w > maxLineWidth) maxLineWidth = w;
+        }
+        if (maxLineWidth <= el.w) {
+            break;
+        }
         currentFontSize--;
-        div.style.fontSize = currentFontSize + 'px';
     }
     
-    if (div.scrollWidth > el.w && el.multiline) {
+    div.style.fontSize = currentFontSize + 'px';
+    
+    if ((maxLineWidth > el.w || hasNewlines) && el.multiline) {
         div.style.whiteSpace = 'pre-wrap';
         div.style.textAlign = 'left';
         div.style.justifyContent = 'flex-start';
@@ -420,6 +432,10 @@ function autoFitTextElement(div, el) {
             currentFontSize--;
             div.style.fontSize = currentFontSize + 'px';
         }
+    } else {
+        div.style.whiteSpace = 'nowrap';
+        div.style.textAlign = 'center';
+        div.style.justifyContent = 'center';
     }
 }
 
