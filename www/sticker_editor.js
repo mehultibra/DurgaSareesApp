@@ -411,18 +411,19 @@ function autoFitTextElement(div, el) {
     let fontSize = parseInt(el.fontSize, 10) || 14;
     const minFontSize = 6;
 
-    // ── Phase 1: Prepare div for single-line scrollWidth measurement ──
-    // scrollWidth = actual content width (IGNORES overflow:hidden on parent!)
+    // ── Phase 1: Set up div for scrollWidth measurement ──
+    // CRITICAL: overflow MUST be 'hidden' (not 'visible') for scrollWidth to report
+    // the true content width beyond the element's own box!
     div.style.whiteSpace = 'nowrap';
-    div.style.width = '';           // Remove explicit width so content can expand freely
+    div.style.width = targetW + 'px';   // Fixed width to measure against
     div.style.height = '';
-    div.style.overflow = 'visible'; // Override local hidden so scrollWidth expands
-    div.style.display = 'block';    // block + no width = stretches to content
+    div.style.overflow = 'hidden';      // Required for scrollWidth to reflect full content width
+    div.style.display = 'block';
     div.style.fontSize = fontSize + 'px';
     div.style.transform = 'none';
 
-    // ── Phase 2: Shrink font until single-line text fits in targetW ──
-    // Use scrollWidth — it reports full content width even when parent clips
+    // ── Phase 2: Shrink font until scrollWidth fits in targetW ──
+    // scrollWidth > clientWidth means text overflows the box
     while (div.scrollWidth > targetW && fontSize > minFontSize) {
         fontSize--;
         div.style.fontSize = fontSize + 'px';
@@ -436,10 +437,10 @@ function autoFitTextElement(div, el) {
     if (finalW > targetW) scale = Math.min(scale, targetW / finalW);
     if (finalH > targetH) scale = Math.min(scale, targetH / finalH);
 
-    // ── Phase 4: Apply final styles to the real div ──
+    // ── Phase 4: Apply final styles ──
     div.style.width  = targetW + 'px';
     div.style.height = targetH + 'px';
-    div.style.overflow = 'visible'; // scale handles containment now
+    div.style.overflow = 'visible'; // Now safe — scale or font handles containment
     div.style.whiteSpace = 'nowrap';
     div.style.display = 'flex';
     div.style.alignItems = 'center';
