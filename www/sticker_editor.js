@@ -290,7 +290,6 @@ function renderStickerTemplate(containerId, isEditor = false) {
             if (!isEditor) {
                 div.contentEditable = "true";
                 div.style.outline = "none";
-                div.id = el.id; 
             }
         } else if (el.type === 'image') {
             div.style.width = el.w + 'px';
