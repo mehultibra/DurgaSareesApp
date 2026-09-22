@@ -501,6 +501,19 @@ function autoFitTextElement(div, el) {
         } else {
             div.style.transform = 'none';
         }
+        
+        div.dataset.scale = scale;
+        if (div.id.startsWith('editor_')) {
+            const isSelected = (window.selectedElementId === el.id);
+            div.style.borderWidth = (isSelected ? (2/scale) : (1/scale)) + 'px';
+            const handle = document.getElementById('resize_' + el.id) || div.querySelector('[id^="resize_"]');
+            if (handle) {
+                handle.style.width = (10/scale) + 'px';
+                handle.style.height = (10/scale) + 'px';
+                handle.style.right = (-5/scale) + 'px';
+                handle.style.bottom = (-5/scale) + 'px';
+            }
+        }
 
     } catch(e) { console.error('[autoFitTextElement]', e, el?.id); }
 }
@@ -522,8 +535,19 @@ function startDrag(e, id) {
     window.stickerLayout.elements.forEach(x => {
         const div = document.getElementById('editor_' + x.id);
         const handle = document.getElementById('resize_' + x.id);
-        if (div) div.style.border = x.id === id ? '2px solid blue' : '1px dashed transparent';
-        if (handle) handle.style.display = x.id === id ? 'block' : 'none';
+        const s = (div && parseFloat(div.dataset.scale)) || 1;
+        
+        if (div) {
+            div.style.border = x.id === id ? 'solid blue' : 'dashed transparent';
+            div.style.borderWidth = (x.id === id ? 2/s : 1/s) + 'px';
+        }
+        if (handle) {
+            handle.style.display = x.id === id ? 'block' : 'none';
+            handle.style.width = (10/s) + 'px';
+            handle.style.height = (10/s) + 'px';
+            handle.style.right = (-5/s) + 'px';
+            handle.style.bottom = (-5/s) + 'px';
+        }
     });
     
     updatePropertiesPanel();
