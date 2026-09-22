@@ -405,27 +405,36 @@ function autoFitTextElement(div, el) {
         const text = div.innerText || div.textContent || '';
         if (!text.trim()) return;
 
-        // Effective target box dimensions
-        const targetW = el.w || Math.max(50, (window.stickerLayout?.width || 440) - el.x - 5);
-        const targetH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
+        const ew = parseFloat(el.w);
+        const eh = parseFloat(el.h);
+        const ex = parseFloat(el.x) || 0;
+        const ey = parseFloat(el.y) || 0;
+        const containerW = window.stickerLayout?.width || 440;
+        
+        const targetW = (ew > 0) ? ew : Math.max(50, containerW - ex - 5);
         const baseFontSize = parseInt(el.fontSize, 10) || 14;
+        const targetH = (eh > 0) ? eh : Math.round(baseFontSize * 1.4) || 24;
+
         const minFontSize = 6;
         const minScale = minFontSize / baseFontSize;
         const isMultiline = !!el.multiline;
 
-        // Reset div to measure pure single-line text width at base font size
-        div.style.position = 'absolute';
-        div.style.left = el.x + 'px';
-        div.style.top  = el.y + 'px';
-        div.style.width = 'auto';  
-        div.style.height = 'auto';
-        div.style.overflow = 'visible';
-        div.style.whiteSpace = 'nowrap';
-        div.style.display = 'inline-block';
-        div.style.transform = 'none';
-        div.style.fontSize = baseFontSize + 'px';
+        // Clone for safe measurement outside of any display:none or scaled parents
+        const clone = div.cloneNode(true);
+        clone.style.position = 'absolute';
+        clone.style.visibility = 'hidden';
+        clone.style.left = '-9999px';
+        clone.style.top = '0px';
+        clone.style.width = 'auto';  
+        clone.style.height = 'auto';
+        clone.style.overflow = 'visible';
+        clone.style.whiteSpace = 'nowrap';
+        clone.style.display = 'inline-block';
+        clone.style.transform = 'none';
+        clone.style.fontSize = baseFontSize + 'px';
+        document.body.appendChild(clone);
 
-        const rawWidth = div.scrollWidth;
+        const rawWidth = clone.scrollWidth;
 
         let finalWhiteSpace = 'nowrap';
         let finalWidth = targetW;
@@ -436,33 +445,29 @@ function autoFitTextElement(div, el) {
             let idealScale = targetW / rawWidth;
 
             if (idealScale >= minScale || !isMultiline) {
-                // Single line mode. Either it naturally fits within minScale, or multiline is disabled 
-                // so we FORCE it to fit by scaling infinitely small if necessary.
+                // Single line mode
                 finalWhiteSpace = 'nowrap';
                 scale = idealScale;
                 finalWidth = targetW / scale; 
                 finalHeight = targetH / scale; 
             } else {
-                // Multiline enabled AND it requires shrinking below minScale to fit on one line.
-                // Wrap it at minScale!
+                // Multiline enabled AND requires shrinking below minScale
                 finalWhiteSpace = 'pre-wrap';
-                div.style.whiteSpace = 'pre-wrap';
-                div.style.wordBreak = 'break-word';
-                div.style.overflowWrap = 'anywhere';
+                clone.style.whiteSpace = 'pre-wrap';
+                clone.style.wordBreak = 'break-word';
+                clone.style.overflowWrap = 'anywhere';
                 
                 const wrapWidth = targetW / minScale;
-                div.style.width = wrapWidth + 'px'; 
-                div.style.height = 'auto';
+                clone.style.width = wrapWidth + 'px'; 
+                clone.style.height = 'auto';
                 
-                const wrappedHeight = div.scrollHeight;
+                const wrappedHeight = clone.scrollHeight;
                 
                 if (wrappedHeight * minScale > targetH) {
-                    // Wraps, but overflows vertically. Scale it down to fit height.
                     scale = targetH / wrappedHeight;
                     finalWidth = wrapWidth; 
                     finalHeight = wrappedHeight;
                 } else {
-                    // Wraps and fits vertically at minScale!
                     scale = minScale;
                     finalWidth = wrapWidth;
                     finalHeight = targetH / scale;
@@ -475,6 +480,8 @@ function autoFitTextElement(div, el) {
             finalHeight = targetH;
             scale = 1;
         }
+
+        document.body.removeChild(clone);
 
         // Apply final styles
         div.style.fontSize = baseFontSize + 'px'; // NEVER CHANGE FONT SIZE to avoid clamps!
