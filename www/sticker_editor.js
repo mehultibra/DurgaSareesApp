@@ -232,19 +232,6 @@ function renderStickerTemplate(containerId, isEditor = false) {
             div.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); startDrag(e, el.id); };
             div.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); startDrag(e.touches[0], el.id); };
 
-            const handle = document.createElement('div');
-            handle.style.position = 'absolute';
-            handle.style.right = '0px';
-            handle.style.bottom = '0px';
-            handle.style.width = '10px';
-            handle.style.height = '10px';
-            handle.style.background = 'blue';
-            handle.style.cursor = 'se-resize';
-            handle.style.display = selectedElementId === el.id ? 'block' : 'none';
-            handle.id = 'resize_' + el.id;
-            handle.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e, el.id); };
-            handle.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e.touches[0], el.id); };
-            div.appendChild(handle);
         }
 
         if (el.type === 'text') {
@@ -321,6 +308,21 @@ function renderStickerTemplate(containerId, isEditor = false) {
             } else {
                 div.id = 'stkQRCode'; 
             }
+        }
+        if (isEditor) {
+            const handle = document.createElement('div');
+            handle.style.position = 'absolute';
+            handle.style.right = '0px';
+            handle.style.bottom = '0px';
+            handle.style.width = '10px';
+            handle.style.height = '10px';
+            handle.style.background = 'blue';
+            handle.style.cursor = 'se-resize';
+            handle.style.display = selectedElementId === el.id ? 'block' : 'none';
+            handle.id = 'resize_' + el.id;
+            handle.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e, el.id); };
+            handle.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e.touches[0], el.id); };
+            div.appendChild(handle);
         }
 
         container.appendChild(div);
