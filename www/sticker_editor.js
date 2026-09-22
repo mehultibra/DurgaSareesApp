@@ -232,21 +232,19 @@ function renderStickerTemplate(containerId, isEditor = false) {
             div.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); startDrag(e, el.id); };
             div.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); startDrag(e.touches[0], el.id); };
 
-            if (el.w) {
-                const handle = document.createElement('div');
-                handle.style.position = 'absolute';
-                handle.style.right = '-5px';
-                handle.style.bottom = '-5px';
-                handle.style.width = '10px';
-                handle.style.height = '10px';
-                handle.style.background = 'blue';
-                handle.style.cursor = 'se-resize';
-                handle.style.display = selectedElementId === el.id ? 'block' : 'none';
-                handle.id = 'resize_' + el.id;
-                handle.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e, el.id); };
-                handle.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e.touches[0], el.id); };
-                div.appendChild(handle);
-            }
+            const handle = document.createElement('div');
+            handle.style.position = 'absolute';
+            handle.style.right = '-5px';
+            handle.style.bottom = '-5px';
+            handle.style.width = '10px';
+            handle.style.height = '10px';
+            handle.style.background = 'blue';
+            handle.style.cursor = 'se-resize';
+            handle.style.display = selectedElementId === el.id ? 'block' : 'none';
+            handle.id = 'resize_' + el.id;
+            handle.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e, el.id); };
+            handle.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); startResize(e.touches[0], el.id); };
+            div.appendChild(handle);
         }
 
         if (el.type === 'text') {
