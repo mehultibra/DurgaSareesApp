@@ -475,7 +475,7 @@ function autoFitTextElement(div, el) {
         } else {
             // Fits perfectly without scaling
             finalWhiteSpace = 'nowrap';
-            finalWidth = targetW;
+            finalWidth = (ew > 0) ? targetW : rawWidth;
             finalHeight = targetH;
             scale = 1;
         }
@@ -560,8 +560,18 @@ function startResize(e, id) {
     startY = e.clientY;
     
     const el = window.stickerLayout.elements.find(x => x.id === id);
-    initialElemW = el.w || 100;
-    initialElemH = el.h || 20;
+    
+    let startW = el.w;
+    let startH = el.h;
+    const domEl = document.getElementById('editor_' + id);
+    if (domEl) {
+        const s = parseFloat(domEl.dataset.scale) || 1;
+        if (!startW) startW = domEl.offsetWidth * s;
+        if (!startH) startH = domEl.offsetHeight * s;
+    }
+    
+    initialElemW = startW || 100;
+    initialElemH = startH || 20;
     
     updatePropertiesPanel();
 }
