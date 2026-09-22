@@ -312,11 +312,12 @@ function renderStickerTemplate(containerId, isEditor = false) {
         if (isEditor) {
             const handle = document.createElement('div');
             handle.style.position = 'absolute';
-            handle.style.right = '0px';
-            handle.style.bottom = '0px';
-            handle.style.width = '10px';
-            handle.style.height = '10px';
-            handle.style.background = 'blue';
+            handle.style.right = '-15px';
+            handle.style.bottom = '-15px';
+            handle.style.width = '30px';
+            handle.style.height = '30px';
+            handle.style.borderRadius = '15px';
+            handle.style.background = 'rgba(0, 0, 255, 0.8)';
             handle.style.cursor = 'se-resize';
             handle.style.display = selectedElementId === el.id ? 'block' : 'none';
             handle.id = 'resize_' + el.id;
@@ -493,7 +494,7 @@ function autoFitTextElement(div, el) {
         div.style.alignItems = 'center';
         div.style.justifyContent = (finalWhiteSpace === 'pre-wrap') ? 'flex-start' : 'center';
         div.style.textAlign = (finalWhiteSpace === 'pre-wrap') ? 'left' : 'center';
-        div.style.overflow = 'hidden';
+        div.style.overflow = div.id.startsWith('editor_') ? 'visible' : 'hidden';
 
         if (scale < 0.999) {
             div.style.transform = `scale(${scale})`;
@@ -508,10 +509,11 @@ function autoFitTextElement(div, el) {
             div.style.borderWidth = (isSelected ? (2/scale) : (1/scale)) + 'px';
             const handle = document.getElementById('resize_' + el.id) || div.querySelector('[id^="resize_"]');
             if (handle) {
-                handle.style.width = (10/scale) + 'px';
-                handle.style.height = (10/scale) + 'px';
-                handle.style.right = '0px';
-                handle.style.bottom = '0px';
+                handle.style.width = (30/scale) + 'px';
+                handle.style.height = (30/scale) + 'px';
+                handle.style.right = (-15/scale) + 'px';
+                handle.style.bottom = (-15/scale) + 'px';
+                handle.style.borderRadius = (15/scale) + 'px';
             }
         }
 
@@ -543,10 +545,11 @@ function startDrag(e, id) {
         }
         if (handle) {
             handle.style.display = x.id === id ? 'block' : 'none';
-            handle.style.width = (10/s) + 'px';
-            handle.style.height = (10/s) + 'px';
-            handle.style.right = '0px';
-            handle.style.bottom = '0px';
+            handle.style.width = (30/s) + 'px';
+            handle.style.height = (30/s) + 'px';
+            handle.style.right = (-15/s) + 'px';
+            handle.style.bottom = (-15/s) + 'px';
+            handle.style.borderRadius = (15/s) + 'px';
         }
     });
     
