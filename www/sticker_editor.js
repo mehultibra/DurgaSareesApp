@@ -588,8 +588,12 @@ function updateElementSize(dx, dy) {
         
         const domEl = document.getElementById('editor_' + el.id);
         if (domEl) {
-            domEl.style.width = el.w + 'px';
-            if (el.h) domEl.style.height = el.h + 'px';
+            if (el.type === 'text' && typeof autoFitTextElement === 'function') {
+                autoFitTextElement(domEl, el);
+            } else {
+                domEl.style.width = el.w + 'px';
+                if (el.h) domEl.style.height = el.h + 'px';
+            }
         }
         
         // Also update inputs in properties panel
@@ -949,24 +953,38 @@ function updatePropertiesPanel() {
     
     const wInp = document.createElement('input');
     wInp.type = 'number';
+    wInp.id = 'seSizeW_' + el.id;
     wInp.value = el.w || '';
     wInp.style.width = '100%';
     wInp.placeholder = 'W';
     wInp.oninput = (e) => {
         el.w = parseInt(e.target.value) || 0;
         const domEl = document.getElementById('editor_' + el.id);
-        if (domEl && el.w) domEl.style.width = el.w + 'px';
+        if (domEl && el.w) {
+            if (el.type === 'text' && typeof autoFitTextElement === 'function') {
+                autoFitTextElement(domEl, el);
+            } else {
+                domEl.style.width = el.w + 'px';
+            }
+        }
     };
     
     const hInp = document.createElement('input');
     hInp.type = 'number';
+    hInp.id = 'seSizeH_' + el.id;
     hInp.value = el.h || '';
     hInp.style.width = '100%';
     hInp.placeholder = 'H';
     hInp.oninput = (e) => {
         el.h = parseInt(e.target.value) || 0;
         const domEl = document.getElementById('editor_' + el.id);
-        if (domEl && el.h) domEl.style.height = el.h + 'px';
+        if (domEl && el.h) {
+            if (el.type === 'text' && typeof autoFitTextElement === 'function') {
+                autoFitTextElement(domEl, el);
+            } else {
+                domEl.style.height = el.h + 'px';
+            }
+        }
     };
     
     row.appendChild(wInp);
