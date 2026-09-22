@@ -401,65 +401,110 @@ function renderStickerTemplate(containerId, isEditor = false) {
 
 function autoFitTextElement(div, el) {
     try {
-    if (!div) return;
-    const text = div.innerText || div.textContent || '';
-    if (!text.trim()) return;
+        if (!div) return;
+        const text = div.innerText || div.textContent || '';
+        if (!text.trim()) return;
 
-    // Effective target box dimensions
-    const targetW = el.w || Math.max(50, (window.stickerLayout?.width || 440) - el.x - 5);
-    const targetH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
-    let fontSize = parseInt(el.fontSize, 10) || 14;
-    const minFontSize = 6;
-    const isMultiline = !!el.multiline;
+        // Effective target box dimensions
+        const targetW = el.w || Math.max(50, (window.stickerLayout?.width || 440) - el.x - 5);
+        const targetH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
+        const baseFontSize = parseInt(el.fontSize, 10) || 14;
+        const minFontSize = 6;
+        const isMultiline = !!el.multiline;
 
-    // Phase 1: Try to fit on a SINGLE line first
-    div.style.position = 'absolute';
-    div.style.left = el.x + 'px';
-    div.style.top  = el.y + 'px';
-    div.style.width = targetW + 'px';
-    div.style.height = ''; 
-    div.style.overflow = 'hidden';
-    div.style.whiteSpace = 'nowrap'; // Force single line initially
-    div.style.display = 'block';
-    div.style.transform = 'none';
-    div.style.fontSize = fontSize + 'px';
-
-    // Shrink font pixel by pixel until single-line text fits
-    while (div.scrollWidth > targetW && fontSize > minFontSize) {
-        fontSize--;
-        div.style.fontSize = fontSize + 'px';
-    }
-
-    // Phase 2: If we hit minFontSize and it STILL overflows horizontally
-    let finalWhiteSpace = 'nowrap';
-    if (div.scrollWidth > targetW && isMultiline) {
-        // It didn't fit on one line at minFontSize, so allow wrapping to multiple lines
-        finalWhiteSpace = 'pre-wrap';
-        div.style.whiteSpace = finalWhiteSpace;
-    }
-
-    // Phase 3: Scale fallback for any remaining overflow (horizontal or vertical)
-    let scaleX = 1, scaleY = 1;
-    if (div.scrollWidth > targetW) scaleX = targetW / div.scrollWidth;
-    if (div.scrollHeight > targetH) scaleY = targetH / div.scrollHeight;
-    let scale = Math.min(scaleX, scaleY, 1);
-
-    // Phase 4: Apply final display styles
-    div.style.display = 'flex';
-    div.style.alignItems = 'center';
-    div.style.justifyContent = (finalWhiteSpace === 'pre-wrap') ? 'flex-start' : 'center';
-    div.style.textAlign = (finalWhiteSpace === 'pre-wrap') ? 'left' : 'center';
-    div.style.overflow = 'hidden';     // Always hidden — text must not bleed outside box!
-    div.style.whiteSpace = finalWhiteSpace;
-    div.style.width = targetW + 'px';
-    div.style.height = targetH + 'px';
-
-    if (scale < 0.99) {
-        div.style.transform = 'scale(' + scale + ')';
-        div.style.transformOrigin = (finalWhiteSpace === 'pre-wrap') ? 'left center' : 'center center';
-    } else {
+        // Reset div to measure pure single-line text width at base font size
+        div.style.position = 'absolute';
+        div.style.left = el.x + 'px';
+        div.style.top  = el.y + 'px';
+        div.style.width = 'auto';  // Let it expand
+        div.style.height = 'auto';
+        div.style.overflow = 'visible';
+        div.style.whiteSpace = 'nowrap';
+        div.style.display = 'inline-block';
         div.style.transform = 'none';
-    }
+        div.style.fontSize = baseFontSize + 'px';
+
+        const rawWidth = div.scrollWidth;
+
+        let finalFontSize = baseFontSize;
+        let finalWhiteSpace = 'nowrap';
+        let finalWidth = targetW;
+        let finalHeight = targetH;
+        let scale = 1;
+
+        if (rawWidth > targetW) {
+            // Text is too wide. Calculate exact font size ratio to fit
+            let idealFontSize = Math.floor(baseFontSize * (targetW / rawWidth));
+
+            if (idealFontSize >= minFontSize) {
+                // Fits on one line just by reducing font size
+                finalFontSize = idealFontSize;
+                finalWhiteSpace = 'nowrap';
+                finalWidth = targetW;
+                finalHeight = targetH;
+                scale = 1;
+            } else {
+                // Needs to be smaller than minFontSize to fit on one line
+                finalFontSize = minFontSize;
+                div.style.fontSize = minFontSize + 'px';
+                
+                if (isMultiline) {
+                    // Wrap to multiple lines
+                    finalWhiteSpace = 'pre-wrap';
+                    div.style.whiteSpace = 'pre-wrap';
+                    div.style.width = targetW + 'px'; // Constrain width to force wrap
+                    div.style.height = 'auto';
+                    
+                    const wrappedHeight = div.scrollHeight;
+                    if (wrappedHeight > targetH) {
+                        // Wraps, but overflows vertically. Scale it down to fit height.
+                        scale = targetH / wrappedHeight;
+                        finalWidth = targetW;
+                        finalHeight = wrappedHeight; // Set height to unscaled height so it doesn't clip internally before scaling
+                    } else {
+                        // Wraps and fits vertically!
+                        scale = 1;
+                        finalWidth = targetW;
+                        finalHeight = targetH;
+                    }
+                } else {
+                    // Multiline disabled. Keep single line, but apply scale to squish it horizontally.
+                    finalWhiteSpace = 'nowrap';
+                    div.style.whiteSpace = 'nowrap';
+                    div.style.width = 'auto'; // let it take full width for measurement at minFontSize
+                    
+                    const squeezedWidth = div.scrollWidth; 
+                    scale = targetW / squeezedWidth;
+                    finalWidth = squeezedWidth; // Set width to unscaled width so it doesn't clip before scaling
+                    finalHeight = targetH;
+                }
+            }
+        } else {
+            // Fits perfectly at baseFontSize
+            finalFontSize = baseFontSize;
+            finalWhiteSpace = 'nowrap';
+            finalWidth = targetW;
+            finalHeight = targetH;
+            scale = 1;
+        }
+
+        // Apply final styles
+        div.style.fontSize = finalFontSize + 'px';
+        div.style.whiteSpace = finalWhiteSpace;
+        div.style.width = finalWidth + 'px';
+        div.style.height = finalHeight + 'px';
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.justifyContent = (finalWhiteSpace === 'pre-wrap') ? 'flex-start' : 'center';
+        div.style.textAlign = (finalWhiteSpace === 'pre-wrap') ? 'left' : 'center';
+        div.style.overflow = 'hidden';
+
+        if (scale < 0.99) {
+            div.style.transform = `scale(${scale})`;
+            div.style.transformOrigin = (finalWhiteSpace === 'pre-wrap') ? 'left top' : 'center center';
+        } else {
+            div.style.transform = 'none';
+        }
 
     } catch(e) { console.error('[autoFitTextElement]', e, el?.id); }
 }
