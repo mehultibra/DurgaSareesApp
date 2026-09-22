@@ -1215,36 +1215,47 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var lowResUrl = actualUrl;
 
     var isNativeLoading = (imgElement.getAttribute('src') === actualUrl || imgElement.src === actualUrl);
+    var cacheKey = (fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") ? gridPath : lowResUrl;
+
+    // 🚀 INSTANT LOAD FOR NEW USERS: Fire native network request immediately!
+    if (!isNativeLoading && !imgElement.dataset.tempBlobUrl) {
+        imgElement.src = actualUrl;
+    }
 
     // ALWAYS check IndexedDB to support Offline Mode.
-    // The previous bypass completely skipped IDB which broke offline caching.
-    getImageFromDB(actualUrl).then(function (blob) {
+    getImageFromDB(cacheKey).then(function (blob) {
         if (blob) {
             var objectUrl = URL.createObjectURL(blob);
-            // Only inject the IDB blob if the native URL hasn't already finished loading.
-            // This prevents flicker for online users, but instantly loads for offline users!
-            if (!isNativeLoading || !imgElement.complete || imgElement.naturalWidth === 0) {
+            if (!imgElement.complete || imgElement.naturalWidth === 0) {
                 imgElement.src = objectUrl;
             }
+            if (imgElement.dataset.tempBlobUrl) URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
             imgElement.dataset.tempBlobUrl = objectUrl;
             if (window.coverExistsMap) window.coverExistsMap[gridPath] = true;
             if (window.saveCoverExistsMap) window.saveCoverExistsMap();
         } else {
-            // Not in IDB cache. Wait for the native network load to fail before trying fallbacks.
-            if (isNativeLoading) {
-                if (imgElement.complete && imgElement.naturalWidth === 0) {
-                    loadFromNetwork();
-                } else {
-                    imgElement.onerror = function () {
-                        imgElement.onerror = null;
-                        loadFromNetwork();
-                    };
-                }
+            // Native image is already loading. Catch success to cache it, or failure to trigger fallbacks.
+            if (imgElement.complete) {
+                if (imgElement.naturalWidth === 0) loadFromNetwork();
+                else cacheNativeImageToDB(actualUrl, cacheKey);
             } else {
-                loadFromNetwork();
+                imgElement.onload = function () {
+                    imgElement.onload = null; imgElement.onerror = null;
+                    cacheNativeImageToDB(actualUrl, cacheKey);
+                };
+                imgElement.onerror = function () {
+                    imgElement.onload = null; imgElement.onerror = null;
+                    loadFromNetwork();
+                };
             }
         }
-    });
+    }).catch(function() { loadFromNetwork(); });
+
+    function cacheNativeImageToDB(url, key) {
+        fetch(url, { cache: 'force-cache' }).then(res => res.blob()).then(blob => {
+            if (blob.size > 0 && typeof saveImageToDB === 'function') saveImageToDB(key, blob);
+        }).catch(err => {});
+    }
 
     function showPlaceholder(err) {
         imgElement.src = window.dsMissingImage;
@@ -1391,23 +1402,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         fetchImageSecurely(lowResUrl);
     }
 
-    var cacheKey = (fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") ? gridPath : lowResUrl;
-
-    // ALWAYS check IndexedDB cache first for ALL images (Cover, Fallback, and Specific Cart Designs)
-    getImageFromDB(cacheKey).then(function (blob) {
-        if (blob) {
-            var objectUrl = URL.createObjectURL(blob);
-            imgElement.src = objectUrl;
-            imgElement.onerror = function () {
-                loadFromNetwork();
-            };
-        } else {
-            loadFromNetwork();
-        }
-    }).catch(function (err) {
-        loadFromNetwork();
-    });
-
+    // Duplicate IndexedDB check removed. Logic merged at the top for instant native loading.
     // 2. Background Load High-Res Zoom Image (if applicable) — saved to IndexedDB for PDF speed
     if (zoomPath && zoomPath.trim() !== "" && zoomPath.toLowerCase() !== "none") {
         var encZoomPath = decodeURIComponent(String(zoomPath)).trim().replace(/\\/g, '/').split('/').map(encodeURIComponent).join('%2F');
