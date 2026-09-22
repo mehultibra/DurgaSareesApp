@@ -410,13 +410,14 @@ function autoFitTextElement(div, el) {
         const targetH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
         const baseFontSize = parseInt(el.fontSize, 10) || 14;
         const minFontSize = 6;
+        const minScale = minFontSize / baseFontSize;
         const isMultiline = !!el.multiline;
 
         // Reset div to measure pure single-line text width at base font size
         div.style.position = 'absolute';
         div.style.left = el.x + 'px';
         div.style.top  = el.y + 'px';
-        div.style.width = 'auto';  // Let it expand
+        div.style.width = 'auto';  
         div.style.height = 'auto';
         div.style.overflow = 'visible';
         div.style.whiteSpace = 'nowrap';
@@ -426,62 +427,49 @@ function autoFitTextElement(div, el) {
 
         const rawWidth = div.scrollWidth;
 
-        let finalFontSize = baseFontSize;
         let finalWhiteSpace = 'nowrap';
         let finalWidth = targetW;
         let finalHeight = targetH;
         let scale = 1;
 
         if (rawWidth > targetW) {
-            // Text is too wide. Calculate exact font size ratio to fit
-            let idealFontSize = Math.floor(baseFontSize * (targetW / rawWidth));
+            let idealScale = targetW / rawWidth;
 
-            if (idealFontSize >= minFontSize) {
-                // Fits on one line just by reducing font size
-                finalFontSize = idealFontSize;
+            if (idealScale >= minScale || !isMultiline) {
+                // Single line mode. Either it naturally fits within minScale, or multiline is disabled 
+                // so we FORCE it to fit by scaling infinitely small if necessary.
                 finalWhiteSpace = 'nowrap';
-                finalWidth = targetW;
-                finalHeight = targetH;
-                scale = 1;
+                scale = idealScale;
+                finalWidth = targetW / scale; 
+                finalHeight = targetH / scale; 
             } else {
-                // Needs to be smaller than minFontSize to fit on one line
-                finalFontSize = minFontSize;
-                div.style.fontSize = minFontSize + 'px';
+                // Multiline enabled AND it requires shrinking below minScale to fit on one line.
+                // Wrap it at minScale!
+                finalWhiteSpace = 'pre-wrap';
+                div.style.whiteSpace = 'pre-wrap';
+                div.style.wordBreak = 'break-word';
+                div.style.overflowWrap = 'anywhere';
                 
-                if (isMultiline) {
-                    // Wrap to multiple lines
-                    finalWhiteSpace = 'pre-wrap';
-                    div.style.whiteSpace = 'pre-wrap';
-                    div.style.width = targetW + 'px'; // Constrain width to force wrap
-                    div.style.height = 'auto';
-                    
-                    const wrappedHeight = div.scrollHeight;
-                    if (wrappedHeight > targetH) {
-                        // Wraps, but overflows vertically. Scale it down to fit height.
-                        scale = targetH / wrappedHeight;
-                        finalWidth = targetW;
-                        finalHeight = wrappedHeight; // Set height to unscaled height so it doesn't clip internally before scaling
-                    } else {
-                        // Wraps and fits vertically!
-                        scale = 1;
-                        finalWidth = targetW;
-                        finalHeight = targetH;
-                    }
+                const wrapWidth = targetW / minScale;
+                div.style.width = wrapWidth + 'px'; 
+                div.style.height = 'auto';
+                
+                const wrappedHeight = div.scrollHeight;
+                
+                if (wrappedHeight * minScale > targetH) {
+                    // Wraps, but overflows vertically. Scale it down to fit height.
+                    scale = targetH / wrappedHeight;
+                    finalWidth = wrapWidth; 
+                    finalHeight = wrappedHeight;
                 } else {
-                    // Multiline disabled. Keep single line, but apply scale to squish it horizontally.
-                    finalWhiteSpace = 'nowrap';
-                    div.style.whiteSpace = 'nowrap';
-                    div.style.width = 'auto'; // let it take full width for measurement at minFontSize
-                    
-                    const squeezedWidth = div.scrollWidth; 
-                    scale = targetW / squeezedWidth;
-                    finalWidth = squeezedWidth; // Set width to unscaled width so it doesn't clip before scaling
-                    finalHeight = targetH;
+                    // Wraps and fits vertically at minScale!
+                    scale = minScale;
+                    finalWidth = wrapWidth;
+                    finalHeight = targetH / scale;
                 }
             }
         } else {
-            // Fits perfectly at baseFontSize
-            finalFontSize = baseFontSize;
+            // Fits perfectly without scaling
             finalWhiteSpace = 'nowrap';
             finalWidth = targetW;
             finalHeight = targetH;
@@ -489,8 +477,10 @@ function autoFitTextElement(div, el) {
         }
 
         // Apply final styles
-        div.style.fontSize = finalFontSize + 'px';
+        div.style.fontSize = baseFontSize + 'px'; // NEVER CHANGE FONT SIZE to avoid clamps!
         div.style.whiteSpace = finalWhiteSpace;
+        div.style.wordBreak = (finalWhiteSpace === 'pre-wrap') ? 'break-word' : 'normal';
+        div.style.overflowWrap = (finalWhiteSpace === 'pre-wrap') ? 'anywhere' : 'normal';
         div.style.width = finalWidth + 'px';
         div.style.height = finalHeight + 'px';
         div.style.display = 'flex';
@@ -499,9 +489,9 @@ function autoFitTextElement(div, el) {
         div.style.textAlign = (finalWhiteSpace === 'pre-wrap') ? 'left' : 'center';
         div.style.overflow = 'hidden';
 
-        if (scale < 0.99) {
+        if (scale < 0.999) {
             div.style.transform = `scale(${scale})`;
-            div.style.transformOrigin = (finalWhiteSpace === 'pre-wrap') ? 'left top' : 'center center';
+            div.style.transformOrigin = 'left top';
         } else {
             div.style.transform = 'none';
         }
