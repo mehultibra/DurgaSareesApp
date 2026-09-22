@@ -234,8 +234,8 @@ function renderStickerTemplate(containerId, isEditor = false) {
 
             const handle = document.createElement('div');
             handle.style.position = 'absolute';
-            handle.style.right = '-5px';
-            handle.style.bottom = '-5px';
+            handle.style.right = '0px';
+            handle.style.bottom = '0px';
             handle.style.width = '10px';
             handle.style.height = '10px';
             handle.style.background = 'blue';
@@ -508,8 +508,8 @@ function autoFitTextElement(div, el) {
             if (handle) {
                 handle.style.width = (10/scale) + 'px';
                 handle.style.height = (10/scale) + 'px';
-                handle.style.right = (-5/scale) + 'px';
-                handle.style.bottom = (-5/scale) + 'px';
+                handle.style.right = '0px';
+                handle.style.bottom = '0px';
             }
         }
 
@@ -543,8 +543,8 @@ function startDrag(e, id) {
             handle.style.display = x.id === id ? 'block' : 'none';
             handle.style.width = (10/s) + 'px';
             handle.style.height = (10/s) + 'px';
-            handle.style.right = (-5/s) + 'px';
-            handle.style.bottom = (-5/s) + 'px';
+            handle.style.right = '0px';
+            handle.style.bottom = '0px';
         }
     });
     
@@ -616,7 +616,7 @@ function updateElementSize(dx, dy) {
     const el = window.stickerLayout.elements.find(x => x.id === selectedElementId);
     if (el) {
         el.w = Math.max(20, initialElemW + dx);
-        if (el.h) el.h = Math.max(10, initialElemH + dy);
+        el.h = Math.max(10, initialElemH + dy);
         
         const domEl = document.getElementById('editor_' + el.id);
         if (domEl) {
@@ -624,15 +624,15 @@ function updateElementSize(dx, dy) {
                 autoFitTextElement(domEl, el);
             } else {
                 domEl.style.width = el.w + 'px';
-                if (el.h) domEl.style.height = el.h + 'px';
+                domEl.style.height = el.h + 'px';
             }
         }
         
         // Also update inputs in properties panel
         const wInp = document.getElementById('seSizeW_' + el.id);
         const hInp = document.getElementById('seSizeH_' + el.id);
-        if (wInp) wInp.value = el.w;
-        if (hInp && el.h) hInp.value = el.h;
+        if (wInp) wInp.value = Math.round(el.w);
+        if (hInp) hInp.value = Math.round(el.h);
     }
 }
 
