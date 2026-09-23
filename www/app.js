@@ -5703,168 +5703,63 @@ function previewLabel(type) {
     if (!curProduct) return;
     window.currentPrintType = type;
 
-    var typeLabels = { barcode: '(Barcode)', tag: '(Tag)', sticker: '(Sticker)' };
+    var typeLabels = { sticker: '(Sticker)' };
     document.getElementById('printTypeSpan').innerText = typeLabels[type] || '';
 
     var stickerContainer = document.getElementById('stickerPreviewContainer');
-    var canvasContainer = document.getElementById('printPreviewCanvasContainer');
-    var tagEditor = document.getElementById('tagEditorContainer');
 
     // Reset visibility
-    stickerContainer.style.display = 'none';
-    canvasContainer.style.display = 'block';
-    tagEditor.style.display = 'none';
+    stickerContainer.style.display = 'block';
     window.currentPrintCanvas = null;
 
-    var cdObj = JSON.parse(localStorage.getItem("dsCustomerDetails") || "{}");
-    var firmName = cdObj.firm || "DURGA SAREES";
-
-    if (type === 'sticker') {
-        // ── LIVE EDITABLE STICKER MODE ─────────────────────────────────────
-        stickerContainer.style.display = 'block';
-        canvasContainer.style.display = 'none';
-
-        var btnEdit = document.getElementById('btnEditStickerLayout');
-        if (btnEdit) {
-            btnEdit.style.display = window.isSuperAdmin ? 'block' : 'none';
-        }
-
-        var sel = document.getElementById('stickerTemplateSelect');
-        if (sel && window.stickerLayoutsMap) {
-            sel.innerHTML = '';
-            Object.keys(window.stickerLayoutsMap).forEach(k => {
-                var layout = window.stickerLayoutsMap[k];
-                var opt = document.createElement('option');
-                opt.value = k;
-                opt.innerText = k;
-                if (k === (window.currentTemplateName || "Default")) opt.selected = true;
-                sel.appendChild(opt);
-            });
-            sel.style.display = Object.keys(window.stickerLayoutsMap).length > 1 ? 'block' : 'none';
-        }
-
-        if (typeof renderStickerTemplate === 'function') {
-            renderStickerTemplate('stickerTemplate', false);
-        }
-
-        // (Removed stkProductImg injection)
-        // Generate QR code (encodes SKU so it can be scanned)
-        var qrEl = document.getElementById('stkQRCode');
-        if (qrEl) {
-            qrEl.innerHTML = '';
-            if (window.QRCode) {
-                var productUrl = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
-                new QRCode(qrEl, {
-                    text: productUrl,
-                    width: 100,
-                    height: 100,
-                    correctLevel: QRCode.CorrectLevel.M
-                });
-            }
-        }
-        
-        setTimeout(() => {
-            if (typeof updateStickerCanvasScale === 'function') {
-                updateStickerCanvasScale('stickerTemplate');
-            }
-        }, 100);
-
-        loadPrinters();
-        openModal('printPreviewModal');
-        return;
+    var btnEdit = document.getElementById('btnEditStickerLayout');
+    if (btnEdit) {
+        btnEdit.style.display = window.isSuperAdmin ? 'block' : 'none';
     }
 
-    if (type === 'barcode') {
-        document.getElementById('lbl_bc_firm').innerText = firmName;
-        document.getElementById('lbl_bc_name').innerText = curProduct.name;
-        document.getElementById('lbl_bc_price').innerText = curProduct.price || '0';
-        document.getElementById('lbl_bc_pack').innerText = curProduct.packing || '1';
-
-        var nameEl = document.getElementById('lbl_bc_name');
-        nameEl.style.fontSize = '40px';
-        if (curProduct.name.length > 20) nameEl.style.fontSize = '30px';
-        if (curProduct.name.length > 30) nameEl.style.fontSize = '24px';
-
-        JsBarcode("#lbl_bc_barcode", curProduct.sku || "00000", {
-            format: "CODE128", width: 3, height: 100,
-            displayValue: true, fontSize: 24, margin: 0
+    var sel = document.getElementById('stickerTemplateSelect');
+    if (sel && window.stickerLayoutsMap) {
+        sel.innerHTML = '';
+        Object.keys(window.stickerLayoutsMap).forEach(k => {
+            var layout = window.stickerLayoutsMap[k];
+            var opt = document.createElement('option');
+            opt.value = k;
+            opt.innerText = k;
+            if (k === (window.currentTemplateName || "Default")) opt.selected = true;
+            sel.appendChild(opt);
         });
-    } else {
-        tagEditor.style.display = 'block';
-
-        document.getElementById('editTagDesc1').value = localStorage.getItem("dsTagDesc1") || "";
-        document.getElementById('editTagDesc2').value = localStorage.getItem("dsTagDesc2") || "";
-        document.getElementById('editTagCut').value = localStorage.getItem("dsTagCut") || "CUT 6 MTR + WTH BLOUSE";
-
-        document.getElementById('lbl_tag_name').innerText = curProduct.name;
-        document.getElementById('lbl_tag_desc1').innerText = document.getElementById('editTagDesc1').value;
-        document.getElementById('lbl_tag_desc2').innerText = document.getElementById('editTagDesc2').value;
-        document.getElementById('lbl_tag_cut').innerText = document.getElementById('editTagCut').value;
-        document.getElementById('lbl_tag_sku').innerText = curProduct.sku || "-";
-
-        var nameEl = document.getElementById('lbl_tag_name');
-        nameEl.style.fontSize = '52px';
-        if (curProduct.name.length > 15) nameEl.style.fontSize = '42px';
-        if (curProduct.name.length > 22) nameEl.style.fontSize = '34px';
+        sel.style.display = Object.keys(window.stickerLayoutsMap).length > 1 ? 'block' : 'none';
     }
 
-    // Render barcode/tag via html2canvas
-    var tplId = type === 'barcode' ? 'tpl_barcode' : 'tpl_tag';
-    var tpl = document.getElementById(tplId);
-    canvasContainer.innerHTML = 'Rendering...';
+    if (typeof renderStickerTemplate === 'function') {
+        renderStickerTemplate('stickerTemplate', false);
+    }
+
+    // Generate QR code (encodes SKU so it can be scanned)
+    var qrEl = document.getElementById('stkQRCode');
+    if (qrEl) {
+        qrEl.innerHTML = '';
+        if (window.QRCode) {
+            var productUrl = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
+            new QRCode(qrEl, {
+                text: productUrl,
+                width: 100,
+                height: 100,
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        }
+    }
+    
+    setTimeout(() => {
+        if (typeof updateStickerCanvasScale === 'function') {
+            updateStickerCanvasScale('stickerTemplate');
+        }
+    }, 100);
 
     loadPrinters();
     openModal('printPreviewModal');
-
-    setTimeout(() => {
-        html2canvas(tpl, { scale: 1 }).then(canvas => {
-            window.currentPrintCanvas = canvas;
-            var displayCanvas = document.createElement('canvas');
-            var ctx = displayCanvas.getContext('2d');
-            displayCanvas.width = canvas.width / 2;
-            displayCanvas.height = canvas.height / 2;
-            ctx.drawImage(canvas, 0, 0, displayCanvas.width, displayCanvas.height);
-            displayCanvas.style.maxWidth = '100%';
-            canvasContainer.innerHTML = '';
-            canvasContainer.appendChild(displayCanvas);
-        });
-    }, 100);
 }
 
-// Called when typing in the editor inputs to live-update the canvas
-function updateLiveLabel() {
-    if (window.currentPrintType !== 'tag') return;
-
-    var desc1 = document.getElementById('editTagDesc1').value;
-    var desc2 = document.getElementById('editTagDesc2').value;
-    var cut = document.getElementById('editTagCut').value;
-
-    // Save defaults
-    localStorage.setItem("dsTagDesc1", desc1);
-    localStorage.setItem("dsTagDesc2", desc2);
-    localStorage.setItem("dsTagCut", cut);
-
-    // Update hidden HTML template
-    document.getElementById('lbl_tag_desc1').innerText = desc1;
-    document.getElementById('lbl_tag_desc2').innerText = desc2;
-    document.getElementById('lbl_tag_cut').innerText = cut;
-
-    // Re-render canvas
-    var tpl = document.getElementById('tpl_tag');
-    var container = document.getElementById('printPreviewCanvasContainer');
-
-    html2canvas(tpl, { scale: 1 }).then(canvas => {
-        window.currentPrintCanvas = canvas;
-        var displayCanvas = document.createElement('canvas');
-        var ctx = displayCanvas.getContext('2d');
-        displayCanvas.width = canvas.width / 2;
-        displayCanvas.height = canvas.height / 2;
-        ctx.drawImage(canvas, 0, 0, displayCanvas.width, displayCanvas.height);
-        displayCanvas.style.maxWidth = '100%';
-        container.innerHTML = '';
-        container.appendChild(displayCanvas);
-    });
-}
 
 window.changePrintQty = function(delta) {
     var el = document.getElementById('printQtyInput');
@@ -5920,47 +5815,41 @@ function confirmPrint() {
         }
     };
 
-    if (window.currentPrintType === 'sticker') {
-        // ── STICKER: render the live contenteditable template ─────────────
-        var tpl = document.getElementById('stickerTemplate');
+    // ── STICKER: render the live contenteditable template ─────────────
+    var tpl = document.getElementById('stickerTemplate');
 
-        // Temporarily hide the dashed preview border, focus indicators, and transform scaling
-        var origBorder = tpl.style.border;
-        var origBoxShadow = tpl.style.boxShadow;
-        var origTransform = tpl.style.transform;
-        
-        tpl.style.border = 'none';
-        tpl.style.boxShadow = 'none';
-        tpl.style.transform = 'none';
-        
-        // Also hide any active focus underlines on contenteditable fields
-        ['stkProduct', 'stkPrice', 'stkDesign', 'stkFabric', 'stkCut'].forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) el.style.borderBottom = 'none';
+    // Temporarily hide the dashed preview border, focus indicators, and transform scaling
+    var origBorder = tpl.style.border;
+    var origBoxShadow = tpl.style.boxShadow;
+    var origTransform = tpl.style.transform;
+    
+    tpl.style.border = 'none';
+    tpl.style.boxShadow = 'none';
+    tpl.style.transform = 'none';
+    
+    // Also hide any active focus underlines on contenteditable fields
+    ['stkProduct', 'stkPrice', 'stkDesign', 'stkFabric', 'stkCut'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.style.borderBottom = 'none';
+    });
+
+    setTimeout(function () {
+        html2canvas(tpl, { scale: 1, useCORS: true, backgroundColor: '#ffffff' }).then(function (canvas) {
+            // Restore the preview styling
+            tpl.style.border = origBorder;
+            tpl.style.boxShadow = origBoxShadow;
+            tpl.style.transform = origTransform;
+            window.currentPrintCanvas = canvas;
+            doSendCanvas(canvas);
+        }).catch(function (err) {
+            tpl.style.border = origBorder;
+            tpl.style.boxShadow = origBoxShadow;
+            tpl.style.transform = origTransform;
+            btn.innerText = "Render Error";
+            btn.disabled = false;
+            alert("Could not render sticker: " + err.message);
         });
-
-        setTimeout(function () {
-            html2canvas(tpl, { scale: 1, useCORS: true, backgroundColor: '#ffffff' }).then(function (canvas) {
-                // Restore the preview styling
-                tpl.style.border = origBorder;
-                tpl.style.boxShadow = origBoxShadow;
-                tpl.style.transform = origTransform;
-                window.currentPrintCanvas = canvas;
-                doSendCanvas(canvas);
-            }).catch(function (err) {
-                tpl.style.border = origBorder;
-                tpl.style.boxShadow = origBoxShadow;
-                tpl.style.transform = origTransform;
-                btn.innerText = "Render Error";
-                btn.disabled = false;
-                alert("Could not render sticker: " + err.message);
-            });
-        }, 50);
-    } else {
-        // ── BARCODE / TAG: use the pre-rendered canvas ─────────────────────
-        if (!window.currentPrintCanvas) { btn.innerText = "PRINT"; btn.disabled = false; return; }
-        doSendCanvas(window.currentPrintCanvas);
-    }
+    }, 50);
 }
 
 // ==========================================
@@ -5979,9 +5868,7 @@ function loadPrinters() {
     });
 
     // Auto-select the last used IP for this type
-    var lastIp = window.currentPrintType === 'barcode' ? localStorage.getItem("dsBarcodePrinterIp") : 
-                 (window.currentPrintType === 'tag' ? localStorage.getItem("dsTagPrinterIp") : 
-                 localStorage.getItem("dsStickerPrinterIp_" + (window.currentTemplateName || "Default")));
+    var lastIp = localStorage.getItem("dsStickerPrinterIp_" + (window.currentTemplateName || "Default"));
 
     if (lastIp) {
         var foundIdx = printers.findIndex(p => p.ip === lastIp);
@@ -6038,9 +5925,7 @@ function savePrinter() {
     localStorage.setItem('dsPrinters', JSON.stringify(printers));
 
     // Set as default for this type
-    if (window.currentPrintType === 'barcode') localStorage.setItem("dsBarcodePrinterIp", ip);
-    else if (window.currentPrintType === 'tag') localStorage.setItem("dsTagPrinterIp", ip);
-    else localStorage.setItem("dsStickerPrinterIp_" + (window.currentTemplateName || "Default"), ip);
+    localStorage.setItem("dsStickerPrinterIp_" + (window.currentTemplateName || "Default"), ip);
 
     loadPrinters();
     alert("Printer saved!");
