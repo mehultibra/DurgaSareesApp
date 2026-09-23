@@ -5987,27 +5987,15 @@ function generateTSPL(canvas, type, qty) {
 
     // TSPL Commands
     var headerStr = "";
-    if (type === 'barcode') {
-        headerStr += "SIZE 72 mm, 48 mm\n";
-        headerStr += "GAP 3 mm, 0 mm\n";
-    } else if (type === 'sticker') {
-        // Sticker dynamic size from window.stickerLayout (converted to mm)
-        var stkW = window.stickerLayout ? Math.round(window.stickerLayout.width / 8) : 55;
-        var stkH = window.stickerLayout ? Math.round(window.stickerLayout.height / 8) : 25;
-        var stkGap = window.stickerLayout ? (window.stickerLayout.gap_mm || 0) : 3;
-        headerStr += "SIZE " + stkW + " mm, " + stkH + " mm\n";
-        headerStr += "GAP " + stkGap + " mm, 0 mm\n";
-    } else {
-        headerStr += "SIZE 78 mm, 57 mm\n";
-        headerStr += "GAP 0 mm, 0 mm\n"; // Continuous tearable
-    }
     
-    if (type === 'sticker') {
-        headerStr += "DIRECTION 1\n"; // 180 degree rotate for stickers
-    } else {
-        headerStr += "DIRECTION 0\n";
-    }
+    // Sticker dynamic size from window.stickerLayout (converted to mm)
+    var stkW = window.stickerLayout ? Math.round(window.stickerLayout.width / 8) : 55;
+    var stkH = window.stickerLayout ? Math.round(window.stickerLayout.height / 8) : 25;
+    var stkGap = window.stickerLayout ? (window.stickerLayout.gap_mm !== undefined && window.stickerLayout.gap_mm !== null ? window.stickerLayout.gap_mm : 3) : 3;
     
+    headerStr += "SIZE " + stkW + " mm, " + stkH + " mm\n";
+    headerStr += "GAP " + stkGap + " mm, 0 mm\n";
+    headerStr += "DIRECTION 1\n"; // 180 degree rotate for stickers
     headerStr += "CLS\n";
 
     // BITMAP X,Y,width_bytes,height,mode,bitmap_data
