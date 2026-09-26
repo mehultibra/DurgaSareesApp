@@ -782,6 +782,7 @@ function initApp() {
                     pallu: f.pallu ? f.pallu.stringValue : "",
                     blouse: f.blouse ? f.blouse.stringValue : "",
                     work: f.work ? f.work.stringValue : "",
+                    igLinks: f.igLinks ? f.igLinks.stringValue : "[]",
                     updateTime: f.latestImageAddedAt ? (f.latestImageAddedAt.timestampValue || f.latestImageAddedAt.stringValue) : (d.createTime || d.updateTime || "")
                 });
                 validCounter++;
@@ -1921,6 +1922,13 @@ window.recordTimeSpent = function () {
 
 function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     if (document.activeElement) document.activeElement.blur(); // Hide keyboard when opening a product
+    
+    var fabPaste = document.getElementById('fabPasteImages');
+    if (fabPaste && window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.isAdminMode) {
+        fabPaste.style.display = 'flex';
+    } else if (fabPaste) {
+        fabPaste.style.display = 'none';
+    }
 
     if (!skipShow) {
         cameFromDetail = false;
@@ -2015,6 +2023,12 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     document.getElementById('dtPriceBot').innerText = p.price || '0';
     document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
 
+    var dtIgBtn = document.getElementById('dtIgBtn');
+    if (dtIgBtn) {
+        var hasLinks = p.igLinks && p.igLinks !== "[]" && p.igLinks.trim() !== "";
+        dtIgBtn.style.display = (window.isAdminMode || hasLinks) ? "inline-flex" : "none";
+    }
+
     // 🚀 NEW: LIVE SYNC FETCH WHEN OPENING PRODUCT PAGE
     if (p.docId) {
         var docUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId;
@@ -2025,13 +2039,19 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                     var f = data.fields;
                     var livePrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
                     var livePacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
+                    var liveIgLinks = f.igLinks ? f.igLinks.stringValue : "[]";
 
                     p.price = livePrice;
                     p.packing = livePacking;
+                    p.igLinks = liveIgLinks;
 
                     if (curProduct && curProduct.id === p.id) {
                         document.getElementById('dtPriceBot').innerText = p.price || '0';
                         document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
+                        if (dtIgBtn) {
+                            var hasLiveLinks = p.igLinks && p.igLinks !== "[]" && p.igLinks.trim() !== "";
+                            dtIgBtn.style.display = (window.isAdminMode || hasLiveLinks) ? "inline-flex" : "none";
+                        }
                     }
                     refreshCardUI(p.id);
                 }
@@ -2654,6 +2674,9 @@ function updateLiveDetailHeader() {
 }
 
 function closeDetail(fromHistory) {
+    var fabPaste = document.getElementById('fabPasteImages');
+    if (fabPaste) fabPaste.style.display = 'none';
+
     if (document.activeElement) document.activeElement.blur(); // Hide keyboard when returning to home
 
     var fab = document.getElementById('adminCamFab'); if (fab) fab.remove();
@@ -5645,9 +5668,20 @@ window.processCameraOutbox = async function () {
             var filename = `${item.docId}___${item.designId}___${safeName}___${item.ts}.jpg`;
             try {
                 var uploadStartTime = Date.now();
-                var fileData = await Capacitor.Plugins.Filesystem.readFile({ path: item.fileUri });
-                var res = await fetch(`data:image/jpeg;base64,${fileData.data}`);
-                var blob = await res.blob();
+                var blob;
+                try {
+                    // Modern way to read local file URL (Capacitor handles it)
+                    var capUri = item.fileUri;
+                    if (capUri.startsWith('file://')) capUri = Capacitor.convertFileSrc(capUri);
+                    var fRes = await fetch(capUri);
+                    if (!fRes.ok) throw new Error("Fetch failed");
+                    blob = await fRes.blob();
+                } catch(e) {
+                    // Fallback to Filesystem base64 string
+                    var fileData = await Capacitor.Plugins.Filesystem.readFile({ path: item.fileUri });
+                    var fRes = await fetch(`data:image/jpeg;base64,${fileData.data}`);
+                    blob = await fRes.blob();
+                }
 
                 var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
 
@@ -5667,6 +5701,7 @@ window.processCameraOutbox = async function () {
                     throw new Error(`Status ${uploadRes.status}`);
                 }
             } catch (err) {
+                if (window.isAdminMode) alert("Camera Upload Error: " + err.message);
                 window.logAppError('Outbox Uploader', 'Failed to upload ' + filename + ': ' + err.message);
             }
         }
@@ -6056,6 +6091,261 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App
     });
 }
 
+// Share Target Listener
+window.pendingSharedImages = null;
+if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorShareTarget) {
+    window.Capacitor.Plugins.CapacitorShareTarget.addListener('shareReceived', (event) => {
+        if (!event.files || event.files.length === 0) return;
+        window.pendingSharedImages = event.files;
+        
+        if (window.isSuperAdmin) {
+            document.getElementById('adminShareCount').innerText = event.files.length;
+            window.openModal('adminShareModal');
+        } else {
+            document.getElementById('customerShareCount').innerText = event.files.length;
+            
+            // Populate category dropdown
+            var catSelect = document.getElementById('custShareCat');
+            catSelect.innerHTML = '<option value="">(Optional) Select Category...</option>';
+            var catSet = new Set();
+            window.allProducts.forEach(p => { if (p.cat) catSet.add(p.cat); });
+            Array.from(catSet).sort().forEach(c => {
+                var opt = document.createElement('option');
+                opt.value = c; opt.innerText = c;
+                catSelect.appendChild(opt);
+            });
+            
+            window.openModal('customerShareModal');
+        }
+    });
+}
+
+window.routeShareToNewProduct = function() {
+    window.closeModals();
+    window.openAddProductModal();
+};
+
+window.routeShareToExistingProduct = function() {
+    window.closeModals();
+    alert("Please navigate to the product you want to update and click on it. A 'Paste Shared Images' button will appear!");
+};
+
+window.pasteSharedImages = async function() {
+    if (!window.pendingSharedImages || window.pendingSharedImages.length === 0) return;
+    if (!window.currentProduct) return alert("Open a product first!");
+    
+    if (!confirm("Are you sure you want to add these " + window.pendingSharedImages.length + " images to " + window.currentProduct.name + "?")) return;
+    
+    try {
+        var docId = window.currentProduct.id;
+        var pName = window.currentProduct.name;
+        
+        var maxNum = 1;
+        if (window.lastRenderedDesignNames) {
+            var names = window.lastRenderedDesignNames.split(',');
+            names.forEach(n => {
+                if (/^\d{1,4}$/.test(n)) {
+                    var num = parseInt(n, 10);
+                    if (num > maxNum) maxNum = num;
+                }
+            });
+        }
+        
+        for (let idx = 0; idx < window.pendingSharedImages.length; idx++) {
+            let sFile = window.pendingSharedImages[idx];
+            maxNum++;
+            let designNum = maxNum.toString().padStart(2, '0');
+            await window.saveToOutbox(docId, designNum, sFile.uri, pName, false);
+        }
+        
+        window.pendingSharedImages = null;
+        var fabPaste = document.getElementById('fabPasteImages');
+        if (fabPaste) fabPaste.style.display = 'none';
+        
+        window.processCameraOutbox();
+        alert("Images pasted successfully and added to Outbox!");
+    } catch (e) {
+        alert("Error pasting images: " + e.message);
+    }
+};
+
+window.submitCustomerSharedImages = async function() {
+    if (!window.pendingSharedImages || window.pendingSharedImages.length === 0) return;
+    
+    var btn = event.currentTarget;
+    var originalText = btn.innerHTML;
+    btn.innerHTML = "Submitting...";
+    btn.disabled = true;
+    
+    var cat = document.getElementById('custShareCat').value.trim();
+    var notes = document.getElementById('custShareNotes').value.trim();
+    
+    var uploaderName = "Unknown";
+    if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
+        uploaderName = firebase.auth().currentUser.displayName || firebase.auth().currentUser.phoneNumber || "Customer";
+    }
+    
+    var timestamp = Date.now();
+    var submissionPayload = {
+        fields: {
+            uploaderName: { stringValue: uploaderName },
+            category: { stringValue: cat },
+            notes: { stringValue: notes },
+            timestamp: { integerValue: timestamp },
+            status: { stringValue: "Pending" },
+            imageCount: { integerValue: window.pendingSharedImages.length },
+            images: { arrayValue: { values: [] } } // We'll just push to outbox for now
+        }
+    };
+    
+    try {
+        // Just push them to outbox under a special docId
+        var tempDocId = "CUSTOMER_SUBMIT_" + timestamp;
+        for (let idx = 0; idx < window.pendingSharedImages.length; idx++) {
+            let sFile = window.pendingSharedImages[idx];
+            let designNum = (idx + 1).toString().padStart(2, '0');
+            await window.saveToOutbox(tempDocId, designNum, sFile.uri, uploaderName + " - " + notes, true);
+        }
+        
+        window.pendingSharedImages = null;
+        window.processCameraOutbox();
+        window.closeModals();
+        alert("Images submitted to Admin successfully!");
+    } catch(e) {
+        alert("Error submitting: " + e.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+};
+
+
+// Instagram Links Logic
+window.openIgLinks = function() {
+    if (!window.curProduct) return;
+    
+    var links = [];
+    try {
+        links = JSON.parse(window.curProduct.igLinks || "[]");
+    } catch(e) {}
+    
+    var editBtn = document.getElementById('igEditBtn');
+    if (editBtn) {
+        editBtn.style.display = window.isAdminMode ? 'block' : 'none';
+    }
+    
+    if (links.length === 0) {
+        if (window.isAdminMode) {
+            window.openIgLinksEditor();
+        } else {
+            alert("No reference links available for this product.");
+        }
+    } else if (links.length === 1) {
+        window.open(links[0].url, '_blank');
+    } else {
+        // Multiple links
+        var listContainer = document.getElementById('igLinksList');
+        listContainer.innerHTML = '';
+        links.forEach(l => {
+            var btn = document.createElement('a');
+            btn.href = l.url;
+            btn.target = "_blank";
+            btn.style.display = "block";
+            btn.style.padding = "12px";
+            btn.style.border = "1px solid #ddd";
+            btn.style.borderRadius = "8px";
+            btn.style.textDecoration = "none";
+            btn.style.color = "var(--text-main)";
+            btn.innerHTML = `<div style="font-weight:bold;">${l.text || "Reference Link"}</div><div style="font-size:11px; color:blue; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${l.url}</div>`;
+            listContainer.appendChild(btn);
+        });
+        window.openModal('igLinksViewerModal');
+    }
+};
+
+window.openIgLinksEditor = function() {
+    window.closeModals();
+    if (!window.curProduct || !window.isAdminMode) return;
+    
+    var links = [];
+    try {
+        links = JSON.parse(window.curProduct.igLinks || "[]");
+    } catch(e) {}
+    
+    var container = document.getElementById('igLinksEditContainer');
+    container.innerHTML = '';
+    
+    if (links.length === 0) {
+        window.addIgLinkRow();
+    } else {
+        links.forEach(l => window.addIgLinkRow(l.text, l.url));
+    }
+    
+    window.openModal('igLinksEditorModal');
+};
+
+window.addIgLinkRow = function(text = "", url = "") {
+    var container = document.getElementById('igLinksEditContainer');
+    
+    var row = document.createElement('div');
+    row.className = "ig-link-row";
+    row.style.display = "flex";
+    row.style.flexDirection = "column";
+    row.style.gap = "8px";
+    row.style.padding = "12px";
+    row.style.border = "1px solid #eee";
+    row.style.borderRadius = "8px";
+    row.style.position = "relative";
+    
+    row.innerHTML = `
+        <i class="fas fa-times" onclick="this.parentElement.remove()" style="position:absolute; right:10px; top:10px; color:red; cursor:pointer;"></i>
+        <input type="text" class="ig-link-text" placeholder="Link Title (e.g., Reel 1)" value="${text}" style="padding:10px; border:1px solid #ccc; border-radius:6px; font-size:14px; width:100%;">
+        <input type="url" class="ig-link-url" placeholder="https://instagram.com/..." value="${url}" style="padding:10px; border:1px solid #ccc; border-radius:6px; font-size:14px; width:100%;">
+    `;
+    
+    container.appendChild(row);
+};
+
+window.saveIgLinks = async function() {
+    if (!window.curProduct || !window.isAdminMode) return;
+    
+    var container = document.getElementById('igLinksEditContainer');
+    var rows = container.querySelectorAll('.ig-link-row');
+    
+    var links = [];
+    rows.forEach(r => {
+        var text = r.querySelector('.ig-link-text').value.trim();
+        var url = r.querySelector('.ig-link-url').value.trim();
+        if (url) {
+            links.push({ text: text || "Reference Link", url: url });
+        }
+    });
+    
+    var linksStr = JSON.stringify(links);
+    
+    var docUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + window.curProduct.docId + "?updateMask.fieldPaths=igLinks";
+    try {
+        var res = await window.fetchWithRetry(docUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { igLinks: { stringValue: linksStr } } })
+        }, 1);
+        
+        if (!res.ok) throw new Error("Failed to save to Firestore");
+        
+        window.curProduct.igLinks = linksStr;
+        
+        // Also update allProducts locally
+        var pLocal = window.allProducts.find(x => x.id === window.curProduct.id);
+        if (pLocal) pLocal.igLinks = linksStr;
+        
+        window.closeModals();
+        alert("Reference Links saved successfully!");
+        
+    } catch(e) {
+        alert("Error saving links: " + e.message);
+    }
+};
 
 window.promptRenameDesign = async function (docId, pid, oldDesignId, imgUrl) {
     if (!window.isAdminMode) return;
@@ -6992,6 +7282,17 @@ window.submitNewProduct = async function () {
         var fbData = await fbRes.json();
 
         var newDocId = fbData.name.split('/').pop();
+
+        // Process pending shared images
+        if (window.pendingSharedImages && window.pendingSharedImages.length > 0) {
+            for (let idx = 0; idx < window.pendingSharedImages.length; idx++) {
+                let sFile = window.pendingSharedImages[idx];
+                let designNum = (idx + 1).toString().padStart(2, '0');
+                await window.saveToOutbox(newDocId, designNum, sFile.uri, name, true);
+            }
+            window.pendingSharedImages = null;
+            setTimeout(() => { window.processCameraOutbox(); }, 1000);
+        }
 
         // 2. Transaction Safe: Notify Apps Script Webhook
         if (window.DS_APP_SCRIPT_URL) {

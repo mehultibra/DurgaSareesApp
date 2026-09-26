@@ -23,6 +23,7 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/share": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
+    "@capgo/capacitor-share-target": "^8.0.54",
     "@capgo/capacitor-updater": "^8.50.1",
     "capacitor-tcp-socket": "^7.1.1"
   },

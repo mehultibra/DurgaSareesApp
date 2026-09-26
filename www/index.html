@@ -346,9 +346,14 @@
           style="font-size:12px; font-weight:bold; color:var(--text-light); outline:none; cursor:text;">1</span>
         <span style="user-select: none;">&nbsp;&nbsp;</span>
         <div onclick="openModal('shareModal')"
-          style="cursor:pointer; color:var(--whatsapp); font-size:20px; display:inline-flex; align-items:center; justify-content:center;"
+          style="cursor:pointer; color:var(--whatsapp); font-size:20px; display:inline-flex; align-items:center; justify-content:center; margin-right: 12px;"
           title="Share Catalog">
           <i class="fab fa-whatsapp"></i>
+        </div>
+        <div id="dtIgBtn" onclick="window.openIgLinks()"
+          style="cursor:pointer; color:#C13584; font-size:20px; display:none; align-items:center; justify-content:center;"
+          title="Instagram Links">
+          <i class="fab fa-instagram"></i>
         </div>
       </div>
       <div id="dtDesignsSummary"
@@ -415,6 +420,11 @@
   <div id="fabAddProduct" class="fab-wa" onclick="openAddProductModal()" style="display: none; bottom: calc(135px + env(safe-area-inset-bottom)); background: var(--myntra-pink); z-index: 1000;">
     <i class="fas fa-plus"></i>
   </div>
+  
+  <div id="fabPasteImages" class="fab-wa" onclick="window.pasteSharedImages()" style="display: none; bottom: calc(205px + env(safe-area-inset-bottom)); background: #2196f3; z-index: 1001; width:auto; border-radius:30px; padding:0 20px;">
+    <i class="fas fa-paste" style="margin-right:8px;"></i> Paste Shared Images
+  </div>
+
 
   <div class="fab-wa" onclick="openModal('shareModal')">
     <i class="fab fa-whatsapp"></i>
@@ -845,6 +855,77 @@
         </button>
       </div>
       
+    </div>
+  </div>
+
+  <!-- ADMIN SHARE ROUTING MODAL -->
+  <div class="action-modal" id="adminShareModal" onclick="if(event.target===this) closeModals()" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; flex-direction: column; justify-content: center;">
+    <div class="modal-content" style="background: #fff; border-radius: 12px; padding: 20px; width: 90%; margin: 0 auto; text-align: center;">
+      <h3 style="margin-top: 0; color: var(--text-main);">Incoming Images</h3>
+      <p style="font-size: 13px; color: #666; margin-bottom: 20px;">You received <span id="adminShareCount">0</span> images from another app.</p>
+      
+      <button onclick="window.routeShareToNewProduct()" style="width: 100%; background: var(--myntra-pink); color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; margin-bottom: 15px; cursor: pointer;">
+        <i class="fas fa-plus-circle"></i> Create Brand New Product
+      </button>
+      
+      <button onclick="window.routeShareToExistingProduct()" style="width: 100%; background: #2196f3; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+        <i class="fas fa-search"></i> Add to Existing Product
+      </button>
+      
+      <div style="margin-top: 20px; color: #999; font-size: 12px; cursor: pointer; text-decoration: underline;" onclick="closeModals()">Cancel</div>
+    </div>
+  </div>
+
+  <!-- CUSTOMER SHARE SUBMISSION MODAL -->
+  <div class="action-modal" id="customerShareModal" onclick="if(event.target===this) closeModals()" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; flex-direction: column; justify-content: flex-end;">
+    <div class="modal-content" style="background: #fff; border-radius: 16px 16px 0 0; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); text-align: left;">
+      <h3 style="margin-top: 0; color: var(--text-main);">Submit to Durga Sarees</h3>
+      <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Send these <span id="customerShareCount">0</span> images to the Admin for review.</p>
+      
+      <label style="font-weight: bold; font-size: 12px; color: var(--text-main);">Suggest Category</label>
+      <select id="custShareCat" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; margin-top: 5px; margin-bottom: 15px;">
+        <option value="">(Optional) Select Category...</option>
+      </select>
+      
+      <label style="font-weight: bold; font-size: 12px; color: var(--text-main);">Notes for Admin</label>
+      <textarea id="custShareNotes" placeholder="e.g. Do you have this design in stock?" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; margin-top: 5px; height: 80px; resize: none; margin-bottom: 20px;"></textarea>
+      
+      <button onclick="window.submitCustomerSharedImages()" style="width: 100%; background: #4caf50; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+        <i class="fas fa-paper-plane"></i> Submit Images
+      </button>
+    </div>
+  </div>
+
+  <!-- IG LINKS VIEWER MODAL -->
+  <div class="action-modal" id="igLinksViewerModal" onclick="if(event.target===this) closeModals()" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; flex-direction: column; justify-content: flex-end;">
+    <div class="modal-content" style="background: #fff; border-radius: 16px 16px 0 0; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); text-align: left;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+        <h3 style="margin: 0; color: var(--text-main);"><i class="fab fa-instagram" style="color:#C13584; margin-right:8px;"></i> Reference Links</h3>
+        <button id="igEditBtn" onclick="window.openIgLinksEditor()" style="display:none; background:none; border:none; color:var(--myntra-pink); font-size:14px; font-weight:bold; cursor:pointer;">Edit</button>
+      </div>
+      <div id="igLinksList" style="display:flex; flex-direction:column; gap:12px; margin-bottom:10px;">
+        <!-- Links injected here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- IG LINKS EDITOR MODAL -->
+  <div class="action-modal" id="igLinksEditorModal" onclick="if(event.target===this) closeModals()" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; flex-direction: column; justify-content: center;">
+    <div class="modal-content" style="background: #fff; border-radius: 12px; padding: 20px; width: 90%; margin: 0 auto; text-align: left; max-height: 80vh; overflow-y: auto;">
+      <h3 style="margin-top: 0; color: var(--text-main);">Manage Reference Links</h3>
+      
+      <div id="igLinksEditContainer" style="display:flex; flex-direction:column; gap:15px; margin-bottom:20px;">
+        <!-- Edit rows injected here -->
+      </div>
+      
+      <button onclick="window.addIgLinkRow()" style="width: 100%; background: #f0f0f0; color: #333; border: 1px dashed #ccc; padding: 12px; border-radius: 8px; font-weight: bold; margin-bottom: 20px; cursor: pointer;">
+        + Add Another Link
+      </button>
+      
+      <div style="display:flex; gap:10px;">
+        <button onclick="closeModals()" style="flex:1; background: #eee; color: #333; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer;">Cancel</button>
+        <button onclick="window.saveIgLinks()" style="flex:1; background: var(--myntra-pink); color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer;">Save Links</button>
+      </div>
     </div>
   </div>
 
