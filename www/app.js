@@ -5687,7 +5687,9 @@ window.processCameraOutbox = async function () {
                 try {
                     // Modern way to read local file URL (Capacitor handles it)
                     var capUri = item.fileUri;
-                    if (capUri.startsWith('file://')) capUri = Capacitor.convertFileSrc(capUri);
+                    if (window.Capacitor && window.Capacitor.convertFileSrc) {
+                        capUri = window.Capacitor.convertFileSrc(capUri);
+                    }
                     var fRes = await fetch(capUri);
                     if (!fRes.ok) throw new Error("Fetch failed");
                     blob = await fRes.blob();
@@ -6183,7 +6185,20 @@ window.showNextSharedImagePreview = async function() {
     let sFile = window.pendingSharedImages[window.sharedImagePasteIndex];
     window.tempCamPhotoPath = sFile.uri || sFile.webPath;
 
-    var defaultDesignId = await window.promptDesignNumber(window.tempCamPid);
+    var maxNum = 0; // Default if no previous designs exist
+    if (window.lastRenderedDesignNames && !window.tempCamIsNewProduct) {
+        var names = window.lastRenderedDesignNames.split(',');
+        names.forEach(n => {
+            if (/^\d{1,4}$/.test(n)) {
+                var num = parseInt(n, 10);
+                if (num > maxNum) maxNum = num;
+            }
+        });
+    }
+    // If it's a new product, or no designs exist, start from 1. 
+    // Add the current paste index so it increments automatically for each image.
+    var nextNum = maxNum + 1 + window.sharedImagePasteIndex;
+    var defaultDesignId = nextNum.toString().padStart(2, '0');
 
     var modal = document.getElementById('adminCameraPreviewModal');
     var previewImg = document.getElementById('adminPreviewImg');
@@ -6192,7 +6207,7 @@ window.showNextSharedImagePreview = async function() {
 
     if (previewImg) {
         var capUri = window.tempCamPhotoPath;
-        if (capUri && capUri.startsWith('file://') && window.Capacitor) {
+        if (capUri && window.Capacitor && window.Capacitor.convertFileSrc) {
             capUri = window.Capacitor.convertFileSrc(capUri);
         }
         previewImg.src = capUri;
@@ -7326,7 +7341,7 @@ window.submitNewProduct = async function () {
             window.tempCamDocId = newDocId;
             window.tempCamPid = newDocId;
             window.tempCamProductName = name;
-            window.tempCamIsNewProduct = false; // We already created it, so treat as existing
+            window.tempCamIsNewProduct = true; // This is a NEW product
             window.sharedImagePasteIndex = 0;
             
             // Allow modal to close and state to settle before popping open the camera preview
