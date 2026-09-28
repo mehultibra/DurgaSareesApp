@@ -5589,7 +5589,14 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
 window.retakeAdminPhoto = function () {
     var modal = document.getElementById('adminCameraPreviewModal');
     if (modal) modal.style.display = 'none';
-    window.triggerAdminCamera(window.tempCamDocId, window.tempCamPid);
+
+    if (window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.sharedImagePasteIndex !== undefined) {
+        // Cancel/Skip this shared image and move to the next one
+        window.sharedImagePasteIndex++;
+        window.showNextSharedImagePreview();
+    } else {
+        window.triggerAdminCamera(window.tempCamDocId, window.tempCamPid);
+    }
 };
 
 window.confirmAdminUpload = async function () {
@@ -5626,8 +5633,16 @@ window.confirmAdminUpload = async function () {
             setTimeout(() => {
                 var toastEl = document.getElementById(toastId);
                 if (toastEl) toastEl.remove();
-                window.processCameraOutbox();
+                
+                if (!(window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.sharedImagePasteIndex !== undefined)) {
+                    window.processCameraOutbox();
+                }
             }, 5000);
+            
+            if (window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.sharedImagePasteIndex !== undefined) {
+                window.sharedImagePasteIndex++;
+                setTimeout(window.showNextSharedImagePreview, 300);
+            }
         }
     } catch (e) {
         window.logAppError('Confirm Upload', e.message);
@@ -6132,41 +6147,54 @@ window.routeShareToExistingProduct = function() {
 
 window.pasteSharedImages = async function() {
     if (!window.pendingSharedImages || window.pendingSharedImages.length === 0) return;
-    if (!window.currentProduct) return alert("Open a product first!");
+    if (!window.curProduct) return alert("Open a product first!");
     
-    if (!confirm("Are you sure you want to add these " + window.pendingSharedImages.length + " images to " + window.currentProduct.name + "?")) return;
+    window.tempCamDocId = window.curProduct.docId;
+    window.tempCamPid = window.curProduct.id;
+    window.tempCamProductName = window.curProduct.name;
+    window.tempCamIsNewProduct = false;
+    window.sharedImagePasteIndex = 0;
     
-    try {
-        var docId = window.currentProduct.id;
-        var pName = window.currentProduct.name;
-        
-        var maxNum = 1;
-        if (window.lastRenderedDesignNames) {
-            var names = window.lastRenderedDesignNames.split(',');
-            names.forEach(n => {
-                if (/^\d{1,4}$/.test(n)) {
-                    var num = parseInt(n, 10);
-                    if (num > maxNum) maxNum = num;
-                }
-            });
-        }
-        
-        for (let idx = 0; idx < window.pendingSharedImages.length; idx++) {
-            let sFile = window.pendingSharedImages[idx];
-            maxNum++;
-            let designNum = maxNum.toString().padStart(2, '0');
-            await window.saveToOutbox(docId, designNum, sFile.uri, pName, false);
-        }
-        
+    window.showNextSharedImagePreview();
+};
+
+window.showNextSharedImagePreview = async function() {
+    if (!window.pendingSharedImages || window.sharedImagePasteIndex >= window.pendingSharedImages.length) {
+        // Done pasting all images
         window.pendingSharedImages = null;
+        window.sharedImagePasteIndex = 0;
         var fabPaste = document.getElementById('fabPasteImages');
         if (fabPaste) fabPaste.style.display = 'none';
-        
         window.processCameraOutbox();
-        alert("Images pasted successfully and added to Outbox!");
-    } catch (e) {
-        alert("Error pasting images: " + e.message);
+        alert("All shared images pasted successfully!");
+        return;
     }
+    
+    let sFile = window.pendingSharedImages[window.sharedImagePasteIndex];
+    window.tempCamPhotoPath = sFile.uri || sFile.webPath;
+
+    var defaultDesignId = await window.promptDesignNumber(window.tempCamPid);
+
+    var modal = document.getElementById('adminCameraPreviewModal');
+    var previewImg = document.getElementById('adminPreviewImg');
+    var designInput = document.getElementById('adminDesignNumberInput');
+    var nameLabel = document.getElementById('adminPreviewProductName');
+
+    if (previewImg) {
+        var capUri = window.tempCamPhotoPath;
+        if (capUri && capUri.startsWith('file://') && window.Capacitor) {
+            capUri = window.Capacitor.convertFileSrc(capUri);
+        }
+        previewImg.src = capUri;
+    }
+    
+    if (designInput) designInput.value = defaultDesignId;
+
+    if (nameLabel) {
+        nameLabel.value = window.tempCamProductName || "";
+    }
+
+    if (modal) modal.style.display = 'flex';
 };
 
 window.submitCustomerSharedImages = async function() {
@@ -7285,13 +7313,14 @@ window.submitNewProduct = async function () {
 
         // Process pending shared images
         if (window.pendingSharedImages && window.pendingSharedImages.length > 0) {
-            for (let idx = 0; idx < window.pendingSharedImages.length; idx++) {
-                let sFile = window.pendingSharedImages[idx];
-                let designNum = (idx + 1).toString().padStart(2, '0');
-                await window.saveToOutbox(newDocId, designNum, sFile.uri, name, true);
-            }
-            window.pendingSharedImages = null;
-            setTimeout(() => { window.processCameraOutbox(); }, 1000);
+            window.tempCamDocId = newDocId;
+            window.tempCamPid = newDocId;
+            window.tempCamProductName = name;
+            window.tempCamIsNewProduct = false; // We already created it, so treat as existing
+            window.sharedImagePasteIndex = 0;
+            
+            // Allow modal to close and state to settle before popping open the camera preview
+            setTimeout(window.showNextSharedImagePreview, 500);
         }
 
         // 2. Transaction Safe: Notify Apps Script Webhook
