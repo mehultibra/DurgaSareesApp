@@ -6136,12 +6136,18 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Cap
 }
 
 window.routeShareToNewProduct = function() {
-    window.closeModals();
-    window.openAddProductModal();
+    closeModals();
+    if (typeof window.openAddProductModal === 'function') {
+        window.openAddProductModal();
+    } else if (typeof openAddProductModal === 'function') {
+        openAddProductModal();
+    } else {
+        alert("Error: openAddProductModal is not defined.");
+    }
 };
 
 window.routeShareToExistingProduct = function() {
-    window.closeModals();
+    closeModals();
     alert("Please navigate to the product you want to update and click on it. A 'Paste Shared Images' button will appear!");
 };
 
@@ -6237,7 +6243,7 @@ window.submitCustomerSharedImages = async function() {
         
         window.pendingSharedImages = null;
         window.processCameraOutbox();
-        window.closeModals();
+        closeModals();
         alert("Images submitted to Admin successfully!");
     } catch(e) {
         alert("Error submitting: " + e.message);
@@ -6292,7 +6298,7 @@ window.openIgLinks = function() {
 };
 
 window.openIgLinksEditor = function() {
-    window.closeModals();
+    closeModals();
     if (!window.curProduct || !window.isAdminMode) return;
     
     var links = [];
@@ -6367,7 +6373,7 @@ window.saveIgLinks = async function() {
         var pLocal = window.allProducts.find(x => x.id === window.curProduct.id);
         if (pLocal) pLocal.igLinks = linksStr;
         
-        window.closeModals();
+        closeModals();
         alert("Reference Links saved successfully!");
         
     } catch(e) {
