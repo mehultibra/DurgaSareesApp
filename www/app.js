@@ -6136,19 +6136,23 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Cap
 }
 
 window.routeShareToNewProduct = function() {
-    closeModals();
-    if (typeof window.openAddProductModal === 'function') {
-        window.openAddProductModal();
-    } else if (typeof openAddProductModal === 'function') {
-        openAddProductModal();
-    } else {
-        alert("Error: openAddProductModal is not defined.");
-    }
+    closeModals(true); // pass true to prevent history.back() race condition
+    setTimeout(function() {
+        if (typeof window.openAddProductModal === 'function') {
+            window.openAddProductModal();
+        } else if (typeof openAddProductModal === 'function') {
+            openAddProductModal();
+        } else {
+            alert("Error: openAddProductModal is not defined.");
+        }
+    }, 100);
 };
 
 window.routeShareToExistingProduct = function() {
-    closeModals();
-    alert("Please navigate to the product you want to update and click on it. A 'Paste Shared Images' button will appear!");
+    closeModals(true);
+    setTimeout(function() {
+        alert("Please navigate to the product you want to update and click on it. A 'Paste Shared Images' button will appear!");
+    }, 100);
 };
 
 window.pasteSharedImages = async function() {
