@@ -868,9 +868,14 @@
         <i class="fas fa-plus-circle"></i> Create Brand New Product
       </button>
       
-      <button onclick="window.routeShareToExistingProduct()" style="width: 100%; background: #2196f3; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+      <button onclick="document.getElementById('adminShareExistingWrapper').style.display='block'; this.style.display='none'; document.getElementById('adminShareSearch').focus();" style="width: 100%; background: #2196f3; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer;">
         <i class="fas fa-search"></i> Add to Existing Product
       </button>
+
+      <div id="adminShareExistingWrapper" style="display: none; margin-top: 15px; text-align: left;">
+        <input type="text" id="adminShareSearch" onkeyup="window.adminShareSearchProduct()" placeholder="Search product name or SKU..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px;">
+        <div id="adminShareSearchResults" style="max-height: 150px; overflow-y: auto; margin-top: 10px; border: 1px solid #eee; border-radius: 6px; display: none;"></div>
+      </div>
       
       <div style="margin-top: 20px; color: #999; font-size: 12px; cursor: pointer; text-decoration: underline;" onclick="closeModals()">Cancel</div>
     </div>

@@ -6151,11 +6151,60 @@ window.routeShareToNewProduct = function() {
     }, 100);
 };
 
-window.routeShareToExistingProduct = function() {
+window.adminShareSearchProduct = function() {
+    var q = document.getElementById('adminShareSearch').value.toLowerCase().trim();
+    var resDiv = document.getElementById('adminShareSearchResults');
+    if (q.length < 2) {
+        resDiv.style.display = 'none';
+        return;
+    }
+    
+    var matches = window.allProducts.filter(p => 
+        (p.name && p.name.toLowerCase().includes(q)) || 
+        (p.sku && p.sku.toLowerCase().includes(q))
+    ).slice(0, 15); // Top 15 matches
+
+    if (matches.length === 0) {
+        resDiv.innerHTML = '<div style="padding: 10px; color: #888; text-align: center;">No matches found</div>';
+    } else {
+        var html = '';
+        matches.forEach(p => {
+            html += `<div onclick="window.selectAdminShareProduct('${p.id}')" style="padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: bold; color: #333;">${p.name}</div>
+                    <div style="font-size: 11px; color: #777;">SKU: ${p.sku || 'N/A'} &bull; ${p.cat || ''}</div>
+                </div>
+                <i class="fas fa-chevron-right" style="color: #ccc; font-size: 12px;"></i>
+            </div>`;
+        });
+        resDiv.innerHTML = html;
+    }
+    resDiv.style.display = 'block';
+};
+
+window.selectAdminShareProduct = function(pid) {
     closeModals(true);
+    
+    // Reset search UI for next time
+    document.getElementById('adminShareSearch').value = '';
+    document.getElementById('adminShareSearchResults').style.display = 'none';
+    var addBtn = document.getElementById('adminShareSearch').parentElement.previousElementSibling;
+    if (addBtn) addBtn.style.display = 'block';
+    document.getElementById('adminShareExistingWrapper').style.display = 'none';
+
+    // Open detail page then paste
     setTimeout(function() {
-        alert("Please navigate to the product you want to update and click on it. A 'Paste Shared Images' button will appear!");
+        if (typeof openDetail === 'function') {
+            openDetail(pid);
+            setTimeout(function() {
+                window.pasteSharedImages();
+            }, 300); // Give it a tiny bit to render
+        }
     }, 100);
+};
+
+window.routeShareToExistingProduct = function() {
+    // Deprecated. Handled directly by search now.
 };
 
 window.pasteSharedImages = async function() {
