@@ -1420,7 +1420,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
 }
 
 
-function askShareTypeAsync() {
+function askShareTypeAsync(isMainPage) {
     return new Promise((resolve) => {
         var overlay = document.createElement('div');
         overlay.style.position = 'fixed';
@@ -1466,7 +1466,7 @@ function askShareTypeAsync() {
         btnReady.onclick = function () { close('full'); };
 
         var btnAll = document.createElement('button');
-        btnAll.innerText = 'All designs';
+        btnAll.innerText = isMainPage ? 'Cover Images (1 pic per product)' : 'Cover Image Only';
         btnAll.style.width = '100%'; btnAll.style.padding = '12px'; btnAll.style.marginBottom = '10px';
         btnAll.style.backgroundColor = '#333'; btnAll.style.color = '#fff';
         btnAll.style.border = 'none'; btnAll.style.borderRadius = '6px'; btnAll.style.fontSize = '14px';
@@ -1506,10 +1506,12 @@ window.triggerShare = async function (action) {
         // --- MAIN PAGE SHARE (Favorites) ---
         var favProducts = allProducts.filter(p => favorites[p.id]);
         if (favProducts.length === 0) {
+            history.back(); // Pop the shareModal state we were hiding
             return alert("No favorite items to share. Please mark some products as favorites first.");
         }
 
-        var shareType = 'cover'; // Always use cover image for bulk favorite sharing
+        var shareType = await askShareTypeAsync(true);
+        if (!shareType) return;
 
         var allHighResUrls = [];
         var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
@@ -1559,9 +1561,12 @@ window.triggerShare = async function (action) {
     }
 
     // --- EXISTING SINGLE PRODUCT SHARE ---
-    if (!curProduct) return;
+    if (!curProduct) {
+        history.back();
+        return;
+    }
 
-    var shareType = await askShareTypeAsync();
+    var shareType = await askShareTypeAsync(false);
     if (!shareType) return;
 
     var highResUrls = [];
