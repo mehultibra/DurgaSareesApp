@@ -5541,8 +5541,9 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
         var names = window.lastRenderedDesignNames.split(',');
         var maxNum = 1;
         names.forEach(n => {
-            if (/^\d{1,4}$/.test(n)) {
-                var num = parseInt(n, 10);
+            var match = n.trim().match(/^(\d{1,4})/);
+            if (match) {
+                var num = parseInt(match[1], 10);
                 if (num > maxNum) maxNum = num;
             }
         });
@@ -6189,8 +6190,9 @@ window.showNextSharedImagePreview = async function() {
     if (window.lastRenderedDesignNames && !window.tempCamIsNewProduct) {
         var names = window.lastRenderedDesignNames.split(',');
         names.forEach(n => {
-            if (/^\d{1,4}$/.test(n)) {
-                var num = parseInt(n, 10);
+            var match = n.trim().match(/^(\d{1,4})/);
+            if (match) {
+                var num = parseInt(match[1], 10);
                 if (num > maxNum) maxNum = num;
             }
         });
