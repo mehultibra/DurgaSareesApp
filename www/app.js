@@ -5631,6 +5631,13 @@ window.confirmAdminUpload = async function () {
             </div>`;
             document.body.insertAdjacentHTML('beforeend', toastHtml);
             
+            // Bump the product to the top of the main screen by updating updateTime locally
+            var pToBump = window.allProducts ? window.allProducts.find(x => x.id === window.tempCamPid) : null;
+            if (pToBump) {
+                pToBump.updateTime = new Date().toISOString();
+                if (typeof window.applyFilter === 'function') window.applyFilter();
+            }
+
             // INSTANT UI UPDATE: Show the image immediately in the grid if looking at the product
             var detailPanel = document.getElementById('detailPanel');
             var grid = document.getElementById('detailImageGrid');
@@ -7468,7 +7475,8 @@ window.submitNewProduct = async function () {
             gridUrl: gridUrl,
             zoomUrl: zoomUrl,
             stock: { DIRECT: 999 },
-            totalStock: 999
+            totalStock: 999,
+            updateTime: new Date().toISOString()
         };
 
         window.allProducts.push(newP);
