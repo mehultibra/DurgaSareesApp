@@ -5630,6 +5630,23 @@ window.confirmAdminUpload = async function () {
                 <span>Photo Saved to Outbox.</span>
             </div>`;
             document.body.insertAdjacentHTML('beforeend', toastHtml);
+            
+            // INSTANT UI UPDATE: Show the image immediately in the grid if looking at the product
+            var detailPanel = document.getElementById('detailPanel');
+            var grid = document.getElementById('detailImageGrid');
+            if (detailPanel && detailPanel.classList.contains('open') && window.curProduct && window.curProduct.id === window.tempCamPid) {
+                if (grid) {
+                    var capUri = window.tempCamPhotoPath;
+                    if (capUri && window.Capacitor && window.Capacitor.convertFileSrc) {
+                        capUri = window.Capacitor.convertFileSrc(capUri);
+                    }
+                    var newImgHtml = `<div style="position:relative; border-radius:8px; overflow:hidden; background:#eee; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                        <img src="${capUri}" style="width:100%; display:block; aspect-ratio:3/4; object-fit:cover; opacity:0.7;">
+                        <div style="position:absolute; bottom:5px; right:5px; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; padding:2px 6px; border-radius:4px;">Uploading...</div>
+                    </div>`;
+                    grid.insertAdjacentHTML('beforeend', newImgHtml);
+                }
+            }
 
             setTimeout(() => {
                 var toastEl = document.getElementById(toastId);
