@@ -5605,6 +5605,35 @@ window.confirmAdminUpload = async function () {
     var designInput = document.getElementById('adminDesignNumberInput');
     var finalDesignId = (designInput && designInput.value) ? designInput.value.trim().toUpperCase() : "02";
 
+    // Auto-append -A, -B, -C if the exact design ID already exists!
+    var names = window.lastRenderedDesignNames ? window.lastRenderedDesignNames.toLowerCase().split(',') : [];
+    var baseName = finalDesignId.toLowerCase();
+    
+    var conflictCount = 0;
+    var hasExactMatch = false;
+    
+    names.forEach(n => {
+        var nClean = n.trim().replace(/\.(webp|jpg|jpeg|png)$/i, '');
+        if (nClean === baseName) {
+            hasExactMatch = true;
+        } else if (nClean.startsWith(baseName + "-")) {
+            // We check if the suffix is a single letter to accurately count
+            var suffix = nClean.replace(baseName + "-", "");
+            if (/^[a-z]$/.test(suffix)) {
+                var charCode = suffix.charCodeAt(0) - 97; // a=0, b=1
+                if (charCode >= conflictCount) conflictCount = charCode + 1;
+            }
+        }
+    });
+
+    if (hasExactMatch) {
+        var letter = String.fromCharCode(97 + conflictCount); // 97 is 'a'
+        finalDesignId = finalDesignId + "-" + letter;
+    }
+    
+    // Instantly append it to the local string so the next rapid photo doesn't get the same letter
+    window.lastRenderedDesignNames = (window.lastRenderedDesignNames ? window.lastRenderedDesignNames + "," : "") + finalDesignId + ".jpg";
+
     var bypassCb = document.getElementById('adminBypassCloudinary');
     var bypass = bypassCb ? bypassCb.checked : false;
 
