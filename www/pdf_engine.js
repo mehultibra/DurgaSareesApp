@@ -3,7 +3,8 @@
 // ==========================================
 
 async function getActualDesignsForProduct(p, shareType, action) {
-    if (shareType !== 'full' && shareType !== 'cover') return [];
+    if (shareType === 'cover') return []; // Force caller to use cover fallback block
+    if (shareType !== 'full') return [];
     var folderPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
     if (!folderPath) return [];
     var bucket = "durga-sarees.firebasestorage.app";
