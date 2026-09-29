@@ -6797,30 +6797,20 @@ window.shareWhatsAppLink = async function () {
                 }
             }
 
-            // 3. Or use the coverDesignId to construct the HD URL directly!
-            if (!coverSrc && curProduct.coverDesignId && curProduct.coverDesignId !== "None") {
-                var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-                var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encPath + "%2F" + encodeURIComponent(curProduct.coverDesignId) + "?alt=media";
-            }
+            // 3. Or use the robust resolveCorrectUrl logic from pdf_engine.js!
+            if (!coverSrc && typeof window.resolveCorrectUrl === 'function') {
+                var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
+                var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
+                var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
+                var coverDesignId = 'DIRECT';
 
-            // 4. Last resort: We must list the directory to find a design image
-            if (!coverSrc) {
-                var folderPath = (curProduct.zoomUrl && curProduct.zoomUrl !== "None") ? curProduct.zoomUrl : curProduct.gridUrl;
-                var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-                var listUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?prefix=" + listPrefix + "&delimiter=/";
-                var listRes = await fetch(listUrl);
-                if (listRes.ok) {
-                    var data = await listRes.json();
-                    var items = data.items || [];
-                    if (items.length > 0) {
-                        var fileNames = items.map(item => item.name.substring(item.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
-                        if (fileNames.length > 0) {
-                            var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                            coverSrc = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encPath + "%2F" + encodeURIComponent(fileNames[0]) + "?alt=media";
-                        }
-                    }
+                if (fallbackFile) {
+                    coverDesignId = fallbackFile;
+                } else if (readyDesigns.length > 0) {
+                    coverDesignId = readyDesigns[0];
                 }
+
+                coverSrc = await window.resolveCorrectUrl(curProduct, coverDesignId);
             }
 
             if (!coverSrc) {
