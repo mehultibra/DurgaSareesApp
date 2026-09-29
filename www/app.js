@@ -6782,23 +6782,8 @@ window.shareWhatsAppLink = async function () {
         try {
             var coverSrc = "";
 
-            // 1. Prioritize the currently open zoom image if Fullscreen modal is active
-            var fsModal = document.getElementById('fsModal');
-            var fsImg = document.getElementById('fsImg');
-            if (fsModal && fsModal.style.display === 'flex' && fsImg && fsImg.src && !fsImg.src.endsWith(window.dsMissingImage)) {
-                coverSrc = fsImg.getAttribute('data-zoom-url') || fsImg.src;
-            }
-
-            // 2. Or grab the first HD zoom image from the Product Details gallery
-            if (!coverSrc) {
-                var firstDesignImg = document.getElementById("design_img_" + curProduct.id + "_0");
-                if (firstDesignImg && firstDesignImg.getAttribute('data-zoom-url')) {
-                    coverSrc = firstDesignImg.getAttribute('data-zoom-url');
-                }
-            }
-
-            // 3. Or use the robust resolveCorrectUrl logic from pdf_engine.js!
-            if (!coverSrc && typeof window.resolveCorrectUrl === 'function') {
+            // 1. Use the robust resolveCorrectUrl logic from pdf_engine.js to guarantee the EXACT cover image!
+            if (typeof window.resolveCorrectUrl === 'function') {
                 var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
                 var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
                 var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
