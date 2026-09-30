@@ -6397,7 +6397,7 @@ window.openIgLinks = function() {
         } else {
             alert("No reference links available for this product.");
         }
-    } else if (links.length === 1) {
+    } else if (links.length === 1 && !window.isAdminMode) {
         window.open(links[0].url, '_blank');
     } else {
         // Multiple links
