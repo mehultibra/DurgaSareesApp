@@ -2666,10 +2666,13 @@ function updateLiveDetailHeader() {
 
     var oldFab = document.getElementById('adminCamFab');
     if (oldFab) oldFab.remove();
+    var oldGal = document.getElementById('adminGalFab');
+    if (oldGal) oldGal.remove();
 
     if (window.isAdminMode) {
         var panel = document.getElementById('detailPanel');
         panel.insertAdjacentHTML('beforeend', `<div id="adminCamFab" onclick="window.triggerAdminCamera('${curProduct.docId}', '${curProduct.id}')" style="position:fixed; bottom:95px; right:20px; background:var(--myntra-pink); color:white; width:55px; height:55px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:2500; cursor:pointer;"><i class="fas fa-camera"></i></div>`);
+        panel.insertAdjacentHTML('beforeend', `<div id="adminGalFab" onclick="window.triggerAdminGallery('${curProduct.docId}', '${curProduct.id}', '${curProduct.name}')" style="position:fixed; bottom:165px; right:25px; background:#4CAF50; color:white; width:45px; height:45px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:2500; cursor:pointer;"><i class="fas fa-images"></i></div>`);
     }
 }
 
@@ -2680,6 +2683,7 @@ function closeDetail(fromHistory) {
     if (document.activeElement) document.activeElement.blur(); // Hide keyboard when returning to home
 
     var fab = document.getElementById('adminCamFab'); if (fab) fab.remove();
+    var galFab = document.getElementById('adminGalFab'); if (galFab) galFab.remove();
     var panel = document.getElementById('detailPanel');
     if (panel) {
         panel.classList.remove('open');
@@ -5557,7 +5561,7 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
             quality: 100,
             allowEditing: false,
             resultType: 'uri',
-            source: 'PROMPT',
+            source: 'CAMERA',
             width: 2500, // Explicitly request high resolution
             preserveAspectRatio: true
         });
@@ -5584,6 +5588,25 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
 
     } catch (e) {
         window.logAppError('Camera Trigger', e.message);
+    }
+};
+
+window.triggerAdminGallery = async function (docId, pid, productName = "Product Preview") {
+    try {
+        var res = await Capacitor.Plugins.Camera.pickImages({
+            quality: 100,
+            limit: 0 // unlimited selection
+        });
+        if (res && res.photos && res.photos.length > 0) {
+            window.pendingSharedImages = res.photos.map(p => ({ webPath: p.webPath }));
+            window.tempCamDocId = docId;
+            window.tempCamPid = pid;
+            window.tempCamProductName = productName;
+            window.sharedImagePasteIndex = 0;
+            window.showNextSharedImagePreview();
+        }
+    } catch (e) {
+        window.logAppError('Gallery Trigger', e.message);
     }
 };
 
