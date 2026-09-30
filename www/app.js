@@ -6421,7 +6421,7 @@ window.openIgLinks = function() {
 };
 
 window.openIgLinksEditor = function() {
-    closeModals();
+    document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
     if (!window.curProduct || !window.isAdminMode) return;
     
     var links = [];
