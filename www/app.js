@@ -6420,24 +6420,41 @@ window.openIgLinks = function() {
         } else {
             alert("No reference links available for this product.");
         }
-    } else if (links.length === 1 && !window.isAdminMode) {
-        window.open(links[0].url, '_blank');
     } else {
-        // Multiple links
+        var isSingleNonIg = links.length === 1 && !window.isAdminMode && !(links[0].url.includes("instagram.com/p/") || links[0].url.includes("instagram.com/reel/"));
+        if (isSingleNonIg) {
+            window.open(links[0].url, '_blank');
+            return;
+        }
+
+        // Multiple links, Admin Mode, or Embeddable IG links
         var listContainer = document.getElementById('igLinksList');
         listContainer.innerHTML = '';
         links.forEach(l => {
-            var btn = document.createElement('a');
-            btn.href = l.url;
-            btn.target = "_blank";
-            btn.style.display = "block";
-            btn.style.padding = "12px";
-            btn.style.border = "1px solid #ddd";
-            btn.style.borderRadius = "8px";
-            btn.style.textDecoration = "none";
-            btn.style.color = "var(--text-main)";
-            btn.innerHTML = `<div style="font-weight:bold;">${l.text || "Reference Link"}</div><div style="font-size:11px; color:blue; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${l.url}</div>`;
-            listContainer.appendChild(btn);
+            var container = document.createElement('div');
+            container.style.display = "block";
+            container.style.padding = "12px";
+            container.style.border = "1px solid #ddd";
+            container.style.borderRadius = "8px";
+            container.style.marginBottom = "10px";
+            container.style.position = "relative";
+            
+            var titleHtml = `<div style="font-weight:bold; color:var(--text-main); margin-bottom: 8px;">${l.text || "Reference Link"}</div>`;
+            
+            var isIg = l.url && (l.url.includes("instagram.com/p/") || l.url.includes("instagram.com/reel/"));
+            if (isIg) {
+                // Ensure it ends with /embed
+                var embedUrl = l.url.split('?')[0]; // remove query params
+                if (!embedUrl.endsWith('/')) embedUrl += '/';
+                embedUrl += 'embed';
+                
+                // Add iframe
+                container.innerHTML = titleHtml + `<iframe src="${embedUrl}" width="100%" height="450" frameborder="0" scrolling="no" allowtransparency="true" style="border-radius:6px; background:#f9f9f9; width:100%; max-width:400px; display:block; margin:0 auto;"></iframe>`;
+            } else {
+                // Fallback to normal link
+                container.innerHTML = titleHtml + `<a href="${l.url}" target="_blank" style="font-size:13px; color:blue; word-break: break-all; text-decoration:none;">${l.url}</a>`;
+            }
+            listContainer.appendChild(container);
         });
         window.openModal('igLinksViewerModal');
     }
