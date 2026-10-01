@@ -5688,6 +5688,14 @@ window.confirmAdminUpload = async function () {
             if (pToBump) {
                 pToBump.updateTime = new Date().toISOString();
                 if (typeof window.applyFilter === 'function') window.applyFilter();
+                
+                // Aggressively force Firestore updateTime bump so it survives reloads instantly
+                var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + window.tempCamDocId + "?updateMask.fieldPaths=updateTime";
+                fetch(fsUrl, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fields: { updateTime: { timestampValue: pToBump.updateTime } } })
+                }).catch(e => console.error("Auto-bump failed", e));
             }
 
             // INSTANT UI UPDATE: Show the image immediately in the grid if looking at the product
@@ -7457,11 +7465,12 @@ window.submitNewProduct = async function () {
         var fbData = await fbRes.json();
 
         var newDocId = fbData.name.split('/').pop();
+        var localPid = "p_" + Date.now();
 
         // Process pending shared images
         if (window.pendingSharedImages && window.pendingSharedImages.length > 0) {
             window.tempCamDocId = newDocId;
-            window.tempCamPid = newDocId;
+            window.tempCamPid = localPid;
             window.tempCamProductName = name;
             window.tempCamIsNewProduct = true; // This is a NEW product
             window.lastRenderedDesignNames = ""; // Clear out previous product's cache!
@@ -7505,7 +7514,7 @@ window.submitNewProduct = async function () {
         // 3. Instant Local UI Update
         var newP = {
             docId: newDocId,
-            id: "p_" + Date.now(),
+            id: localPid,
             name: name,
             cat: cat,
             price: parseFloat(price),
