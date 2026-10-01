@@ -7461,6 +7461,7 @@ window.submitNewProduct = async function () {
             window.tempCamPid = newDocId;
             window.tempCamProductName = name;
             window.tempCamIsNewProduct = true; // This is a NEW product
+            window.lastRenderedDesignNames = ""; // Clear out previous product's cache!
             window.sharedImagePasteIndex = 0;
             
             // Allow modal to close and state to settle before popping open the camera preview
