@@ -783,7 +783,7 @@ function initApp() {
                     blouse: f.blouse ? f.blouse.stringValue : "",
                     work: f.work ? f.work.stringValue : "",
                     igLinks: f.igLinks ? f.igLinks.stringValue : "[]",
-                    updateTime: f.latestImageAddedAt ? (f.latestImageAddedAt.timestampValue || f.latestImageAddedAt.stringValue) : (d.createTime || d.updateTime || "")
+                    updateTime: f.latestImageAddedAt ? (f.latestImageAddedAt.timestampValue || f.latestImageAddedAt.stringValue) : (d.updateTime || d.createTime || "")
                 });
                 validCounter++;
             }
@@ -1540,23 +1540,28 @@ function renderProductGrid(products) {
 
     // Sort products primarily by category (alphabetically), and secondarily by the active sort rule
     var sorted = [...products].sort((a, b) => {
+        var timeA = new Date(a.updateTime || 0).getTime();
+        var timeB = new Date(b.updateTime || 0).getTime();
+        var isARecent = (Date.now() - timeA) < 15 * 60 * 1000;
+        var isBRecent = (Date.now() - timeB) < 15 * 60 * 1000;
+
         // --- ADMIN & INVENTORY: OUT OF STOCK TO BOTTOM ---
-        if (a.totalStock === 0 && b.totalStock > 0) return 1;
-        if (b.totalStock === 0 && a.totalStock > 0) return -1;
+        var aOutOfStock = !isARecent && (a.totalStock === 0);
+        var bOutOfStock = !isBRecent && (b.totalStock === 0);
+        if (aOutOfStock && !bOutOfStock) return 1;
+        if (!aOutOfStock && bOutOfStock) return -1;
         
         // --- NO DESIGNS (NO IMAGES OR ONLY COVER) TO BOTTOM (Before Out of Stock) ---
-        var aHasDesigns = a.stock && Object.keys(a.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0;
-        var bHasDesigns = b.stock && Object.keys(b.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0;
+        var aHasDesigns = isARecent || (a.stock && Object.keys(a.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0);
+        var bHasDesigns = isBRecent || (b.stock && Object.keys(b.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0);
         
         if (!aHasDesigns && bHasDesigns) return 1;
         if (aHasDesigns && !bHasDesigns) return -1;
 
         // --- BROKEN IMAGES: JUST ABOVE OUT OF STOCK ---
         window.brokenImagesMap = window.brokenImagesMap || {};
-        var aNoImg = (!a.gridUrl || String(a.gridUrl).trim() === "" || String(a.gridUrl).toLowerCase() === "none");
-        var bNoImg = (!b.gridUrl || String(b.gridUrl).trim() === "" || String(b.gridUrl).toLowerCase() === "none");
-        var aBroken = window.brokenImagesMap[a.gridUrl] === true || aNoImg;
-        var bBroken = window.brokenImagesMap[b.gridUrl] === true || bNoImg;
+        var aBroken = !isARecent && (window.brokenImagesMap[a.gridUrl] === true || (!a.gridUrl || String(a.gridUrl).trim() === "" || String(a.gridUrl).toLowerCase() === "none"));
+        var bBroken = !isBRecent && (window.brokenImagesMap[b.gridUrl] === true || (!b.gridUrl || String(b.gridUrl).trim() === "" || String(b.gridUrl).toLowerCase() === "none"));
         if (aBroken && !bBroken) return 1;
         if (!aBroken && bBroken) return -1;
 
