@@ -44,7 +44,7 @@ async function loadStickerLayout() {
                     
                     if (!newFormats[fmtName]) {
                         newFormats[fmtName] = {
-                            width: old.width || 440, height: old.height || 220, gap_mm: old.gap_mm || 0,
+                            width: old.width || 440, height: old.height || 220, gap_mm: old.gap_mm || 0, sensor: old.sensor || "GAP",
                             marginTop: old.marginTop || 0, marginRight: old.marginRight || 0,
                             marginBottom: old.marginBottom || 0, marginLeft: old.marginLeft || 0
                         };
@@ -195,6 +195,8 @@ window.changeStickerFormatSize = function(formatId) {
             document.getElementById('seCanvasW_mm').value = Math.round(window.stickerLayout.width / 8);
             document.getElementById('seCanvasH_mm').value = Math.round(window.stickerLayout.height / 8);
             document.getElementById('seGap_mm').value = window.stickerLayout.gap_mm;
+            var sensorEl = document.getElementById('seSensor');
+            if (sensorEl) sensorEl.value = window.stickerLayout.sensor || "GAP";
             document.getElementById('seMarginT_mm').value = Math.round(window.stickerLayout.marginTop / 8);
             document.getElementById('seMarginR_mm').value = Math.round(window.stickerLayout.marginRight / 8);
             document.getElementById('seMarginB_mm').value = Math.round(window.stickerLayout.marginBottom / 8);
@@ -671,6 +673,9 @@ function openStickerEditor() {
     const gapEl = document.getElementById('seGap_mm');
     if (gapEl) gapEl.value = window.stickerLayout.gap_mm || 0;
     
+    const sensorEl = document.getElementById('seSensor');
+    if (sensorEl) sensorEl.value = window.stickerLayout.sensor || "GAP";
+    
     const tplNameInput = document.getElementById('seTemplateName');
     const tplDefInput = document.getElementById('seTemplateDefault');
     if (tplNameInput) tplNameInput.value = window.currentTemplateName || "Default";
@@ -759,6 +764,9 @@ function updateStickerCanvasSize() {
     const gapEl = document.getElementById('seGap_mm');
     if (gapEl) window.stickerLayout.gap_mm = parseFloat(gapEl.value) || 0;
     
+    const sensorEl = document.getElementById('seSensor');
+    if (sensorEl) window.stickerLayout.sensor = sensorEl.value || "GAP";
+    
     buildCurrentStickerLayout();
     populateTemplateDropdown();
     populateFormatDropdown();
@@ -794,6 +802,8 @@ function editStickerFormatSetup() {
     document.getElementById('newFmtW').value = Math.round((window.stickerLayout.width || 440) / 8);
     document.getElementById('newFmtH').value = Math.round((window.stickerLayout.height || 220) / 8);
     document.getElementById('newFmtGap').value = window.stickerLayout.gap_mm || 0;
+    var newSensorEl = document.getElementById('newFmtSensor');
+    if (newSensorEl) newSensorEl.value = window.stickerLayout.sensor || "GAP";
     
     document.getElementById('newFmtMT').value = Math.round((window.stickerLayout.marginTop || 0) / 8);
     document.getElementById('newFmtMR').value = Math.round((window.stickerLayout.marginRight || 0) / 8);
@@ -824,6 +834,7 @@ function saveNewStickerFormat() {
     const w = parseFloat(document.getElementById('newFmtW').value) || 50;
     const h = parseFloat(document.getElementById('newFmtH').value) || 25;
     const gap = parseFloat(document.getElementById('newFmtGap').value) || 3;
+    const sensor = document.getElementById('newFmtSensor') ? document.getElementById('newFmtSensor').value : "GAP";
     const mt = parseFloat(document.getElementById('newFmtMT').value) || 0;
     const mr = parseFloat(document.getElementById('newFmtMR').value) || 0;
     const mb = parseFloat(document.getElementById('newFmtMB').value) || 0;
@@ -842,7 +853,7 @@ function saveNewStickerFormat() {
     }
 
     const fmt = {
-        width: Math.round(w * 8), height: Math.round(h * 8), gap_mm: gap,
+        width: Math.round(w * 8), height: Math.round(h * 8), gap_mm: gap, sensor: sensor,
         marginTop: Math.round(mt * 8), marginRight: Math.round(mr * 8),
         marginBottom: Math.round(mb * 8), marginLeft: Math.round(ml * 8)
     };
