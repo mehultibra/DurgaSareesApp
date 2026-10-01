@@ -6443,13 +6443,16 @@ window.openIgLinks = function() {
             
             var isIg = l.url && (l.url.includes("instagram.com/p/") || l.url.includes("instagram.com/reel/"));
             if (isIg) {
-                // Ensure it ends with /embed
+                // Ensure it ends with /embed and add hidecaption
                 var embedUrl = l.url.split('?')[0]; // remove query params
                 if (!embedUrl.endsWith('/')) embedUrl += '/';
-                embedUrl += 'embed';
+                embedUrl += 'embed?hidecaption=true';
                 
-                // Add iframe
-                container.innerHTML = titleHtml + `<iframe src="${embedUrl}" width="100%" height="450" frameborder="0" scrolling="no" allowtransparency="true" style="border-radius:6px; background:#f9f9f9; width:100%; max-width:400px; display:block; margin:0 auto;"></iframe>`;
+                // Add iframe with a CSS crop hack to hide the top Instagram profile header
+                container.innerHTML = titleHtml + `
+                <div style="width: 100%; height: 500px; overflow: hidden; border-radius: 6px; position: relative; background: #000;">
+                    <iframe src="${embedUrl}" width="100%" height="560" frameborder="0" scrolling="no" allowtransparency="true" allowfullscreen="true" style="border:none; display:block; margin-top: -54px; width:100%;"></iframe>
+                </div>`;
             } else {
                 // Fallback to normal link
                 container.innerHTML = titleHtml + `<a href="${l.url}" target="_blank" style="font-size:13px; color:blue; word-break: break-all; text-decoration:none;">${l.url}</a>`;
