@@ -384,7 +384,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
     // Check for updates on ALL platforms (Native & Web)
     setTimeout(checkForOTAUpdates, 2000);
-    
+
     // Set Version Display
     setTimeout(async () => {
         let displayStr = "Web";
@@ -392,7 +392,7 @@ window.addEventListener('DOMContentLoaded', function () {
             try {
                 let info = await window.Capacitor.Plugins.App.getInfo();
                 displayStr = "App v" + info.version;
-            } catch(e) {}
+            } catch (e) { }
         }
         let otaVer = localStorage.getItem("dsOtaVersion") || "builtin";
         let verEl = document.getElementById("appVersionDisplay");
@@ -468,7 +468,7 @@ async function sendOtp() {
         } catch (err) {
             let errMsg = (err.message || "").toLowerCase();
             let isPlayError = errMsg.includes("google play") || errMsg.includes("internal error") || errMsg.includes("reinstalling");
-            
+
             if (isPlayError && retriesLeft > 0) {
                 console.log("Caught Play Integrity error. Retrying in 2.5s...", err);
                 if (errEl) errEl.innerText = "Initializing secure connection... Please wait.";
@@ -633,7 +633,7 @@ async function saveProfile() {
             phone = localStorage.getItem("dsUserPhone") || "";
         }
     }
-    
+
     // Ensure we don't send undefined, otherwise Firestore Rules fail
     if (!phone) {
         err.innerText = "Error: Phone number is missing. Please login again.";
@@ -955,6 +955,10 @@ function getDB() {
 }
 
 function saveImageToDB(key, blob) {
+    if (!blob.type || blob.type === 'application/octet-stream') {
+        var isWebp = typeof key === 'string' && key.toLowerCase().includes('.webp');
+        blob = new Blob([blob], { type: isWebp ? 'image/webp' : 'image/jpeg' });
+    }
     window.sessionImageCache.set(key, blob);
     if (window.sessionImageCache.size > 300) {
         window.sessionImageCache.delete(window.sessionImageCache.keys().next().value);
@@ -1153,6 +1157,10 @@ function getImageFromDB(key) {
             req.onsuccess = () => {
                 var blob = req.result;
                 if (blob) {
+                    if (!blob.type || blob.type === 'application/octet-stream') {
+                        var isWebp = typeof key === 'string' && key.toLowerCase().includes('.webp');
+                        blob = new Blob([blob], { type: isWebp ? 'image/webp' : 'image/jpeg' });
+                    }
                     if (blob.size === 0) {
                         resolve(null);
                         return;
@@ -1271,12 +1279,12 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 };
             }
         }
-    }).catch(function() { loadFromNetwork(); });
+    }).catch(function () { loadFromNetwork(); });
 
     function cacheNativeImageToDB(url, key) {
         fetch(url, { cache: 'force-cache' }).then(res => res.blob()).then(blob => {
             if (blob.size > 0 && typeof saveImageToDB === 'function') saveImageToDB(key, blob);
-        }).catch(err => {});
+        }).catch(err => { });
     }
 
     function showPlaceholder(err) {
@@ -1571,11 +1579,11 @@ function renderProductGrid(products) {
         var bOutOfStock = !isBRecent && (b.totalStock === 0);
         if (aOutOfStock && !bOutOfStock) return 1;
         if (!aOutOfStock && bOutOfStock) return -1;
-        
+
         // --- NO DESIGNS (NO IMAGES OR ONLY COVER) TO BOTTOM (Before Out of Stock) ---
         var aHasDesigns = isARecent || (a.stock && Object.keys(a.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0);
         var bHasDesigns = isBRecent || (b.stock && Object.keys(b.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0);
-        
+
         if (!aHasDesigns && bHasDesigns) return 1;
         if (aHasDesigns && !bHasDesigns) return -1;
 
@@ -1948,7 +1956,7 @@ window.recordTimeSpent = function () {
 
 function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     if (document.activeElement) document.activeElement.blur(); // Hide keyboard when opening a product
-    
+
     var fabPaste = document.getElementById('fabPasteImages');
     if (fabPaste && window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.isAdminMode) {
         fabPaste.style.display = 'flex';
@@ -3720,7 +3728,7 @@ async function syncImages(silent = false) {
 
         // 🛡️ BATCH LIMIT: Process 1 folder at a time, but fetch its inner images in parallel (Max 5 concurrent).
         // This guarantees we never hit Samsung/Android OS TCP socket connection limits (ERR_INSUFFICIENT_RESOURCES).
-        var batchSize = 40;
+        var batchSize = 30;
         for (var i = 0; i < productsToSync.length; i += batchSize) {
             var batch = productsToSync.slice(i, i + batchSize);
             await Promise.all(batch.map(async (p) => {
@@ -4602,7 +4610,7 @@ function applyModalState(modal) {
     // 2. Sync Detail Panel
     let isActionModal = false;
     actionModals.forEach(m => { if (m.id === modal) isActionModal = true; });
-    
+
     if (modal === 'detail' || modal === 'fs') {
         if (detailPanel && !detailPanel.classList.contains('open')) {
             detailPanel.classList.add('open');
@@ -5657,10 +5665,10 @@ window.confirmAdminUpload = async function () {
     // Auto-append -A, -B, -C if the exact design ID already exists!
     var names = window.lastRenderedDesignNames ? window.lastRenderedDesignNames.toLowerCase().split(',') : [];
     var baseName = finalDesignId.toLowerCase();
-    
+
     var conflictCount = 0;
     var hasExactMatch = false;
-    
+
     names.forEach(n => {
         var nClean = n.trim().replace(/\.(webp|jpg|jpeg|png)$/i, '');
         if (nClean === baseName) {
@@ -5679,7 +5687,7 @@ window.confirmAdminUpload = async function () {
         var letter = String.fromCharCode(97 + conflictCount); // 97 is 'a'
         finalDesignId = finalDesignId + "-" + letter;
     }
-    
+
     // Instantly append it to the local string so the next rapid photo doesn't get the same letter
     window.lastRenderedDesignNames = (window.lastRenderedDesignNames ? window.lastRenderedDesignNames + "," : "") + finalDesignId + ".jpg";
 
@@ -5708,13 +5716,13 @@ window.confirmAdminUpload = async function () {
                 <span>Photo Saved to Outbox.</span>
             </div>`;
             document.body.insertAdjacentHTML('beforeend', toastHtml);
-            
+
             // Bump the product to the top of the main screen by updating updateTime locally
             var pToBump = window.allProducts ? window.allProducts.find(x => x.id === window.tempCamPid) : null;
             if (pToBump) {
                 pToBump.updateTime = new Date().toISOString();
                 if (typeof window.applyFilter === 'function') window.applyFilter();
-                
+
                 // Aggressively force Firestore updateTime bump so it survives reloads instantly
                 var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + window.tempCamDocId + "?updateMask.fieldPaths=updateTime";
                 fetch(fsUrl, {
@@ -5744,12 +5752,12 @@ window.confirmAdminUpload = async function () {
             setTimeout(() => {
                 var toastEl = document.getElementById(toastId);
                 if (toastEl) toastEl.remove();
-                
+
                 if (!(window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.sharedImagePasteIndex !== undefined)) {
                     window.processCameraOutbox();
                 }
             }, 5000);
-            
+
             if (window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.sharedImagePasteIndex !== undefined) {
                 window.sharedImagePasteIndex++;
                 setTimeout(window.showNextSharedImagePreview, 300);
@@ -5804,7 +5812,7 @@ window.processCameraOutbox = async function () {
                     var fRes = await fetch(capUri);
                     if (!fRes.ok) throw new Error("Fetch failed");
                     blob = await fRes.blob();
-                } catch(e) {
+                } catch (e) {
                     // Fallback to Filesystem base64 string
                     var fileData = await Capacitor.Plugins.Filesystem.readFile({ path: item.fileUri });
                     var fRes = await fetch(`data:image/jpeg;base64,${fileData.data}`);
@@ -5912,7 +5920,7 @@ function previewLabel(type) {
             });
         }
     }
-    
+
     setTimeout(() => {
         if (typeof updateStickerCanvasScale === 'function') {
             updateStickerCanvasScale('stickerTemplate');
@@ -5924,7 +5932,7 @@ function previewLabel(type) {
 }
 
 
-window.changePrintQty = function(delta) {
+window.changePrintQty = function (delta) {
     var el = document.getElementById('printQtyInput');
     if (el) {
         var v = parseInt(el.value || 1) + delta;
@@ -5985,11 +5993,11 @@ function confirmPrint() {
     var origBorder = tpl.style.border;
     var origBoxShadow = tpl.style.boxShadow;
     var origTransform = tpl.style.transform;
-    
+
     tpl.style.border = 'none';
     tpl.style.boxShadow = 'none';
     tpl.style.transform = 'none';
-    
+
     // Also hide any active focus underlines on contenteditable fields
     ['stkProduct', 'stkPrice', 'stkDesign', 'stkFabric', 'stkCut'].forEach(function (id) {
         var el = document.getElementById(id);
@@ -6134,7 +6142,7 @@ function generateTSPL(canvas, type, qty) {
             // RGB to Grayscale
             var gray = (r * 0.299 + g * 0.587 + b * 0.114);
             var isBlack = gray < 128; // Simple threshold
-            
+
             // Fix inverted color specifically for sticker printers
             if (type === 'sticker') {
                 isBlack = !isBlack;
@@ -6150,13 +6158,13 @@ function generateTSPL(canvas, type, qty) {
 
     // TSPL Commands
     var headerStr = "";
-    
+
     // Sticker dynamic size from window.stickerLayout (converted to mm)
     var stkW = window.stickerLayout ? Math.round(window.stickerLayout.width / 8) : 55;
     var stkH = window.stickerLayout ? Math.round(window.stickerLayout.height / 8) : 25;
     var stkGap = window.stickerLayout ? (window.stickerLayout.gap_mm !== undefined && window.stickerLayout.gap_mm !== null ? window.stickerLayout.gap_mm : 3) : 3;
     var stkSensor = window.stickerLayout ? (window.stickerLayout.sensor || "GAP") : "GAP";
-    
+
     headerStr += "SIZE " + stkW + " mm, " + stkH + " mm\n";
     if (stkSensor === "BLINE") {
         headerStr += "BLINE " + stkGap + " mm, 0 mm\n";
@@ -6232,13 +6240,13 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Cap
     window.Capacitor.Plugins.CapacitorShareTarget.addListener('shareReceived', (event) => {
         if (!event.files || event.files.length === 0) return;
         window.pendingSharedImages = event.files;
-        
+
         if (window.isSuperAdmin) {
             document.getElementById('adminShareCount').innerText = event.files.length;
             window.openModal('adminShareModal');
         } else {
             document.getElementById('customerShareCount').innerText = event.files.length;
-            
+
             // Populate category dropdown
             var catSelect = document.getElementById('custShareCat');
             catSelect.innerHTML = '<option value="">(Optional) Select Category...</option>';
@@ -6249,15 +6257,15 @@ if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Cap
                 opt.value = c; opt.innerText = c;
                 catSelect.appendChild(opt);
             });
-            
+
             window.openModal('customerShareModal');
         }
     });
 }
 
-window.routeShareToNewProduct = function() {
+window.routeShareToNewProduct = function () {
     closeModals(true); // pass true to prevent history.back() race condition
-    setTimeout(function() {
+    setTimeout(function () {
         if (typeof window.openAddProductModal === 'function') {
             window.openAddProductModal();
         } else if (typeof openAddProductModal === 'function') {
@@ -6268,16 +6276,16 @@ window.routeShareToNewProduct = function() {
     }, 100);
 };
 
-window.adminShareSearchProduct = function() {
+window.adminShareSearchProduct = function () {
     var q = document.getElementById('adminShareSearch').value.toLowerCase().trim();
     var resDiv = document.getElementById('adminShareSearchResults');
     if (q.length < 2) {
         resDiv.style.display = 'none';
         return;
     }
-    
-    var matches = window.allProducts.filter(p => 
-        (p.name && p.name.toLowerCase().includes(q)) || 
+
+    var matches = window.allProducts.filter(p =>
+        (p.name && p.name.toLowerCase().includes(q)) ||
         (p.sku && p.sku.toLowerCase().includes(q))
     ).slice(0, 15); // Top 15 matches
 
@@ -6299,9 +6307,9 @@ window.adminShareSearchProduct = function() {
     resDiv.style.display = 'block';
 };
 
-window.selectAdminShareProduct = function(pid) {
+window.selectAdminShareProduct = function (pid) {
     closeModals(true);
-    
+
     // Reset search UI for next time
     document.getElementById('adminShareSearch').value = '';
     document.getElementById('adminShareSearchResults').style.display = 'none';
@@ -6310,34 +6318,34 @@ window.selectAdminShareProduct = function(pid) {
     document.getElementById('adminShareExistingWrapper').style.display = 'none';
 
     // Open detail page then paste
-    setTimeout(function() {
+    setTimeout(function () {
         if (typeof openDetail === 'function') {
             openDetail(pid);
-            setTimeout(function() {
+            setTimeout(function () {
                 window.pasteSharedImages();
             }, 300); // Give it a tiny bit to render
         }
     }, 100);
 };
 
-window.routeShareToExistingProduct = function() {
+window.routeShareToExistingProduct = function () {
     // Deprecated. Handled directly by search now.
 };
 
-window.pasteSharedImages = async function() {
+window.pasteSharedImages = async function () {
     if (!window.pendingSharedImages || window.pendingSharedImages.length === 0) return;
     if (!window.curProduct) return alert("Open a product first!");
-    
+
     window.tempCamDocId = window.curProduct.docId;
     window.tempCamPid = window.curProduct.id;
     window.tempCamProductName = window.curProduct.name;
     window.tempCamIsNewProduct = false;
     window.sharedImagePasteIndex = 0;
-    
+
     window.showNextSharedImagePreview();
 };
 
-window.showNextSharedImagePreview = async function() {
+window.showNextSharedImagePreview = async function () {
     if (!window.pendingSharedImages || window.sharedImagePasteIndex >= window.pendingSharedImages.length) {
         // Done pasting all images
         window.pendingSharedImages = null;
@@ -6348,7 +6356,7 @@ window.showNextSharedImagePreview = async function() {
         alert("All shared images pasted successfully!");
         return;
     }
-    
+
     let sFile = window.pendingSharedImages[window.sharedImagePasteIndex];
     window.tempCamPhotoPath = sFile.uri || sFile.webPath;
 
@@ -6380,7 +6388,7 @@ window.showNextSharedImagePreview = async function() {
         }
         previewImg.src = capUri;
     }
-    
+
     if (designInput) designInput.value = defaultDesignId;
 
     if (nameLabel) {
@@ -6390,22 +6398,22 @@ window.showNextSharedImagePreview = async function() {
     if (modal) modal.style.display = 'flex';
 };
 
-window.submitCustomerSharedImages = async function() {
+window.submitCustomerSharedImages = async function () {
     if (!window.pendingSharedImages || window.pendingSharedImages.length === 0) return;
-    
+
     var btn = event.currentTarget;
     var originalText = btn.innerHTML;
     btn.innerHTML = "Submitting...";
     btn.disabled = true;
-    
+
     var cat = document.getElementById('custShareCat').value.trim();
     var notes = document.getElementById('custShareNotes').value.trim();
-    
+
     var uploaderName = "Unknown";
     if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
         uploaderName = firebase.auth().currentUser.displayName || firebase.auth().currentUser.phoneNumber || "Customer";
     }
-    
+
     var timestamp = Date.now();
     var submissionPayload = {
         fields: {
@@ -6418,7 +6426,7 @@ window.submitCustomerSharedImages = async function() {
             images: { arrayValue: { values: [] } } // We'll just push to outbox for now
         }
     };
-    
+
     try {
         // Just push them to outbox under a special docId
         var tempDocId = "CUSTOMER_SUBMIT_" + timestamp;
@@ -6427,12 +6435,12 @@ window.submitCustomerSharedImages = async function() {
             let designNum = (idx + 1).toString().padStart(2, '0');
             await window.saveToOutbox(tempDocId, designNum, sFile.uri, uploaderName + " - " + notes, true);
         }
-        
+
         window.pendingSharedImages = null;
         window.processCameraOutbox();
         closeModals();
         alert("Images submitted to Admin successfully!");
-    } catch(e) {
+    } catch (e) {
         alert("Error submitting: " + e.message);
     } finally {
         btn.innerHTML = originalText;
@@ -6442,19 +6450,19 @@ window.submitCustomerSharedImages = async function() {
 
 
 // Instagram Links Logic
-window.openIgLinks = function() {
+window.openIgLinks = function () {
     if (!window.curProduct) return;
-    
+
     var links = [];
     try {
         links = JSON.parse(window.curProduct.igLinks || "[]");
-    } catch(e) {}
-    
+    } catch (e) { }
+
     var editBtn = document.getElementById('igEditBtn');
     if (editBtn) {
         editBtn.style.display = window.isAdminMode ? 'block' : 'none';
     }
-    
+
     if (links.length === 0) {
         if (window.isAdminMode) {
             window.openIgLinksEditor();
@@ -6479,16 +6487,16 @@ window.openIgLinks = function() {
             container.style.borderRadius = "8px";
             container.style.marginBottom = "10px";
             container.style.position = "relative";
-            
+
             var titleHtml = `<div style="font-weight:bold; color:var(--text-main); margin-bottom: 8px;">${l.text || "Reference Link"}</div>`;
-            
+
             var isIg = l.url && (l.url.includes("instagram.com/p/") || l.url.includes("instagram.com/reel/"));
             if (isIg) {
                 // Ensure it ends with /embed and add hidecaption
                 var embedUrl = l.url.split('?')[0]; // remove query params
                 if (!embedUrl.endsWith('/')) embedUrl += '/';
                 embedUrl += 'embed?hidecaption=true';
-                
+
                 // Add iframe with a CSS crop hack to hide the top Instagram profile header
                 container.innerHTML = titleHtml + `
                 <div style="width: 100%; height: 500px; overflow: hidden; border-radius: 6px; position: relative; background: #000;">
@@ -6504,30 +6512,30 @@ window.openIgLinks = function() {
     }
 };
 
-window.openIgLinksEditor = function() {
+window.openIgLinksEditor = function () {
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
     if (!window.curProduct || !window.isAdminMode) return;
-    
+
     var links = [];
     try {
         links = JSON.parse(window.curProduct.igLinks || "[]");
-    } catch(e) {}
-    
+    } catch (e) { }
+
     var container = document.getElementById('igLinksEditContainer');
     container.innerHTML = '';
-    
+
     if (links.length === 0) {
         window.addIgLinkRow();
     } else {
         links.forEach(l => window.addIgLinkRow(l.text, l.url));
     }
-    
+
     window.openModal('igLinksEditorModal');
 };
 
-window.addIgLinkRow = function(text = "", url = "") {
+window.addIgLinkRow = function (text = "", url = "") {
     var container = document.getElementById('igLinksEditContainer');
-    
+
     var row = document.createElement('div');
     row.className = "ig-link-row";
     row.style.display = "flex";
@@ -6537,22 +6545,22 @@ window.addIgLinkRow = function(text = "", url = "") {
     row.style.border = "1px solid #eee";
     row.style.borderRadius = "8px";
     row.style.position = "relative";
-    
+
     row.innerHTML = `
         <i class="fas fa-times" onclick="this.parentElement.remove()" style="position:absolute; right:10px; top:10px; color:red; cursor:pointer;"></i>
         <input type="text" class="ig-link-text" placeholder="Link Title (e.g., Reel 1)" value="${text}" style="padding:10px; border:1px solid #ccc; border-radius:6px; font-size:14px; width:100%;">
         <input type="url" class="ig-link-url" placeholder="https://instagram.com/..." value="${url}" style="padding:10px; border:1px solid #ccc; border-radius:6px; font-size:14px; width:100%;">
     `;
-    
+
     container.appendChild(row);
 };
 
-window.saveIgLinks = async function() {
+window.saveIgLinks = async function () {
     if (!window.curProduct || !window.isAdminMode) return;
-    
+
     var container = document.getElementById('igLinksEditContainer');
     var rows = container.querySelectorAll('.ig-link-row');
-    
+
     var links = [];
     rows.forEach(r => {
         var text = r.querySelector('.ig-link-text').value.trim();
@@ -6561,9 +6569,9 @@ window.saveIgLinks = async function() {
             links.push({ text: text || "Reference Link", url: url });
         }
     });
-    
+
     var linksStr = JSON.stringify(links);
-    
+
     var docUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + window.curProduct.docId + "?updateMask.fieldPaths=igLinks";
     try {
         var res = await window.fetchWithRetry(docUrl, {
@@ -6571,19 +6579,19 @@ window.saveIgLinks = async function() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields: { igLinks: { stringValue: linksStr } } })
         }, 1);
-        
+
         if (!res.ok) throw new Error("Failed to save to Firestore");
-        
+
         window.curProduct.igLinks = linksStr;
-        
+
         // Also update allProducts locally
         var pLocal = window.allProducts.find(x => x.id === window.curProduct.id);
         if (pLocal) pLocal.igLinks = linksStr;
-        
+
         closeModals();
         alert("Reference Links saved successfully!");
-        
-    } catch(e) {
+
+    } catch (e) {
         alert("Error saving links: " + e.message);
     }
 };
@@ -7081,7 +7089,7 @@ window.openLiveAdmin = function () {
                         historyHtml = `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${d.recentHistory.join(', ')}</div>`;
                     }
 
-                    let namePortion = (d.customerName && d.customerName !== "Guest") ? d.customerName : (isGuest ? "Guest #" + docId.replace('guest_', '').substring(0,6).toUpperCase() : docId);
+                    let namePortion = (d.customerName && d.customerName !== "Guest") ? d.customerName : (isGuest ? "Guest #" + docId.replace('guest_', '').substring(0, 6).toUpperCase() : docId);
                     let stationPortion = (d.customerStation && d.customerStation !== "Unknown") ? ' - ' + d.customerStation : '';
                     let dispName = namePortion + stationPortion;
 
@@ -7508,7 +7516,7 @@ window.submitNewProduct = async function () {
             window.tempCamIsNewProduct = true; // This is a NEW product
             window.lastRenderedDesignNames = ""; // Clear out previous product's cache!
             window.sharedImagePasteIndex = 0;
-            
+
             // Allow modal to close and state to settle before popping open the camera preview
             setTimeout(window.showNextSharedImagePreview, 500);
         }
