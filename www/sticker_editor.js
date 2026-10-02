@@ -68,7 +68,7 @@ async function loadStickerLayout() {
             window.currentTemplateName = window.defaultTemplateName;
             buildCurrentStickerLayout();
             populateTemplateDropdown();
-            populateFormatDropdown();
+            window.populateFormatDropdown();
         } else {
             buildCurrentStickerLayout();
         }
@@ -126,23 +126,40 @@ function populateTemplateDropdown() {
     }
 }
 
-function populateFormatDropdown() {
+window.populateFormatDropdown = function() {
     const selFormat = document.getElementById('seActiveFormatIdSelect');
-    if (!selFormat) return;
+    const selFormatPreview = document.getElementById('printPreviewPaperSizeSelect');
     
-    selFormat.innerHTML = '';
+    if (selFormat) selFormat.innerHTML = '';
+    if (selFormatPreview) selFormatPreview.innerHTML = '';
+
     const keys = Object.keys(window.stickerFormatsMap);
     keys.forEach(k => {
-        const opt = document.createElement('option');
-        opt.value = k;
-        opt.innerText = k;
         // Select the format currently used by the active layout
         const currentLayout = window.stickerLayoutsMap[window.currentTemplateName];
-        if (currentLayout && k === currentLayout.formatId) {
-            opt.selected = true;
+        const isSelected = (currentLayout && k === currentLayout.formatId);
+        
+        if (selFormat) {
+            const opt = document.createElement('option');
+            opt.value = k;
+            opt.innerText = k;
+            opt.selected = isSelected;
+            selFormat.appendChild(opt);
         }
-        selFormat.appendChild(opt);
+        
+        if (selFormatPreview) {
+            const optP = document.createElement('option');
+            optP.value = k;
+            optP.innerText = k;
+            optP.selected = isSelected;
+            selFormatPreview.appendChild(optP);
+        }
     });
+
+    const previewContainer = document.getElementById('printPreviewPaperSizeContainer');
+    if (previewContainer) {
+        previewContainer.style.display = keys.length > 1 ? 'block' : 'none';
+    }
 }
 
 window.changeStickerTemplate = function(name) {
@@ -151,7 +168,7 @@ window.changeStickerTemplate = function(name) {
         buildCurrentStickerLayout();
         
         // Sync the format dropdown to match the selected layout's format
-        populateFormatDropdown();
+        window.populateFormatDropdown();
 
         // If in Print Modal, update the format label and preview
         const pm = document.getElementById('printPreviewModal');
@@ -769,7 +786,7 @@ function updateStickerCanvasSize() {
     
     buildCurrentStickerLayout();
     populateTemplateDropdown();
-    populateFormatDropdown();
+    window.populateFormatDropdown();
     renderStickerTemplate('stickerEditorCanvas', true);
     updateStickerCanvasScale('stickerEditorCanvas');
 }
@@ -878,7 +895,7 @@ function saveNewStickerFormat() {
 
     closeNewStickerFormatModal();
     buildCurrentStickerLayout();
-    populateFormatDropdown();
+    window.populateFormatDropdown();
     renderStickerTemplate('stickerEditorCanvas', true);
     
     // Save to Firebase immediately

@@ -5902,6 +5902,10 @@ function previewLabel(type) {
         sel.style.display = Object.keys(window.stickerLayoutsMap).length > 1 ? 'block' : 'none';
     }
 
+    if (window.populateFormatDropdown) {
+        window.populateFormatDropdown();
+    }
+
     if (typeof renderStickerTemplate === 'function') {
         renderStickerTemplate('stickerTemplate', false);
     }
