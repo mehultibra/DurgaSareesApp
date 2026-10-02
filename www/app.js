@@ -686,12 +686,14 @@ async function checkAdminStatus(phone) {
                 localStorage.setItem('dsIsAdmin', 'true');
                 window.isSuperAdmin = true;
                 if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
+                if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
                 var fabAdd = document.getElementById('fabAddProduct');
                 if (fabAdd) fabAdd.style.display = window.isAdminMode ? 'flex' : 'none';
             } else {
                 localStorage.setItem('dsIsAdmin', 'false');
                 window.isSuperAdmin = false;
                 if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'none';
+                if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'none';
             }
         }
     } catch (e) {
