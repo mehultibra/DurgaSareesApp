@@ -7062,7 +7062,7 @@ window.openLiveAdmin = function () {
                         historyHtml = `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${d.recentHistory.join(', ')}</div>`;
                     }
 
-                    let namePortion = (d.customerName && d.customerName !== "Guest") ? d.customerName : (isGuest ? "Guest" : docId);
+                    let namePortion = (d.customerName && d.customerName !== "Guest") ? d.customerName : (isGuest ? "Guest #" + docId.replace('guest_', '').substring(0,6).toUpperCase() : docId);
                     let stationPortion = (d.customerStation && d.customerStation !== "Unknown") ? ' - ' + d.customerStation : '';
                     let dispName = namePortion + stationPortion;
 
