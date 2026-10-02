@@ -87,6 +87,20 @@ function getActiveUserId() {
     return uid;
 }
 
+function fetchGuestLocation() {
+    if (typeof localStorage === 'undefined') return;
+    if (localStorage.getItem('ds_guest_location')) return; // Already fetched
+    fetch('https://ipwho.is/')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                let locStr = (data.city ? data.city + ", " : "") + (data.region || "") + " (IP: " + data.ip + ")";
+                localStorage.setItem('ds_guest_location', locStr);
+            }
+        }).catch(e => console.log('IP fetch failed', e));
+}
+fetchGuestLocation();
+
 let presenceTimeout = null;
 let lastPresencePush = 0;
 window.updateLivePresence = function (productId, force = false) {
@@ -115,6 +129,11 @@ window.updateLivePresence = function (productId, force = false) {
         try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || "{}"); } catch (e) { }
         let customerName = cd.name || cd.firm || "Guest";
         let customerStation = cd.station || "Unknown";
+
+        let guestLoc = localStorage.getItem('ds_guest_location');
+        if (guestLoc && customerStation === "Unknown") {
+            customerStation = guestLoc;
+        }
 
         let historyMap = {};
         try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch (e) { }
