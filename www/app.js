@@ -6781,60 +6781,59 @@ window.promptSetAsCover = async function (docId, pid, designId) {
     }
 };
 
-window.shareWhatsAppLink = async function () {
-    if (!curProduct) return;
-    var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
-
+window.generateShareMessage = function(prod) {
+    if (!prod) return "";
+    var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(prod.docId || prod.id);
     var details = [];
-
     var readyCount = 0;
-    if (curProduct.stock) {
-        for (var k in curProduct.stock) {
-            if (curProduct.stock[k] > 0) readyCount++;
+    
+    if (prod.stock) {
+        for (var k in prod.stock) {
+            if (prod.stock[k] > 0) readyCount++;
         }
-    } else if (curProduct.ready) {
-        readyCount = curProduct.ready.split(',').filter(s => s.trim().length > 0).length;
+    } else if (prod.ready) {
+        readyCount = prod.ready.split(',').filter(s => s.trim().length > 0).length;
     }
 
     if (readyCount > 0) {
         details.push(`Designs : *${readyCount}*`);
     }
 
-    if (curProduct.mult) {
-        details.push(`Colours : ${curProduct.mult} Selected Colour Matching`);
+    if (prod.mult) {
+        details.push(`Colours : ${prod.mult} Selected Colour Matching`);
         details.push("");
     }
 
     var fabricJari = [];
-    if (curProduct.fabric && curProduct.fabric !== "None") fabricJari.push(curProduct.fabric);
-    if (curProduct.jari && curProduct.jari !== "None") fabricJari.push(curProduct.jari);
+    if (prod.fabric && prod.fabric !== "None") fabricJari.push(prod.fabric);
+    if (prod.jari && prod.jari !== "None") fabricJari.push(prod.jari);
     if (fabricJari.length > 0) {
         details.push(`Fabric : ${fabricJari.join(' & ')}`);
         details.push("");
     }
 
-    if (curProduct.border && curProduct.border !== "None") {
-        details.push(`Border : ${curProduct.border}`);
+    if (prod.border && prod.border !== "None") {
+        details.push(`Border : ${prod.border}`);
         details.push("");
     }
 
-    if (curProduct.blouse && curProduct.blouse !== "None") {
-        details.push(`Blouse : ${curProduct.blouse}`);
+    if (prod.blouse && prod.blouse !== "None") {
+        details.push(`Blouse : ${prod.blouse}`);
         details.push("");
     }
 
-    if (curProduct.pallu && curProduct.pallu !== "None") {
-        details.push(`Pallu : ${curProduct.pallu}`);
+    if (prod.pallu && prod.pallu !== "None") {
+        details.push(`Pallu : ${prod.pallu}`);
         details.push("");
     }
 
-    if (curProduct.work && curProduct.work !== "None") {
-        details.push(`Work : ${curProduct.work}`);
+    if (prod.work && prod.work !== "None") {
+        details.push(`Work : ${prod.work}`);
         details.push("");
     }
 
-    if (curProduct.cut && curProduct.cut !== "None") {
-        details.push(`Cut : ${curProduct.cut}`);
+    if (prod.cut && prod.cut !== "None") {
+        details.push(`Cut : ${prod.cut}`);
         details.push("");
     }
 
@@ -6844,8 +6843,8 @@ window.shareWhatsAppLink = async function () {
 
     details.push(`Special Price`);
     var pricePacking = [];
-    if (curProduct.price) pricePacking.push(`${curProduct.price}/-`);
-    if (curProduct.packing && curProduct.packing !== "None") pricePacking.push(curProduct.packing);
+    if (prod.price) pricePacking.push(`${prod.price}/-`);
+    if (prod.packing && prod.packing !== "None") pricePacking.push(prod.packing);
     if (pricePacking.length > 0) details.push(`*${pricePacking.join(' ')}*`);
 
     details.push("");
@@ -6854,7 +6853,13 @@ window.shareWhatsAppLink = async function () {
     details.push("Thank You,");
     details.push("*Durga Sarees, Surat*");
 
-    var textMsg = `*${curProduct.name}*\n\n` + details.join("\n");
+    return `*${prod.name}*\n\n` + details.join("\n");
+};
+
+window.shareWhatsAppLink = async function () {
+    if (!curProduct) return;
+    
+    var textMsg = window.generateShareMessage(curProduct);
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
         document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing HD Image...</div>');

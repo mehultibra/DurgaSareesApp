@@ -978,8 +978,30 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
                     data: pureBase64,
                     directory: "CACHE"
                 });
+                
+                var copyText = null;
+                if (typeof window.generateShareMessage === 'function') {
+                    copyText = window.generateShareMessage(product);
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText);
+                        else {
+                            var ta = document.createElement("textarea"); ta.value = copyText; document.body.appendChild(ta);
+                            ta.focus(); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        }
+                        var toastId = 'copyToast_' + Date.now();
+                        var toastHtml = `<div id="${toastId}" style="position:fixed; top:40%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.9); color:#fff; padding:16px 24px; border-radius:8px; font-size:16px; font-weight:bold; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:10000; display:flex; flex-direction:column; gap:8px; pointer-events:none;">
+                            <i class="fas fa-check-circle" style="font-size:28px; color:#4caf50;"></i>
+                            <span>Text Copied!</span>
+                            <span style="font-size:13px; font-weight:normal; color:#ddd;">Please paste it into WhatsApp<br>along with the PDF.</span>
+                        </div>`;
+                        document.body.insertAdjacentHTML('beforeend', toastHtml);
+                        setTimeout(() => { var t = document.getElementById(toastId); if(t) t.remove(); }, 5000);
+                    } catch(e) {}
+                }
+                
                 await window.Capacitor.Plugins.Share.share({
                     title: product.name + ' Catalog',
+                    text: copyText,
                     files: [writeResult.uri]
                 });
             } else {
@@ -1311,6 +1333,9 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                 
                 if (deepLink) {
                     var copyText = "Check out this design at Durga Sarees:\n\n" + deepLink;
+                    if (typeof window.generateShareMessage === 'function' && window.curProduct) {
+                        copyText = window.generateShareMessage(window.curProduct);
+                    }
                     if (uriArray.length > 1) {
                         try {
                             if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText);
@@ -1375,6 +1400,31 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
             }
 
             if (typeof navigator.share === 'function') {
+                if (deepLink) {
+                    var copyText = "Check out this design at Durga Sarees:\n\n" + deepLink;
+                    if (typeof window.generateShareMessage === 'function' && window.curProduct) {
+                        copyText = window.generateShareMessage(window.curProduct);
+                    }
+                    if (true) {
+                        try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText);
+                            else {
+                                var ta = document.createElement("textarea"); ta.value = copyText; document.body.appendChild(ta);
+                                ta.focus(); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                            }
+                            
+                            var toastId = 'copyToast_' + Date.now();
+                            var toastHtml = `<div id="${toastId}" style="position:fixed; top:40%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.9); color:#fff; padding:16px 24px; border-radius:8px; font-size:16px; font-weight:bold; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:10000; display:flex; flex-direction:column; gap:8px; pointer-events:none;">
+                                <i class="fas fa-check-circle" style="font-size:28px; color:#4caf50;"></i>
+                                <span>Link Copied!</span>
+                                <span style="font-size:13px; font-weight:normal; color:#ddd;">Please paste it into WhatsApp<br>after images appear.</span>
+                            </div>`;
+                            document.body.insertAdjacentHTML('beforeend', toastHtml);
+                            setTimeout(() => { var t = document.getElementById(toastId); if(t) t.remove(); }, 5000);
+                        } catch(e) {}
+                    }
+                }
+
                 try {
                     // ⚠️ Same fix: don't mix `text` with `files` — WhatsApp drops images when both are present.
                     await navigator.share({
