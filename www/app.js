@@ -982,6 +982,23 @@ function saveImageToDB(key, blob) {
     });
 }
 
+window.renderBlobToImg = function (imgElement, blob) {
+    if (!blob) return;
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (isIOS) {
+        var reader = new FileReader();
+        reader.onloadend = function () {
+            imgElement.src = reader.result;
+        };
+        reader.readAsDataURL(blob);
+    } else {
+        if (imgElement.dataset.tempBlobUrl) URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
+        var objUrl = URL.createObjectURL(blob);
+        imgElement.dataset.tempBlobUrl = objUrl;
+        imgElement.src = objUrl;
+    }
+};
+
 function deleteImageFromDB(key) {
     window.sessionImageCache.delete(key);
 
@@ -1051,11 +1068,8 @@ async function manageProductHDCache(product, action) {
                                         // 🟢 LIVE UI INJECTION: Update swipe deck instantly
                                         var liveImgs = document.querySelectorAll('img[data-zoom-url="' + fullUrl + '"]');
                                         if (liveImgs.length > 0) {
-                                            var objUrl = URL.createObjectURL(newBlob);
                                             liveImgs.forEach(img => {
-                                                if (img.dataset.tempBlobUrl) URL.revokeObjectURL(img.dataset.tempBlobUrl);
-                                                img.dataset.tempBlobUrl = objUrl;
-                                                img.src = objUrl;
+                                                window.renderBlobToImg(img, newBlob);
                                                 img.dataset.loadedZoom = 'true';
                                             });
                                         }
@@ -1069,7 +1083,7 @@ async function manageProductHDCache(product, action) {
                                             if (typeof fsDesignId !== 'undefined') {
                                                 var isCoverMatch = (fsDesignId === 'DIRECT' || fsDesignId === 'Cover') && /^(01|1|cover)$/i.test(dName);
                                                 if (fsDesignId === dName || isCoverMatch) {
-                                                    fsImg.src = URL.createObjectURL(newBlob);
+                                                    window.renderBlobToImg(fsImg, newBlob);
                                                 }
                                             }
                                         }
@@ -1255,12 +1269,9 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     // ALWAYS check IndexedDB to support Offline Mode.
     getImageFromDB(cacheKey).then(function (blob) {
         if (blob) {
-            var objectUrl = URL.createObjectURL(blob);
             if (!imgElement.complete || imgElement.naturalWidth === 0) {
-                imgElement.src = objectUrl;
+                window.renderBlobToImg(imgElement, blob);
             }
-            if (imgElement.dataset.tempBlobUrl) URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
-            imgElement.dataset.tempBlobUrl = objectUrl;
             if (window.coverExistsMap) window.coverExistsMap[gridPath] = true;
             if (window.saveCoverExistsMap) window.saveCoverExistsMap();
         } else {
@@ -1311,9 +1322,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
             var cachedUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cachedFile) + "?alt=media";
             getImageFromDB(cachedUrl).then(function (blob) {
                 if (blob) {
-                    var objUrl = URL.createObjectURL(blob);
-                    imgElement.src = objUrl;
-                    imgElement.dataset.tempBlobUrl = objUrl;
+                    window.renderBlobToImg(imgElement, blob);
                 } else {
                     imgElement.src = cachedUrl;
                     imgElement.onerror = function () {
@@ -1355,9 +1364,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                     // Try IDB first, then network
                     getImageFromDB(firstUrl).then(function (blob) {
                         if (blob) {
-                            var objUrl = URL.createObjectURL(blob);
-                            imgElement.src = objUrl;
-                            imgElement.dataset.tempBlobUrl = objUrl;
+                            window.renderBlobToImg(imgElement, blob);
                         } else {
                             imgElement.src = firstUrl;
                             imgElement.onerror = function () { showPlaceholder(new Error("Image element onload onerror triggered")); };
@@ -1387,10 +1394,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 if (res.ok) {
                     var blob = await res.blob();
                     await saveImageToDB(cacheKey, blob);
-                    if (imgElement.dataset.tempBlobUrl) URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
-                    var objUrl = URL.createObjectURL(blob);
-                    imgElement.dataset.tempBlobUrl = objUrl;
-                    imgElement.src = objUrl;
+                    window.renderBlobToImg(imgElement, blob);
 
                 } else {
                     throw new Error("HTTP Status " + res.status);
@@ -1408,10 +1412,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                         if (zRes.ok) {
                             var zBlob = await zRes.blob();
                             if (zBlob.size === 0) throw new Error("Zero byte cover");
-                            if (imgElement.dataset.tempBlobUrl) URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
-                            var zObj = URL.createObjectURL(zBlob);
-                            imgElement.dataset.tempBlobUrl = zObj;
-                            imgElement.src = zObj;
+                            window.renderBlobToImg(imgElement, zBlob);
                         } else {
                             if (zRes.status === 404) {
                                 coverExistsMap[gridPath] = false;
@@ -1445,22 +1446,12 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                     .then(function (res) { return res.ok ? res.blob() : null; })
                     .then(function (blob) {
                         if (blob && blob.size > 0) {
-                            if (imgElement.dataset.tempBlobUrl) {
-                                URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
-                            }
-                            var objUrl = URL.createObjectURL(blob);
-                            imgElement.dataset.tempBlobUrl = objUrl;
-                            imgElement.src = objUrl;
+                            window.renderBlobToImg(imgElement, blob);
                         }
                     })
                     .catch(function () { });
             } else {
-                if (imgElement.dataset.tempBlobUrl) {
-                    URL.revokeObjectURL(imgElement.dataset.tempBlobUrl);
-                }
-                var objUrl = URL.createObjectURL(existingBlob);
-                imgElement.dataset.tempBlobUrl = objUrl;
-                imgElement.src = objUrl;
+                window.renderBlobToImg(imgElement, existingBlob);
             }
         }).catch(function () {
             var hdImage = new Image();
@@ -1775,11 +1766,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
             var zoomBlob = await getImageFromDB(url);
             if (zoomBlob) {
                 console.log('[ZOOM] IDB HIT:', fileName);
-                // RAM FIX: Revoke old grid placeholder and assign new temp URL
-                if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
-                var objUrl = URL.createObjectURL(zoomBlob);
-                imgEl.dataset.tempBlobUrl = objUrl;
-                imgEl.src = objUrl;
+                window.renderBlobToImg(imgEl, zoomBlob);
                 imgEl.dataset.loadedZoom = 'true';
                 return;
             }
@@ -1789,10 +1776,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
             if (designGridUrl) gridBlob = await getImageFromDB(designGridUrl);
             if (!gridBlob && folderPath) gridBlob = await getImageFromDB(folderPath);
             if (gridBlob && imgEl.dataset.loadedZoom !== 'true') {
-                if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
-                var gridObjUrl = URL.createObjectURL(gridBlob);
-                imgEl.dataset.tempBlobUrl = gridObjUrl;
-                imgEl.src = gridObjUrl;
+                window.renderBlobToImg(imgEl, gridBlob);
             }
 
             // STEP 3: No distinct zoom? Mark done.
@@ -1814,10 +1798,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                     console.log('[ZOOM] Retained in transient RAM Only (PACKED Item):', fileName);
                 }
                 if (imgEl.dataset.loadedZoom !== 'true') {
-                    if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
-                    var oUrl = URL.createObjectURL(blob);
-                    imgEl.dataset.tempBlobUrl = oUrl;
-                    imgEl.src = oUrl;
+                    window.renderBlobToImg(imgEl, blob);
                     imgEl.dataset.loadedZoom = 'true';
                 }
                 console.log('[ZOOM] Loaded into RAM:', fileName);
@@ -1842,10 +1823,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                             console.log('[ZOOM] Retained in transient RAM Only (Fallback):', fileName);
                         }
                         if (imgEl.dataset.loadedZoom !== 'true') {
-                            if (imgEl.dataset.tempBlobUrl) URL.revokeObjectURL(imgEl.dataset.tempBlobUrl);
-                            var u2 = URL.createObjectURL(b2);
-                            imgEl.dataset.tempBlobUrl = u2;
-                            imgEl.src = u2;
+                            window.renderBlobToImg(imgEl, b2);
                             imgEl.dataset.loadedZoom = 'true';
                         }
                     } else {
@@ -3438,7 +3416,7 @@ function openCart(preserveScroll) {
                                         return fetch(finalUrl).then(function (r) {
                                             if (r.ok) {
                                                 return r.blob().then(function (blob) {
-                                                    imgEl.src = URL.createObjectURL(blob);
+                                                    window.renderBlobToImg(imgEl, blob);
                                                     saveImageToDB(finalUrl, blob);
                                                 });
                                             }
@@ -3452,7 +3430,7 @@ function openCart(preserveScroll) {
 
                                 getImageFromDB(cacheKey).then(function (blob) {
                                     if (blob) {
-                                        imgEl.src = URL.createObjectURL(blob);
+                                        window.renderBlobToImg(imgEl, blob);
                                     } else {
                                         imgEl.src = fallbackSVG;
                                     }
