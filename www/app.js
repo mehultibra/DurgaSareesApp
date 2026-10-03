@@ -741,7 +741,13 @@ function backToPhone() {
 
 function initApp() {
     var bootScreen = document.getElementById('boot');
-    if (typeof window.processCameraOutbox === 'function') window.processCameraOutbox();
+    if (typeof window.processCameraOutbox === 'function') {
+        window.processCameraOutbox();
+        if (!window.dsOnlineListenerAdded) {
+            window.addEventListener('online', window.processCameraOutbox);
+            window.dsOnlineListenerAdded = true;
+        }
+    }
 
     function processProducts(docs) {
         var validCounter = 0;
