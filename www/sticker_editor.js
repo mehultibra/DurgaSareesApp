@@ -128,10 +128,7 @@ function populateTemplateDropdown() {
 
 window.populateFormatDropdown = function() {
     const selFormat = document.getElementById('seActiveFormatIdSelect');
-    const selFormatPreview = document.getElementById('printPreviewPaperSizeSelect');
-    
     if (selFormat) selFormat.innerHTML = '';
-    if (selFormatPreview) selFormatPreview.innerHTML = '';
 
     const keys = Object.keys(window.stickerFormatsMap);
     keys.forEach(k => {
@@ -146,20 +143,7 @@ window.populateFormatDropdown = function() {
             opt.selected = isSelected;
             selFormat.appendChild(opt);
         }
-        
-        if (selFormatPreview) {
-            const optP = document.createElement('option');
-            optP.value = k;
-            optP.innerText = k;
-            optP.selected = isSelected;
-            selFormatPreview.appendChild(optP);
-        }
     });
-
-    const previewContainer = document.getElementById('printPreviewPaperSizeContainer');
-    if (previewContainer) {
-        previewContainer.style.display = keys.length > 1 ? 'block' : 'none';
-    }
 }
 
 window.changeStickerTemplate = function(name) {
