@@ -4065,6 +4065,15 @@ function openModal(id) {
 }
 function closeModals(fromHistory) {
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
+    
+    // Completely destroy IG embeds to stop any audio playing
+    var igLinksList = document.getElementById('igLinksList');
+    if (igLinksList) igLinksList.innerHTML = '';
+    if (window.currentIgObserver) {
+        window.currentIgObserver.disconnect();
+        window.currentIgObserver = null;
+    }
+    
     if (!fromHistory) history.back();
 }
 
@@ -6474,7 +6483,7 @@ window.openIgLinks = function () {
             container.style.marginBottom = "10px";
             container.style.position = "relative";
 
-            var titleHtml = `<div style="font-weight:bold; color:var(--text-main); margin-bottom: 8px;">${l.text || "Reference Link"}</div>`;
+            var titleHtml = l.text ? `<div style="font-weight:bold; color:var(--text-main); margin-bottom: 8px;">${l.text}</div>` : '';
 
             var isIg = l.url && (l.url.includes("instagram.com/p/") || l.url.includes("instagram.com/reel/"));
             if (isIg) {
@@ -6485,8 +6494,8 @@ window.openIgLinks = function () {
 
                 // Add iframe with a CSS crop hack to hide the top Instagram profile header
                 container.innerHTML = titleHtml + `
-                <div style="width: 100%; height: 500px; overflow: hidden; border-radius: 6px; position: relative; background: #000;">
-                    <iframe src="${embedUrl}" width="100%" height="560" frameborder="0" scrolling="no" allowtransparency="true" allowfullscreen="true" style="border:none; display:block; margin-top: -54px; width:100%;"></iframe>
+                <div class="ig-embed-container" data-src="${embedUrl}" style="width: 100%; height: 500px; overflow: hidden; border-radius: 6px; position: relative; background: #000;">
+                    <iframe width="100%" height="560" frameborder="0" scrolling="no" allowtransparency="true" allowfullscreen="true" style="border:none; display:block; margin-top: -54px; width:100%;"></iframe>
                 </div>`;
             } else {
                 // Fallback to normal link
@@ -6494,7 +6503,36 @@ window.openIgLinks = function () {
             }
             listContainer.appendChild(container);
         });
+        
         window.openModal('igLinksViewerModal');
+        
+        // Use Intersection Observer to only load and play the visible reel
+        setTimeout(() => {
+            var observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    var iframe = entry.target.querySelector('iframe');
+                    var src = entry.target.getAttribute('data-src');
+                    if (entry.isIntersecting) {
+                        if (iframe && iframe.src !== src) {
+                            iframe.src = src;
+                        }
+                    } else {
+                        if (iframe && iframe.src) {
+                            iframe.src = ''; // Stops the video/sound
+                        }
+                    }
+                });
+            }, {
+                root: document.getElementById('igLinksList'),
+                threshold: 0.5
+            });
+            
+            var embedContainers = document.querySelectorAll('#igLinksList .ig-embed-container');
+            embedContainers.forEach(c => observer.observe(c));
+            
+            // Store observer on the modal so we can disconnect it later if needed, though it's bound to the DOM elements anyway.
+            window.currentIgObserver = observer;
+        }, 100);
     }
 };
 
