@@ -6483,8 +6483,6 @@ window.openIgLinks = function () {
             container.style.marginBottom = "10px";
             container.style.position = "relative";
 
-            var titleHtml = l.text ? `<div style="font-weight:bold; color:var(--text-main); margin-bottom: 8px;">${l.text}</div>` : '';
-
             var isIg = l.url && (l.url.includes("instagram.com/p/") || l.url.includes("instagram.com/reel/"));
             if (isIg) {
                 // Ensure it ends with /embed and add hidecaption
@@ -6493,13 +6491,13 @@ window.openIgLinks = function () {
                 embedUrl += 'embed?hidecaption=true';
 
                 // Add iframe with a CSS crop hack to hide the top Instagram profile header
-                container.innerHTML = titleHtml + `
+                container.innerHTML = `
                 <div class="ig-embed-container" data-src="${embedUrl}" style="width: 100%; height: 500px; overflow: hidden; border-radius: 6px; position: relative; background: #000;">
                     <iframe width="100%" height="560" frameborder="0" scrolling="no" allowtransparency="true" allowfullscreen="true" style="border:none; display:block; margin-top: -54px; width:100%;"></iframe>
                 </div>`;
             } else {
                 // Fallback to normal link
-                container.innerHTML = titleHtml + `<a href="${l.url}" target="_blank" style="font-size:13px; color:blue; word-break: break-all; text-decoration:none;">${l.url}</a>`;
+                container.innerHTML = `<a href="${l.url}" target="_blank" style="font-size:13px; color:blue; word-break: break-all; text-decoration:none;">${l.url}</a>`;
             }
             listContainer.appendChild(container);
         });
