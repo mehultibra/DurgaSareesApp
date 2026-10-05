@@ -6494,6 +6494,9 @@ window.openIgLinks = function () {
                 container.innerHTML = `
                 <div class="ig-embed-container" data-src="${embedUrl}" style="width: 100%; height: 500px; overflow: hidden; border-radius: 6px; position: relative; background: #000;">
                     <iframe width="100%" height="560" frameborder="0" scrolling="no" allowtransparency="true" allowfullscreen="true" style="border:none; display:block; margin-top: -54px; width:100%;"></iframe>
+                    <div onclick="window.toggleIgFullscreen(this.parentElement)" style="position: absolute; bottom: 15px; right: 15px; background: rgba(0,0,0,0.6); color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">
+                        <i class="fas fa-expand"></i>
+                    </div>
                 </div>`;
             } else {
                 // Fallback to normal link
@@ -6533,6 +6536,63 @@ window.openIgLinks = function () {
         }, 100);
     }
 };
+
+window.toggleIgFullscreen = function(container) {
+    if (!document.fullscreenElement) {
+        // Enter fullscreen
+        var req = container.requestFullscreen || container.webkitRequestFullscreen || container.msRequestFullscreen;
+        if (req) {
+            req.call(container).then(() => {
+                var iframe = container.querySelector('iframe');
+                if (iframe) {
+                    iframe.style.height = "100vh";
+                    iframe.style.marginTop = "0";
+                }
+                var icon = container.querySelector('.fa-expand');
+                if (icon) {
+                    icon.classList.remove('fa-expand');
+                    icon.classList.add('fa-compress');
+                }
+            }).catch(e => console.log("Fullscreen err:", e));
+        }
+    } else {
+        // Exit fullscreen
+        var ext = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+        if (ext) {
+            ext.call(document).then(() => {
+                // The styling resets can also be handled by an event listener, but we can do it here
+                var iframe = container.querySelector('iframe');
+                if (iframe) {
+                    iframe.style.height = "560px";
+                    iframe.style.marginTop = "-54px";
+                }
+                var icon = container.querySelector('.fa-compress');
+                if (icon) {
+                    icon.classList.remove('fa-compress');
+                    icon.classList.add('fa-expand');
+                }
+            }).catch(e => console.log("Exit fullscreen err:", e));
+        }
+    }
+};
+
+// Also listen for hardware/escape key fullscreen exits
+document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) {
+        document.querySelectorAll('.ig-embed-container').forEach(container => {
+            var iframe = container.querySelector('iframe');
+            if (iframe) {
+                iframe.style.height = "560px";
+                iframe.style.marginTop = "-54px";
+            }
+            var icon = container.querySelector('.fa-compress');
+            if (icon) {
+                icon.classList.remove('fa-compress');
+                icon.classList.add('fa-expand');
+            }
+        });
+    }
+});
 
 window.openIgLinksEditor = function () {
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
