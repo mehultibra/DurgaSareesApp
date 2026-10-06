@@ -3865,31 +3865,6 @@ async function syncImages(silent = false) {
                         }
                     }
 
-                    // --- 3B. Download Cover ZOOM if ready ---
-                    var curStockCover = p.stock && p.stock['Cover'] !== undefined ? p.stock['Cover'] : 999;
-                    if (downloaded && encZoomPath && curStockCover > 0) {
-                        var coverZoomUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
-                        var existingCoverZoom = await checkImageInDB(coverZoomUrl);
-                        var localZoomTimeCover = window.dsCoverTimeCache[coverZoomUrl] || 0;
-                        if (!existingCoverZoom || localZoomTimeCover < remoteTime) {
-                            if (existingCoverZoom) await deleteImageFromDB(coverZoomUrl);
-                            try {
-                                const ctrlZc = new AbortController();
-                                const tidZc = setTimeout(() => ctrlZc.abort(), 30000);
-                                var zcRes = await window.fetchWithRetry(coverZoomUrl + "&_cb=" + Date.now(), { signal: ctrlZc.signal }, 3);
-                                clearTimeout(tidZc);
-                                if (zcRes.ok) {
-                                    var zcBlob = await zcRes.blob();
-                                    if (zcBlob.size > 0) {
-                                        await saveImageToDB(coverZoomUrl, zcBlob);
-                                        window.dsCoverTimeCache[coverZoomUrl] = remoteTime;
-                                        try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
-                                    }
-                                }
-                            } catch(e) {}
-                        }
-                    }
-
                     // ——— 4. Download remaining design files (FAST PARALLEL BATCHING - GRID ONLY) ——————————————————
                     if (downloaded) {
                         var innerBatchSize = 2; // Download 2 inner images concurrently!
@@ -3932,32 +3907,6 @@ async function syncImages(silent = false) {
                                         console.warn("[SYNC] Fast design fetch failed:", fname, e.message); if (typeof window.logAppError === 'function') window.logAppError('Sync Inner Image', e.message + " | " + p.name);
                                     }
                                 }
-
-                                // --- 4B. Download ZOOM if ready ---
-                                var curStock = p.stock && p.stock[fname] !== undefined ? p.stock[fname] : 999;
-                                if (encZoomPath && curStock > 0) {
-                                    var zoomUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                                    var existingZoom = await checkImageInDB(zoomUrl);
-                                    var localZoomTime = window.dsCoverTimeCache[zoomUrl] || 0;
-                                    
-                                    if (!existingZoom || localZoomTime < remoteDesignTime) {
-                                        if (existingZoom) await deleteImageFromDB(zoomUrl);
-                                        try {
-                                            const ctrlZ = new AbortController();
-                                            const tidZ = setTimeout(() => ctrlZ.abort(), 30000);
-                                            var zRes = await window.fetchWithRetry(zoomUrl + "&_cb=" + Date.now(), { signal: ctrlZ.signal }, 3);
-                                            clearTimeout(tidZ);
-                                            if (zRes.ok) {
-                                                var zBlob = await zRes.blob();
-                                                if (zBlob.size > 0) {
-                                                    await saveImageToDB(zoomUrl, zBlob);
-                                                    window.dsCoverTimeCache[zoomUrl] = remoteDesignTime;
-                                                    try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
-                                                }
-                                            }
-                                        } catch (e) {}
-                                    }
-                                }
                             }));
                         }
                     }
@@ -3991,75 +3940,80 @@ async function syncImages(silent = false) {
             // Yield the main thread to keep UI smooth
             await new Promise(resolve => setTimeout(resolve, 50));
         }
+        // 🚀 PHASE 2: ZOOM SYNC & OUT-OF-STOCK CLEANUP
+        if (bootMsg) bootMsg.innerText = "Syncing HD zoom images 0 / " + total + "...";
+        var zCount = 0;
+        var zBatchSize = 10;
+        for (var i = 0; i < productsToSync.length; i += zBatchSize) {
+            var batch = productsToSync.slice(i, i + zBatchSize);
+            await Promise.all(batch.map(async (p) => {
+                if (!p._folderFiles || p._folderFiles.length === 0) return;
+                if (!p.zoomUrl || String(p.zoomUrl).toLowerCase() === "none" || p.zoomUrl === p.gridUrl) return;
+
+                var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+
+                // Sort exactly as UI does to match stock indices
+                var sortedFiles = Array.from(p._folderFiles);
+                if (p.coverDesignId && p.coverDesignId !== "None") {
+                    var cleanCover = p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                    sortedFiles.sort((a, b) => {
+                        var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                        var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                        if (aClean === cleanCover) return -1;
+                        if (bClean === cleanCover) return 1;
+                        return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                    });
+                } else {
+                    sortedFiles.sort((a, b) => {
+                        var possible = ["cover", "cover1", "01", "1"];
+                        var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                        var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                        if (possible.includes(aClean)) return -1;
+                        if (possible.includes(bClean)) return 1;
+                        return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                    });
+                }
+
+                async function handleZoomImage(fname, index) {
+                    var isCover = (index === 0);
+                    var stockKey = isCover ? 'Cover' : fname;
+                    var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 0;
+                    var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                    var existing = await checkImageInDB(zoomImgUrl);
+
+                    if (curStock > 0) {
+                        if (existing) return;
+                        try {
+                            var zRes = await window.fetchWithRetry(zoomImgUrl, {}, 2);
+                            if (zRes.ok) {
+                                var zBlob = await zRes.blob();
+                                if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
+                            }
+                        } catch (e) { }
+                    } else {
+                        // OUT OF STOCK - DELETE ZOOM
+                        if (existing) {
+                            await deleteImageFromDB(zoomImgUrl);
+                            console.log("[SYNC Phase 2] Deleted out-of-stock zoom cache:", fname);
+                        }
+                    }
+                }
+
+                for (var iFile = 0; iFile < sortedFiles.length; iFile++) {
+                    await handleZoomImage(sortedFiles[iFile], iFile);
+                }
+            }));
+            
+            zCount += batch.length;
+            if (bootMsg) bootMsg.innerText = "Syncing HD zoom images " + zCount + " / " + total + "...";
+            // Yield the main thread to keep UI smooth
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
         if (bootScreen) bootScreen.style.display = 'none';
         window.isSyncing = false;
         if (syncIcon) syncIcon.classList.remove('fa-spin');
-
-        // 🚀 PHASE 2: SILENT BACKGROUND ZOOM SYNC & OUT-OF-STOCK CLEANUP
-        (async function () {
-            var zBatchSize = 10;
-            for (var i = 0; i < productsToSync.length; i += zBatchSize) {
-                var batch = productsToSync.slice(i, i + zBatchSize);
-                await Promise.all(batch.map(async (p) => {
-                    if (!p._folderFiles || p._folderFiles.length === 0) return;
-                    if (!p.zoomUrl || String(p.zoomUrl).toLowerCase() === "none" || p.zoomUrl === p.gridUrl) return;
-
-                    var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
-                    var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
-
-                    // Sort exactly as UI does to match stock indices
-                    var sortedFiles = Array.from(p._folderFiles);
-                    if (p.coverDesignId && p.coverDesignId !== "None") {
-                        var cleanCover = p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                        sortedFiles.sort((a, b) => {
-                            var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                            var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                            if (aClean === cleanCover) return -1;
-                            if (bClean === cleanCover) return 1;
-                            return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
-                        });
-                    } else {
-                        sortedFiles.sort((a, b) => {
-                            var possible = ["cover", "cover1", "01", "1"];
-                            var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                            var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                            if (possible.includes(aClean)) return -1;
-                            if (possible.includes(bClean)) return 1;
-                            return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
-                        });
-                    }
-
-                    async function handleZoomImage(fname, index) {
-                        var curStock = p.stock && p.stock[String(index)] !== undefined ? p.stock[String(index)] : 0;
-                        var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                        var existing = await checkImageInDB(zoomImgUrl);
-
-                        if (curStock > 0) {
-                            if (existing) return;
-                            try {
-                                var zRes = await window.fetchWithRetry(zoomImgUrl, {}, 2);
-                                if (zRes.ok) {
-                                    var zBlob = await zRes.blob();
-                                    if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
-                                }
-                            } catch (e) { }
-                        } else {
-                            // OUT OF STOCK - DELETE ZOOM
-                            if (existing) {
-                                await deleteImageFromDB(zoomImgUrl);
-                                console.log("[SYNC Phase 2] Deleted out-of-stock zoom cache:", fname);
-                            }
-                        }
-                    }
-
-                    for (var iFile = 0; iFile < sortedFiles.length; iFile++) {
-                        await handleZoomImage(sortedFiles[iFile], iFile);
-                    }
-                }));
-                // Yield the main thread to keep UI smooth
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-        })();
 
         if (silent) {
             // Background sync update: update main screen layout with newly localized grid imagery
