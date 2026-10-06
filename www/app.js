@@ -4065,7 +4065,7 @@ function openModal(id) {
 }
 function closeModals(fromHistory) {
     document.querySelectorAll('.action-modal').forEach(m => m.style.display = 'none');
-    
+
     // Completely destroy IG embeds to stop any audio playing
     var igLinksList = document.getElementById('igLinksList');
     if (igLinksList) igLinksList.innerHTML = '';
@@ -4073,7 +4073,7 @@ function closeModals(fromHistory) {
         window.currentIgObserver.disconnect();
         window.currentIgObserver = null;
     }
-    
+
     if (!fromHistory) history.back();
 }
 
@@ -6504,9 +6504,9 @@ window.openIgLinks = function () {
             }
             listContainer.appendChild(container);
         });
-        
+
         window.openModal('igLinksViewerModal');
-        
+
         // Use Intersection Observer to only load and play the visible reel
         setTimeout(() => {
             var observer = new IntersectionObserver((entries) => {
@@ -6527,17 +6527,17 @@ window.openIgLinks = function () {
                 root: document.getElementById('igLinksList'),
                 threshold: 0.5
             });
-            
+
             var embedContainers = document.querySelectorAll('#igLinksList .ig-embed-container');
             embedContainers.forEach(c => observer.observe(c));
-            
+
             // Store observer on the modal so we can disconnect it later if needed, though it's bound to the DOM elements anyway.
             window.currentIgObserver = observer;
         }, 100);
     }
 };
 
-window.toggleIgFullscreen = function(container) {
+window.toggleIgFullscreen = function (container) {
     if (!document.fullscreenElement) {
         // Enter fullscreen
         var req = container.requestFullscreen || container.webkitRequestFullscreen || container.msRequestFullscreen;
@@ -6875,12 +6875,12 @@ window.promptSetAsCover = async function (docId, pid, designId) {
     }
 };
 
-window.generateShareMessage = function(prod) {
+window.generateShareMessage = function (prod) {
     if (!prod) return "";
     var link = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(prod.docId || prod.id);
     var details = [];
     var readyCount = 0;
-    
+
     if (prod.stock) {
         for (var k in prod.stock) {
             if (prod.stock[k] > 0) readyCount++;
@@ -6935,7 +6935,7 @@ window.generateShareMessage = function(prod) {
     details.push(link);
     details.push("");
 
-    details.push(`Special Price`);
+    details.push(`Price`);
     var pricePacking = [];
     if (prod.price) pricePacking.push(`${prod.price}/-`);
     if (prod.packing && prod.packing !== "None") pricePacking.push(prod.packing);
@@ -6952,7 +6952,7 @@ window.generateShareMessage = function(prod) {
 
 window.shareWhatsAppLink = async function () {
     if (!curProduct) return;
-    
+
     var textMsg = window.generateShareMessage(curProduct);
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
@@ -7111,6 +7111,50 @@ window.openLiveAdmin = function () {
                     }
                 });
                 sortedDocs.sort((a, b) => b.time - a.time);
+
+                let groupedDocsMap = {};
+                let finalDocs = [];
+
+                sortedDocs.forEach(item => {
+                    let d = item.data;
+                    let isGuest = item.id.startsWith('guest_');
+                    
+                    if (isGuest && d.customerStation) {
+                        let ipMatch = d.customerStation.match(/\(IP:\s*([^)]+)\)/);
+                        if (ipMatch) {
+                            let ipStr = ipMatch[1];
+                            let cityRegion = d.customerStation.replace(/\s*\(IP:\s*[^)]+\)/, '');
+                            
+                            if (!groupedDocsMap[ipStr]) {
+                                d.customerStation = cityRegion; 
+                                groupedDocsMap[ipStr] = item;
+                                finalDocs.push(item);
+                            } else {
+                                let masterItem = groupedDocsMap[ipStr];
+                                if (d.historyMap) {
+                                    if (!masterItem.data.historyMap) masterItem.data.historyMap = {};
+                                    for (let date in d.historyMap) {
+                                        if (!masterItem.data.historyMap[date]) masterItem.data.historyMap[date] = {};
+                                        for (let prod in d.historyMap[date]) {
+                                            masterItem.data.historyMap[date][prod] = (parseFloat(masterItem.data.historyMap[date][prod]) || 0) + parseFloat(d.historyMap[date][prod]);
+                                        }
+                                    }
+                                }
+                                if (d.cartSummary && d.cartSummary.length > 0) {
+                                    if (!masterItem.data.cartSummary) masterItem.data.cartSummary = [];
+                                    masterItem.data.cartSummary = [...new Set([...masterItem.data.cartSummary, ...d.cartSummary])];
+                                }
+                                return; // skip adding to finalDocs
+                            }
+                        } else {
+                            finalDocs.push(item);
+                        }
+                    } else {
+                        finalDocs.push(item);
+                    }
+                });
+
+                sortedDocs = finalDocs;
 
                 sortedDocs.forEach(item => {
                     hasLive = true;
