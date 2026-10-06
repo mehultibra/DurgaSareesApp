@@ -3865,6 +3865,31 @@ async function syncImages(silent = false) {
                         }
                     }
 
+                    // --- 3B. Download Cover ZOOM if ready ---
+                    var curStockCover = p.stock && p.stock['Cover'] !== undefined ? p.stock['Cover'] : 999;
+                    if (downloaded && encZoomPath && curStockCover > 0) {
+                        var coverZoomUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
+                        var existingCoverZoom = await checkImageInDB(coverZoomUrl);
+                        var localZoomTimeCover = window.dsCoverTimeCache[coverZoomUrl] || 0;
+                        if (!existingCoverZoom || localZoomTimeCover < remoteTime) {
+                            if (existingCoverZoom) await deleteImageFromDB(coverZoomUrl);
+                            try {
+                                const ctrlZc = new AbortController();
+                                const tidZc = setTimeout(() => ctrlZc.abort(), 30000);
+                                var zcRes = await window.fetchWithRetry(coverZoomUrl + "&_cb=" + Date.now(), { signal: ctrlZc.signal }, 3);
+                                clearTimeout(tidZc);
+                                if (zcRes.ok) {
+                                    var zcBlob = await zcRes.blob();
+                                    if (zcBlob.size > 0) {
+                                        await saveImageToDB(coverZoomUrl, zcBlob);
+                                        window.dsCoverTimeCache[coverZoomUrl] = remoteTime;
+                                        try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
+                                    }
+                                }
+                            } catch(e) {}
+                        }
+                    }
+
                     // ——— 4. Download remaining design files (FAST PARALLEL BATCHING - GRID ONLY) ——————————————————
                     if (downloaded) {
                         var innerBatchSize = 2; // Download 2 inner images concurrently!
@@ -3905,6 +3930,32 @@ async function syncImages(silent = false) {
                                         }
                                     } catch (e) {
                                         console.warn("[SYNC] Fast design fetch failed:", fname, e.message); if (typeof window.logAppError === 'function') window.logAppError('Sync Inner Image', e.message + " | " + p.name);
+                                    }
+                                }
+
+                                // --- 4B. Download ZOOM if ready ---
+                                var curStock = p.stock && p.stock[fname] !== undefined ? p.stock[fname] : 999;
+                                if (encZoomPath && curStock > 0) {
+                                    var zoomUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                                    var existingZoom = await checkImageInDB(zoomUrl);
+                                    var localZoomTime = window.dsCoverTimeCache[zoomUrl] || 0;
+                                    
+                                    if (!existingZoom || localZoomTime < remoteDesignTime) {
+                                        if (existingZoom) await deleteImageFromDB(zoomUrl);
+                                        try {
+                                            const ctrlZ = new AbortController();
+                                            const tidZ = setTimeout(() => ctrlZ.abort(), 30000);
+                                            var zRes = await window.fetchWithRetry(zoomUrl + "&_cb=" + Date.now(), { signal: ctrlZ.signal }, 3);
+                                            clearTimeout(tidZ);
+                                            if (zRes.ok) {
+                                                var zBlob = await zRes.blob();
+                                                if (zBlob.size > 0) {
+                                                    await saveImageToDB(zoomUrl, zBlob);
+                                                    window.dsCoverTimeCache[zoomUrl] = remoteDesignTime;
+                                                    try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
+                                                }
+                                            }
+                                        } catch (e) {}
                                     }
                                 }
                             }));
