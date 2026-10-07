@@ -3990,9 +3990,10 @@ async function syncImages(silent = false) {
                         });
                     }
 
+                    var consecutiveFails = 0;
                     async function handleZoomImage(fname, index) {
                         return new Promise(async (resolve) => {
-                            var timeoutId = setTimeout(() => resolve(), 45000); // 45s hard timeout per file
+                            var timeoutId = setTimeout(() => resolve(), 15000); // 15s hard timeout per file
                             try {
                                 var isCover = (index === 0);
                                 var stockKey = isCover ? 'Cover' : fname;
@@ -4003,12 +4004,15 @@ async function syncImages(silent = false) {
                                 if (curStock > 0) {
                                     if (existing) { resolve(); return; }
                                     const ctrlZ = new AbortController();
-                                    const tidZ = setTimeout(() => ctrlZ.abort(), 35000);
+                                    const tidZ = setTimeout(() => ctrlZ.abort(), 12000); // 12s abort
                                     try {
-                                        var zRes = await window.fetchWithRetry(zoomImgUrl, { signal: ctrlZ.signal }, 2);
+                                        var zRes = await window.fetchWithRetry(zoomImgUrl, { signal: ctrlZ.signal }, 1);
                                         if (zRes.ok) {
                                             var zBlob = await zRes.blob();
-                                            if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
+                                            if (zBlob.size > 0) {
+                                                await saveImageToDB(zoomImgUrl, zBlob);
+                                                consecutiveFails = 0; // reset on success
+                                            }
                                         }
                                     } finally {
                                         clearTimeout(tidZ);
@@ -4017,6 +4021,7 @@ async function syncImages(silent = false) {
                                     if (existing) await deleteImageFromDB(zoomImgUrl);
                                 }
                             } catch (e) {
+                                consecutiveFails++;
                                 console.warn("Phase 2 Error:", fname, e.message);
                             } finally {
                                 clearTimeout(timeoutId);
@@ -4026,6 +4031,10 @@ async function syncImages(silent = false) {
                     }
 
                     for (var iFile = 0; iFile < sortedFiles.length; iFile++) {
+                        if (consecutiveFails >= 2) {
+                            console.warn("Skipping remaining HD images for product due to network stalls.");
+                            break;
+                        }
                         await handleZoomImage(sortedFiles[iFile], iFile);
                     }
                 }));
