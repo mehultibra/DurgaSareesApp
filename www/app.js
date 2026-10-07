@@ -3995,6 +3995,9 @@ async function syncImages(silent = false) {
                         return new Promise(async (resolve) => {
                             var timeoutId = setTimeout(() => resolve(), 15000); // 15s hard timeout per file
                             try {
+                                while (window.isSharing) {
+                                    await new Promise(r => setTimeout(r, 500));
+                                }
                                 var isCover = (index === 0);
                                 var stockKey = isCover ? 'Cover' : fname;
                                 var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
@@ -6998,6 +7001,7 @@ window.shareWhatsAppLink = async function () {
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
         document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing HD Image...</div>');
 
+        window.isSharing = true;
         try {
             var coverSrc = "";
 
@@ -7027,11 +7031,22 @@ window.shareWhatsAppLink = async function () {
             } else {
                 var blob = null;
                 if (typeof window.getImageFromDB === 'function') {
-                    blob = await window.getImageFromDB(coverSrc);
+                    try {
+                        blob = await Promise.race([
+                            window.getImageFromDB(coverSrc),
+                            new Promise((_, rej) => setTimeout(() => rej(new Error("IDB Timeout")), 2000))
+                        ]);
+                    } catch(e) { console.warn("Share IDB skip:", e); }
                 }
                 if (!blob) {
-                    var res = await fetch(coverSrc);
-                    blob = await res.blob();
+                    var ctrlS = new AbortController();
+                    var tidS = setTimeout(() => ctrlS.abort(), 15000);
+                    try {
+                        var res = await fetch(coverSrc, { signal: ctrlS.signal });
+                        blob = await res.blob();
+                    } finally {
+                        clearTimeout(tidS);
+                    }
                 }
                 base64data = await new Promise((resolve) => {
                     var reader = new FileReader();
@@ -7057,6 +7072,7 @@ window.shareWhatsAppLink = async function () {
             console.error("Share error:", e);
             window.location.href = "https://wa.me/?text=" + encodeURIComponent(textMsg);
         } finally {
+            window.isSharing = false;
             var ldr = document.getElementById('shareLoader');
             if (ldr) ldr.remove();
         }

@@ -183,8 +183,11 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
                 }
                 return Promise.resolve(null);
             }
-            return window.fetchWithRetry(fallbacks[index], {}, 0) // ZERO retries to prevent 6s loop
+            var ctrlC = new AbortController();
+            var tidC = setTimeout(function() { ctrlC.abort(); }, 15000);
+            return window.fetchWithRetry(fallbacks[index], { signal: ctrlC.signal }, 0) // ZERO retries to prevent 6s loop
                 .then(function(res) { 
+                    clearTimeout(tidC);
                     if (res.ok) return res.blob();
                     throw new Error("HTTP " + res.status);
                 })
@@ -1279,6 +1282,8 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
         bootScreen.style.display = 'flex';
         document.getElementById('bootMsg').innerText = "Preparing Images...";
     }
+    
+    window.isSharing = true;
 
     try {
         var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins &&
@@ -1467,6 +1472,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
         alert("Image Sharing Error: " + error.message);
     }
 
+    window.isSharing = false;
     if (bootScreen) bootScreen.style.display = 'none';
 }
 
