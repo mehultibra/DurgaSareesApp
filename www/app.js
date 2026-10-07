@@ -3944,7 +3944,7 @@ async function syncImages(silent = false) {
         // 🚀 PHASE 2: ZOOM SYNC & OUT-OF-STOCK CLEANUP
         if (bootMsg) bootMsg.innerText = "Syncing HD zoom images 0 / " + total + "...";
         var zCount = 0;
-        var zBatchSize = 10;
+        var zBatchSize = 2; // Reduced batch size for heavy HD images
         for (var i = 0; i < productsToSync.length; i += zBatchSize) {
             var batch = productsToSync.slice(i, i + zBatchSize);
             await Promise.all(batch.map(async (p) => {
@@ -3986,12 +3986,17 @@ async function syncImages(silent = false) {
                     if (curStock > 0) {
                         if (existing) return;
                         try {
-                            var zRes = await window.fetchWithRetry(zoomImgUrl, {}, 2);
+                            const ctrlZ = new AbortController();
+                            const tidZ = setTimeout(() => ctrlZ.abort(), 30000);
+                            var zRes = await window.fetchWithRetry(zoomImgUrl, { signal: ctrlZ.signal }, 2);
+                            clearTimeout(tidZ);
                             if (zRes.ok) {
                                 var zBlob = await zRes.blob();
                                 if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
                             }
-                        } catch (e) { }
+                        } catch (e) {
+                            console.warn("Phase 2 Zoom Sync Timeout/Error:", fname, e.message);
+                        }
                     } else {
                         // OUT OF STOCK - DELETE ZOOM
                         if (existing) {
