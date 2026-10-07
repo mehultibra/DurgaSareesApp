@@ -2224,14 +2224,15 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             var coverSrc = (gridImgEl && gridImgEl.src && !gridImgEl.src.startsWith("data:")) ? gridImgEl.src : "";
             var fallbackGridUrl = "";
             var fallbackZoomUrl = "";
+            var inferredCover = p.coverDesignId && p.coverDesignId !== "None" ? encodeURIComponent(p.coverDesignId) : "01.webp";
             if (p.gridUrl && p.gridUrl !== "None") {
                 var encGridPath = cleanGridPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                fallbackGridUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F01.webp?alt=media";
+                fallbackGridUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridPath + "%2F" + inferredCover + "?alt=media";
                 if (!coverSrc) coverSrc = fallbackGridUrl;
             }
             if (p.zoomUrl && p.zoomUrl !== "None") {
                 var encZoomPath = cleanZoomPath.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-                fallbackZoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomPath + "%2F01.webp?alt=media";
+                fallbackZoomUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomPath + "%2F" + inferredCover + "?alt=media";
             } else {
                 fallbackZoomUrl = fallbackGridUrl;
             }
@@ -3978,7 +3979,7 @@ async function syncImages(silent = false) {
                 async function handleZoomImage(fname, index) {
                     var isCover = (index === 0);
                     var stockKey = isCover ? 'Cover' : fname;
-                    var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 0;
+                    var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
                     var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
                     var existing = await checkImageInDB(zoomImgUrl);
 
