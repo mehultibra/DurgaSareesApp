@@ -3941,85 +3941,105 @@ async function syncImages(silent = false) {
             // Yield the main thread to keep UI smooth
             await new Promise(resolve => setTimeout(resolve, 50));
         }
-        // 🚀 PHASE 2: ZOOM SYNC & OUT-OF-STOCK CLEANUP
-        if (bootMsg) bootMsg.innerText = "Syncing HD zoom images 0 / " + total + "...";
-        var zCount = 0;
-        var zBatchSize = 2; // Reduced batch size for heavy HD images
-        for (var i = 0; i < productsToSync.length; i += zBatchSize) {
-            var batch = productsToSync.slice(i, i + zBatchSize);
-            await Promise.all(batch.map(async (p) => {
-                if (!p._folderFiles || p._folderFiles.length === 0) return;
-                if (!p.zoomUrl || String(p.zoomUrl).toLowerCase() === "none" || p.zoomUrl === p.gridUrl) return;
-
-                var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
-                var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
-
-                // Sort exactly as UI does to match stock indices
-                var sortedFiles = Array.from(p._folderFiles);
-                if (p.coverDesignId && p.coverDesignId !== "None") {
-                    var cleanCover = p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                    sortedFiles.sort((a, b) => {
-                        var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                        var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                        if (aClean === cleanCover) return -1;
-                        if (bClean === cleanCover) return 1;
-                        return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
-                    });
-                } else {
-                    sortedFiles.sort((a, b) => {
-                        var possible = ["cover", "cover1", "01", "1"];
-                        var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                        var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                        if (possible.includes(aClean)) return -1;
-                        if (possible.includes(bClean)) return 1;
-                        return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
-                    });
-                }
-
-                async function handleZoomImage(fname, index) {
-                    var isCover = (index === 0);
-                    var stockKey = isCover ? 'Cover' : fname;
-                    var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
-                    var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                    var existing = await checkImageInDB(zoomImgUrl);
-
-                    if (curStock > 0) {
-                        if (existing) return;
-                        try {
-                            const ctrlZ = new AbortController();
-                            const tidZ = setTimeout(() => ctrlZ.abort(), 30000);
-                            var zRes = await window.fetchWithRetry(zoomImgUrl, { signal: ctrlZ.signal }, 2);
-                            clearTimeout(tidZ);
-                            if (zRes.ok) {
-                                var zBlob = await zRes.blob();
-                                if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
-                            }
-                        } catch (e) {
-                            console.warn("Phase 2 Zoom Sync Timeout/Error:", fname, e.message);
-                        }
-                    } else {
-                        // OUT OF STOCK - DELETE ZOOM
-                        if (existing) {
-                            await deleteImageFromDB(zoomImgUrl);
-                            console.log("[SYNC Phase 2] Deleted out-of-stock zoom cache:", fname);
-                        }
-                    }
-                }
-
-                for (var iFile = 0; iFile < sortedFiles.length; iFile++) {
-                    await handleZoomImage(sortedFiles[iFile], iFile);
-                }
-            }));
-            
-            zCount += batch.length;
-            if (bootMsg) bootMsg.innerText = "Syncing HD zoom images " + zCount + " / " + total + "...";
-            // Yield the main thread to keep UI smooth
-            await new Promise(resolve => setTimeout(resolve, 50));
-        }
-
+        // Close boot screen and unlock UI before Phase 2 starts!
         if (bootScreen) bootScreen.style.display = 'none';
         window.isSyncing = false;
         if (syncIcon) syncIcon.classList.remove('fa-spin');
+
+        // 🚀 PHASE 2: NON-BLOCKING BACKGROUND ZOOM SYNC
+        (async function () {
+            // Create floating progress indicator
+            var p2ToastId = 'p2Toast_' + Date.now();
+            var p2ToastHtml = `<div id="${p2ToastId}" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.85); color:#fff; padding:10px 20px; border-radius:30px; font-size:12px; font-weight:bold; box-shadow:0 4px 15px rgba(0,0,0,0.4); z-index:999999; display:flex; align-items:center; gap:10px; pointer-events:none;">
+                <i class="fas fa-circle-notch fa-spin"></i> <span id="${p2ToastId}_text">HD Sync 0 / ${total}</span>
+            </div>`;
+            document.body.insertAdjacentHTML('beforeend', p2ToastHtml);
+            var p2TextEl = document.getElementById(p2ToastId + '_text');
+            var p2Container = document.getElementById(p2ToastId);
+
+            var zCount = 0;
+            var zBatchSize = 2; // Keep it low to prevent network stall
+            
+            for (var i = 0; i < productsToSync.length; i += zBatchSize) {
+                var batch = productsToSync.slice(i, i + zBatchSize);
+                await Promise.all(batch.map(async (p) => {
+                    if (!p._folderFiles || p._folderFiles.length === 0) return;
+                    if (!p.zoomUrl || String(p.zoomUrl).toLowerCase() === "none" || p.zoomUrl === p.gridUrl) return;
+
+                    var cleanZoom = decodeURIComponent(String(p.zoomUrl)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/');
+                    var encZoomPath = cleanZoom.split('/').map(s => encodeURIComponent(s)).join('%2F');
+
+                    var sortedFiles = Array.from(p._folderFiles);
+                    if (p.coverDesignId && p.coverDesignId !== "None") {
+                        var cleanCover = p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                        sortedFiles.sort((a, b) => {
+                            var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                            var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                            if (aClean === cleanCover) return -1;
+                            if (bClean === cleanCover) return 1;
+                            return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                        });
+                    } else {
+                        sortedFiles.sort((a, b) => {
+                            var possible = ["cover", "cover1", "01", "1"];
+                            var aClean = a.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                            var bClean = b.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
+                            if (possible.includes(aClean)) return -1;
+                            if (possible.includes(bClean)) return 1;
+                            return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                        });
+                    }
+
+                    async function handleZoomImage(fname, index) {
+                        return new Promise(async (resolve) => {
+                            var timeoutId = setTimeout(() => resolve(), 45000); // 45s hard timeout per file
+                            try {
+                                var isCover = (index === 0);
+                                var stockKey = isCover ? 'Cover' : fname;
+                                var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
+                                var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
+                                var existing = await checkImageInDB(zoomImgUrl);
+
+                                if (curStock > 0) {
+                                    if (existing) { resolve(); return; }
+                                    const ctrlZ = new AbortController();
+                                    const tidZ = setTimeout(() => ctrlZ.abort(), 35000);
+                                    try {
+                                        var zRes = await window.fetchWithRetry(zoomImgUrl, { signal: ctrlZ.signal }, 2);
+                                        if (zRes.ok) {
+                                            var zBlob = await zRes.blob();
+                                            if (zBlob.size > 0) await saveImageToDB(zoomImgUrl, zBlob);
+                                        }
+                                    } finally {
+                                        clearTimeout(tidZ);
+                                    }
+                                } else {
+                                    if (existing) await deleteImageFromDB(zoomImgUrl);
+                                }
+                            } catch (e) {
+                                console.warn("Phase 2 Error:", fname, e.message);
+                            } finally {
+                                clearTimeout(timeoutId);
+                                resolve();
+                            }
+                        });
+                    }
+
+                    for (var iFile = 0; iFile < sortedFiles.length; iFile++) {
+                        await handleZoomImage(sortedFiles[iFile], iFile);
+                    }
+                }));
+                
+                zCount += batch.length;
+                if (p2TextEl) p2TextEl.innerText = "HD Sync " + zCount + " / " + total;
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            if (p2Container) {
+                p2Container.innerHTML = '<i class="fas fa-check-circle" style="color:#25D366;"></i> <span>HD Sync Complete</span>';
+                setTimeout(() => { p2Container.style.opacity = '0'; setTimeout(() => p2Container.remove(), 500); }, 3000);
+            }
+        })();
 
         if (silent) {
             // Background sync update: update main screen layout with newly localized grid imagery
