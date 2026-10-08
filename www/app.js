@@ -1047,6 +1047,18 @@ function listDBKeysForPrefix(prefix) {
     }).catch(() => []);
 }
 
+function listAllDBKeys() {
+    return getDB().then(db => {
+        return new Promise((resolve) => {
+            var tx = db.transaction(storeName, "readonly");
+            var store = tx.objectStore(storeName);
+            var req = store.getAllKeys();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        });
+    }).catch(() => []);
+}
+
 async function manageProductHDCache(product, action) {
     if (!product) return;
     var zoomUrl = (product.zoomUrl && product.zoomUrl.toLowerCase() !== "none") ? product.zoomUrl : product.gridUrl;
@@ -3960,6 +3972,9 @@ async function syncImages(silent = false) {
             var zCount = 0;
             var zBatchSize = 2; // Keep it low to prevent network stall
             
+            // 🚀 MASSIVE OPTIMIZATION: Fetch ALL cached keys instantly into memory to prevent IDB transaction starvation
+            var allCachedKeys = new Set(await listAllDBKeys());
+            
             for (var i = 0; i < productsToSync.length; i += zBatchSize) {
                 var batch = productsToSync.slice(i, i + zBatchSize);
                 await Promise.all(batch.map(async (p) => {
@@ -4002,7 +4017,9 @@ async function syncImages(silent = false) {
                                 var stockKey = isCover ? 'Cover' : fname;
                                 var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
                                 var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                                var existing = await checkImageInDB(zoomImgUrl);
+                                
+                                // O(1) Instant memory check! Fixes offline detail image load starvation.
+                                var existing = allCachedKeys.has(zoomImgUrl);
 
                                 if (curStock > 0) {
                                     if (existing) { resolve(); return; }
@@ -4014,6 +4031,7 @@ async function syncImages(silent = false) {
                                             var zBlob = await zRes.blob();
                                             if (zBlob.size > 0) {
                                                 await saveImageToDB(zoomImgUrl, zBlob);
+                                                allCachedKeys.add(zoomImgUrl); // update memory
                                                 consecutiveFails = 0; // reset on success
                                             }
                                         }
@@ -4021,7 +4039,10 @@ async function syncImages(silent = false) {
                                         clearTimeout(tidZ);
                                     }
                                 } else {
-                                    if (existing) await deleteImageFromDB(zoomImgUrl);
+                                    if (existing) {
+                                        await deleteImageFromDB(zoomImgUrl);
+                                        allCachedKeys.delete(zoomImgUrl);
+                                    }
                                 }
                             } catch (e) {
                                 consecutiveFails++;
