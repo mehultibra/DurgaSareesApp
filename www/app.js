@@ -6197,13 +6197,13 @@ function generateTSPL(canvas, type, qty) {
     // TSPL Commands
     var headerStr = "";
 
-    // Sticker dynamic size from window.stickerLayout (converted to mm)
-    var stkW = window.stickerLayout ? Math.round(window.stickerLayout.width / 8) : 55;
-    var stkH = window.stickerLayout ? Math.round(window.stickerLayout.height / 8) : 25;
+    // Sticker dynamic size from canvas dimensions exactly (converted to mm with decimals)
+    var stkW_mm = (w / 8).toFixed(2);
+    var stkH_mm = (h / 8).toFixed(2);
     var stkGap = window.stickerLayout ? (window.stickerLayout.gap_mm !== undefined && window.stickerLayout.gap_mm !== null ? window.stickerLayout.gap_mm : 3) : 3;
     var stkSensor = window.stickerLayout ? (window.stickerLayout.sensor || "GAP") : "GAP";
 
-    headerStr += "SIZE " + stkW + " mm, " + stkH + " mm\n";
+    headerStr += "SIZE " + stkW_mm + " mm, " + stkH_mm + " mm\n";
     if (stkSensor === "BLINE") {
         headerStr += "BLINE " + stkGap + " mm, 0 mm\n";
     } else if (stkSensor === "CONT") {
@@ -6212,6 +6212,7 @@ function generateTSPL(canvas, type, qty) {
         headerStr += "GAP " + stkGap + " mm, 0 mm\n";
     }
     headerStr += "DIRECTION 1\n"; // 180 degree rotate for stickers
+    headerStr += "REFERENCE 0,0\n";
     headerStr += "CLS\n";
 
     // BITMAP X,Y,width_bytes,height,mode,bitmap_data
