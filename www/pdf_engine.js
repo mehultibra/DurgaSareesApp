@@ -44,23 +44,14 @@ async function getActualDesignsForProduct(p, shareType, action) {
             filesToReturn = validFiles.filter(f => !/^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
         }
         
-        if (shareType === 'full') {
-            filesToReturn = filesToReturn.filter(f => {
-                if (p.stock && p.stock[f] === 0) return false;
-                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
-                if (p.stock && p.stock[nameWithoutExt] === 0) return false;
-                return true;
-            });
-        }
+        // Removed stock filtering to include packed designs as requested
         
         filesToReturn.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
         return filesToReturn;
     }
 
     var readyArr = (p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(d => d) : [];
-    if (shareType === 'full') {
-        readyArr = readyArr.filter(d => !p.stock || p.stock[d] !== 0);
-    }
+    // Removed stock filtering to include packed designs as requested
     
     return readyArr;
 }
@@ -1304,7 +1295,17 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                         var ext = base64Img.split(';')[0].split('/')[1];
                         if (ext === 'jpeg') ext = 'jpg';
                         if (ext === 'octet-stream' || !ext) ext = 'webp';
-                        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "." + ext;
+                        
+                        var designName = "Design_" + i;
+                        var urlMatch = url.match(/\/([^/?]+)\?alt=media/i);
+                        if (urlMatch) {
+                            var decoded = decodeURIComponent(urlMatch[1]);
+                            var lastDot = decoded.lastIndexOf('.');
+                            if (lastDot > 0) designName = decoded.substring(0, lastDot);
+                            else designName = decoded;
+                        }
+                        
+                        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_" + designName + "." + ext;
                         var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
                             path: fileName,
                             data: pureBase64,
@@ -1516,7 +1517,7 @@ function askShareTypeAsync(isMainPage) {
         };
 
         var btnReady = document.createElement('button');
-        btnReady.innerText = 'Ready Designs';
+        btnReady.innerText = 'All Designs';
         btnReady.style.width = '100%'; btnReady.style.padding = '12px'; btnReady.style.marginBottom = '10px';
         btnReady.style.backgroundColor = 'var(--myntra-pink)'; btnReady.style.color = '#fff';
         btnReady.style.border = 'none'; btnReady.style.borderRadius = '6px'; btnReady.style.fontSize = '14px';
