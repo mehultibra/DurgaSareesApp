@@ -44,14 +44,23 @@ async function getActualDesignsForProduct(p, shareType, action) {
             filesToReturn = validFiles.filter(f => !/^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
         }
         
-        // Removed stock filtering to include packed designs as requested
+        if (shareType === 'ready') {
+            filesToReturn = filesToReturn.filter(f => {
+                if (p.stock && p.stock[f] === 0) return false;
+                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
+                if (p.stock && p.stock[nameWithoutExt] === 0) return false;
+                return true;
+            });
+        }
         
         filesToReturn.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
         return filesToReturn;
     }
 
     var readyArr = (p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(d => d) : [];
-    // Removed stock filtering to include packed designs as requested
+    if (shareType === 'ready') {
+        readyArr = readyArr.filter(d => !p.stock || p.stock[d] !== 0);
+    }
     
     return readyArr;
 }
@@ -1295,17 +1304,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                         var ext = base64Img.split(';')[0].split('/')[1];
                         if (ext === 'jpeg') ext = 'jpg';
                         if (ext === 'octet-stream' || !ext) ext = 'webp';
-                        
-                        var designName = "Design_" + i;
-                        var urlMatch = url.match(/\/([^/?]+)\?alt=media/i);
-                        if (urlMatch) {
-                            var decoded = decodeURIComponent(urlMatch[1]);
-                            var lastDot = decoded.lastIndexOf('.');
-                            if (lastDot > 0) designName = decoded.substring(0, lastDot);
-                            else designName = decoded;
-                        }
-                        
-                        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_" + designName + "." + ext;
+                        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "." + ext;
                         var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
                             path: fileName,
                             data: pureBase64,
@@ -1517,18 +1516,25 @@ function askShareTypeAsync(isMainPage) {
         };
 
         var btnReady = document.createElement('button');
-        btnReady.innerText = 'All Designs';
+        btnReady.innerText = 'Ready Designs';
         btnReady.style.width = '100%'; btnReady.style.padding = '12px'; btnReady.style.marginBottom = '10px';
         btnReady.style.backgroundColor = 'var(--myntra-pink)'; btnReady.style.color = '#fff';
         btnReady.style.border = 'none'; btnReady.style.borderRadius = '6px'; btnReady.style.fontSize = '14px';
-        btnReady.onclick = function () { close('full'); };
+        btnReady.onclick = function () { close('ready'); };
 
         var btnAll = document.createElement('button');
-        btnAll.innerText = isMainPage ? 'Cover Images (1 pic per product)' : 'Cover Image Only';
+        btnAll.innerText = 'All Designs';
         btnAll.style.width = '100%'; btnAll.style.padding = '12px'; btnAll.style.marginBottom = '10px';
-        btnAll.style.backgroundColor = '#333'; btnAll.style.color = '#fff';
+        btnAll.style.backgroundColor = '#007BFF'; btnAll.style.color = '#fff';
         btnAll.style.border = 'none'; btnAll.style.borderRadius = '6px'; btnAll.style.fontSize = '14px';
-        btnAll.onclick = function () { close('cover'); };
+        btnAll.onclick = function () { close('full'); };
+
+        var btnCover = document.createElement('button');
+        btnCover.innerText = isMainPage ? 'Cover Images (1 pic per product)' : 'Cover Image Only';
+        btnCover.style.width = '100%'; btnCover.style.padding = '12px'; btnCover.style.marginBottom = '10px';
+        btnCover.style.backgroundColor = '#333'; btnCover.style.color = '#fff';
+        btnCover.style.border = 'none'; btnCover.style.borderRadius = '6px'; btnCover.style.fontSize = '14px';
+        btnCover.onclick = function () { close('cover'); };
 
         var btnCancel = document.createElement('button');
         btnCancel.innerText = 'Cancel';
@@ -1537,7 +1543,7 @@ function askShareTypeAsync(isMainPage) {
         btnCancel.style.border = 'none'; btnCancel.style.borderRadius = '6px'; btnCancel.style.fontSize = '14px';
         btnCancel.onclick = function () { close(null); };
 
-        box.appendChild(title); box.appendChild(btnReady); box.appendChild(btnAll); box.appendChild(btnCancel);
+        box.appendChild(title); box.appendChild(btnReady); box.appendChild(btnAll); box.appendChild(btnCover); box.appendChild(btnCancel);
         overlay.appendChild(box);
         document.body.appendChild(overlay);
 
