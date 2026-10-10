@@ -142,126 +142,114 @@ function blobToJpegForPDF(blob) {
  * forceJpeg = true  -> Engine 2 (PDF)
  */
 function getBase64FromCache(cacheKey, forceJpeg = false) {
+    if (!cacheKey) return Promise.resolve(null);
     var isCoverOrGarbage = false;
-    if (cacheKey) {
-        if (cacheKey.includes('cover.webp')) isCoverOrGarbage = true;
+    var lowerKey = cacheKey.toLowerCase();
+    if (lowerKey.includes('cover.webp') || lowerKey.includes('01.webp') || lowerKey.includes('cover1.webp') || lowerKey.includes('1.webp')) {
+        isCoverOrGarbage = true;
     }
 
-    function networkFallback(url) {
-        if (!url || !url.startsWith('http')) return Promise.resolve(null);
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) return Promise.resolve(null);
-        
-        var fallbacks = [url];
-        if (url.toLowerCase().includes('.webp?alt=media')) {
-            fallbacks.push(url.replace(/\.webp\?alt=media/i, '.jpg?alt=media'));
-            fallbacks.push(url.replace(/\.webp\?alt=media/i, '.jpeg?alt=media'));
-            fallbacks.push(url.replace(/\.webp\?alt=media/i, '.png?alt=media'));
-        } else if (url.toLowerCase().includes('.jpg?alt=media')) {
-            fallbacks.push(url.replace(/\.jpg\?alt=media/i, '.webp?alt=media'));
-            fallbacks.push(url.replace(/\.jpg\?alt=media/i, '.jpeg?alt=media'));
-            fallbacks.push(url.replace(/\.jpg\?alt=media/i, '.png?alt=media'));
-        }
+    var urlsToTry = [cacheKey];
+    if (lowerKey.includes('.webp?alt=media')) {
+        urlsToTry.push(cacheKey.replace(/\.webp\?alt=media/i, '.jpg?alt=media'));
+        urlsToTry.push(cacheKey.replace(/\.webp\?alt=media/i, '.jpeg?alt=media'));
+        urlsToTry.push(cacheKey.replace(/\.webp\?alt=media/i, '.png?alt=media'));
+    } else if (lowerKey.includes('.jpg?alt=media')) {
+        urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.webp?alt=media'));
+        urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.jpeg?alt=media'));
+        urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.png?alt=media'));
+    }
 
-        if (isCoverOrGarbage) {
-            var extIndex = url.indexOf('.webp?alt=media');
-            if (extIndex > -1) {
-                var lastSlash = Math.max(url.lastIndexOf('%2F'), url.lastIndexOf('/'));
-                if (lastSlash > -1 && lastSlash < extIndex) {
-                    var folderUrl = url.substring(0, lastSlash + (url.charAt(lastSlash) === '%' ? 3 : 1));
-                    var c1 = folderUrl + 'cover1.webp?alt=media';
-                    var c2 = folderUrl + '01.webp?alt=media';
-                    var c3 = folderUrl + '1.webp?alt=media';
-                    if (fallbacks.indexOf(c1) === -1) fallbacks.push(c1);
-                    if (fallbacks.indexOf(c2) === -1) fallbacks.push(c2);
-                    if (fallbacks.indexOf(c3) === -1) fallbacks.push(c3);
-                }
-            }
-        }
-
-        function tryNext(index, lastError) {
-            if (index >= fallbacks.length) {
-                // Ultimate Fallback: Query Firebase folder for ANY image
-                if (isCoverOrGarbage) {
-                    try {
-                        var bucket = "durga-sarees.firebasestorage.app";
-                        var urlObj = new URL(url);
-                        var pathName = decodeURIComponent(urlObj.pathname.split('/o/')[1]); 
-                        var fwdPath = pathName.substring(0, pathName.lastIndexOf('/'));
-                        var listPrefix = fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('/') + '/';
-                        var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
-                        
-                        return window.fetchWithRetry(listUrl, {}, 0) // ZERO retries for faster offline failure
-                            .then(function(r) { return r.json(); })
-                            .then(function(data) {
-                                var files = (data.items || [])
-                                    .map(function(item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
-                                    .filter(function(f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
-                                if (files.length > 0) {
-                                    files.sort(function(a, b) { return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999); });
-                                    var finalUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('%2F') + "%2F" + encodeURIComponent(files[0]) + "?alt=media";
-                                    return window.fetchWithRetry(finalUrl, {}, 0).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? (forceJpeg ? blobToJpegForPDF(b) : blobToBase64Direct(b)) : null; });
-                                }
-                                return null;
-                            }).catch(function() { return null; });
-                    } catch (e) { return Promise.resolve(null); }
-                }
-
-                if (!isCoverOrGarbage && typeof window.logAppError === 'function') {
-                    var errMsg = lastError ? lastError.message : "Unknown error";
-                    window.logAppError('Image Fetch Failed', 'URL: ' + fallbacks[0] + ' | Error: ' + errMsg);
-                }
-                return Promise.resolve(null);
-            }
-            var ctrlC = new AbortController();
-            var tidC = setTimeout(function() { ctrlC.abort(); }, 15000);
-            return window.fetchWithRetry(fallbacks[index], { signal: ctrlC.signal }, 0) // ZERO retries to prevent 6s loop
-                .then(function(res) { 
-                    clearTimeout(tidC);
-                    if (res.ok) return res.blob();
-                    throw new Error("HTTP " + res.status);
-                })
-                .then(function(netBlob) { 
-                    if (netBlob.size === 0) {
-                        if (typeof window.logAppError === 'function') window.logAppError('Zero Byte Corrupt Image', fallbacks[index] + ' | PDF Generation');
-                        throw new Error("Zero byte file");
-                    }
-                    return forceJpeg ? blobToJpegForPDF(netBlob) : blobToBase64Direct(netBlob); 
-                })
-                .catch(function(err) {
-                    if (err && err.message && !err.message.includes("HTTP") && !err.message.includes("Zero byte")) {
-                        // Network error (offline or CORS). Abort fallbacks instantly!
-                        if (typeof window.logAppError === 'function') window.logAppError('Image Network Error', 'URL: ' + fallbacks[index] + ' | Error: ' + err.message);
-                        return Promise.resolve(null);
-                    }
-                    return tryNext(index + 1, err); 
+    if (isCoverOrGarbage) {
+        var extIndex = cacheKey.indexOf('.webp?alt=media');
+        if (extIndex > -1) {
+            var lastSlash = Math.max(cacheKey.lastIndexOf('%2F'), cacheKey.lastIndexOf('/'));
+            if (lastSlash > -1 && lastSlash < extIndex) {
+                var folderUrl = cacheKey.substring(0, lastSlash + (cacheKey.charAt(lastSlash) === '%' ? 3 : 1));
+                var possibleCovers = ['cover.webp', 'cover1.webp', '01.webp', '1.webp'];
+                possibleCovers.forEach(function(cName) {
+                    var tryUrl = folderUrl + cName + '?alt=media';
+                    if (urlsToTry.indexOf(tryUrl) === -1) urlsToTry.push(tryUrl);
                 });
+            }
         }
-        
-        return tryNext(0, null);
     }
 
-    return getImageFromDB(cacheKey).then(function(blob) {
-        if (blob) return forceJpeg ? blobToJpegForPDF(blob) : blobToBase64Direct(blob);
-        
-        if (isCoverOrGarbage) {
-            try {
-                var urlObj = new URL(cacheKey);
-                var pathName = decodeURIComponent(urlObj.pathname.split('/o/')[1]);
-                var fwdPath = pathName.substring(0, pathName.lastIndexOf('/'));
-                var backPath = fwdPath.replace(/\//g, '\\');
-                
-                return getImageFromDB(fwdPath).then(function(b1) {
-                    if (b1) return forceJpeg ? blobToJpegForPDF(b1) : blobToBase64Direct(b1);
-                    return getImageFromDB(backPath).then(function(b2) {
-                        if (b2) return forceJpeg ? blobToJpegForPDF(b2) : blobToBase64Direct(b2);
-                        return networkFallback(cacheKey);
-                    });
-                }).catch(function() { return networkFallback(cacheKey); });
-            } catch (e) { }
+    // Phase 1: Try IDB for all possible URLs
+    function tryIDB(index) {
+        if (index >= urlsToTry.length) return tryNetwork(0);
+        return getImageFromDB(urlsToTry[index]).then(function(blob) {
+            if (blob && blob.size > 0) {
+                return (forceJpeg ? blobToJpegForPDF(blob) : blobToBase64Direct(blob)).then(function(res) {
+                    if (res) return res; // Success!
+                    return tryIDB(index + 1); // Blob corrupt, try next
+                });
+            }
+            return tryIDB(index + 1);
+        }).catch(function() { return tryIDB(index + 1); });
+    }
+
+    // Phase 2: Try Network for all possible URLs
+    function tryNetwork(index) {
+        if (index >= urlsToTry.length) {
+            // Phase 3: Ultimate Fallback (Directory Scan) for Covers
+            if (isCoverOrGarbage) {
+                try {
+                    var bucket = "durga-sarees.firebasestorage.app";
+                    var urlObj = new URL(cacheKey);
+                    var pathName = decodeURIComponent(urlObj.pathname.split('/o/')[1]); 
+                    var fwdPath = pathName.substring(0, pathName.lastIndexOf('/'));
+                    var listPrefix = fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('/') + '/';
+                    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
+                    
+                    return window.fetchWithRetry(listUrl, {}, 0)
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            var files = (data.items || [])
+                                .map(function(item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
+                                .filter(function(f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
+                            if (files.length > 0) {
+                                files.sort(function(a, b) { return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999); });
+                                var finalUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('%2F') + "%2F" + encodeURIComponent(files[0]) + "?alt=media";
+                                return window.fetchWithRetry(finalUrl, {}, 0).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? (forceJpeg ? blobToJpegForPDF(b) : blobToBase64Direct(b)) : null; });
+                            }
+                            return null;
+                        }).catch(function() { return null; });
+                } catch (e) { return Promise.resolve(null); }
+            }
+            return Promise.resolve(null);
         }
         
-        return networkFallback(cacheKey);
-    }).catch(function() { return networkFallback(cacheKey); });
+        var fetchUrl = urlsToTry[index];
+        if (!fetchUrl || !fetchUrl.startsWith('http') || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+            return Promise.resolve(null); // Offline abort network
+        }
+
+        var ctrlC = new AbortController();
+        var tidC = setTimeout(function() { ctrlC.abort(); }, 15000);
+        return window.fetchWithRetry(fetchUrl, { signal: ctrlC.signal }, 0)
+            .then(function(res) { 
+                clearTimeout(tidC);
+                if (res.ok) return res.blob();
+                throw new Error("HTTP " + res.status);
+            })
+            .then(function(netBlob) { 
+                if (netBlob.size === 0) throw new Error("Zero byte file");
+                return forceJpeg ? blobToJpegForPDF(netBlob) : blobToBase64Direct(netBlob); 
+            })
+            .then(function(res) {
+                if (res) return res;
+                return tryNetwork(index + 1);
+            })
+            .catch(function(err) {
+                if (err && err.message && !err.message.includes("HTTP") && !err.message.includes("Zero byte")) {
+                    return Promise.resolve(null); // Critical network error, abort fallbacks
+                }
+                return tryNetwork(index + 1); 
+            });
+    }
+
+    return tryIDB(0);
 }
 
 
