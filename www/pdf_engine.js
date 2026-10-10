@@ -108,6 +108,35 @@ function blobToBase64Direct(blob) {
 }
 
 /**
+ * ENGINE 2: CANVAS-BASED JPEG CONVERTER
+ * Safely converts WebP/PNG into JPEG to fix WhatsApp attachment bugs.
+ */
+function blobToJpegForPDF(blob) {
+    return new Promise(function(resolve) {
+        if (!blob) { resolve(null); return; }
+        if (blob.size === 0) { resolve(null); return; }
+        var url = URL.createObjectURL(blob);
+        var img = new Image();
+        img.onload = function() {
+            var canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            var ctx = canvas.getContext('2d');
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL('image/jpeg', 0.9));
+        };
+        img.onerror = function() {
+            URL.revokeObjectURL(url);
+            resolve(null);
+        };
+        img.src = url;
+    });
+}
+
+/**
  * ROUTING & DOWNGRADE INTERCEPTOR
  * forceJpeg = false -> Engine 1 (Sharing)
  * forceJpeg = true  -> Engine 2 (PDF)
