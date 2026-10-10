@@ -268,7 +268,7 @@ async function resolveCorrectUrl(p, dId, overrideFolder) {
     if (isCover) {
         var dsFallbackMap = {};
         try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
-        var fallbackFileName = dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
+        var fallbackFileName = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
         if (fallbackFileName) {
             dId = fallbackFileName;
         }

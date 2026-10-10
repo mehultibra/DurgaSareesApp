@@ -7036,7 +7036,7 @@ window.shareWhatsAppLink = async function () {
             // 1. Use the robust resolveCorrectUrl logic from pdf_engine.js to guarantee the EXACT cover image!
             if (typeof window.resolveCorrectUrl === 'function') {
                 var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
-                var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
+                var fallbackFile = curProduct.coverDesignId || dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
                 var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
                 var coverDesignId = 'DIRECT';
 
