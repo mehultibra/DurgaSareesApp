@@ -1292,8 +1292,8 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
 
         if (isCapacitor) {
             try {
-                // Fetch all base64 images concurrently for instant performance
-                var base64Results = await Promise.all(imageUrlsArray.map(url => getBase64FromCache(url)));
+                // Fetch all base64 images concurrently for instant performance (Force JPEG for WhatsApp compatibility)
+                var base64Results = await Promise.all(imageUrlsArray.map(url => getBase64FromCache(url, true)));
                 
                 var failedUrls = [];
                 var uriArray = [];
@@ -1301,9 +1301,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                     var base64Img = base64Results[i];
                     if (base64Img) {
                         var pureBase64 = base64Img.split(',')[1];
-                        var ext = base64Img.split(';')[0].split('/')[1];
-                        if (ext === 'jpeg') ext = 'jpg';
-                        if (ext === 'octet-stream' || !ext) ext = 'webp';
+                        var ext = 'jpg';
                         var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "." + ext;
                         var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
                             path: fileName,

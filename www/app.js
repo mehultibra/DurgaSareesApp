@@ -7057,15 +7057,13 @@ window.shareWhatsAppLink = async function () {
             if (coverSrc.startsWith("data:")) {
                 base64data = coverSrc;
             } else if (typeof window.getBase64FromCache === 'function') {
-                base64data = await window.getBase64FromCache(coverSrc);
+                base64data = await window.getBase64FromCache(coverSrc, true); // Force JPEG conversion
             }
             if (!base64data) throw new Error("Failed to load image");
 
             var pureBase64 = base64data.includes(',') ? base64data.split(',')[1] : base64data;
             var ext = 'jpg';
-            if (base64data.includes('image/png')) ext = 'png';
-            if (base64data.includes('image/webp')) ext = 'webp';
-
+            
             var pathName = "share_" + Date.now() + "." + ext;
             var writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
                 path: pathName,
