@@ -242,6 +242,9 @@ function renderStickerTemplate(containerId, isEditor = false) {
             div.style.fontWeight = el.fontWeight || 'normal';
             div.style.fontStyle = el.fontStyle || 'normal';
             div.style.textDecoration = el.textDecoration || 'none';
+            if (el.textThick) {
+                div.style.webkitTextStroke = '1.5px black';
+            }
             div.style.color = '#000';
             
             div.style.display = 'flex';
@@ -947,6 +950,7 @@ function updatePropertiesPanel() {
         };
         
         fmtRow.appendChild(createToggle('B', 'fontWeight', 'bold', 'normal'));
+        fmtRow.appendChild(createToggle('Thick', 'textThick', true, false));
         fmtRow.appendChild(createToggle('I', 'fontStyle', 'italic', 'normal'));
         fmtRow.appendChild(createToggle('U', 'textDecoration', 'underline', 'none'));
         fmtRow.appendChild(createToggle('M', 'multiline', true, false));
