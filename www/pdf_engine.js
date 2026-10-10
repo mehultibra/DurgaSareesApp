@@ -4,7 +4,7 @@
 
 async function getActualDesignsForProduct(p, shareType, action) {
     if (shareType === 'cover') return []; // Force caller to use cover fallback block
-    if (shareType !== 'full') return [];
+    if (shareType !== 'full' && shareType !== 'ready') return [];
     var folderPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
     if (!folderPath) return [];
     var bucket = "durga-sarees.firebasestorage.app";
@@ -27,6 +27,20 @@ async function getActualDesignsForProduct(p, shareType, action) {
                 window.dsFolderCache[listUrl] = items;
             }
         } catch (e) { }
+    }
+
+    if (!items || items.length === 0) {
+        // Offline Fallback: Synthesize the items list from local stock/ready data!
+        var knownKeys = [];
+        if (p.stock) Object.keys(p.stock).forEach(k => knownKeys.push(k));
+        if (p.ready) String(p.ready).split(',').forEach(k => knownKeys.push(k.trim()));
+        
+        var uniqueKeys = Array.from(new Set(knownKeys)).filter(Boolean);
+        items = uniqueKeys.map(k => {
+            var fName = k;
+            if (!/\.(webp|jpg|jpeg|png)$/i.test(fName)) fName += ".webp";
+            return { name: listPrefix + fName };
+        });
     }
 
     if (items && items.length > 0) {
