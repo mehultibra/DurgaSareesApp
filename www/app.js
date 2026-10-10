@@ -5,6 +5,14 @@
 const FIRESTORE_PRODUCTS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products?pageSize=1000";
 const FIRESTORE_USERS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users?pageSize=100";
 
+window.getRobustStock = function(p, fname, isCoverFallback) {
+    if (!p || !p.stock) return 999;
+    if (p.stock[fname] !== undefined) return p.stock[fname];
+    if (isCoverFallback && p.stock['Cover'] !== undefined) return p.stock['Cover'];
+    var nameWithoutExt = fname.replace(/\.[^/.]+$/, "");
+    if (p.stock[nameWithoutExt] !== undefined) return p.stock[nameWithoutExt];
+    return 999;
+};
 history.replaceState({ modal: 'main' }, '');
 
 // --- ADMIN MODE GLOBALS ---
@@ -2418,8 +2426,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                         }
 
                         var isCover = (fname === coverFile);
-                        var stockKey = isCover ? 'Cover' : fname;
-                        var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
+                        var curStock = window.getRobustStock(p, fname, isCover);
                         var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
                         var existing = await checkImageInDB(zoomImgUrl);
 
@@ -2536,7 +2543,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgEl = document.getElementById(imgId);
                 if (imgEl) {
-                    var currentStock = p.stock && p.stock[file.name] !== undefined ? p.stock[file.name] : 999;
+                    var currentStock = window.getRobustStock(p, file.name, /^(cover|cover1)\./i.test(file.name));
                     loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(cover|cover1)$/i.test(file.name), cleanZoomPath, currentStock > 0);
                 }
             }
@@ -4014,8 +4021,7 @@ async function syncImages(silent = false) {
                                     await new Promise(r => setTimeout(r, 500));
                                 }
                                 var isCover = (index === 0);
-                                var stockKey = isCover ? 'Cover' : fname;
-                                var curStock = p.stock && p.stock[stockKey] !== undefined ? p.stock[stockKey] : 999;
+                                var curStock = window.getRobustStock(p, fname, isCover);
                                 var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
                                 
                                 // O(1) Instant memory check! Fixes offline detail image load starvation.
