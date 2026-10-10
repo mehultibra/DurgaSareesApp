@@ -7056,37 +7056,20 @@ window.shareWhatsAppLink = async function () {
             var base64data = "";
             if (coverSrc.startsWith("data:")) {
                 base64data = coverSrc;
-            } else {
-                var blob = null;
-                if (typeof window.getImageFromDB === 'function') {
-                    try {
-                        blob = await Promise.race([
-                            window.getImageFromDB(coverSrc),
-                            new Promise((_, rej) => setTimeout(() => rej(new Error("IDB Timeout")), 2000))
-                        ]);
-                    } catch(e) { console.warn("Share IDB skip:", e); }
-                }
-                if (!blob) {
-                    var ctrlS = new AbortController();
-                    var tidS = setTimeout(() => ctrlS.abort(), 15000);
-                    try {
-                        var res = await fetch(coverSrc, { signal: ctrlS.signal });
-                        blob = await res.blob();
-                    } finally {
-                        clearTimeout(tidS);
-                    }
-                }
-                base64data = await new Promise((resolve) => {
-                    var reader = new FileReader();
-                    reader.readAsDataURL(blob);
-                    reader.onloadend = () => resolve(reader.result);
-                });
+            } else if (typeof window.getBase64FromCache === 'function') {
+                base64data = await window.getBase64FromCache(coverSrc);
             }
+            if (!base64data) throw new Error("Failed to load image");
 
-            var pathName = "share_" + Date.now() + ".jpg";
+            var pureBase64 = base64data.includes(',') ? base64data.split(',')[1] : base64data;
+            var ext = 'jpg';
+            if (base64data.includes('image/png')) ext = 'png';
+            if (base64data.includes('image/webp')) ext = 'webp';
+
+            var pathName = "share_" + Date.now() + "." + ext;
             var writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
                 path: pathName,
-                data: base64data,
+                data: pureBase64,
                 directory: 'CACHE'
             });
 
