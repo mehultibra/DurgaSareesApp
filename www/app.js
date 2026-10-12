@@ -7000,12 +7000,77 @@ window.generateShareMessage = function (prod) {
     var details = [];
     var readyCount = 0;
 
-    if (prod.stock) {
-        for (var k in prod.stock) {
-            if (prod.stock[k] > 0) readyCount++;
+    // Accurate calculation of in-stock designs (never counting DIRECT, FULLY_PACKED, or Cover twice)
+    var isFullyPacked = prod.stock && prod.stock['FULLY_PACKED'] === 1;
+
+    if (!isFullyPacked) {
+        // 1. Try actual folder items from dsFolderCache (highest accuracy)
+        var folderFiles = null;
+        if (prod.gridUrl) {
+            var bucket = "durga-sarees.firebasestorage.app";
+            var cleanGrid = String(prod.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+            var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + cleanGrid + "&delimiter=/";
+            if (window.dsFolderCache && window.dsFolderCache[listUrl]) {
+                folderFiles = window.dsFolderCache[listUrl];
+            } else {
+                try {
+                    var fc = JSON.parse(localStorage.getItem("dsFolderCache") || "{}");
+                    if (fc[listUrl]) folderFiles = fc[listUrl];
+                } catch (e) { }
+            }
         }
-    } else if (prod.ready) {
-        readyCount = prod.ready.split(',').filter(s => s.trim().length > 0).length;
+
+        if (folderFiles && folderFiles.length > 0) {
+            var imgFiles = folderFiles
+                .map(it => it.name ? it.name.substring(it.name.lastIndexOf('/') + 1) : "")
+                .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+
+            var nonCoverFiles = imgFiles.filter(f => !/^(cover|cover1)\./i.test(f));
+            var designsToCheck = nonCoverFiles.length > 0 ? nonCoverFiles : imgFiles;
+            var uniqueDesigns = Array.from(new Set(designsToCheck.map(f => f.replace(/\.[^/.]+$/, '').toLowerCase())));
+
+            var inStockCount = 0;
+            uniqueDesigns.forEach(dName => {
+                if (typeof window.isDesignInStock === 'function') {
+                    if (window.isDesignInStock(prod, dName)) inStockCount++;
+                } else {
+                    inStockCount++;
+                }
+            });
+            readyCount = inStockCount;
+        }
+
+        // 2. Fallback to DOM swipe-cards if open on current product page
+        if (readyCount === 0 && typeof curProduct !== 'undefined' && curProduct && (curProduct.id === prod.id || curProduct.docId === prod.docId)) {
+            var deck = document.getElementById('dtDesigns');
+            if (deck) {
+                var cards = deck.querySelectorAll('.swipe-card');
+                if (cards && cards.length > 0) {
+                    var nonCoverCards = Array.from(cards).filter(c => {
+                        var d = (c.getAttribute('data-design') || '').toLowerCase();
+                        return d && d !== 'direct' && !d.startsWith('cover');
+                    });
+                    readyCount = nonCoverCards.length > 0 ? nonCoverCards.length : cards.length;
+                }
+            }
+        }
+
+        // 3. Fallback to stock map (strictly excluding DIRECT, FULLY_PACKED, Cover)
+        if (readyCount === 0 && prod.stock) {
+            var specificKeys = Object.keys(prod.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
+            if (specificKeys.length > 0) {
+                readyCount = specificKeys.filter(k => prod.stock[k] > 0).length;
+            } else if (prod.stock['Cover'] > 0 || prod.stock['DIRECT'] > 0) {
+                readyCount = 1;
+            }
+        }
+
+        // 4. Fallback to ready field string
+        if (readyCount === 0 && prod.ready) {
+            var rArr = String(prod.ready).split(',').map(s => s.trim().replace(/\.[^/.]+$/, '').toLowerCase()).filter(Boolean);
+            var filtered = rArr.filter(k => k !== 'direct' && k !== 'fully_packed' && !k.startsWith('cover'));
+            readyCount = filtered.length > 0 ? filtered.length : (rArr.length > 0 ? 1 : 0);
+        }
     }
 
     if (readyCount > 0) {
