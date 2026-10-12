@@ -6687,22 +6687,10 @@ window.toggleIgFullscreen = function (container) {
             }).catch(e => console.log("Fullscreen err:", e));
         }
     } else {
-        // Exit fullscreen
+        // Exit fullscreen (fullscreenchange event listener resets iframe styles and icons automatically)
         var ext = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
         if (ext) {
-            ext.call(document).then(() => {
-                // The styling resets can also be handled by an event listener, but we can do it here
-                var iframe = container.querySelector('iframe');
-                if (iframe) {
-                    iframe.style.height = "560px";
-                    iframe.style.marginTop = "-54px";
-                }
-                var icon = container.querySelector('.fa-compress');
-                if (icon) {
-                    icon.classList.remove('fa-compress');
-                    icon.classList.add('fa-expand');
-                }
-            }).catch(e => console.log("Exit fullscreen err:", e));
+            ext.call(document).catch(e => console.log("Exit fullscreen err:", e));
         }
     }
 };
