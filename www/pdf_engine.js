@@ -2,81 +2,188 @@
 // 🌸 DURGA SAREES: PDF ENGINE (V7 - CART PDF + WIX LINKS)
 // ==========================================
 
+function isDesignInStock(p, fname) {
+    if (!p) return false;
+    if (p.stock && p.stock['FULLY_PACKED'] === 1) return false;
+
+    var cleanName = String(fname || '').replace(/\.[^/.]+$/, "").trim();
+    var num = parseInt(cleanName.replace(/\D/g, ''), 10);
+    var numStr = !isNaN(num) ? String(num) : "";
+    var pad2 = !isNaN(num) ? String(num).padStart(2, '0') : "";
+    var isCover = /^(cover|cover1)$/i.test(cleanName) || 
+                  (p.coverDesignId && cleanName.toLowerCase() === String(p.coverDesignId).replace(/\.[^/.]+$/, "").trim().toLowerCase());
+
+    if (p.stock) {
+        var candidates = [fname, cleanName];
+        if (numStr) candidates.push(numStr);
+        if (pad2) candidates.push(pad2);
+        if (isCover) {
+            candidates.push('Cover');
+            candidates.push('DIRECT');
+        }
+
+        var matchedVal = undefined;
+        for (var i = 0; i < candidates.length; i++) {
+            var k = candidates[i];
+            if (p.stock[k] !== undefined) {
+                matchedVal = p.stock[k];
+                break;
+            }
+        }
+
+        if (matchedVal !== undefined) {
+            return matchedVal > 0;
+        }
+
+        var specificKeys = Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
+        if (specificKeys.length > 0) {
+            return false;
+        }
+    }
+
+    if (p.ready && String(p.ready).trim().length > 0) {
+        var rArr = String(p.ready).split(',').map(s => s.trim().replace(/\.[^/.]+$/, '').toLowerCase()).filter(Boolean);
+        if (rArr.length > 0) {
+            return rArr.includes(cleanName.toLowerCase()) || 
+                   (numStr && rArr.includes(numStr.toLowerCase())) || 
+                   (pad2 && rArr.includes(pad2.toLowerCase()));
+        }
+    }
+
+    return true; // Default in stock
+}
+
 async function getActualDesignsForProduct(p, shareType, action) {
     if (shareType === 'cover') return []; // Force caller to use cover fallback block
     if (shareType !== 'full' && shareType !== 'ready') return [];
-    var folderPath = (p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl;
-    if (!folderPath) return [];
-    var bucket = "durga-sarees.firebasestorage.app";
-    var listPrefix = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
-    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
-    
-    var items = [];
-    if (!window.dsFolderCache) {
-        try { window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {}; } catch(e) { window.dsFolderCache = {}; }
-    }
-    if (window.dsFolderCache && window.dsFolderCache[listUrl]) {
-        items = window.dsFolderCache[listUrl];
-    } else {
-        try {
-            var res = await (window.fetchWithRetry ? window.fetchWithRetry(listUrl, {}, 1) : fetch(listUrl));
-            if (res.ok) {
-                var data = await res.json();
-                items = data.items || [];
-                if (!window.dsFolderCache) window.dsFolderCache = {};
-                window.dsFolderCache[listUrl] = items;
-            }
-        } catch (e) { }
-    }
 
-    if (!items || items.length === 0) {
-        // Offline Fallback: Synthesize the items list from local stock/ready data!
-        var knownKeys = [];
-        if (p.stock) Object.keys(p.stock).forEach(k => knownKeys.push(k));
-        if (p.ready) String(p.ready).split(',').forEach(k => knownKeys.push(k.trim()));
-        
-        var uniqueKeys = Array.from(new Set(knownKeys)).filter(Boolean);
-        items = uniqueKeys.map(k => {
-            var fName = k;
-            if (!/\.(webp|jpg|jpeg|png)$/i.test(fName)) fName += ".webp";
-            return { name: listPrefix + fName };
-        });
-    }
+    var isCurrentProductPage = (typeof curProduct !== 'undefined' && curProduct && (curProduct.id === p.id || curProduct.docId === p.docId));
+    var deck = isCurrentProductPage ? document.getElementById('detailDeck') : null;
+    var rawFiles = [];
 
-    if (items && items.length > 0) {
-        var validFiles = items.map(it => it.name.substring(it.name.lastIndexOf('/') + 1)).filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
-        
-        var filesToReturn;
-        if (action === 'images') {
-            // For WhatsApp images, keep everything EXCEPT explicit cover images (unless it's the ONLY image!)
-            filesToReturn = validFiles.filter(f => !/^(cover|cover1)\.(webp|jpg|jpeg|png)$/i.test(f));
-            if (filesToReturn.length === 0 && validFiles.length > 0) {
-                filesToReturn = validFiles; // Single product fallback
-            }
-        } else {
-            // For PDFs, we also strip 01/1 because the PDF engine prepends the cover page manually
-            filesToReturn = validFiles.filter(f => !/^(cover|cover1|01|1)\.(webp|jpg|jpeg|png)$/i.test(f));
-        }
-        
-        if (shareType === 'ready') {
-            filesToReturn = filesToReturn.filter(f => {
-                if (p.stock && p.stock[f] === 0) return false;
-                var nameWithoutExt = f.substring(0, f.lastIndexOf('.'));
-                if (p.stock && p.stock[nameWithoutExt] === 0) return false;
-                return true;
+    // 1. FASTEST: If on Product Page and swipe deck already has cards, use them immediately!
+    if (deck) {
+        var cards = deck.querySelectorAll('.swipe-card');
+        if (cards && cards.length > 0) {
+            cards.forEach(card => {
+                if (card.querySelector('video')) return; // Skip videos for image/PDF share
+                var dName = card.getAttribute('data-design');
+                if (!dName || dName === 'DIRECT' || dName.toLowerCase().startsWith('cover')) {
+                    if (cards.length === 1 && dName) {
+                        rawFiles.push(dName.includes('.') ? dName : dName + '.webp');
+                    }
+                    return;
+                }
+                var fileName = dName.includes('.') ? dName : dName + '.webp';
+                if (!rawFiles.includes(fileName)) rawFiles.push(fileName);
             });
         }
-        
-        filesToReturn.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
-        return filesToReturn;
     }
 
-    var readyArr = (p.ready) ? String(p.ready).split(',').map(d => d.trim()).filter(d => d) : [];
-    if (shareType === 'ready') {
-        readyArr = readyArr.filter(d => !p.stock || p.stock[d] !== 0);
+    // 2. CACHE & NETWORK DISCOVERY (Used when DOM cards not available or incomplete)
+    if (rawFiles.length === 0) {
+        var bucket = "durga-sarees.firebasestorage.app";
+        var cleanGrid = p.gridUrl ? String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/' : '';
+        var gridListUrl = cleanGrid ? ("https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + cleanGrid + "&delimiter=/") : '';
+        
+        var cleanZoom = (p.zoomUrl && p.zoomUrl !== "None") ? String(p.zoomUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/' : cleanGrid;
+        var zoomListUrl = cleanZoom ? ("https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + cleanZoom + "&delimiter=/") : '';
+
+        var items = [];
+        if (!window.dsFolderCache) {
+            try { window.dsFolderCache = JSON.parse(localStorage.getItem("dsFolderCache")) || {}; } catch(e) { window.dsFolderCache = {}; }
+        }
+
+        // Check cache with gridListUrl (standard) or zoomListUrl
+        if (gridListUrl && window.dsFolderCache && window.dsFolderCache[gridListUrl]) {
+            items = window.dsFolderCache[gridListUrl];
+        } else if (zoomListUrl && window.dsFolderCache && window.dsFolderCache[zoomListUrl]) {
+            items = window.dsFolderCache[zoomListUrl];
+        } else {
+            // Fetch from Firebase Storage (grid first, then zoom)
+            try {
+                var targetListUrl = gridListUrl || zoomListUrl;
+                if (targetListUrl) {
+                    var res = await (window.fetchWithRetry ? window.fetchWithRetry(targetListUrl, {}, 1) : fetch(targetListUrl));
+                    if (res.ok) {
+                        var data = await res.json();
+                        items = data.items || [];
+                        if (!window.dsFolderCache) window.dsFolderCache = {};
+                        window.dsFolderCache[targetListUrl] = items;
+                    }
+                }
+            } catch (e) { }
+        }
+
+        // Check master cache
+        if ((!items || items.length === 0) && window.dsMasterCache) {
+            var rawGridPath = p.gridUrl ? String(p.gridUrl).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => s.trim()).join('/') : '';
+            var mStr = window.dsMasterCache[rawGridPath] || window.dsMasterCache[p.gridUrl];
+            if (mStr) {
+                var mDesigns = String(mStr).split(',').map(s => s.trim()).filter(Boolean);
+                items = mDesigns.map(d => ({ name: (cleanGrid || cleanZoom) + (d.includes('.') ? d : d + '.webp') }));
+            }
+        }
+
+        // Offline Fallback: Synthesize from stock & ready keys
+        if (!items || items.length === 0) {
+            var knownKeys = [];
+            if (p.stock) {
+                Object.keys(p.stock).forEach(k => {
+                    if (k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')) knownKeys.push(k);
+                });
+            }
+            if (p.ready) String(p.ready).split(',').forEach(k => knownKeys.push(k.trim()));
+            var uniqueKeys = Array.from(new Set(knownKeys)).filter(Boolean);
+            
+            if (uniqueKeys.length > 0) {
+                items = uniqueKeys.map(k => {
+                    var fName = k.includes('.') ? k : k + ".webp";
+                    return { name: (cleanGrid || cleanZoom) + fName };
+                });
+            } else {
+                for (var i = 1; i <= 5; i++) {
+                    var n = String(i).padStart(2, '0');
+                    items.push({ name: (cleanGrid || cleanZoom) + n + ".webp" });
+                }
+            }
+        }
+
+        if (items && items.length > 0) {
+            var validFiles = items
+                .map(it => it.name.substring(it.name.lastIndexOf('/') + 1))
+                .filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f));
+            
+            // Exclude explicit cover / cover1 images unless it's the only image
+            var nonCoverFiles = validFiles.filter(f => !/^(cover|cover1)\.(webp|jpg|jpeg|png)$/i.test(f));
+            rawFiles = (nonCoverFiles.length > 0) ? nonCoverFiles : validFiles;
+        }
     }
-    
-    return readyArr;
+
+    // 3. FILTER BY STOCK (Ready Designs)
+    var filesToReturn = [...rawFiles];
+    if (shareType === 'ready') {
+        filesToReturn = filesToReturn.filter(f => isDesignInStock(p, f));
+    }
+
+    // 4. ORDER WITH CHOSEN COVER FIRST, THEN NUMERICAL
+    var dsFallbackMap = {};
+    try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+    var chosenCover = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
+    if (chosenCover) {
+        var cleanCoverName = String(chosenCover).replace(/\.[^/.]+$/, "").trim().toLowerCase();
+        filesToReturn.sort((a, b) => {
+            var aClean = a.replace(/\.[^/.]+$/, "").trim().toLowerCase();
+            var bClean = b.replace(/\.[^/.]+$/, "").trim().toLowerCase();
+            if (aClean === cleanCoverName) return -1;
+            if (bClean === cleanCoverName) return 1;
+            return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+        });
+    } else {
+        filesToReturn.sort((a, b) => (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
+    }
+
+    return filesToReturn;
 }
 
 const WEBSITE_BASE = "https://www.durgasarees.com";
@@ -172,6 +279,18 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
         urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.webp?alt=media'));
         urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.jpeg?alt=media'));
         urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.png?alt=media'));
+    }
+
+    if (typeof curProduct !== 'undefined' && curProduct && curProduct.zoomUrl && curProduct.gridUrl) {
+        var encZoom = encodeURIComponent(curProduct.zoomUrl.trim().replace(/\\/g, '/'));
+        var encGrid = encodeURIComponent(curProduct.gridUrl.trim().replace(/\\/g, '/'));
+        if (cacheKey.includes(encZoom)) {
+            var gUrl = cacheKey.replace(encZoom, encGrid);
+            if (!urlsToTry.includes(gUrl)) urlsToTry.push(gUrl);
+        } else if (cacheKey.includes(encGrid)) {
+            var zUrl = cacheKey.replace(encGrid, encZoom);
+            if (!urlsToTry.includes(zUrl)) urlsToTry.push(zUrl);
+        }
     }
 
     if (isCoverOrGarbage) {
@@ -1085,10 +1204,12 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             if (dArr.length > 0) {
                 coverUrl = await resolveCorrectUrl(product, dArr[0]);
             } else {
-                // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
+                if (shareType === 'ready') {
+                    continue; // Skip products with 0 ready stock in favorites PDF
+                }
                 var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
-                var fallbackFile = dsFallbackMap[product.gridUrl] || dsFallbackMap[product.zoomUrl];
-                var readyFallback = (product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d && !/\.(mp4|mov|avi|wmv|webm)$/i.test(d)) : [];
+                var fallbackFile = product.coverDesignId || dsFallbackMap[product.gridUrl] || dsFallbackMap[product.zoomUrl];
+                var readyFallback = (product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d && isDesignInStock(product, d)) : [];
                 var coverDesignId = 'DIRECT';
                 
                 if (fallbackFile) {
@@ -1327,23 +1448,25 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                 var base64Results = await Promise.all(imageUrlsArray.map(url => getBase64FromCache(url, true)));
                 
                 var failedUrls = [];
-                var uriArray = [];
+                var writePromises = [];
                 for (var i = 0; i < base64Results.length; i++) {
                     var base64Img = base64Results[i];
                     if (base64Img) {
                         var pureBase64 = base64Img.split(',')[1];
                         var ext = 'jpg';
-                        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "." + ext;
-                        var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
-                            path: fileName,
-                            data: pureBase64,
-                            directory: "CACHE"
-                        });
-                        uriArray.push(writeResult.uri);
+                        var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "_" + Date.now() + "." + ext;
+                        writePromises.push(
+                            window.Capacitor.Plugins.Filesystem.writeFile({
+                                path: fileName,
+                                data: pureBase64,
+                                directory: "CACHE"
+                            }).then(r => r.uri)
+                        );
                     } else {
                         failedUrls.push(imageUrlsArray[i]);
                     }
                 }
+                var uriArray = await Promise.all(writePromises);
 
                 if (failedUrls.length > 0) {
                     var errMsg = "Failed to fetch " + failedUrls.length + " images. URLs: " + failedUrls.join(', ');
@@ -1622,9 +1745,11 @@ window.triggerShare = async function (action) {
                     }
                 }
             } else {
-                // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
-                var fallbackFile = dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
-                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && (!fp.stock || fp.stock[d] !== 0)) : [];
+                if (shareType === 'ready') {
+                    continue; // Skip products with 0 ready stock
+                }
+                var fallbackFile = fp.coverDesignId || dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
+                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && isDesignInStock(fp, d)) : [];
                 var coverDesignId = 'DIRECT';
 
                 if (fallbackFile) {
@@ -1674,10 +1799,14 @@ window.triggerShare = async function (action) {
             }
         }
     } else {
-        // Cover mode: Use dsFallbackMap first, then ready designs, then DIRECT
+        if (shareType === 'ready') {
+            alert("No ready designs currently in stock for this product.");
+            return;
+        }
+        // Cover mode: Use curProduct.coverDesignId first, then dsFallbackMap, then ready designs, then DIRECT
         var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
-        var fallbackFile = dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
-        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
+        var fallbackFile = curProduct.coverDesignId || dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
+        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && isDesignInStock(curProduct, d)) : [];
         var coverDesignId = 'DIRECT';
 
         if (fallbackFile) {

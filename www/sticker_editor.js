@@ -27,7 +27,7 @@ async function loadStickerLayout() {
         const doc = await firebase.firestore().collection('Settings').doc('StickerTemplate').get();
         if (doc.exists) {
             const data = doc.data();
-            
+
             if (data.formats && data.layouts) {
                 window.stickerFormatsMap = data.formats;
                 window.stickerLayoutsMap = data.layouts;
@@ -41,7 +41,7 @@ async function loadStickerLayout() {
                     let w_mm = Math.round((old.width || 440) / 8);
                     let h_mm = Math.round((old.height || 220) / 8);
                     let fmtName = w_mm + "x" + h_mm + "mm";
-                    
+
                     if (!newFormats[fmtName]) {
                         newFormats[fmtName] = {
                             width: old.width || 440, height: old.height || 220, gap_mm: old.gap_mm || 0, sensor: old.sensor || "GAP",
@@ -58,13 +58,13 @@ async function loadStickerLayout() {
             } else if (data.layout) {
                 // Ultra legacy migration
                 let old = data.layout;
-                let fmtName = Math.round((old.width || 440)/8) + "x" + Math.round((old.height || 220)/8) + "mm";
-                window.stickerFormatsMap = { [fmtName]: { width: old.width||440, height: old.height||220, gap_mm: old.gap_mm||0 } };
+                let fmtName = Math.round((old.width || 440) / 8) + "x" + Math.round((old.height || 220) / 8) + "mm";
+                window.stickerFormatsMap = { [fmtName]: { width: old.width || 440, height: old.height || 220, gap_mm: old.gap_mm || 0 } };
                 window.stickerLayoutsMap = { "Default": { formatId: fmtName, elements: old.elements || [] } };
                 window.defaultTemplateName = "Default";
                 saveStickerLayout(true);
             }
-            
+
             window.currentTemplateName = window.defaultTemplateName;
             buildCurrentStickerLayout();
             populateTemplateDropdown();
@@ -72,7 +72,7 @@ async function loadStickerLayout() {
         } else {
             buildCurrentStickerLayout();
         }
-    } catch(e) { console.error("Failed to load sticker layout", e); }
+    } catch (e) { console.error("Failed to load sticker layout", e); }
 }
 
 function buildCurrentStickerLayout() {
@@ -81,13 +81,13 @@ function buildCurrentStickerLayout() {
     if (!layout) return;
     const format = window.stickerFormatsMap[layout.formatId];
     if (!format) return;
-    
+
     // Combine them into a single window.stickerLayout object so the rest of the app doesn't break
     window.stickerLayout = {
         ...format,
         elements: JSON.parse(JSON.stringify(layout.elements))
     };
-    
+
     const formatLbl = document.getElementById('editorFormatLabel');
     if (formatLbl) {
         formatLbl.innerText = "(Format: " + layout.formatId + ")";
@@ -99,9 +99,9 @@ function populateTemplateDropdown() {
     const selPrint = document.getElementById('stickerTemplateSelect');
     // Populate the dropdown in the Sticker Editor
     const selEdit = document.getElementById('seActiveFormatSelect');
-    
+
     const keys = Object.keys(window.stickerLayoutsMap);
-    
+
     if (selPrint) {
         selPrint.innerHTML = '';
         keys.forEach(k => {
@@ -113,7 +113,7 @@ function populateTemplateDropdown() {
         });
         selPrint.style.display = keys.length > 0 ? 'block' : 'none';
     }
-    
+
     if (selEdit) {
         selEdit.innerHTML = '';
         keys.forEach(k => {
@@ -126,7 +126,7 @@ function populateTemplateDropdown() {
     }
 }
 
-window.populateFormatDropdown = function() {
+window.populateFormatDropdown = function () {
     const selFormat = document.getElementById('seActiveFormatIdSelect');
     if (selFormat) selFormat.innerHTML = '';
 
@@ -135,7 +135,7 @@ window.populateFormatDropdown = function() {
         // Select the format currently used by the active layout
         const currentLayout = window.stickerLayoutsMap[window.currentTemplateName];
         const isSelected = (currentLayout && k === currentLayout.formatId);
-        
+
         if (selFormat) {
             const opt = document.createElement('option');
             opt.value = k;
@@ -146,11 +146,11 @@ window.populateFormatDropdown = function() {
     });
 }
 
-window.changeStickerTemplate = function(name) {
+window.changeStickerTemplate = function (name) {
     if (window.stickerLayoutsMap && window.stickerLayoutsMap[name]) {
         window.currentTemplateName = name;
         buildCurrentStickerLayout();
-        
+
         // Sync the format dropdown to match the selected layout's format
         window.populateFormatDropdown();
 
@@ -162,13 +162,13 @@ window.changeStickerTemplate = function(name) {
                 const layout = window.stickerLayoutsMap[name];
                 formatLbl.innerText = layout ? "(Format: " + layout.formatId + ")" : "";
             }
-            
+
             renderStickerTemplate('stickerTemplate', false);
-            
+
             if (typeof updateStickerCanvasScale === 'function') {
                 updateStickerCanvasScale('stickerTemplate');
             }
-            
+
             if (typeof loadPrinters === 'function') {
                 loadPrinters();
             }
@@ -182,16 +182,16 @@ window.changeStickerTemplate = function(name) {
     }
 };
 
-window.changeStickerFormatSize = function(formatId) {
+window.changeStickerFormatSize = function (formatId) {
     if (window.stickerFormatsMap && window.stickerFormatsMap[formatId]) {
         // Update the current layout to use this new format size
         if (window.currentTemplateName && window.stickerLayoutsMap[window.currentTemplateName]) {
             window.stickerLayoutsMap[window.currentTemplateName].formatId = formatId;
             buildCurrentStickerLayout();
-            
+
             // Re-render editor canvas to reflect the new size
             renderStickerTemplate('stickerEditorCanvas', true);
-            
+
             // Also update the properties panel size inputs
             document.getElementById('seCanvasW_mm').value = Math.round(window.stickerLayout.width / 8);
             document.getElementById('seCanvasH_mm').value = Math.round(window.stickerLayout.height / 8);
@@ -209,7 +209,7 @@ window.changeStickerFormatSize = function(formatId) {
 function renderStickerTemplate(containerId, isEditor = false) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    
+
     container.innerHTML = '';
     container.style.width = window.stickerLayout.width + 'px';
     container.style.height = window.stickerLayout.height + 'px';
@@ -246,7 +246,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
                 div.style.webkitTextStroke = '1.5px black';
             }
             div.style.color = '#000';
-            
+
             div.style.display = 'flex';
             div.style.alignItems = 'center';
             div.style.justifyContent = 'center';
@@ -254,13 +254,13 @@ function renderStickerTemplate(containerId, isEditor = false) {
             if (el.w) div.style.width = el.w + 'px';
             if (el.h) div.style.height = el.h + 'px';
             div.style.overflow = 'hidden';
-            
+
             if (el.multiline) {
                 div.style.whiteSpace = 'pre-wrap';
             } else {
                 div.style.whiteSpace = 'nowrap';
             }
-            
+
             let rawVal = el.text || '';
             let defVal = '';
             if (el.field === 'name') { rawVal = window.curProduct?.name; defVal = 'Product Name'; }
@@ -268,9 +268,9 @@ function renderStickerTemplate(containerId, isEditor = false) {
             if (el.field === 'cut') { rawVal = window.curProduct?.cut; defVal = 'Cut Details'; }
             if (el.field === 'price') { rawVal = window.curProduct?.price; defVal = '000'; }
             if (el.field === 'design') { rawVal = window.curProduct?.sku || window.curProduct?.design; defVal = 'Design No'; }
-            
+
             if (!rawVal && isEditor) rawVal = defVal; // fallback for editor preview
-            
+
             if (rawVal && String(rawVal).trim() !== '') {
                 div.innerText = (el.prefix || '') + rawVal + (el.suffix || '');
                 div.style.display = 'block';
@@ -290,7 +290,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
             div.style.justifyContent = 'center';
             div.style.background = '#f5f5f6';
             div.style.overflow = 'hidden';
-            
+
             const img = document.createElement('img');
             img.style.maxWidth = '100%';
             img.style.maxHeight = '100%';
@@ -299,7 +299,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
                 img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
                 img.style.pointerEvents = 'none';
             } else {
-                img.id = 'stkProductImg'; 
+                img.id = 'stkProductImg';
             }
             div.appendChild(img);
         } else if (el.type === 'qr') {
@@ -312,7 +312,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
                 div.style.alignItems = 'center';
                 div.style.justifyContent = 'center';
             } else {
-                div.id = 'stkQRCode'; 
+                div.id = 'stkQRCode';
             }
         }
         if (isEditor) {
@@ -333,7 +333,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
         }
 
         container.appendChild(div);
-        
+
         // Generate QR Code if it's the QR element and not in editor
         if (el.type === 'qr' && !isEditor && window.QRCode && window.curProduct) {
             const productUrl = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(window.curProduct.docId || window.curProduct.id);
@@ -356,7 +356,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
         marginOverlay.style.left = (window.stickerLayout.marginLeft || 0) + 'px';
         marginOverlay.style.pointerEvents = 'none';
         marginOverlay.style.zIndex = '1000';
-        
+
         const corners = [
             { top: '0', left: '0', borderTop: '2px solid red', borderLeft: '2px solid red' },
             { top: '0', right: '0', borderTop: '2px solid red', borderRight: '2px solid red' },
@@ -371,7 +371,7 @@ function renderStickerTemplate(containerId, isEditor = false) {
             Object.assign(corner.style, c);
             marginOverlay.appendChild(corner);
         });
-        
+
         container.appendChild(marginOverlay);
     }
 
@@ -379,23 +379,23 @@ function renderStickerTemplate(containerId, isEditor = false) {
     setTimeout(() => {
         const containerW = window.stickerLayout.width || 440;
         const containerH = window.stickerLayout.height || 220;
-        
+
         window.stickerLayout.elements.forEach(el => {
             if (el.type !== 'text') return;
-            
+
             // Compute effective width: use stored el.w, or derive from sticker canvas right edge.
             // This ensures even old elements with no explicit width get shrink-to-fit!
             const effectiveW = el.w || Math.max(50, containerW - el.x - 5);
             const effectiveH = el.h || Math.round(parseInt(el.fontSize, 10) * 1.4) || 24;
             const elWithBounds = Object.assign({}, el, { w: effectiveW, h: effectiveH });
-            
+
             const divEdit = document.getElementById('editor_' + el.id);
             if (divEdit && divEdit.style.display !== 'none') autoFitTextElement(divEdit, elWithBounds);
-            
+
             const divPrint = document.getElementById('print_' + el.id);
             if (divPrint && divPrint.style.display !== 'none') {
                 autoFitTextElement(divPrint, elWithBounds);
-                
+
                 // Bind live auto-shrink for live editing in print preview!
                 divPrint.removeEventListener('input', divPrint._fitHandler);
                 divPrint._fitHandler = () => autoFitTextElement(divPrint, elWithBounds);
@@ -416,7 +416,7 @@ function autoFitTextElement(div, el) {
         const ex = parseFloat(el.x) || 0;
         const ey = parseFloat(el.y) || 0;
         const containerW = window.stickerLayout?.width || 440;
-        
+
         const targetW = (ew > 0) ? ew : Math.max(50, containerW - ex - 5);
         const baseFontSize = parseInt(el.fontSize, 10) || 14;
         const targetH = (eh > 0) ? eh : Math.round(baseFontSize * 1.4) || 24;
@@ -431,7 +431,7 @@ function autoFitTextElement(div, el) {
         clone.style.visibility = 'hidden';
         clone.style.left = '-9999px';
         clone.style.top = '0px';
-        clone.style.width = 'auto';  
+        clone.style.width = 'auto';
         clone.style.height = 'auto';
         clone.style.overflow = 'visible';
         clone.style.whiteSpace = 'nowrap';
@@ -454,24 +454,24 @@ function autoFitTextElement(div, el) {
                 // Single line mode
                 finalWhiteSpace = 'nowrap';
                 scale = idealScale;
-                finalWidth = targetW / scale; 
-                finalHeight = targetH / scale; 
+                finalWidth = targetW / scale;
+                finalHeight = targetH / scale;
             } else {
                 // Multiline enabled AND requires shrinking below minScale
                 finalWhiteSpace = 'pre-wrap';
                 clone.style.whiteSpace = 'pre-wrap';
                 clone.style.wordBreak = 'break-word';
                 clone.style.overflowWrap = 'anywhere';
-                
+
                 const wrapWidth = targetW / minScale;
-                clone.style.width = wrapWidth + 'px'; 
+                clone.style.width = wrapWidth + 'px';
                 clone.style.height = 'auto';
-                
+
                 const wrappedHeight = clone.scrollHeight;
-                
+
                 if (wrappedHeight * minScale > targetH) {
                     scale = targetH / wrappedHeight;
-                    finalWidth = wrapWidth; 
+                    finalWidth = wrapWidth;
                     finalHeight = wrappedHeight;
                 } else {
                     scale = minScale;
@@ -508,22 +508,22 @@ function autoFitTextElement(div, el) {
         } else {
             div.style.transform = 'none';
         }
-        
+
         div.dataset.scale = scale;
         if (div.id.startsWith('editor_')) {
             const isSelected = (window.selectedElementId === el.id);
-            div.style.borderWidth = (isSelected ? (2/scale) : (1/scale)) + 'px';
+            div.style.borderWidth = (isSelected ? (2 / scale) : (1 / scale)) + 'px';
             const handle = document.getElementById('resize_' + el.id) || div.querySelector('[id^="resize_"]');
             if (handle) {
-                handle.style.width = (30/scale) + 'px';
-                handle.style.height = (30/scale) + 'px';
-                handle.style.right = (-15/scale) + 'px';
-                handle.style.bottom = (-15/scale) + 'px';
-                handle.style.borderRadius = (15/scale) + 'px';
+                handle.style.width = (30 / scale) + 'px';
+                handle.style.height = (30 / scale) + 'px';
+                handle.style.right = (-15 / scale) + 'px';
+                handle.style.bottom = (-15 / scale) + 'px';
+                handle.style.borderRadius = (15 / scale) + 'px';
             }
         }
 
-    } catch(e) { console.error('[autoFitTextElement]', e, el?.id); }
+    } catch (e) { console.error('[autoFitTextElement]', e, el?.id); }
 }
 
 
@@ -534,31 +534,31 @@ function startDrag(e, id) {
     isDragging = true;
     startX = e.clientX;
     startY = e.clientY;
-    
+
     const el = window.stickerLayout.elements.find(x => x.id === id);
     initialElemX = el.x;
     initialElemY = el.y;
-    
+
     // Manually update borders instead of re-rendering the whole canvas
     window.stickerLayout.elements.forEach(x => {
         const div = document.getElementById('editor_' + x.id);
         const handle = document.getElementById('resize_' + x.id);
         const s = (div && parseFloat(div.dataset.scale)) || 1;
-        
+
         if (div) {
             div.style.border = x.id === id ? 'solid blue' : 'dashed transparent';
-            div.style.borderWidth = (x.id === id ? 2/s : 1/s) + 'px';
+            div.style.borderWidth = (x.id === id ? 2 / s : 1 / s) + 'px';
         }
         if (handle) {
             handle.style.display = x.id === id ? 'block' : 'none';
-            handle.style.width = (30/s) + 'px';
-            handle.style.height = (30/s) + 'px';
-            handle.style.right = (-15/s) + 'px';
-            handle.style.bottom = (-15/s) + 'px';
-            handle.style.borderRadius = (15/s) + 'px';
+            handle.style.width = (30 / s) + 'px';
+            handle.style.height = (30 / s) + 'px';
+            handle.style.right = (-15 / s) + 'px';
+            handle.style.bottom = (-15 / s) + 'px';
+            handle.style.borderRadius = (15 / s) + 'px';
         }
     });
-    
+
     updatePropertiesPanel();
 }
 
@@ -567,9 +567,9 @@ function startResize(e, id) {
     isResizing = true;
     startX = e.clientX;
     startY = e.clientY;
-    
+
     const el = window.stickerLayout.elements.find(x => x.id === id);
-    
+
     let startW = el.w;
     let startH = el.h;
     const domEl = document.getElementById('editor_' + id);
@@ -578,10 +578,10 @@ function startResize(e, id) {
         if (!startW) startW = domEl.offsetWidth * s;
         if (!startH) startH = domEl.offsetHeight * s;
     }
-    
+
     initialElemW = startW || 100;
     initialElemH = startH || 20;
-    
+
     updatePropertiesPanel();
 }
 
@@ -628,7 +628,7 @@ function updateElementSize(dx, dy) {
     if (el) {
         el.w = Math.max(20, initialElemW + dx);
         el.h = Math.max(10, initialElemH + dy);
-        
+
         const domEl = document.getElementById('editor_' + el.id);
         if (domEl) {
             if (el.type === 'text' && typeof autoFitTextElement === 'function') {
@@ -638,7 +638,7 @@ function updateElementSize(dx, dy) {
                 domEl.style.height = el.h + 'px';
             }
         }
-        
+
         // Also update inputs in properties panel
         const wInp = document.getElementById('seSizeW_' + el.id);
         const hInp = document.getElementById('seSizeH_' + el.id);
@@ -649,7 +649,7 @@ function updateElementSize(dx, dy) {
 
 function openStickerEditor() {
     document.getElementById('stickerEditorModal').style.display = 'flex';
-    
+
     // Populate dropdown
     const sel = document.getElementById('seActiveFormatSelect');
     if (sel && window.stickerLayoutsMap) {
@@ -668,18 +668,18 @@ function openStickerEditor() {
 
     document.getElementById('seCanvasW_mm').value = Math.round((window.stickerLayout.width || 440) / 8);
     document.getElementById('seCanvasH_mm').value = Math.round((window.stickerLayout.height || 220) / 8);
-    
+
     document.getElementById('seMarginT_mm').value = Math.round((window.stickerLayout.marginTop || 0) / 8);
     document.getElementById('seMarginR_mm').value = Math.round((window.stickerLayout.marginRight || 0) / 8);
     document.getElementById('seMarginB_mm').value = Math.round((window.stickerLayout.marginBottom || 0) / 8);
     document.getElementById('seMarginL_mm').value = Math.round((window.stickerLayout.marginLeft || 0) / 8);
-    
+
     const gapEl = document.getElementById('seGap_mm');
     if (gapEl) gapEl.value = window.stickerLayout.gap_mm || 0;
-    
+
     const sensorEl = document.getElementById('seSensor');
     if (sensorEl) sensorEl.value = window.stickerLayout.sensor || "GAP";
-    
+
     const tplNameInput = document.getElementById('seTemplateName');
     const tplDefInput = document.getElementById('seTemplateDefault');
     if (tplNameInput) tplNameInput.value = window.currentTemplateName || "Default";
@@ -689,9 +689,9 @@ function openStickerEditor() {
         // Let's store window.defaultTemplateName globally too.
         tplDefInput.checked = (window.currentTemplateName === window.defaultTemplateName);
     }
-    
+
     selectedElementId = null;
-    
+
     const toggles = document.getElementById('seElementToggles');
     toggles.innerHTML = '';
     window.stickerLayout.elements.forEach(el => {
@@ -710,10 +710,10 @@ function openStickerEditor() {
         lbl.appendChild(document.createTextNode(el.id));
         toggles.appendChild(lbl);
     });
-    
+
     updatePropertiesPanel();
     renderStickerTemplate('stickerEditorCanvas', true);
-    
+
     setTimeout(() => {
         updateStickerCanvasScale('stickerEditorCanvas');
     }, 100);
@@ -731,7 +731,7 @@ function updateStickerCanvasScale(targetId) {
     if (!canvas) return;
     const parent = canvas.parentElement;
     if (parent) {
-        const availableWidth = parent.clientWidth - (cid === 'stickerEditorCanvas' ? 20 : 0); 
+        const availableWidth = parent.clientWidth - (cid === 'stickerEditorCanvas' ? 20 : 0);
         if (window.stickerLayout.width > availableWidth) {
             window.stickerScale = availableWidth / window.stickerLayout.width;
         } else {
@@ -739,7 +739,7 @@ function updateStickerCanvasScale(targetId) {
         }
         canvas.style.transform = `scale(${window.stickerScale})`;
         canvas.style.transformOrigin = 'top left';
-        
+
         if (cid === 'stickerEditorCanvas') {
             // Apply negative margins to shrink the DOM layout bounding box to the scaled size!
             // This prevents flexbox from overflowing and causing scroll bugs on mobile
@@ -759,18 +759,18 @@ function updateStickerCanvasSize() {
     // Only used to update the shared stickerLayout preview bounds before saving
     window.stickerLayout.width = Math.round((parseFloat(document.getElementById('seCanvasW_mm').value) || 55) * 8);
     window.stickerLayout.height = Math.round((parseFloat(document.getElementById('seCanvasH_mm').value) || 27.5) * 8);
-    
+
     window.stickerLayout.marginTop = Math.round((parseFloat(document.getElementById('seMarginT_mm').value) || 0) * 8);
     window.stickerLayout.marginRight = Math.round((parseFloat(document.getElementById('seMarginR_mm').value) || 0) * 8);
     window.stickerLayout.marginBottom = Math.round((parseFloat(document.getElementById('seMarginB_mm').value) || 0) * 8);
     window.stickerLayout.marginLeft = Math.round((parseFloat(document.getElementById('seMarginL_mm').value) || 0) * 8);
-    
+
     const gapEl = document.getElementById('seGap_mm');
     if (gapEl) window.stickerLayout.gap_mm = parseFloat(gapEl.value) || 0;
-    
+
     const sensorEl = document.getElementById('seSensor');
     if (sensorEl) window.stickerLayout.sensor = sensorEl.value || "GAP";
-    
+
     buildCurrentStickerLayout();
     populateTemplateDropdown();
     window.populateFormatDropdown();
@@ -796,24 +796,24 @@ function editStickerFormatSetup() {
     const curLayout = window.stickerLayoutsMap[window.currentTemplateName];
     if (!curLayout) return;
     window.oldFormatName = curLayout.formatId; // Format Name
-    
+
     document.getElementById('fmtModalTitle').innerText = "Edit Format Size";
     document.getElementById('fmtModalBtn').innerText = "Update Format Size";
-    
+
     document.getElementById('newFmtName').value = window.oldFormatName;
-    document.getElementById('newFmtName').readOnly = false; 
-    
+    document.getElementById('newFmtName').readOnly = false;
+
     document.getElementById('newFmtW').value = Math.round((window.stickerLayout.width || 440) / 8);
     document.getElementById('newFmtH').value = Math.round((window.stickerLayout.height || 220) / 8);
     document.getElementById('newFmtGap').value = window.stickerLayout.gap_mm || 0;
     var newSensorEl = document.getElementById('newFmtSensor');
     if (newSensorEl) newSensorEl.value = window.stickerLayout.sensor || "GAP";
-    
+
     document.getElementById('newFmtMT').value = Math.round((window.stickerLayout.marginTop || 0) / 8);
     document.getElementById('newFmtMR').value = Math.round((window.stickerLayout.marginRight || 0) / 8);
     document.getElementById('newFmtMB').value = Math.round((window.stickerLayout.marginBottom || 0) / 8);
     document.getElementById('newFmtML').value = Math.round((window.stickerLayout.marginLeft || 0) / 8);
-    
+
     document.getElementById('newStickerFormatModal').style.display = 'flex';
 }
 
@@ -864,7 +864,7 @@ function saveNewStickerFormat() {
 
     if (!window.stickerFormatsMap) window.stickerFormatsMap = {};
     window.stickerFormatsMap[formatName] = fmt;
-    
+
     // If they renamed an existing format, update all layouts that used the old name and delete the old name
     if (window.isEditingStickerSetup && formatName !== window.oldFormatName) {
         Object.keys(window.stickerLayoutsMap).forEach(layoutName => {
@@ -884,7 +884,7 @@ function saveNewStickerFormat() {
     buildCurrentStickerLayout();
     window.populateFormatDropdown();
     renderStickerTemplate('stickerEditorCanvas', true);
-    
+
     // Save to Firebase immediately
     saveStickerLayout(true);
 }
@@ -892,17 +892,17 @@ function saveNewStickerFormat() {
 function updatePropertiesPanel() {
     const panel = document.getElementById('seSelectedProps');
     panel.innerHTML = '';
-    
+
     if (!selectedElementId) {
         panel.innerHTML = '<div style="color:#888; font-style:italic;">None selected</div>';
         return;
     }
-    
+
     const el = window.stickerLayout.elements.find(x => x.id === selectedElementId);
     if (!el) return;
-    
+
     const wrapper = document.createElement('div');
-    
+
     const lbl = document.createElement('div');
     lbl.style.fontWeight = 'bold';
     lbl.innerText = el.id.replace('stk', '');
@@ -924,14 +924,14 @@ function updatePropertiesPanel() {
         };
         wrapper.appendChild(document.createTextNode('Font Size: '));
         wrapper.appendChild(range);
-        
+
         // Formatting options
         const fmtRow = document.createElement('div');
         fmtRow.style.display = 'flex';
         fmtRow.style.gap = '10px';
         fmtRow.style.marginTop = '8px';
         fmtRow.style.marginBottom = '8px';
-        
+
         const createToggle = (label, prop, trueVal, falseVal) => {
             const lbl = document.createElement('label');
             lbl.style.display = 'flex';
@@ -948,14 +948,14 @@ function updatePropertiesPanel() {
             lbl.appendChild(document.createTextNode(label));
             return lbl;
         };
-        
+
         fmtRow.appendChild(createToggle('B', 'fontWeight', 'bold', 'normal'));
         fmtRow.appendChild(createToggle('Thick', 'textThick', true, false));
         fmtRow.appendChild(createToggle('I', 'fontStyle', 'italic', 'normal'));
         fmtRow.appendChild(createToggle('U', 'textDecoration', 'underline', 'none'));
         fmtRow.appendChild(createToggle('M', 'multiline', true, false));
         wrapper.appendChild(fmtRow);
-        
+
         const prefixInp = document.createElement('input');
         prefixInp.type = 'text';
         prefixInp.value = el.prefix || '';
@@ -981,7 +981,7 @@ function updatePropertiesPanel() {
             renderStickerTemplate('stickerEditorCanvas', true);
         };
         wrapper.appendChild(suffixInp);
-        
+
         if (el.text !== undefined) {
             const txt = document.createElement('input');
             txt.type = 'text';
@@ -997,13 +997,13 @@ function updatePropertiesPanel() {
             wrapper.appendChild(txt);
         }
     }
-    
+
     // Width and Height inputs available for ALL elements
     const row = document.createElement('div');
     row.style.display = 'flex';
     row.style.gap = '5px';
     row.style.marginTop = '8px';
-    
+
     const wInp = document.createElement('input');
     wInp.type = 'number';
     wInp.id = 'seSizeW_' + el.id;
@@ -1021,7 +1021,7 @@ function updatePropertiesPanel() {
             }
         }
     };
-    
+
     const hInp = document.createElement('input');
     hInp.type = 'number';
     hInp.id = 'seSizeH_' + el.id;
@@ -1039,12 +1039,12 @@ function updatePropertiesPanel() {
             }
         }
     };
-    
+
     row.appendChild(wInp);
     row.appendChild(hInp);
     wrapper.appendChild(document.createTextNode('Size Box (W x H):'));
     wrapper.appendChild(row);
-    
+
     panel.appendChild(wrapper);
 }
 
@@ -1053,18 +1053,18 @@ async function saveStickerLayout(skipAlert = false) {
         const nameInput = document.getElementById('seTemplateName');
         const defInput = document.getElementById('seTemplateDefault');
         let tplName = (nameInput && nameInput.value.trim() !== '') ? nameInput.value.trim() : window.currentTemplateName;
-        
+
         const formatSelect = document.getElementById('seActiveFormatIdSelect');
-        const selectedFormatId = (formatSelect && formatSelect.value) ? formatSelect.value : 
+        const selectedFormatId = (formatSelect && formatSelect.value) ? formatSelect.value :
             (window.stickerLayoutsMap[window.currentTemplateName]?.formatId || Object.keys(window.stickerFormatsMap)[0]);
-        
+
         window.stickerLayoutsMap[tplName] = {
             formatId: selectedFormatId,
             elements: JSON.parse(JSON.stringify(window.stickerLayout.elements || []))
         };
-        
+
         window.currentTemplateName = tplName;
-        
+
         if (defInput && defInput.checked) {
             window.defaultTemplateName = tplName;
         } else if (!window.defaultTemplateName) {
@@ -1076,10 +1076,10 @@ async function saveStickerLayout(skipAlert = false) {
             layouts: window.stickerLayoutsMap,
             defaultLayoutName: window.defaultTemplateName
         }, { merge: true });
-        
+
         if (!skipAlert) alert("Layout Saved successfully!");
         populateTemplateDropdown();
-    } catch(e) {
+    } catch (e) {
         console.error("Failed to save layout", e);
         if (!skipAlert) alert("Error saving layout!");
     }

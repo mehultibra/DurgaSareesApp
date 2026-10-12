@@ -7,11 +7,71 @@ const FIRESTORE_USERS_URL = "https://firestore.googleapis.com/v1/projects/durga-
 
 window.getRobustStock = function(p, fname, isCoverFallback) {
     if (!p || !p.stock) return 999;
+    if (p.stock['FULLY_PACKED'] === 1) return 0;
     if (p.stock[fname] !== undefined) return p.stock[fname];
     if (isCoverFallback && p.stock['Cover'] !== undefined) return p.stock['Cover'];
-    var nameWithoutExt = fname.replace(/\.[^/.]+$/, "");
+    if (isCoverFallback && p.stock['DIRECT'] !== undefined) return p.stock['DIRECT'];
+    var nameWithoutExt = String(fname || '').replace(/\.[^/.]+$/, "").trim();
     if (p.stock[nameWithoutExt] !== undefined) return p.stock[nameWithoutExt];
+    var num = parseInt(nameWithoutExt.replace(/\D/g, ''), 10);
+    if (!isNaN(num)) {
+        var numStr = String(num);
+        if (p.stock[numStr] !== undefined) return p.stock[numStr];
+        var pad2 = String(num).padStart(2, '0');
+        if (p.stock[pad2] !== undefined) return p.stock[pad2];
+    }
     return 999;
+};
+
+window.isDesignInStock = function(p, fname) {
+    if (!p) return false;
+    if (p.stock && p.stock['FULLY_PACKED'] === 1) return false;
+
+    var cleanName = String(fname || '').replace(/\.[^/.]+$/, "").trim();
+    var num = parseInt(cleanName.replace(/\D/g, ''), 10);
+    var numStr = !isNaN(num) ? String(num) : "";
+    var pad2 = !isNaN(num) ? String(num).padStart(2, '0') : "";
+    var isCover = /^(cover|cover1)$/i.test(cleanName) || 
+                  (p.coverDesignId && cleanName.toLowerCase() === String(p.coverDesignId).replace(/\.[^/.]+$/, "").trim().toLowerCase());
+
+    if (p.stock) {
+        var candidates = [fname, cleanName];
+        if (numStr) candidates.push(numStr);
+        if (pad2) candidates.push(pad2);
+        if (isCover) {
+            candidates.push('Cover');
+            candidates.push('DIRECT');
+        }
+
+        var matchedVal = undefined;
+        for (var i = 0; i < candidates.length; i++) {
+            var k = candidates[i];
+            if (p.stock[k] !== undefined) {
+                matchedVal = p.stock[k];
+                break;
+            }
+        }
+
+        if (matchedVal !== undefined) {
+            return matchedVal > 0;
+        }
+
+        var specificKeys = Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
+        if (specificKeys.length > 0) {
+            return false;
+        }
+    }
+
+    if (p.ready && String(p.ready).trim().length > 0) {
+        var rArr = String(p.ready).split(',').map(s => s.trim().replace(/\.[^/.]+$/, '').toLowerCase()).filter(Boolean);
+        if (rArr.length > 0) {
+            return rArr.includes(cleanName.toLowerCase()) || 
+                   (numStr && rArr.includes(numStr.toLowerCase())) || 
+                   (pad2 && rArr.includes(pad2.toLowerCase()));
+        }
+    }
+
+    return true;
 };
 history.replaceState({ modal: 'main' }, '');
 
