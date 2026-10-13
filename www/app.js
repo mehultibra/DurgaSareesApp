@@ -1846,7 +1846,8 @@ var missingDesignSvg = "data:image/svg+xml;utf8," + encodeURIComponent(`
 
 function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName, folderPath, isCover, zoomFolderPath, isInStock) {
     if (imgEl.getAttribute('data-loaded-zoom') === 'true') return;
-    setTimeout(async function () {
+    // Run immediately (no setTimeout) so IDB lookup starts in the same microtask queue
+    (async function () {
         try {
             // STEP 1: IDB direct hit for zoom (Fastest)
             var zoomBlob = await getImageFromDB(url);
@@ -1935,7 +1936,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                 window.logAppError('Zoom Image Error', e.message + " | " + pName);
             }
         }
-    }, 0);
+    })();
 }
 
 function fetchZoomNatively(zoomUrl, imgEl) {
@@ -2533,6 +2534,20 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
         var placeholderSVG = window.dsMissingImage;
 
+        // ⚡ PRE-CACHE LOOKUP: Check sessionImageCache (RAM) synchronously for instant HD inject.
+        // For any zoom URL already in RAM, we'll inject the HD src directly into the HTML.
+        var cachedBlobUrls = {}; // zoomUrl -> objectURL string
+        files.forEach((file) => {
+            if (file.isVideo || !file.url) return;
+            var zoomBlob = window.sessionImageCache && window.sessionImageCache.get(file.url);
+            if (zoomBlob) {
+                // Blob is in RAM — create an objectURL for instant inject
+                try {
+                    cachedBlobUrls[file.url] = URL.createObjectURL(zoomBlob);
+                } catch(e) { /* ignore */ }
+            }
+        });
+
         // 🚀 HTML IS BUILT IMMEDIATELY WITH NO AWAIT FOR LIGHTNING FAST PANEL OPEN
         var html = '';
         files.forEach((file, idx) => {
@@ -2580,11 +2595,15 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 var cleanCoverId = p.coverDesignId ? String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() : '';
                 var cleanFileName = String(file.name).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
                 var isCover = (cleanCoverId !== '' && cleanCoverId === cleanFileName);
+                // ⚡ Use cached HD blob URL if available, otherwise start with grid URL (low-res placeholder)
+                var alreadyCached = !!(cachedBlobUrls[file.url]);
+                var initialSrc = alreadyCached ? cachedBlobUrls[file.url] : (file.gridUrl || placeholderSVG);
+                var loadedZoomAttr = alreadyCached ? 'true' : 'false';
                 html += `
                 <div class="swipe-card" data-design="${file.name}" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
                     ${adminCheckboxHtml}
                     ${window.isAdminMode ? `<i class="${isCover ? 'fas' : 'far'} fa-star" style="position:absolute; top:8px; right:8px; color:gold; font-size:18px; cursor:pointer; background:rgba(0,0,0,0.5); padding:6px; border-radius:50%; z-index:10;" onclick="event.stopPropagation(); window.promptSetAsCover('${p.docId}', '${p.id}', '${file.name}')" title="Set as Cover"></i>` : ''}
-                    <img id="${imgId}" src="${file.gridUrl || placeholderSVG}" data-loaded-zoom="false" data-zoom-url="${file.url}">
+                    <img id="${imgId}" src="${initialSrc}" data-loaded-zoom="${loadedZoomAttr}" data-zoom-url="${file.url}">
                     <div class="swipe-card-bot" onclick="event.stopPropagation()">
                         <div style="font-weight:bold; font-size:12px; color:var(--text-main); display:flex; align-items:center; gap:6px;">
                             ${file.name}
@@ -2603,6 +2622,8 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 var imgId = "design_img_" + p.id + "_" + idx;
                 var imgEl = document.getElementById(imgId);
                 if (imgEl) {
+                    // Store the pre-created objectURL on the element so loadAndCacheDesignImage can revoke old ones
+                    if (cachedBlobUrls[file.url]) imgEl.dataset.tempBlobUrl = cachedBlobUrls[file.url];
                     var currentStock = window.getRobustStock(p, file.name, /^(cover|cover1)\./i.test(file.name));
                     loadAndCacheDesignImage(imgEl, file.url, file.gridUrl, p.id, file.name, p.gridUrl, /^(cover|cover1)$/i.test(file.name), cleanZoomPath, currentStock > 0);
                 }
