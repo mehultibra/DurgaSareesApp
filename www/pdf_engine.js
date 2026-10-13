@@ -120,6 +120,12 @@ async function getActualDesignsForProduct(p, shareType, action) {
     var filesToReturn = [...rawFiles];
     if (shareType === 'ready') {
         filesToReturn = filesToReturn.filter(f => isDesignInStock(p, f));
+        if (filesToReturn.length === 0 && (isDesignInStock(p, 'Cover') || isDesignInStock(p, 'DIRECT') || (p.totalStock && p.totalStock > 0))) {
+            var dsFallbackMap = {};
+            try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+            var coverFile = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl] || "cover.webp";
+            filesToReturn = [coverFile.includes('.') ? coverFile : coverFile + ".webp"];
+        }
     }
 
     // 4. ORDER WITH CHOSEN COVER FIRST, THEN NUMERICAL
@@ -237,9 +243,19 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
         urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.png?alt=media'));
     }
 
-    if (typeof curProduct !== 'undefined' && curProduct && curProduct.zoomUrl && curProduct.gridUrl) {
-        var encZoom = encodeURIComponent(curProduct.zoomUrl.trim().replace(/\\/g, '/'));
-        var encGrid = encodeURIComponent(curProduct.gridUrl.trim().replace(/\\/g, '/'));
+    var matchingProd = (typeof curProduct !== 'undefined' && curProduct) ? curProduct : null;
+    if (typeof allProducts !== 'undefined' && Array.isArray(allProducts)) {
+        var found = allProducts.find(p => {
+            if (p.zoomUrl && p.zoomUrl !== 'None' && cacheKey.includes(encodeURIComponent(p.zoomUrl.trim().replace(/\\/g, '/')))) return true;
+            if (p.gridUrl && cacheKey.includes(encodeURIComponent(p.gridUrl.trim().replace(/\\/g, '/')))) return true;
+            return false;
+        });
+        if (found) matchingProd = found;
+    }
+
+    if (matchingProd && matchingProd.zoomUrl && matchingProd.gridUrl) {
+        var encZoom = encodeURIComponent(matchingProd.zoomUrl.trim().replace(/\\/g, '/'));
+        var encGrid = encodeURIComponent(matchingProd.gridUrl.trim().replace(/\\/g, '/'));
         if (cacheKey.includes(encZoom)) {
             var gUrl = cacheKey.replace(encZoom, encGrid);
             if (!urlsToTry.includes(gUrl)) urlsToTry.push(gUrl);
@@ -247,6 +263,10 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
             var zUrl = cacheKey.replace(encGrid, encZoom);
             if (!urlsToTry.includes(zUrl)) urlsToTry.push(zUrl);
         }
+    }
+
+    if (matchingProd && matchingProd.gridUrl && isCoverOrGarbage) {
+        if (!urlsToTry.includes(matchingProd.gridUrl)) urlsToTry.push(matchingProd.gridUrl);
     }
 
     if (isCoverOrGarbage) {
@@ -350,34 +370,41 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
 
 async function resolveCorrectUrl(p, dId, overrideFolder) {
     if (!p) return null;
-    var folderPath = overrideFolder || ((p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl);
     
     // 1. Check if the cover is explicitly remapped via dsFallbackMap
-    var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover');
-    if (isCover) {
-        var dsFallbackMap = {};
-        try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
-        var fallbackFileName = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
-        if (fallbackFileName) {
-            dId = fallbackFileName;
-        }
-    }
+    var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover' || /^(cover|cover1)\.(webp|jpg|jpeg|png)$/i.test(String(dId)));
+    var dsFallbackMap = {};
+    try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+    var fallbackFileName = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    
+    // Covers are located in gridUrl (or zoomUrl if overridden/explicit)
+    var folderPath = overrideFolder || (isCover ? (p.gridUrl || p.zoomUrl) : ((p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl));
+    if (!folderPath) folderPath = p.gridUrl || p.zoomUrl || "";
     var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     
-    var fileName = "01.webp";
-    if (dId !== 'DIRECT' && dId !== 'Cover') {
-        if (/\.(webp|jpg|jpeg|png)$/i.test(dId)) {
-            fileName = dId;
+    var fileName = "cover.webp";
+    if (isCover) {
+        if (fallbackFileName) {
+            fileName = /\.(webp|jpg|jpeg|png)$/i.test(fallbackFileName) ? fallbackFileName : String(fallbackFileName).trim() + ".webp";
+        } else if (dId && dId !== 'DIRECT' && dId !== 'Cover') {
+            fileName = /\.(webp|jpg|jpeg|png)$/i.test(dId) ? dId : String(dId).trim() + ".webp";
         } else {
-            fileName = String(dId).trim() + ".webp";
+            fileName = "cover.webp";
+        }
+    } else {
+        if (dId) {
+            fileName = /\.(webp|jpg|jpeg|png)$/i.test(dId) ? dId : String(dId).trim() + ".webp";
+        } else {
+            fileName = "01.webp";
         }
     }
 
     return fbBase + encPath + "%2F" + encodeURIComponent(fileName) + "?alt=media";
 }
+window.resolveCorrectUrl = resolveCorrectUrl;
 
 
 
@@ -1141,11 +1168,19 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             var wixUrl = buildWixProductUrl(product);
             
             var folderPath = (product.zoomUrl && product.zoomUrl !== "None") ? product.zoomUrl : product.gridUrl;
-            var dArr = await getActualDesignsForProduct(product, shareType);
+            var dArr = await getActualDesignsForProduct(product, shareType, actionType);
             
             var coverUrl;
             if (dArr.length > 0) {
-                coverUrl = await resolveCorrectUrl(product, dArr[0]);
+                var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
+                var fallbackFile = product.coverDesignId || dsFallbackMap[product.gridUrl] || dsFallbackMap[product.zoomUrl];
+                if (fallbackFile) {
+                    coverUrl = await resolveCorrectUrl(product, fallbackFile);
+                } else if (dArr.length > 0) {
+                    coverUrl = await resolveCorrectUrl(product, dArr[0]);
+                } else {
+                    coverUrl = await resolveCorrectUrl(product, 'DIRECT');
+                }
             } else {
                 if (shareType === 'ready') {
                     continue; // Skip products with 0 ready stock in favorites PDF
@@ -1178,7 +1213,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
             }
             
             // --- DRAW DESIGN PAGES IF REQUIRED ---
-            if (dArr.length > 0) {
+            if (dArr.length > 0 && shareType !== 'cover') {
                 for (var j = 1; j < dArr.length; j++) {
                     var dId = dArr[j];
                     var dUrl = await resolveCorrectUrl(product, dId);
@@ -1193,6 +1228,12 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 }
             }
         } // End loop over products
+
+        if (isFirstPage) {
+            if (bootScreen) bootScreen.style.display = 'none';
+            alert("No ready designs currently in stock for the selected favorite items.");
+            return;
+        }
         
         var fileName = "Favorite_Items_Catalog.pdf";
         if (actionType === 'preview') {
@@ -1572,11 +1613,22 @@ window.triggerShare = async function (action) {
                     coverDesignId = readyDesigns[0];
                 }
 
-                allHighResUrls.push(await resolveCorrectUrl(fp, coverDesignId));
+                var cUrl = await resolveCorrectUrl(fp, coverDesignId);
+                if (cUrl && !allHighResUrls.includes(cUrl)) {
+                    allHighResUrls.push(cUrl);
+                }
             }
         }
 
         if (action === 'images') {
+            if (allHighResUrls.length === 0) {
+                if (shareType === 'ready') {
+                    alert("No ready designs currently in stock for the selected favorite items.");
+                } else {
+                    alert("No images found to share for the selected items.");
+                }
+                return;
+            }
             if (allHighResUrls.length > 100) {
                 alert("⚠ ️ WhatsApp limits sharing to 100 images at a time. Only the first 100 items will be sent successfully.");
                 allHighResUrls = allHighResUrls.slice(0, 100);
@@ -1585,8 +1637,8 @@ window.triggerShare = async function (action) {
                 await shareNativeImages("Favorite Items", "", allHighResUrls);
             }
         } else if (action === 'wa') {
-            if (typeof generateFavoritesPDF === 'function') {
-                await generateFavoritesPDF(favProducts, shareType, action);
+            if (typeof window.generateFavoritesPDF === 'function') {
+                await window.generateFavoritesPDF(favProducts, shareType, action);
             }
         }
         return;
