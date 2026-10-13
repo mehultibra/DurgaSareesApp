@@ -243,19 +243,9 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
         urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.png?alt=media'));
     }
 
-    var matchingProd = (typeof curProduct !== 'undefined' && curProduct) ? curProduct : null;
-    if (typeof allProducts !== 'undefined' && Array.isArray(allProducts)) {
-        var found = allProducts.find(p => {
-            if (p.zoomUrl && p.zoomUrl !== 'None' && cacheKey.includes(encodeURIComponent(p.zoomUrl.trim().replace(/\\/g, '/')))) return true;
-            if (p.gridUrl && cacheKey.includes(encodeURIComponent(p.gridUrl.trim().replace(/\\/g, '/')))) return true;
-            return false;
-        });
-        if (found) matchingProd = found;
-    }
-
-    if (matchingProd && matchingProd.zoomUrl && matchingProd.gridUrl) {
-        var encZoom = encodeURIComponent(matchingProd.zoomUrl.trim().replace(/\\/g, '/'));
-        var encGrid = encodeURIComponent(matchingProd.gridUrl.trim().replace(/\\/g, '/'));
+    if (typeof curProduct !== 'undefined' && curProduct && curProduct.zoomUrl && curProduct.gridUrl) {
+        var encZoom = encodeURIComponent(curProduct.zoomUrl.trim().replace(/\\/g, '/'));
+        var encGrid = encodeURIComponent(curProduct.gridUrl.trim().replace(/\\/g, '/'));
         if (cacheKey.includes(encZoom)) {
             var gUrl = cacheKey.replace(encZoom, encGrid);
             if (!urlsToTry.includes(gUrl)) urlsToTry.push(gUrl);
@@ -263,10 +253,6 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
             var zUrl = cacheKey.replace(encGrid, encZoom);
             if (!urlsToTry.includes(zUrl)) urlsToTry.push(zUrl);
         }
-    }
-
-    if (matchingProd && matchingProd.gridUrl && isCoverOrGarbage) {
-        if (!urlsToTry.includes(matchingProd.gridUrl)) urlsToTry.push(matchingProd.gridUrl);
     }
 
     if (isCoverOrGarbage) {
@@ -370,36 +356,34 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
 
 async function resolveCorrectUrl(p, dId, overrideFolder) {
     if (!p) return null;
+    var folderPath = overrideFolder || ((p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl);
     
     // 1. Check if the cover is explicitly remapped via dsFallbackMap
-    var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover' || /^(cover|cover1)\.(webp|jpg|jpeg|png)$/i.test(String(dId)));
-    var dsFallbackMap = {};
-    try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
-    var fallbackFileName = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
+    var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover');
+    if (isCover) {
+        var dsFallbackMap = {};
+        try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+        var fallbackFileName = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
+        if (fallbackFileName) {
+            dId = fallbackFileName;
+            isCover = false; // treat as named design now
+        }
+    }
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
-    
-    // Covers are located in gridUrl (or zoomUrl if overridden/explicit)
-    var folderPath = overrideFolder || (isCover ? (p.gridUrl || p.zoomUrl) : ((p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl));
-    if (!folderPath) folderPath = p.gridUrl || p.zoomUrl || "";
     var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     
-    var fileName = "cover.webp";
+    var fileName;
     if (isCover) {
-        if (fallbackFileName) {
-            fileName = /\.(webp|jpg|jpeg|png)$/i.test(fallbackFileName) ? fallbackFileName : String(fallbackFileName).trim() + ".webp";
-        } else if (dId && dId !== 'DIRECT' && dId !== 'Cover') {
-            fileName = /\.(webp|jpg|jpeg|png)$/i.test(dId) ? dId : String(dId).trim() + ".webp";
-        } else {
-            fileName = "cover.webp";
-        }
+        // DIRECT or Cover with no fallback — try cover.webp first (most products use this)
+        fileName = "cover.webp";
+    } else if (dId && /\.(webp|jpg|jpeg|png)$/i.test(dId)) {
+        fileName = dId;
+    } else if (dId) {
+        fileName = String(dId).trim() + ".webp";
     } else {
-        if (dId) {
-            fileName = /\.(webp|jpg|jpeg|png)$/i.test(dId) ? dId : String(dId).trim() + ".webp";
-        } else {
-            fileName = "01.webp";
-        }
+        fileName = "cover.webp";
     }
 
     return fbBase + encPath + "%2F" + encodeURIComponent(fileName) + "?alt=media";
