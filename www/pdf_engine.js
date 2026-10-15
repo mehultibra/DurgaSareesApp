@@ -2,7 +2,7 @@
 // 🌸 DURGA SAREES: PDF ENGINE (V7 - CART PDF + WIX LINKS)
 // ==========================================
 
-function isDesignInStock(p, fname) {
+function checkStock(p, fname) {
     if (typeof window !== 'undefined' && typeof window.isDesignInStock === 'function') {
         return window.isDesignInStock(p, fname);
     }
@@ -119,8 +119,8 @@ async function getActualDesignsForProduct(p, shareType, action) {
     // 3. FILTER BY STOCK (Ready Designs)
     var filesToReturn = [...rawFiles];
     if (shareType === 'ready') {
-        filesToReturn = filesToReturn.filter(f => isDesignInStock(p, f));
-        if (filesToReturn.length === 0 && (isDesignInStock(p, 'Cover') || isDesignInStock(p, 'DIRECT') || (p.totalStock && p.totalStock > 0))) {
+        filesToReturn = filesToReturn.filter(f => checkStock(p, f));
+        if (filesToReturn.length === 0 && (checkStock(p, 'Cover') || checkStock(p, 'DIRECT') || (p.totalStock && p.totalStock > 0))) {
             var dsFallbackMap = {};
             try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
             var coverFile = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl] || "cover.webp";
@@ -895,9 +895,10 @@ async function generateCartOrderPDF(actionType) {
 
         if (bootScreen) bootScreen.style.display = 'none';
 
-        var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
-        var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
-        var isCapacitor = !!fsPlugin;
+        var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+        var fsPlugin = isNative ? (window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem)) : null;
+        var sharePlugin = isNative ? (window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share)) : null;
+        var isCapacitor = !!(isNative && fsPlugin);
 
         if (actionType === 'print') {
             if (isCapacitor && window.CapacitorPrinter) {
@@ -1157,9 +1158,10 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
         if (actionType === 'preview') {
             doc.output('dataurlnewwindow');
         } else if (actionType === 'wa' || actionType === 'print') {
-            var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
-            var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
-            var isCapacitor = !!(fsPlugin && sharePlugin);
+            var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+            var fsPlugin = isNative ? (window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem)) : null;
+            var sharePlugin = isNative ? (window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share)) : null;
+            var isCapacitor = !!(isNative && fsPlugin && sharePlugin);
 
             if (isCapacitor) {
                 var pureBase64 = doc.output('datauristring').split(',')[1];
@@ -1254,7 +1256,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 }
                 var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
                 var fallbackFile = product.coverDesignId || dsFallbackMap[product.gridUrl] || dsFallbackMap[product.zoomUrl];
-                var readyFallback = (product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d && isDesignInStock(product, d)) : [];
+                var readyFallback = (product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d && checkStock(product, d)) : [];
                 var coverDesignId = 'DIRECT';
                 
                 if (fallbackFile) {
@@ -1306,9 +1308,10 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
         if (actionType === 'preview') {
             doc.output('dataurlnewwindow');
         } else if (actionType === 'wa' || actionType === 'print') {
-            var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
-            var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
-            var isCapacitor = !!(fsPlugin && sharePlugin);
+            var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+            var fsPlugin = isNative ? (window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem)) : null;
+            var sharePlugin = isNative ? (window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share)) : null;
+            var isCapacitor = !!(isNative && fsPlugin && sharePlugin);
             if (isCapacitor) {
                 var pureBase64 = doc.output('datauristring').split(',')[1];
                 var writeResult = await fsPlugin.writeFile({
@@ -1362,9 +1365,10 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
     window.isSharing = true;
 
     try {
-        var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
-        var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
-        var isCapacitor = !!(fsPlugin && sharePlugin);
+        var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+        var fsPlugin = isNative ? (window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem)) : null;
+        var sharePlugin = isNative ? (window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share)) : null;
+        var isCapacitor = !!(isNative && fsPlugin && sharePlugin);
         var nativeSuccess = false;
 
         if (isCapacitor) {
@@ -1692,7 +1696,7 @@ window.triggerShare = async function (action) {
                     continue; // Skip products with 0 ready stock
                 }
                 var fallbackFile = fp.coverDesignId || dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
-                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && isDesignInStock(fp, d)) : [];
+                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && checkStock(fp, d)) : [];
                 var coverDesignId = 'DIRECT';
 
                 if (fallbackFile) {
@@ -1760,7 +1764,7 @@ window.triggerShare = async function (action) {
         // Cover mode: Use curProduct.coverDesignId first, then dsFallbackMap, then ready designs, then DIRECT
         var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
         var fallbackFile = curProduct.coverDesignId || dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
-        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && isDesignInStock(curProduct, d)) : [];
+        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && checkStock(curProduct, d)) : [];
         var coverDesignId = 'DIRECT';
 
         if (fallbackFile) {

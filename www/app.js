@@ -7191,8 +7191,9 @@ window.shareWhatsAppLink = async function () {
         textMsg = (typeof window.generateShareMessage === 'function') ? window.generateShareMessage(targetProd) : ("*Durga Sarees* - " + targetProd.name);
     }
 
-    var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
-    var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
+    var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    var sharePlugin = isNative ? (window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share)) : null;
+    var fsPlugin = isNative ? (window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem)) : null;
 
     if (sharePlugin) {
         var writeRes = null;
@@ -7253,27 +7254,30 @@ window.shareWhatsAppLink = async function () {
                 shareOpts.files = [writeRes.uri];
             }
             await sharePlugin.share(shareOpts);
+            return;
         } catch (shareErr) {
-            if (!shareErr.message || !shareErr.message.toLowerCase().includes("cancel")) {
-                console.warn("Share with file failed, retrying text-only:", shareErr);
-                try {
-                    await sharePlugin.share({
-                        title: targetProd ? targetProd.name : "Durga Sarees",
-                        text: textMsg
-                    });
-                } catch (e2) {}
+            if (shareErr && shareErr.message && shareErr.message.toLowerCase().includes("cancel")) {
+                return;
             }
-        }
-    } else {
-        if (navigator.share) {
-            navigator.share({
-                title: targetProd ? targetProd.name : "Durga Sarees",
-                text: textMsg
-            }).catch(() => {});
-        } else {
-            window.open("https://wa.me/?text=" + encodeURIComponent(textMsg), '_blank');
+            console.warn("Native share failed, falling back to direct WhatsApp link:", shareErr);
         }
     }
+
+    // Web Fallback: Try navigator.share if available
+    if (typeof navigator !== 'undefined' && navigator.share) {
+        try {
+            await navigator.share({
+                title: targetProd ? targetProd.name : "Durga Sarees",
+                text: textMsg
+            });
+            return;
+        } catch (e) {
+            if (e && (e.name === 'AbortError' || (e.message && e.message.toLowerCase().includes('cancel')))) return;
+        }
+    }
+
+    // Ultimate Fallback: Open WhatsApp link directly
+    window.open("https://wa.me/?text=" + encodeURIComponent(textMsg), '_blank');
 };
 
 window.openLiveAdmin = function () {
