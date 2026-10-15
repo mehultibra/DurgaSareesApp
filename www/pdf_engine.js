@@ -895,7 +895,9 @@ async function generateCartOrderPDF(actionType) {
 
         if (bootScreen) bootScreen.style.display = 'none';
 
-        var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
+        var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
+        var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
+        var isCapacitor = !!fsPlugin;
 
         if (actionType === 'print') {
             if (isCapacitor && window.CapacitorPrinter) {
@@ -917,7 +919,7 @@ async function generateCartOrderPDF(actionType) {
             var pureBase64 = doc.output('datauristring').split(',')[1];
             var writeResult = null;
             try {
-                writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                writeResult = await fsPlugin.writeFile({
                     path: fileName,
                     data: pureBase64,
                     directory: "DOCUMENTS"
@@ -925,7 +927,7 @@ async function generateCartOrderPDF(actionType) {
             } catch(saveErr) {
                 // Fallback to CACHE if DOCUMENTS fails (some devices need permission)
                 try {
-                    writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                    writeResult = await fsPlugin.writeFile({
                         path: fileName,
                         data: pureBase64,
                         directory: "CACHE"
@@ -933,9 +935,9 @@ async function generateCartOrderPDF(actionType) {
                 } catch(e2) { console.warn("PDF save failed", e2); }
             }
 
-            if (writeResult) {
+            if (writeResult && sharePlugin) {
                 // 2. Open Share picker so PDF is attached
-                await window.Capacitor.Plugins.Share.share({
+                await sharePlugin.share({
                     title: "Durga Sarees Order",
                     files: [writeResult.uri]
                 });
@@ -1155,12 +1157,13 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
         if (actionType === 'preview') {
             doc.output('dataurlnewwindow');
         } else if (actionType === 'wa' || actionType === 'print') {
-            var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins &&
-                window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+            var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
+            var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
+            var isCapacitor = !!(fsPlugin && sharePlugin);
 
             if (isCapacitor) {
                 var pureBase64 = doc.output('datauristring').split(',')[1];
-                var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                var writeResult = await fsPlugin.writeFile({
                     path: fileName,
                     data: pureBase64,
                     directory: "CACHE"
@@ -1186,7 +1189,7 @@ window.generateNativePDF = async function (product, imageUrlsArray, actionType) 
                     } catch(e) {}
                 }
                 
-                await window.Capacitor.Plugins.Share.share({
+                await sharePlugin.share({
                     title: product.name + ' Catalog',
                     text: copyText,
                     files: [writeResult.uri]
@@ -1303,13 +1306,15 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
         if (actionType === 'preview') {
             doc.output('dataurlnewwindow');
         } else if (actionType === 'wa' || actionType === 'print') {
-            var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+            var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
+            var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
+            var isCapacitor = !!(fsPlugin && sharePlugin);
             if (isCapacitor) {
                 var pureBase64 = doc.output('datauristring').split(',')[1];
-                var writeResult = await window.Capacitor.Plugins.Filesystem.writeFile({
+                var writeResult = await fsPlugin.writeFile({
                     path: fileName, data: pureBase64, directory: "CACHE"
                 });
-                await window.Capacitor.Plugins.Share.share({
+                await sharePlugin.share({
                     title: 'Favorite Items Catalog', files: [writeResult.uri]
                 });
             } else {
@@ -1357,8 +1362,9 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
     window.isSharing = true;
 
     try {
-        var isCapacitor = !!(window.Capacitor && window.Capacitor.Plugins &&
-            window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem);
+        var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
+        var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
+        var isCapacitor = !!(fsPlugin && sharePlugin);
         var nativeSuccess = false;
 
         if (isCapacitor) {
@@ -1371,21 +1377,24 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                 for (var i = 0; i < base64Results.length; i++) {
                     var base64Img = base64Results[i];
                     if (base64Img) {
-                        var pureBase64 = base64Img.split(',')[1];
+                        var pureBase64 = base64Img.includes(',') ? base64Img.split(',')[1] : base64Img;
                         var ext = 'jpg';
                         var fileName = productName.replace(/[^a-zA-Z0-9]/g, "_") + "_Design_" + i + "_" + Date.now() + "." + ext;
                         writePromises.push(
-                            window.Capacitor.Plugins.Filesystem.writeFile({
+                            fsPlugin.writeFile({
                                 path: fileName,
                                 data: pureBase64,
                                 directory: "CACHE"
-                            }).then(r => r.uri)
+                            }).then(r => r.uri).catch(err => {
+                                console.warn("Failed writing image to cache:", err);
+                                return null;
+                            })
                         );
                     } else {
                         failedUrls.push(imageUrlsArray[i]);
                     }
                 }
-                var uriArray = await Promise.all(writePromises);
+                var uriArray = (await Promise.all(writePromises)).filter(Boolean);
 
                 if (failedUrls.length > 0) {
                     var errMsg = "Failed to fetch " + failedUrls.length + " images. URLs: " + failedUrls.join(', ');
@@ -1442,13 +1451,15 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                     }
                 }
 
-                await window.Capacitor.Plugins.Share.share(shareOptions);
+                await sharePlugin.share(shareOptions);
                 nativeSuccess = true;
             } catch (nativeErr) {
-                if (nativeErr.message && nativeErr.message.toLowerCase().includes("cancel")) {
+                var errStr = String(nativeErr && nativeErr.message ? nativeErr.message : nativeErr).toLowerCase();
+                if (errStr.includes("cancel") || errStr.includes("dismiss")) {
                     nativeSuccess = true; // User cancelled, prevent fallback
                 } else {
-                    console.warn("Native plugins not compiled in this APK or share failed. Falling back to web share.", nativeErr);
+                    console.warn("Native share failed, attempting web fallback:", nativeErr);
+                    if (typeof window.logAppError === 'function') window.logAppError("Native Share", errStr);
                 }
             }
         }
@@ -1485,38 +1496,38 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
 
             if (filesArray.length === 0) {
                 if (bootScreen) bootScreen.style.display = 'none';
-                alert("Could not load images for sharing. Please check your internet connection.");
+                alert("Could not load images to share. Please check your internet connection.");
                 return;
             }
 
-            if (typeof navigator.share === 'function') {
+            var webShareSupported = (typeof navigator.share === 'function');
+            var canShareFiles = webShareSupported && (typeof navigator.canShare === 'function' ? navigator.canShare({ files: filesArray }) : true);
+
+            if (webShareSupported && canShareFiles) {
                 if (deepLink) {
                     var copyText = "Check out this design at Durga Sarees:\n\n" + deepLink;
                     if (typeof window.generateShareMessage === 'function' && window.curProduct) {
                         copyText = window.generateShareMessage(window.curProduct);
                     }
-                    if (true) {
-                        try {
-                            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText);
-                            else {
-                                var ta = document.createElement("textarea"); ta.value = copyText; document.body.appendChild(ta);
-                                ta.focus(); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-                            }
-                            
-                            var toastId = 'copyToast_' + Date.now();
-                            var toastHtml = `<div id="${toastId}" style="position:fixed; top:40%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.9); color:#fff; padding:16px 24px; border-radius:8px; font-size:16px; font-weight:bold; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:10000; display:flex; flex-direction:column; gap:8px; pointer-events:none;">
-                                <i class="fas fa-check-circle" style="font-size:28px; color:#4caf50;"></i>
-                                <span>Link Copied!</span>
-                                <span style="font-size:13px; font-weight:normal; color:#ddd;">Please paste it into WhatsApp<br>after images appear.</span>
-                            </div>`;
-                            document.body.insertAdjacentHTML('beforeend', toastHtml);
-                            setTimeout(() => { var t = document.getElementById(toastId); if(t) t.remove(); }, 5000);
-                        } catch(e) {}
-                    }
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(copyText);
+                        else {
+                            var ta = document.createElement("textarea"); ta.value = copyText; document.body.appendChild(ta);
+                            ta.focus(); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        }
+                        
+                        var toastId = 'copyToast_' + Date.now();
+                        var toastHtml = `<div id="${toastId}" style="position:fixed; top:40%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.9); color:#fff; padding:16px 24px; border-radius:8px; font-size:16px; font-weight:bold; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.5); z-index:10000; display:flex; flex-direction:column; gap:8px; pointer-events:none;">
+                            <i class="fas fa-check-circle" style="font-size:28px; color:#4caf50;"></i>
+                            <span>Link Copied!</span>
+                            <span style="font-size:13px; font-weight:normal; color:#ddd;">Please paste it into WhatsApp<br>after images appear.</span>
+                        </div>`;
+                        document.body.insertAdjacentHTML('beforeend', toastHtml);
+                        setTimeout(() => { var t = document.getElementById(toastId); if(t) t.remove(); }, 5000);
+                    } catch(e) {}
                 }
 
                 try {
-                    // ⚠️ Same fix: don't mix `text` with `files` — WhatsApp drops images when both are present.
                     await navigator.share({
                         title: "🛍️ " + productName + " — ₹" + productPrice,
                         files: filesArray
@@ -1526,17 +1537,15 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                         if (bootScreen) bootScreen.style.display = 'none';
                         return; // User cancelled
                     }
-                    console.error("Share API failed:", shareErr);
-                    try {
-                        await navigator.share({ files: filesArray });
-                    } catch (fallbackErr) {
-                        if (fallbackErr.name !== 'AbortError' && !(fallbackErr.message && fallbackErr.message.toLowerCase().includes('cancel'))) {
-                            alert("Your device's browser blocks native multi-image sharing. Error: " + fallbackErr.message);
-                        }
-                    }
+                    console.error("Web Share API failed:", shareErr);
                 }
             } else {
-                if (confirm("Native Share API is disabled (requires HTTPS or Native App). Do you want to download the images instead?")) {
+                var waText = "Check out this design at Durga Sarees:\n\n" + (deepLink || WEBSITE_BASE);
+                if (typeof window.generateShareMessage === 'function' && window.curProduct) {
+                    waText = window.generateShareMessage(window.curProduct);
+                }
+
+                if (confirm("Direct multi-image sharing is only supported in the Mobile App.\n\nWould you like to download the images and open WhatsApp?")) {
                     for (var j = 0; j < filesArray.length; j++) {
                         var fileObj = filesArray[j];
                         var objectUrl = URL.createObjectURL(fileObj);
@@ -1549,6 +1558,7 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                         await new Promise(resolve => setTimeout(resolve, 300));
                         URL.revokeObjectURL(objectUrl);
                     }
+                    window.open("https://wa.me/?text=" + encodeURIComponent(waText), '_blank');
                 }
             }
         }

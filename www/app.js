@@ -7191,11 +7191,13 @@ window.shareWhatsAppLink = async function () {
         textMsg = (typeof window.generateShareMessage === 'function') ? window.generateShareMessage(targetProd) : ("*Durga Sarees* - " + targetProd.name);
     }
 
-    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
-        var hasFilesystem = !!(window.Capacitor.Plugins.Filesystem);
+    var sharePlugin = window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share);
+    var fsPlugin = window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
+
+    if (sharePlugin) {
         var writeRes = null;
 
-        if (targetProd && hasFilesystem) {
+        if (targetProd && fsPlugin) {
             document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing Image...</div>');
             window.isSharing = true;
 
@@ -7227,7 +7229,7 @@ window.shareWhatsAppLink = async function () {
                 if (base64data) {
                     var pureBase64 = base64data.includes(',') ? base64data.split(',')[1] : base64data;
                     var pathName = "share_" + Date.now() + ".jpg";
-                    writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
+                    writeRes = await fsPlugin.writeFile({
                         path: pathName,
                         data: pureBase64,
                         directory: 'CACHE'
@@ -7250,12 +7252,12 @@ window.shareWhatsAppLink = async function () {
             if (writeRes && writeRes.uri) {
                 shareOpts.files = [writeRes.uri];
             }
-            await window.Capacitor.Plugins.Share.share(shareOpts);
+            await sharePlugin.share(shareOpts);
         } catch (shareErr) {
             if (!shareErr.message || !shareErr.message.toLowerCase().includes("cancel")) {
                 console.warn("Share with file failed, retrying text-only:", shareErr);
                 try {
-                    await window.Capacitor.Plugins.Share.share({
+                    await sharePlugin.share({
                         title: targetProd ? targetProd.name : "Durga Sarees",
                         text: textMsg
                     });
