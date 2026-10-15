@@ -14,7 +14,7 @@ async function getActualDesignsForProduct(p, shareType, action) {
     if (shareType !== 'full' && shareType !== 'ready') return [];
 
     var isCurrentProductPage = (typeof curProduct !== 'undefined' && curProduct && (curProduct.id === p.id || curProduct.docId === p.docId));
-    var deck = isCurrentProductPage ? document.getElementById('detailDeck') : null;
+    var deck = isCurrentProductPage ? (document.getElementById('dtDesigns') || document.getElementById('detailDeck')) : null;
     var rawFiles = [];
 
     // 1. FASTEST: If on Product Page and swipe deck already has cards, use them immediately!
@@ -243,6 +243,15 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
         urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.png?alt=media'));
     }
 
+    // 🔄 Automatic Zoom <-> Grid URL Swapping
+    if (cacheKey.includes('/Zoom%2F') || cacheKey.includes('/Zoom/')) {
+        var gUrl = cacheKey.replace(/\/Zoom(%2F|\/)/i, '/Grid$1');
+        if (!urlsToTry.includes(gUrl)) urlsToTry.push(gUrl);
+    } else if (cacheKey.includes('/Grid%2F') || cacheKey.includes('/Grid/')) {
+        var zUrl = cacheKey.replace(/\/Grid(%2F|\/)/i, '/Zoom$1');
+        if (!urlsToTry.includes(zUrl)) urlsToTry.push(zUrl);
+    }
+
     if (typeof curProduct !== 'undefined' && curProduct && curProduct.zoomUrl && curProduct.gridUrl) {
         var encZoom = encodeURIComponent(curProduct.zoomUrl.trim().replace(/\\/g, '/'));
         var encGrid = encodeURIComponent(curProduct.gridUrl.trim().replace(/\\/g, '/'));
@@ -255,24 +264,46 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
         }
     }
 
-    if (isCoverOrGarbage) {
-        var extIndex = cacheKey.indexOf('.webp?alt=media');
-        if (extIndex > -1) {
-            var lastSlash = Math.max(cacheKey.lastIndexOf('%2F'), cacheKey.lastIndexOf('/'));
-            if (lastSlash > -1 && lastSlash < extIndex) {
-                var folderUrl = cacheKey.substring(0, lastSlash + (cacheKey.charAt(lastSlash) === '%' ? 3 : 1));
-                var possibleCovers = ['cover.webp', 'cover1.webp', '01.webp', '1.webp'];
-                possibleCovers.forEach(function(cName) {
-                    var tryUrl = folderUrl + cName + '?alt=media';
-                    if (urlsToTry.indexOf(tryUrl) === -1) urlsToTry.push(tryUrl);
+    // 🗄️ Include raw IndexedDB folder paths (covers are stored under folder path as key)
+    try {
+        var decoded = decodeURIComponent(cacheKey);
+        if (decoded.includes('/o/')) {
+            var afterO = decoded.split('/o/')[1].split('?')[0];
+            var lastSlashPos = afterO.lastIndexOf('/');
+            if (lastSlashPos > -1) {
+                var folderWithSlash = afterO.substring(0, lastSlashPos + 1);
+                var folderNoSlash = afterO.substring(0, lastSlashPos);
+                [folderWithSlash, folderNoSlash].forEach(function(f) {
+                    if (f && !urlsToTry.includes(f)) urlsToTry.push(f);
+                    var swapped = f.startsWith('Zoom/') ? f.replace(/^Zoom\//i, 'Grid/') : (f.startsWith('Grid/') ? f.replace(/^Grid\//i, 'Zoom/') : null);
+                    if (swapped && !urlsToTry.includes(swapped)) urlsToTry.push(swapped);
                 });
             }
         }
+    } catch(e){}
+
+    if (isCoverOrGarbage) {
+        var baseUrls = [...urlsToTry];
+        baseUrls.forEach(function(u) {
+            if (typeof u === 'string' && u.includes('?alt=media')) {
+                var extIndex = u.indexOf('.webp?alt=media');
+                if (extIndex > -1) {
+                    var lastSlash = Math.max(u.lastIndexOf('%2F'), u.lastIndexOf('/'));
+                    if (lastSlash > -1 && lastSlash < extIndex) {
+                        var folderUrl = u.substring(0, lastSlash + (u.charAt(lastSlash) === '%' ? 3 : 1));
+                        ['cover.webp', 'cover1.webp', '01.webp', '1.webp'].forEach(function(cName) {
+                            var tryUrl = folderUrl + cName + '?alt=media';
+                            if (!urlsToTry.includes(tryUrl)) urlsToTry.push(tryUrl);
+                        });
+                    }
+                }
+            }
+        });
     }
 
     // Phase 1: Try IDB for all possible URLs
     function tryIDB(index) {
-        if (index >= urlsToTry.length) return tryNetwork(0);
+        if (index >= urlsToTry.length) return tryDOM();
         return getImageFromDB(urlsToTry[index]).then(function(blob) {
             if (blob && blob.size > 0) {
                 return (forceJpeg ? blobToJpegForPDF(blob) : blobToBase64Direct(blob)).then(function(res) {
@@ -284,7 +315,52 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
         }).catch(function() { return tryIDB(index + 1); });
     }
 
-    // Phase 2: Try Network for all possible URLs
+    // Phase 1.5: Instant DOM Extraction (if image is already rendered on screen)
+    function tryDOM() {
+        try {
+            var decoded = decodeURIComponent(cacheKey);
+            var filename = decoded.substring(decoded.lastIndexOf('/') + 1).split('?')[0].toLowerCase();
+            var designNum = parseInt(filename.replace(/\D/g, ''), 10);
+
+            var cards = document.querySelectorAll('.swipe-card');
+            for (var i = 0; i < cards.length; i++) {
+                var c = cards[i];
+                var d = (c.getAttribute('data-design') || '').toLowerCase();
+                var dNum = parseInt(d.replace(/\D/g, ''), 10);
+                if (d === filename || d === filename.replace(/\.[^.]+$/, '') || (!isNaN(designNum) && !isNaN(dNum) && designNum === dNum)) {
+                    var img = c.querySelector('img');
+                    if (img && img.naturalWidth > 0) {
+                        var canvas = document.createElement('canvas');
+                        canvas.width = img.naturalWidth;
+                        canvas.height = img.naturalHeight;
+                        var ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        var dataUrl = canvas.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
+                        if (dataUrl && dataUrl.length > 100) return Promise.resolve(dataUrl);
+                    }
+                }
+            }
+
+            var gridImgs = document.querySelectorAll('img.ci-img');
+            for (var j = 0; j < gridImgs.length; j++) {
+                var gImg = gridImgs[j];
+                if (gImg.src && (gImg.src.includes(filename) || (cacheKey.includes('/o/') && gImg.src.includes(cacheKey.split('/o/')[1].split('?')[0])))) {
+                    if (gImg.naturalWidth > 0) {
+                        var canvas2 = document.createElement('canvas');
+                        canvas2.width = gImg.naturalWidth;
+                        canvas2.height = gImg.naturalHeight;
+                        var ctx2 = canvas2.getContext('2d');
+                        ctx2.drawImage(gImg, 0, 0);
+                        var dataUrl2 = canvas2.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
+                        if (dataUrl2 && dataUrl2.length > 100) return Promise.resolve(dataUrl2);
+                    }
+                }
+            }
+        } catch(e){}
+        return tryNetwork(0);
+    }
+
+    // Phase 2: Try Network for all possible URLs (never abort early)
     function tryNetwork(index) {
         if (index >= urlsToTry.length) {
             // Phase 3: Ultimate Fallback (Directory Scan) for Covers
@@ -317,12 +393,12 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
         
         var fetchUrl = urlsToTry[index];
         if (!fetchUrl || !fetchUrl.startsWith('http') || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
-            return Promise.resolve(null); // Offline abort network
+            return tryNetwork(index + 1);
         }
 
         var ctrlC = new AbortController();
-        var tidC = setTimeout(function() { ctrlC.abort(); }, 15000);
-        return window.fetchWithRetry(fetchUrl, { signal: ctrlC.signal }, 0)
+        var tidC = setTimeout(function() { ctrlC.abort(); }, 12000);
+        return (window.fetchWithRetry ? window.fetchWithRetry(fetchUrl, { signal: ctrlC.signal }, 0) : fetch(fetchUrl, { signal: ctrlC.signal }))
             .then(function(res) { 
                 clearTimeout(tidC);
                 if (res.ok) return res.blob();
@@ -330,22 +406,24 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
             })
             .then(function(netBlob) { 
                 if (netBlob.size === 0) throw new Error("Zero byte file");
+                if (typeof saveImageToDB === 'function') {
+                    saveImageToDB(fetchUrl, netBlob).catch(() => {});
+                }
                 return forceJpeg ? blobToJpegForPDF(netBlob) : blobToBase64Direct(netBlob); 
             })
             .then(function(res) {
                 if (res) return res;
                 return tryNetwork(index + 1);
             })
-            .catch(function(err) {
-                if (err && err.message && !err.message.includes("HTTP") && !err.message.includes("Zero byte")) {
-                    return Promise.resolve(null); // Critical network error, abort fallbacks
-                }
+            .catch(function() {
+                clearTimeout(tidC);
                 return tryNetwork(index + 1); 
             });
     }
 
     return tryIDB(0);
 }
+window.getBase64FromCache = getBase64FromCache;
 
 
 
@@ -356,7 +434,6 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
 
 async function resolveCorrectUrl(p, dId, overrideFolder) {
     if (!p) return null;
-    var folderPath = overrideFolder || ((p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl);
     
     // 1. Check if the cover is explicitly remapped via dsFallbackMap
     var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover');
@@ -370,13 +447,16 @@ async function resolveCorrectUrl(p, dId, overrideFolder) {
         }
     }
 
+    // Covers live in gridUrl (fallback to zoomUrl); high-res designs live in zoomUrl (fallback to gridUrl)
+    var folderPath = overrideFolder || (isCover ? (p.gridUrl || p.zoomUrl) : ((p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl));
+    if (!folderPath) folderPath = p.gridUrl || p.zoomUrl || "";
+
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
     var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     
     var fileName;
     if (isCover) {
-        // DIRECT or Cover with no fallback — try cover.webp first (most products use this)
         fileName = "cover.webp";
     } else if (dId && /\.(webp|jpg|jpeg|png)$/i.test(dId)) {
         fileName = dId;
@@ -1312,11 +1392,19 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                     console.error("Share Images Error:", errMsg);
                     if (typeof window.logAppError === 'function') window.logAppError("Share Images", errMsg);
                     
-                    var confirmMsg = "⚠️ " + failedUrls.length + " image(s) could not be downloaded and will be skipped.\n\nContinue sharing the rest?";
-                    if (!confirm(confirmMsg)) {
-                        if (bootScreen) bootScreen.style.display = 'none';
-                        return;
+                    if (uriArray.length > 0) {
+                        var confirmMsg = "⚠️ " + failedUrls.length + " image(s) could not be downloaded and will be skipped.\n\nContinue sharing the rest (" + uriArray.length + " images)?";
+                        if (!confirm(confirmMsg)) {
+                            if (bootScreen) bootScreen.style.display = 'none';
+                            return;
+                        }
                     }
+                }
+
+                if (uriArray.length === 0) {
+                    if (bootScreen) bootScreen.style.display = 'none';
+                    alert("Could not prepare images for sharing. Please check your internet connection.");
+                    return;
                 }
 
                 let shareTitle = productName;
@@ -1393,6 +1481,12 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                     if (bootScreen) bootScreen.style.display = 'none';
                     return;
                 }
+            }
+
+            if (filesArray.length === 0) {
+                if (bootScreen) bootScreen.style.display = 'none';
+                alert("Could not load images for sharing. Please check your internet connection.");
+                return;
             }
 
             if (typeof navigator.share === 'function') {

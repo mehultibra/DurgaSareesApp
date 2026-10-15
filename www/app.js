@@ -7156,71 +7156,121 @@ window.generateShareMessage = function (prod) {
 };
 
 window.shareWhatsAppLink = async function () {
-    if (!curProduct) return;
+    if (typeof closeModals === 'function') closeModals();
 
-    var textMsg = window.generateShareMessage(curProduct);
+    var textMsg = "";
+    var targetProd = (typeof curProduct !== 'undefined' && curProduct) ? curProduct : null;
 
-    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.Share && window.Capacitor.Plugins.Filesystem) {
-        document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing HD Image...</div>');
-
-        window.isSharing = true;
-        try {
-            var coverSrc = "";
-
-            // 1. Use the robust resolveCorrectUrl logic from pdf_engine.js to guarantee the EXACT cover image!
-            if (typeof window.resolveCorrectUrl === 'function') {
-                var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
-                var fallbackFile = curProduct.coverDesignId || dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
-                var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && (!curProduct.stock || curProduct.stock[d] !== 0)) : [];
-                var coverDesignId = 'DIRECT';
-
-                if (fallbackFile) {
-                    coverDesignId = fallbackFile;
-                } else if (readyDesigns.length > 0) {
-                    coverDesignId = readyDesigns[0];
-                }
-
-                coverSrc = await window.resolveCorrectUrl(curProduct, coverDesignId);
-            }
-
-            if (!coverSrc) {
-                throw new Error("No image found to share");
-            }
-
-            var base64data = "";
-            if (coverSrc.startsWith("data:")) {
-                base64data = coverSrc;
-            } else if (typeof window.getBase64FromCache === 'function') {
-                base64data = await window.getBase64FromCache(coverSrc, true); // Force JPEG conversion
-            }
-            if (!base64data) throw new Error("Failed to load image");
-
-            var pureBase64 = base64data.includes(',') ? base64data.split(',')[1] : base64data;
-            var ext = 'jpg';
-            
-            var pathName = "share_" + Date.now() + "." + ext;
-            var writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
-                path: pathName,
-                data: pureBase64,
-                directory: 'CACHE'
+    if (!targetProd) {
+        // Main page share link: Share favorites if available, or store catalog
+        var favProducts = (typeof allProducts !== 'undefined' && Array.isArray(allProducts) && typeof favorites !== 'undefined') ? allProducts.filter(p => favorites[p.id]) : [];
+        if (favProducts.length > 0) {
+            var lines = ["*Durga Sarees, Surat - Favorite Catalog*", ""];
+            lines.push("Here are " + favProducts.length + " selected items from our collection:");
+            lines.push("");
+            favProducts.slice(0, 15).forEach((p, idx) => {
+                var pPrice = p.price ? " — ₹" + p.price : "";
+                lines.push((idx + 1) + ". *" + p.name + "*" + pPrice);
+                lines.push("   https://durga-sarees.web.app/?pid=" + encodeURIComponent(p.docId || p.id));
             });
-
-            await window.Capacitor.Plugins.Share.share({
-                title: curProduct.name,
-                text: textMsg,
-                files: [writeRes.uri]
-            });
-
-        } catch (e) {
-            console.error("Share error:", e);
-            window.location.href = "https://wa.me/?text=" + encodeURIComponent(textMsg);
-        } finally {
-            window.isSharing = false;
-            var ldr = document.getElementById('shareLoader');
-            if (ldr) ldr.remove();
+            if (favProducts.length > 15) {
+                lines.push("...and " + (favProducts.length - 15) + " more items.");
+            }
+            lines.push("");
+            lines.push("Explore all designs online: https://durga-sarees.web.app");
+            lines.push("Visit website: https://www.durgasarees.com");
+            lines.push("");
+            lines.push("Thank You,");
+            lines.push("*Durga Sarees, Surat*");
+            textMsg = lines.join("\n");
+            targetProd = favProducts[0];
+        } else {
+            textMsg = "*Durga Sarees, Surat*\nWholesale Exclusive Saree Collection\n\nBrowse our latest catalog online:\nhttps://durga-sarees.web.app\n\nVisit: https://www.durgasarees.com\n\nThank You,\n*Durga Sarees, Surat*";
         }
     } else {
-        window.open("https://wa.me/?text=" + encodeURIComponent(textMsg), '_blank');
+        textMsg = (typeof window.generateShareMessage === 'function') ? window.generateShareMessage(targetProd) : ("*Durga Sarees* - " + targetProd.name);
+    }
+
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
+        var hasFilesystem = !!(window.Capacitor.Plugins.Filesystem);
+        var writeRes = null;
+
+        if (targetProd && hasFilesystem) {
+            document.body.insertAdjacentHTML('beforeend', '<div id="shareLoader" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:20px;font-weight:bold;">Preparing Image...</div>');
+            window.isSharing = true;
+
+            try {
+                var coverSrc = "";
+                if (typeof window.resolveCorrectUrl === 'function') {
+                    var dsFallbackMap = {};
+                    try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+                    var fallbackFile = targetProd.coverDesignId || dsFallbackMap[targetProd.gridUrl] || dsFallbackMap[targetProd.zoomUrl];
+                    var readyDesigns = (targetProd.ready) ? String(targetProd.ready).split(',').map(d => d.trim()).filter(d => d && (!targetProd.stock || targetProd.stock[d] !== 0)) : [];
+                    var coverDesignId = 'DIRECT';
+
+                    if (fallbackFile) {
+                        coverDesignId = fallbackFile;
+                    } else if (readyDesigns.length > 0) {
+                        coverDesignId = readyDesigns[0];
+                    }
+
+                    coverSrc = await window.resolveCorrectUrl(targetProd, coverDesignId);
+                }
+
+                var base64data = "";
+                if (coverSrc && coverSrc.startsWith("data:")) {
+                    base64data = coverSrc;
+                } else if (coverSrc && typeof window.getBase64FromCache === 'function') {
+                    base64data = await window.getBase64FromCache(coverSrc, true);
+                }
+
+                if (base64data) {
+                    var pureBase64 = base64data.includes(',') ? base64data.split(',')[1] : base64data;
+                    var pathName = "share_" + Date.now() + ".jpg";
+                    writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
+                        path: pathName,
+                        data: pureBase64,
+                        directory: 'CACHE'
+                    });
+                }
+            } catch (imgErr) {
+                console.warn("Cover image attachment failed, sharing text only:", imgErr);
+            } finally {
+                window.isSharing = false;
+                var ldr = document.getElementById('shareLoader');
+                if (ldr) ldr.remove();
+            }
+        }
+
+        try {
+            var shareOpts = {
+                title: targetProd ? targetProd.name : "Durga Sarees",
+                text: textMsg
+            };
+            if (writeRes && writeRes.uri) {
+                shareOpts.files = [writeRes.uri];
+            }
+            await window.Capacitor.Plugins.Share.share(shareOpts);
+        } catch (shareErr) {
+            if (!shareErr.message || !shareErr.message.toLowerCase().includes("cancel")) {
+                console.warn("Share with file failed, retrying text-only:", shareErr);
+                try {
+                    await window.Capacitor.Plugins.Share.share({
+                        title: targetProd ? targetProd.name : "Durga Sarees",
+                        text: textMsg
+                    });
+                } catch (e2) {}
+            }
+        }
+    } else {
+        if (navigator.share) {
+            navigator.share({
+                title: targetProd ? targetProd.name : "Durga Sarees",
+                text: textMsg
+            }).catch(() => {});
+        } else {
+            window.open("https://wa.me/?text=" + encodeURIComponent(textMsg), '_blank');
+        }
     }
 };
 
