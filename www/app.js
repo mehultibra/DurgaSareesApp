@@ -3776,13 +3776,165 @@ window.fetchWithRetry = async function (url, options = {}, retries = 3) {
 };
 
 window.isSyncing = false;
+window.isHDSyncing = false;
+window.hdSyncProgress = {
+    running: false,
+    count: 0,
+    total: 0,
+    percent: 0,
+    completedAt: 0
+};
+window.hdSyncToastTimer = null;
+
+window.showHDSyncStatusToast = function () {
+    var p = window.hdSyncProgress;
+    var toastId = 'hdSyncStatusToast';
+    var existing = document.getElementById(toastId);
+
+    if (window.hdSyncToastTimer) {
+        clearTimeout(window.hdSyncToastTimer);
+        window.hdSyncToastTimer = null;
+    }
+
+    if (!p || !p.running) {
+        var msg = (p && p.completedAt && (Date.now() - p.completedAt < 60000))
+            ? "✅ HD Image Sync is complete! All " + (p.total || "") + " products cached."
+            : "ℹ️ HD Sync is idle. All images up to date.";
+        window.showSyncNoticeToast(msg);
+        return;
+    }
+
+    var percent = p.total > 0 ? Math.min(100, Math.round((p.count / p.total) * 100)) : 0;
+
+    if (existing) {
+        var textEl = document.getElementById(toastId + '_text');
+        var barEl = document.getElementById(toastId + '_bar');
+        var pctEl = document.getElementById(toastId + '_pct');
+        if (textEl) textEl.innerText = p.count + " / " + p.total + " products";
+        if (pctEl) pctEl.innerText = percent + "%";
+        if (barEl) barEl.style.width = percent + "%";
+
+        window.hdSyncToastTimer = setTimeout(function () {
+            window.hideHDSyncStatusToast();
+        }, 8000);
+        return;
+    }
+
+    var toastHtml = `
+    <div id="${toastId}" style="position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:rgba(20,20,24,0.96); color:#fff; padding:14px 20px; border-radius:18px; font-size:13px; font-family:inherit; box-shadow:0 8px 30px rgba(0,0,0,0.5); z-index:999999; display:flex; flex-direction:column; gap:10px; min-width:280px; max-width:92vw; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.12); transition:opacity 0.3s ease, transform 0.3s ease;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <i class="fas fa-sync-alt fa-spin" style="color:#ff3f6c; font-size:14px;"></i>
+                <span style="font-weight:700; font-size:13px; letter-spacing:0.3px;">HD Sync in Progress</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span id="${toastId}_pct" style="font-weight:700; color:#ff3f6c; font-size:13px;">${percent}%</span>
+                <i class="fas fa-times" onclick="window.hideHDSyncStatusToast()" style="cursor:pointer; color:#aaa; font-size:15px; padding:2px 6px; margin-left:4px;" title="Dismiss"></i>
+            </div>
+        </div>
+        <div style="width:100%; height:6px; background:rgba(255,255,255,0.15); border-radius:10px; overflow:hidden;">
+            <div id="${toastId}_bar" style="width:${percent}%; height:100%; background:linear-gradient(90deg, #ff3f6c, #ff6b8b); border-radius:10px; transition:width 0.3s ease;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#aaa;">
+            <span id="${toastId}_text">${p.count} / ${p.total} products</span>
+            <span>Background caching active</span>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', toastHtml);
+
+    window.hdSyncToastTimer = setTimeout(function () {
+        window.hideHDSyncStatusToast();
+    }, 8000);
+};
+
+window.hideHDSyncStatusToast = function () {
+    if (window.hdSyncToastTimer) {
+        clearTimeout(window.hdSyncToastTimer);
+        window.hdSyncToastTimer = null;
+    }
+    var el = document.getElementById('hdSyncStatusToast');
+    if (el) {
+        el.style.opacity = '0';
+        el.style.transform = 'translate(-50%, 15px)';
+        setTimeout(function () { if (el) el.remove(); }, 350);
+    }
+};
+
+window.updateHDSyncStatusToast = function () {
+    var el = document.getElementById('hdSyncStatusToast');
+    if (!el) return;
+    var p = window.hdSyncProgress;
+    if (!p) return;
+    var percent = p.total > 0 ? Math.min(100, Math.round((p.count / p.total) * 100)) : 0;
+    var textEl = document.getElementById('hdSyncStatusToast_text');
+    var barEl = document.getElementById('hdSyncStatusToast_bar');
+    var pctEl = document.getElementById('hdSyncStatusToast_pct');
+    if (textEl) textEl.innerText = p.count + " / " + p.total + " products";
+    if (pctEl) pctEl.innerText = percent + "%";
+    if (barEl) barEl.style.width = percent + "%";
+};
+
+window.finishHDSyncStatusToast = function (totalCount) {
+    var el = document.getElementById('hdSyncStatusToast');
+    if (!el) return;
+    if (window.hdSyncToastTimer) {
+        clearTimeout(window.hdSyncToastTimer);
+        window.hdSyncToastTimer = null;
+    }
+    el.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <i class="fas fa-check-circle" style="color:#25D366; font-size:16px;"></i>
+                <span style="font-weight:700; font-size:13px; color:#25D366;">HD Sync Complete!</span>
+            </div>
+            <i class="fas fa-times" onclick="window.hideHDSyncStatusToast()" style="cursor:pointer; color:#aaa; font-size:15px; padding:2px 6px;" title="Dismiss"></i>
+        </div>
+        <div style="font-size:12px; color:#eee; margin-top:2px;">All ${totalCount} products cached for offline zoom.</div>
+    `;
+    setTimeout(function () {
+        window.hideHDSyncStatusToast();
+    }, 3500);
+};
+
+window.showSyncNoticeToast = function (msg) {
+    var toastId = 'syncNoticeToast';
+    var existing = document.getElementById(toastId);
+    if (existing) existing.remove();
+
+    var toastHtml = `
+    <div id="${toastId}" style="position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:rgba(25,25,30,0.96); color:#fff; padding:12px 22px; border-radius:30px; font-size:13px; font-weight:600; box-shadow:0 6px 20px rgba(0,0,0,0.4); z-index:999999; display:flex; align-items:center; gap:10px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.15); transition:opacity 0.3s ease, transform 0.3s ease;">
+        <span>${msg}</span>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', toastHtml);
+    setTimeout(function () {
+        var el = document.getElementById(toastId);
+        if (el) {
+            el.style.opacity = '0';
+            el.style.transform = 'translate(-50%, 10px)';
+            setTimeout(function () { if (el) el.remove(); }, 350);
+        }
+    }, 3500);
+};
+
 async function syncImages(silent = false) {
     var bootScreen = document.getElementById('boot');
     var bootMsg = document.getElementById('bootMsg');
     var syncIcon = document.querySelector('.fa-sync-alt');
 
     if (window.isSyncing) {
-        if (bootScreen && !silent) bootScreen.style.display = 'flex';
+        if (!silent) {
+            var msg = (bootMsg && bootMsg.innerText) ? bootMsg.innerText : "Catalog sync is already in progress...";
+            window.showSyncNoticeToast("🔄 " + msg);
+        }
+        return;
+    }
+
+    if (window.isHDSyncing) {
+        if (!silent) {
+            window.showHDSyncStatusToast();
+        }
         return;
     }
 
@@ -4095,14 +4247,14 @@ async function syncImages(silent = false) {
 
         // 🚀 PHASE 2: NON-BLOCKING BACKGROUND ZOOM SYNC
         (async function () {
-            // Create floating progress indicator
-            var p2ToastId = 'p2Toast_' + Date.now();
-            var p2ToastHtml = `<div id="${p2ToastId}" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.85); color:#fff; padding:10px 20px; border-radius:30px; font-size:12px; font-weight:bold; box-shadow:0 4px 15px rgba(0,0,0,0.4); z-index:999999; display:flex; align-items:center; gap:10px; pointer-events:none;">
-                <i class="fas fa-circle-notch fa-spin"></i> <span id="${p2ToastId}_text">HD Sync 0 / ${total}</span>
-            </div>`;
-            document.body.insertAdjacentHTML('beforeend', p2ToastHtml);
-            var p2TextEl = document.getElementById(p2ToastId + '_text');
-            var p2Container = document.getElementById(p2ToastId);
+            window.isHDSyncing = true;
+            window.hdSyncProgress = {
+                running: true,
+                count: 0,
+                total: total,
+                percent: 0,
+                completedAt: 0
+            };
 
             var zCount = 0;
             var zBatchSize = 2; // Keep it low to prevent network stall
@@ -4198,14 +4350,18 @@ async function syncImages(silent = false) {
                 }));
                 
                 zCount += batch.length;
-                if (p2TextEl) p2TextEl.innerText = "HD Sync " + zCount + " / " + total;
+                window.hdSyncProgress.count = zCount;
+                window.hdSyncProgress.percent = total > 0 ? Math.min(100, Math.round((zCount / total) * 100)) : 0;
+                window.updateHDSyncStatusToast();
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 
-            if (p2Container) {
-                p2Container.innerHTML = '<i class="fas fa-check-circle" style="color:#25D366;"></i> <span>HD Sync Complete</span>';
-                setTimeout(() => { p2Container.style.opacity = '0'; setTimeout(() => p2Container.remove(), 500); }, 3000);
-            }
+            window.isHDSyncing = false;
+            window.hdSyncProgress.running = false;
+            window.hdSyncProgress.count = total;
+            window.hdSyncProgress.percent = 100;
+            window.hdSyncProgress.completedAt = Date.now();
+            window.finishHDSyncStatusToast(total);
         })();
 
         if (silent) {
@@ -4249,6 +4405,8 @@ async function syncImages(silent = false) {
 
     } catch (err) {
         window.isSyncing = false;
+        window.isHDSyncing = false;
+        if (window.hdSyncProgress) window.hdSyncProgress.running = false;
         if (syncIcon) syncIcon.classList.remove('fa-spin');
         if (bootScreen) bootScreen.style.display = 'none';
         if (!silent) alert("Sync error: " + err.message);
