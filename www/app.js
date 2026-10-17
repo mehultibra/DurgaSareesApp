@@ -5,7 +5,7 @@
 const FIRESTORE_PRODUCTS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products?pageSize=1000";
 const FIRESTORE_USERS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users?pageSize=100";
 
-window.getRobustStock = function(p, fname, isCoverFallback) {
+window.getRobustStock = function (p, fname, isCoverFallback) {
     if (!p || !p.stock) return 999;
     if (p.stock['FULLY_PACKED'] === 1) return 0;
     if (p.stock[fname] !== undefined) return p.stock[fname];
@@ -23,7 +23,7 @@ window.getRobustStock = function(p, fname, isCoverFallback) {
     return 999;
 };
 
-window.isDesignInStock = function(p, fname) {
+window.isDesignInStock = function (p, fname) {
     if (!p) return false;
     if (p.stock && p.stock['FULLY_PACKED'] === 1) return false;
 
@@ -31,8 +31,8 @@ window.isDesignInStock = function(p, fname) {
     var num = parseInt(cleanName.replace(/\D/g, ''), 10);
     var numStr = !isNaN(num) ? String(num) : "";
     var pad2 = !isNaN(num) ? String(num).padStart(2, '0') : "";
-    var isCover = /^(cover|cover1)$/i.test(cleanName) || 
-                  (p.coverDesignId && cleanName.toLowerCase() === String(p.coverDesignId).replace(/\.[^/.]+$/, "").trim().toLowerCase());
+    var isCover = /^(cover|cover1)$/i.test(cleanName) ||
+        (p.coverDesignId && cleanName.toLowerCase() === String(p.coverDesignId).replace(/\.[^/.]+$/, "").trim().toLowerCase());
 
     if (p.stock) {
         var candidates = [fname, cleanName];
@@ -65,9 +65,9 @@ window.isDesignInStock = function(p, fname) {
     if (p.ready && String(p.ready).trim().length > 0) {
         var rArr = String(p.ready).split(',').map(s => s.trim().replace(/\.[^/.]+$/, '').toLowerCase()).filter(Boolean);
         if (rArr.length > 0) {
-            return rArr.includes(cleanName.toLowerCase()) || 
-                   (numStr && rArr.includes(numStr.toLowerCase())) || 
-                   (pad2 && rArr.includes(pad2.toLowerCase()));
+            return rArr.includes(cleanName.toLowerCase()) ||
+                (numStr && rArr.includes(numStr.toLowerCase())) ||
+                (pad2 && rArr.includes(pad2.toLowerCase()));
         }
     }
 
@@ -2560,7 +2560,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 // Blob is in RAM — create an objectURL for instant inject
                 try {
                     cachedBlobUrls[file.url] = URL.createObjectURL(zoomBlob);
-                } catch(e) { /* ignore */ }
+                } catch (e) { /* ignore */ }
             }
         });
 
@@ -4258,10 +4258,10 @@ async function syncImages(silent = false) {
 
             var zCount = 0;
             var zBatchSize = 2; // Keep it low to prevent network stall
-            
+
             // 🚀 MASSIVE OPTIMIZATION: Fetch ALL cached keys instantly into memory to prevent IDB transaction starvation
             var allCachedKeys = new Set(await listAllDBKeys());
-            
+
             for (var i = 0; i < productsToSync.length; i += zBatchSize) {
                 var batch = productsToSync.slice(i, i + zBatchSize);
                 await Promise.all(batch.map(async (p) => {
@@ -4303,7 +4303,7 @@ async function syncImages(silent = false) {
                                 var isCover = (index === 0);
                                 var curStock = window.getRobustStock(p, fname, isCover);
                                 var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
-                                
+
                                 // O(1) Instant memory check! Fixes offline detail image load starvation.
                                 var existing = allCachedKeys.has(zoomImgUrl);
 
@@ -4348,7 +4348,7 @@ async function syncImages(silent = false) {
                         await handleZoomImage(sortedFiles[iFile], iFile);
                     }
                 }));
-                
+
                 zCount += batch.length;
                 window.hdSyncProgress.count = zCount;
                 window.hdSyncProgress.percent = total > 0 ? Math.min(100, Math.round((zCount / total) * 100)) : 0;
@@ -7316,6 +7316,11 @@ window.generateShareMessage = function (prod) {
         details.push("");
     }
 
+    if (prod.work && prod.work !== "None") {
+        details.push(`Work : ${prod.work}`);
+        details.push("");
+    }
+
     if (prod.border && prod.border !== "None") {
         details.push(`Border : ${prod.border}`);
         details.push("");
@@ -7328,11 +7333,6 @@ window.generateShareMessage = function (prod) {
 
     if (prod.pallu && prod.pallu !== "None") {
         details.push(`Pallu : ${prod.pallu}`);
-        details.push("");
-    }
-
-    if (prod.work && prod.work !== "None") {
-        details.push(`Work : ${prod.work}`);
         details.push("");
     }
 
@@ -7411,7 +7411,7 @@ window.shareWhatsAppLink = async function () {
                 var coverSrc = "";
                 if (typeof window.resolveCorrectUrl === 'function') {
                     var dsFallbackMap = {};
-                    try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+                    try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch (e) { }
                     var fallbackFile = targetProd.coverDesignId || dsFallbackMap[targetProd.gridUrl] || dsFallbackMap[targetProd.zoomUrl];
                     var readyDesigns = (targetProd.ready) ? String(targetProd.ready).split(',').map(d => d.trim()).filter(d => d && (!targetProd.stock || targetProd.stock[d] !== 0)) : [];
                     var coverDesignId = 'DIRECT';
@@ -7578,15 +7578,15 @@ window.openLiveAdmin = function () {
                 sortedDocs.forEach(item => {
                     let d = item.data;
                     let isGuest = item.id.startsWith('guest_');
-                    
+
                     if (isGuest && d.customerStation) {
                         let ipMatch = d.customerStation.match(/\(IP:\s*([^)]+)\)/);
                         if (ipMatch) {
                             let ipStr = ipMatch[1];
                             let cityRegion = d.customerStation.replace(/\s*\(IP:\s*[^)]+\)/, '');
-                            
+
                             if (!groupedDocsMap[ipStr]) {
-                                d.customerStation = cityRegion; 
+                                d.customerStation = cityRegion;
                                 groupedDocsMap[ipStr] = item;
                                 finalDocs.push(item);
                             } else {
