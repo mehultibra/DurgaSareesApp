@@ -238,6 +238,7 @@ try {
 } catch (e) {
     console.error("Error reading dsCoverExists", e);
 }
+window.coverExistsMap = coverExistsMap;
 
 function saveCoverExistsMap() {
     try {
@@ -246,6 +247,7 @@ function saveCoverExistsMap() {
         console.error("Error saving dsCoverExists", e);
     }
 }
+window.saveCoverExistsMap = saveCoverExistsMap;
 
 var dsFallbackMap = {};
 try {
@@ -253,6 +255,7 @@ try {
 } catch (e) {
     console.error("Error reading dsFallbackMap", e);
 }
+window.dsFallbackMap = dsFallbackMap;
 
 function saveFallbackMap() {
     try {
@@ -261,6 +264,7 @@ function saveFallbackMap() {
         console.error("Error saving dsFallbackMap", e);
     }
 }
+window.saveFallbackMap = saveFallbackMap;
 
 window.sessionImageCache = new Map();
 window.dsFolderCache = {};
@@ -1329,7 +1333,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     var encZoomPath = (zoomPath && zoomPath !== "None") ? decodeURIComponent(String(zoomPath)).trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F') : encGridPath;
 
-    var fileToFetch = targetFile ? targetFile : "cover.webp"; // Main grid: always try cover.webp first
+    var fileToFetch = targetFile ? targetFile : ((window.dsFallbackMap && window.dsFallbackMap[gridPath]) || "cover.webp");
 
     // If cache confirms cover is missing, jump straight to fallback map
     if ((fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") && window.coverExistsMap && window.coverExistsMap[gridPath] === false) {
@@ -1347,40 +1351,55 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var isNativeLoading = (imgElement.getAttribute('src') === actualUrl || imgElement.src === actualUrl);
     var cacheKey = (fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") ? gridPath : lowResUrl;
 
-    // 🚀 INSTANT LOAD FOR NEW USERS: Fire native network request immediately!
-    if (!isNativeLoading && !imgElement.dataset.tempBlobUrl) {
+    function isPlaceholder() {
+        if (!imgElement.src) return true;
+        if (imgElement.src.startsWith('data:')) return true;
+        if (imgElement.src.includes('dsMissingImage')) return true;
+        if (imgElement.complete && imgElement.naturalWidth <= 1) return true;
+        return false;
+    }
+
+    // 🚀 Fire native network request if not already loading real image
+    if (!isNativeLoading && isPlaceholder()) {
         imgElement.src = actualUrl;
     }
 
-    // ALWAYS check IndexedDB to support Offline Mode.
-    getImageFromDB(cacheKey).then(function (blob) {
+    // ALWAYS check IndexedDB to support Offline Mode. Check gridPath first, then cacheKey
+    getImageFromDB(gridPath).then(function (blob) {
+        if (!blob && cacheKey !== gridPath) return getImageFromDB(cacheKey);
+        return blob;
+    }).then(function (blob) {
         if (blob) {
-            if (!imgElement.complete || imgElement.naturalWidth === 0) {
-                window.renderBlobToImg(imgElement, blob);
-            }
+            window.renderBlobToImg(imgElement, blob);
             if (window.coverExistsMap) window.coverExistsMap[gridPath] = true;
             if (window.saveCoverExistsMap) window.saveCoverExistsMap();
         } else {
-            // Native image is already loading. Catch success to cache it, or failure to trigger fallbacks.
-            if (imgElement.complete) {
-                if (imgElement.naturalWidth === 0) loadFromNetwork();
-                else cacheNativeImageToDB(actualUrl, cacheKey);
+            if (imgElement.complete && !isPlaceholder()) {
+                cacheNativeImageToDB(actualUrl, cacheKey);
             } else {
                 imgElement.onload = function () {
                     imgElement.onload = null; imgElement.onerror = null;
-                    cacheNativeImageToDB(actualUrl, cacheKey);
+                    if (!isPlaceholder()) {
+                        cacheNativeImageToDB(actualUrl, cacheKey);
+                    }
                 };
                 imgElement.onerror = function () {
                     imgElement.onload = null; imgElement.onerror = null;
                     loadFromNetwork();
                 };
+                if (imgElement.complete && isPlaceholder()) {
+                    loadFromNetwork();
+                }
             }
         }
     }).catch(function () { loadFromNetwork(); });
 
     function cacheNativeImageToDB(url, key) {
         fetch(url, { cache: 'force-cache' }).then(res => res.blob()).then(blob => {
-            if (blob.size > 0 && typeof saveImageToDB === 'function') saveImageToDB(key, blob);
+            if (blob.size > 0 && typeof saveImageToDB === 'function') {
+                saveImageToDB(key, blob);
+                if (key !== gridPath) saveImageToDB(gridPath, blob);
+            }
         }).catch(err => { });
     }
 
@@ -1403,7 +1422,7 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     // 🔄 LAST RESORT: Call Firebase list API to discover actual filenames
     function tryFolderListFallback() {
         // Check if we already cached the fallback filename — try IDB first
-        if (window.dsFallbackMap[gridPath]) {
+        if (window.dsFallbackMap && window.dsFallbackMap[gridPath]) {
             var cachedFile = window.dsFallbackMap[gridPath];
             var cachedUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(cachedFile) + "?alt=media";
             getImageFromDB(cachedUrl).then(function (blob) {
@@ -1412,10 +1431,9 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 } else {
                     imgElement.src = cachedUrl;
                     imgElement.onerror = function () {
-                        // The cached fallback file is dead (e.g. admin deleted it). Clear it and try listing folder again.
                         imgElement.onerror = null;
-                        delete window.dsFallbackMap[gridPath];
-                        saveFallbackMap();
+                        if (window.dsFallbackMap) delete window.dsFallbackMap[gridPath];
+                        if (window.saveFallbackMap) window.saveFallbackMap();
                         tryFolderListFallback();
                     };
                 }
@@ -1426,50 +1444,64 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         var listPrefix = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
         var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
 
+        function applyFolderItems(items) {
+            var files = (items || [])
+                .map(function (item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
+                .filter(function (f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
+
+            if (files.length > 0) {
+                files.sort(function (a, b) {
+                    if (a === "cover.webp") return -1;
+                    if (b === "cover.webp") return 1;
+                    if (a === "cover1.webp") return -1;
+                    if (b === "cover1.webp") return 1;
+                    if (a.toLowerCase() === "cover.webp" && b.toLowerCase() !== "cover.webp") return -1;
+                    if (b.toLowerCase() === "cover.webp" && a.toLowerCase() !== "cover.webp") return 1;
+                    return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
+                });
+                var firstFile = files[0];
+                if (!window.dsFallbackMap) window.dsFallbackMap = {};
+                window.dsFallbackMap[gridPath] = firstFile;
+                if (window.saveFallbackMap) window.saveFallbackMap();
+                var firstUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(firstFile) + "?alt=media";
+                getImageFromDB(firstUrl).then(function (blob) {
+                    if (blob) {
+                        window.renderBlobToImg(imgElement, blob);
+                    } else {
+                        imgElement.src = firstUrl;
+                        imgElement.onerror = function () { showPlaceholder(new Error("Image element onload onerror triggered")); };
+                    }
+                });
+            } else {
+                showPlaceholder(new Error("Folder list empty"));
+            }
+        }
+
+        if (window.dsFolderCache && window.dsFolderCache[listUrl] && window.dsFolderCache[listUrl].length > 0) {
+            applyFolderItems(window.dsFolderCache[listUrl]);
+            return;
+        }
+
         window.fetchWithRetry(listUrl)
             .then(function (res) { return res.json(); })
             .then(function (data) {
-                var files = (data.items || [])
-                    .map(function (item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
-                    .filter(function (f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
-
-                if (files.length > 0) {
-                    files.sort(function (a, b) {
-                        if (a === "cover.webp") return -1;
-                        if (b === "cover.webp") return 1;
-                        if (a === "cover1.webp") return -1;
-                        if (b === "cover1.webp") return 1;
-                        if (a.toLowerCase() === "cover.webp" && b.toLowerCase() !== "cover.webp") return -1;
-                        if (b.toLowerCase() === "cover.webp" && a.toLowerCase() !== "cover.webp") return 1;
-                        return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999);
-                    });
-                    var firstFile = files[0];
-                    dsFallbackMap[gridPath] = firstFile;
-                    saveFallbackMap();
-                    var firstUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(firstFile) + "?alt=media";
-                    // Try IDB first, then network
-                    getImageFromDB(firstUrl).then(function (blob) {
-                        if (blob) {
-                            window.renderBlobToImg(imgElement, blob);
-                        } else {
-                            imgElement.src = firstUrl;
-                            imgElement.onerror = function () { showPlaceholder(new Error("Image element onload onerror triggered")); };
-                        }
-                    });
-                } else {
-                    showPlaceholder(new Error("Folder list empty"));
-                }
+                if (!window.dsFolderCache) window.dsFolderCache = {};
+                window.dsFolderCache[listUrl] = data.items || [];
+                try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
+                applyFolderItems(data.items || []);
             })
             .catch(function (err) { showPlaceholder(err); });
     }
 
-
     function loadFromNetwork() {
-        // Priority queue: try cover.webp first, then cover1.webp, then fall back to folder listing
         var fallbackQueue = [];
         if (targetFile && targetFile !== "cover.webp" && targetFile !== "cover1.webp") fallbackQueue.push(targetFile);
+        if (window.dsFallbackMap && window.dsFallbackMap[gridPath] && !fallbackQueue.includes(window.dsFallbackMap[gridPath])) {
+            fallbackQueue.push(window.dsFallbackMap[gridPath]);
+        }
         if (!fallbackQueue.includes("cover.webp")) fallbackQueue.push("cover.webp");
         if (!fallbackQueue.includes("cover1.webp")) fallbackQueue.push("cover1.webp");
+        if (!fallbackQueue.includes("01.webp")) fallbackQueue.push("01.webp");
 
         var queueIndex = fallbackQueue.indexOf(fileToFetch) !== -1 ? fallbackQueue.indexOf(fileToFetch) : 0;
 
@@ -1479,40 +1511,24 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                 var res = await window.fetchWithRetry(targetUrl + cacheBuster);
                 if (res.ok) {
                     var blob = await res.blob();
+                    if (blob.size === 0) throw new Error("Empty image blob");
                     await saveImageToDB(cacheKey, blob);
+                    await saveImageToDB(gridPath, blob);
                     window.renderBlobToImg(imgElement, blob);
-
                 } else {
                     throw new Error("HTTP Status " + res.status);
                 }
             } catch (err) {
                 queueIndex++;
                 if (queueIndex < fallbackQueue.length) {
-                    var nextUrl = fbBase + encGridPath + "%2F" + fallbackQueue[queueIndex] + "?alt=media";
+                    var nextUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(fallbackQueue[queueIndex]) + "?alt=media";
                     fetchImageSecurely(nextUrl);
                 } else {
-                    // Final fallback sequence using token validation
-                    var finalZoomUrl = fbBase + encZoomPath + "%2Fcover.webp?alt=media&_cb=" + Date.now();
-                    try {
-                        var zRes = await window.fetchWithRetry(finalZoomUrl);
-                        if (zRes.ok) {
-                            var zBlob = await zRes.blob();
-                            if (zBlob.size === 0) throw new Error("Zero byte cover");
-                            window.renderBlobToImg(imgElement, zBlob);
-                        } else {
-                            if (zRes.status === 404) {
-                                coverExistsMap[gridPath] = false;
-                                saveCoverExistsMap();
-                            }
-                            tryToLoadLatestReadyDesign();
-                        }
-                    } catch (e) {
-                        if (e && e.message && e.message.includes("HTTP 404")) {
-                            coverExistsMap[gridPath] = false;
-                            saveCoverExistsMap();
-                        }
-                        tryToLoadLatestReadyDesign();
+                    if (window.coverExistsMap) {
+                        window.coverExistsMap[gridPath] = false;
+                        if (window.saveCoverExistsMap) window.saveCoverExistsMap();
                     }
+                    tryFolderListFallback();
                 }
             }
         }
@@ -1624,12 +1640,12 @@ window.resolveImageUrlSync = function (p) {
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
     var encGridPath = gridPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
-    var fileToFetch = p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : "cover.webp";
+    var fileToFetch = p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : ((window.dsFallbackMap && window.dsFallbackMap[gridPath]) || "cover.webp");
     if ((fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") && window.coverExistsMap && window.coverExistsMap[gridPath] === false) {
         if (window.dsFallbackMap && window.dsFallbackMap[gridPath]) {
             fileToFetch = window.dsFallbackMap[gridPath];
         } else {
-            return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+            fileToFetch = "01.webp";
         }
     }
     return fbBase + encGridPath + "%2F" + encodeURIComponent(fileToFetch) + "?alt=media";
@@ -3907,6 +3923,9 @@ async function syncImages(silent = false) {
                             var foundCover = folderFiles.find(f => possibleCovers.includes(f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase()));
                             coverFile = foundCover || folderFiles[0];
                         }
+                        if (!window.dsFallbackMap) window.dsFallbackMap = {};
+                        window.dsFallbackMap[p.gridUrl] = coverFile;
+                        if (window.saveFallbackMap) window.saveFallbackMap();
                         var coverUrl = fbBase + encGridPath + "%2F" + encodeURIComponent(coverFile) + "?alt=media";
 
                         var remoteItem = listData.items.find(it => it.name.endsWith("/" + coverFile));
