@@ -5,6 +5,29 @@
 const FIRESTORE_PRODUCTS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products?pageSize=1000";
 const FIRESTORE_USERS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users?pageSize=100";
 
+window.isSameDesign = function (d1, d2) {
+    if (!d1 || !d2) return false;
+    var c1 = String(d1).replace(/\.[^/.]+$/, '').trim().toLowerCase();
+    var c2 = String(d2).replace(/\.[^/.]+$/, '').trim().toLowerCase();
+    if (c1 === c2) return true;
+    if ((c1 === 'cover' || c1 === 'cover1') && (c2 === 'cover' || c2 === 'cover1')) return true;
+    var n1 = parseInt(c1.replace(/\D/g, ''), 10);
+    var n2 = parseInt(c2.replace(/\D/g, ''), 10);
+    if (!isNaN(n1) && !isNaN(n2) && n1 === n2) return true;
+    return false;
+};
+
+window.matchCoverFile = function (coverDesignId, folderFiles) {
+    if (!coverDesignId || !folderFiles || folderFiles.length === 0) return null;
+    var cleanCover = String(coverDesignId).replace(/\.[^/.]+$/, '').trim().toLowerCase();
+    if (!cleanCover || cleanCover === "none") return null;
+
+    var found = folderFiles.find(f => window.isSameDesign(f, cleanCover));
+    if (found) return found;
+
+    return null;
+};
+
 window.getRobustStock = function (p, fname, isCoverFallback) {
     if (!p || !p.stock) return 999;
     if (p.stock['FULLY_PACKED'] === 1) return 0;
@@ -32,7 +55,7 @@ window.isDesignInStock = function (p, fname) {
     var numStr = !isNaN(num) ? String(num) : "";
     var pad2 = !isNaN(num) ? String(num).padStart(2, '0') : "";
     var isCover = /^(cover|cover1)$/i.test(cleanName) ||
-        (p.coverDesignId && cleanName.toLowerCase() === String(p.coverDesignId).replace(/\.[^/.]+$/, "").trim().toLowerCase());
+        (p.coverDesignId && window.isSameDesign(cleanName, p.coverDesignId));
 
     if (p.stock) {
         var candidates = [fname, cleanName];
@@ -827,23 +850,24 @@ function initApp() {
 
         docs.forEach(d => {
             var f = d.fields || {};
-            var name = f.name ? f.name.stringValue : "";
-            var isWix = JSON.stringify(f).toLowerCase().includes("wix import");
+            var name = f.name ? (f.name.stringValue || f.name) : (d.name || "");
+            var isWix = JSON.stringify(d).toLowerCase().includes("wix import");
 
             if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !isWix) {
-                var finalPrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
-                var finalPacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
+                var finalPrice = d.price !== undefined ? d.price : (f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0);
+                var finalPacking = d.packing !== undefined ? d.packing : (f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1");
 
                 // --- ADMIN & INVENTORY PARSING ---
-                var actualDocId = d.name ? d.name.split('/').pop() : "";
-                var stockMap = {};
+                var actualDocId = d.docId ? d.docId : (d.name ? d.name.split('/').pop() : "");
+                var stockMap = d.stock ? { ...d.stock } : {};
                 if (f.stock && f.stock.mapValue && f.stock.mapValue.fields) {
+                    stockMap = {};
                     for (var k in f.stock.mapValue.fields) {
                         var vObj = f.stock.mapValue.fields[k];
                         stockMap[k] = parseInt(vObj.integerValue || vObj.doubleValue || vObj.stringValue || 0);
                     }
                 }
-                var tStock = 999;
+                var tStock = d.totalStock !== undefined ? d.totalStock : 999;
                 if (f.stock) {
                     if (stockMap['FULLY_PACKED'] === 1) {
                         tStock = 0;
@@ -864,25 +888,25 @@ function initApp() {
                     totalStock: tStock,
                     id: "p_" + validCounter,
                     name: name,
-                    sku: f.sku ? f.sku.stringValue : "",
+                    sku: d.sku !== undefined ? d.sku : (f.sku ? f.sku.stringValue : ""),
                     price: finalPrice,
-                    cat: f.cat ? f.cat.stringValue : "Uncategorized",
-                    gridUrl: f.gridUrl ? f.gridUrl.stringValue : "",
-                    zoomUrl: f.zoomUrl ? f.zoomUrl.stringValue : "",
-                    coverDesignId: f.coverDesignId ? f.coverDesignId.stringValue : "",
-                    mrp: f.mrp ? (f.mrp.doubleValue || f.mrp.integerValue || 0) : 0,
-                    fabric: f.fabric ? f.fabric.stringValue : "",
+                    cat: d.cat !== undefined ? d.cat : (f.cat ? f.cat.stringValue : "Uncategorized"),
+                    gridUrl: d.gridUrl !== undefined ? d.gridUrl : (f.gridUrl ? f.gridUrl.stringValue : ""),
+                    zoomUrl: d.zoomUrl !== undefined ? d.zoomUrl : (f.zoomUrl ? f.zoomUrl.stringValue : ""),
+                    coverDesignId: d.coverDesignId !== undefined ? d.coverDesignId : (f.coverDesignId ? f.coverDesignId.stringValue : ""),
+                    mrp: d.mrp !== undefined ? d.mrp : (f.mrp ? (f.mrp.doubleValue || f.mrp.integerValue || 0) : 0),
+                    fabric: d.fabric !== undefined ? d.fabric : (f.fabric ? f.fabric.stringValue : ""),
                     packing: finalPacking,
-                    mult: f.mult ? (f.mult.integerValue || 8) : 8,
-                    ready: f.ready ? f.ready.stringValue : "",
-                    jari: f.jari ? f.jari.stringValue : "",
-                    border: f.border ? f.border.stringValue : "",
-                    cut: f.cut ? f.cut.stringValue : "",
-                    pallu: f.pallu ? f.pallu.stringValue : "",
-                    blouse: f.blouse ? f.blouse.stringValue : "",
-                    work: f.work ? f.work.stringValue : "",
-                    igLinks: f.igLinks ? f.igLinks.stringValue : "[]",
-                    updateTime: f.latestImageAddedAt ? (f.latestImageAddedAt.timestampValue || f.latestImageAddedAt.stringValue) : (d.updateTime || d.createTime || "")
+                    mult: d.mult !== undefined ? d.mult : (f.mult ? (f.mult.integerValue || 8) : 8),
+                    ready: d.ready !== undefined ? d.ready : (f.ready ? f.ready.stringValue : ""),
+                    jari: d.jari !== undefined ? d.jari : (f.jari ? f.jari.stringValue : ""),
+                    border: d.border !== undefined ? d.border : (f.border ? f.border.stringValue : ""),
+                    cut: d.cut !== undefined ? d.cut : (f.cut ? f.cut.stringValue : ""),
+                    pallu: d.pallu !== undefined ? d.pallu : (f.pallu ? f.pallu.stringValue : ""),
+                    blouse: d.blouse !== undefined ? d.blouse : (f.blouse ? f.blouse.stringValue : ""),
+                    work: d.work !== undefined ? d.work : (f.work ? f.work.stringValue : ""),
+                    igLinks: d.igLinks !== undefined ? d.igLinks : (f.igLinks ? f.igLinks.stringValue : "[]"),
+                    updateTime: d.updateTime || (f.latestImageAddedAt ? (f.latestImageAddedAt.timestampValue || f.latestImageAddedAt.stringValue) : (d.updateTime || d.createTime || ""))
                 });
                 validCounter++;
             }
@@ -1349,7 +1373,8 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
     var lowResUrl = actualUrl;
 
     var isNativeLoading = (imgElement.getAttribute('src') === actualUrl || imgElement.src === actualUrl);
-    var cacheKey = (fileToFetch === "cover.webp" || fileToFetch === "cover1.webp") ? gridPath : lowResUrl;
+    var isExplicitDesign = !!(targetFile && targetFile !== "cover.webp" && targetFile !== "cover1.webp");
+    var cacheKey = isExplicitDesign ? lowResUrl : gridPath;
 
     function isPlaceholder() {
         if (!imgElement.src) return true;
@@ -1364,11 +1389,28 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
         imgElement.src = actualUrl;
     }
 
-    // ALWAYS check IndexedDB to support Offline Mode. Check gridPath first, then cacheKey
-    getImageFromDB(gridPath).then(function (blob) {
-        if (!blob && cacheKey !== gridPath) return getImageFromDB(cacheKey);
-        return blob;
-    }).then(function (blob) {
+    // ALWAYS check IndexedDB to support Offline Mode.
+    // 🛡️ CRITICAL FIX: If a specific design was requested, check cacheKey first!
+    // NEVER let a stale generic gridPath blob overwrite a starred design!
+    var idbLookupPromise;
+    if (isExplicitDesign) {
+        idbLookupPromise = getImageFromDB(cacheKey).then(function (blob) {
+            if (blob) return blob;
+            var cInfo = window.dsCoverTimeCache ? window.dsCoverTimeCache[gridPath] : null;
+            var cFile = (typeof cInfo === 'object' && cInfo) ? cInfo.file : null;
+            if (cFile && window.isSameDesign(cFile, fileToFetch)) {
+                return getImageFromDB(gridPath);
+            }
+            return null;
+        });
+    } else {
+        idbLookupPromise = getImageFromDB(gridPath).then(function (blob) {
+            if (!blob && cacheKey !== gridPath) return getImageFromDB(cacheKey);
+            return blob;
+        });
+    }
+
+    idbLookupPromise.then(function (blob) {
         if (blob) {
             window.renderBlobToImg(imgElement, blob);
             if (window.coverExistsMap) window.coverExistsMap[gridPath] = true;
@@ -1399,6 +1441,9 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
             if (blob.size > 0 && typeof saveImageToDB === 'function') {
                 saveImageToDB(key, blob);
                 if (key !== gridPath) saveImageToDB(gridPath, blob);
+                if (!window.dsCoverTimeCache) window.dsCoverTimeCache = {};
+                window.dsCoverTimeCache[gridPath] = { file: fileToFetch, time: Date.now() };
+                try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
             }
         }).catch(err => { });
     }
@@ -1514,6 +1559,9 @@ window.renderWebpFromFolder = function (imgElement, gridPath, zoomPath, targetFi
                     if (blob.size === 0) throw new Error("Empty image blob");
                     await saveImageToDB(cacheKey, blob);
                     await saveImageToDB(gridPath, blob);
+                    if (!window.dsCoverTimeCache) window.dsCoverTimeCache = {};
+                    window.dsCoverTimeCache[gridPath] = { file: fileToFetch, time: Date.now() };
+                    try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
                     window.renderBlobToImg(imgElement, blob);
                 } else {
                     throw new Error("HTTP Status " + res.status);
@@ -2482,26 +2530,14 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
                 // 2. Zoom Stock Enforcer
                 if (encZoomPath) {
-                    for (var fname of folderFiles) {
-                        var coverFile;
-                        if (p.coverDesignId) {
-                            var cleanCoverId = String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                            var exact = folderFiles.find(f => f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() === cleanCoverId);
-                            if (exact) {
-                                coverFile = exact;
-                            } else {
-                                // AUTO-HEALING GHOST METADATA
-                                var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=coverDesignId";
-                                fetch(patchUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { coverDesignId: { stringValue: "" } } }) }).catch(e => { });
-                                p.coverDesignId = ""; // Clear locally
-                            }
-                        }
-                        if (!coverFile) {
-                            var possibleCovers = ["cover", "cover1"];
-                            var foundCover = folderFiles.find(f => possibleCovers.includes(f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase()));
-                            coverFile = foundCover || folderFiles[0];
-                        }
+                    var coverFile = window.matchCoverFile(p.coverDesignId, folderFiles);
+                    if (!coverFile) {
+                        var possibleCovers = ["cover", "cover1"];
+                        var foundCover = folderFiles.find(f => possibleCovers.includes(f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase()));
+                        coverFile = foundCover || folderFiles[0];
+                    }
 
+                    for (var fname of folderFiles) {
                         var isCover = (fname === coverFile);
                         var curStock = window.getRobustStock(p, fname, isCover);
                         var zoomImgUrl = fbBase + encZoomPath + "%2F" + encodeURIComponent(fname) + "?alt=media";
@@ -2590,9 +2626,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             }
 
             if (file.isVideo) {
-                var cleanCoverId = p.coverDesignId ? String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() : '';
-                var cleanFileName = String(file.name).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                var isCover = (cleanCoverId !== '' && cleanCoverId === cleanFileName);
+                var isCover = window.isSameDesign(p.coverDesignId, file.name);
                 html += `
                 <div class="swipe-card" data-design="${file.name}" onclick="openFs('${p.id}', ${idx}, '${file.name}')" style="position:relative;">
                     ${adminCheckboxHtml}
@@ -2608,9 +2642,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                 </div>`;
             } else {
                 var imgId = "design_img_" + p.id + "_" + idx;
-                var cleanCoverId = p.coverDesignId ? String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() : '';
-                var cleanFileName = String(file.name).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                var isCover = (cleanCoverId !== '' && cleanCoverId === cleanFileName);
+                var isCover = window.isSameDesign(p.coverDesignId, file.name);
                 // ⚡ Use cached HD blob URL if available, otherwise start with grid URL (low-res placeholder)
                 var alreadyCached = !!(cachedBlobUrls[file.url]);
                 var initialSrc = alreadyCached ? cachedBlobUrls[file.url] : (file.gridUrl || placeholderSVG);
@@ -4058,18 +4090,7 @@ async function syncImages(silent = false) {
                             (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999));
 
                         // Build the full Firebase URL keys that should exist in DB
-                        var coverFile;
-                        if (p.coverDesignId) {
-                            var cleanCoverId = String(p.coverDesignId).replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase();
-                            var exact = folderFiles.find(f => f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase() === cleanCoverId);
-                            if (exact) {
-                                coverFile = exact;
-                            } else {
-                                var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=coverDesignId";
-                                fetch(patchUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { coverDesignId: { stringValue: "" } } }) }).catch(e => { });
-                                p.coverDesignId = "";
-                            }
-                        }
+                        var coverFile = window.matchCoverFile(p.coverDesignId, folderFiles);
                         if (!coverFile) {
                             var possibleCovers = ["cover", "cover1"];
                             var foundCover = folderFiles.find(f => possibleCovers.includes(f.replace(/\.(webp|jpg|jpeg|png)$/i, '').toLowerCase()));
@@ -4119,13 +4140,17 @@ async function syncImages(silent = false) {
 
                         // ——— 3. Download the COVER file (GRID ONLY) —————————————————————————————————
                         var existingCover = allCachedKeys.has(p.gridUrl);
-                        var localTime = window.dsCoverTimeCache[p.gridUrl] || 0;
+                        var cachedEntry = window.dsCoverTimeCache[p.gridUrl];
+                        var cachedCoverFile = (typeof cachedEntry === 'object' && cachedEntry) ? cachedEntry.file : null;
+                        var localTime = (typeof cachedEntry === 'object' && cachedEntry) ? (cachedEntry.time || 0) : (Number(cachedEntry) || 0);
 
-                        if (existingCover && localTime >= remoteTime) {
+                        var isSameCover = (cachedCoverFile && window.isSameDesign(cachedCoverFile, coverFile));
+
+                        if (existingCover && isSameCover && localTime >= remoteTime) {
                             downloaded = true;
                         } else {
                             if (existingCover) {
-                                console.log("[SYNC] Updating stale cover for", p.name);
+                                console.log("[SYNC] Updating stale cover for", p.name, "from", cachedCoverFile, "to", coverFile);
                                 await deleteImageFromDB(p.gridUrl);
                                 allCachedKeys.delete(p.gridUrl);
                             }
@@ -4146,7 +4171,7 @@ async function syncImages(silent = false) {
                                         await saveImageToDB(coverUrl, coverBlob);
                                         allCachedKeys.add(p.gridUrl);
                                         allCachedKeys.add(coverUrl);
-                                        window.dsCoverTimeCache[p.gridUrl] = remoteTime;
+                                        window.dsCoverTimeCache[p.gridUrl] = { file: coverFile, time: remoteTime };
                                         try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
                                         downloaded = true;
                                     }
@@ -7157,7 +7182,7 @@ window.promptSetAsCover = async function (docId, pid, designId) {
         return;
     }
 
-    var p = allProducts.find(x => x.docId === docId);
+    var p = allProducts.find(x => (docId && x.docId === docId) || (pid && x.id === pid));
     if (!p) {
         alert("Error: Could not find product.");
         return;
@@ -7168,6 +7193,9 @@ window.promptSetAsCover = async function (docId, pid, designId) {
     var oldCoverId = p.coverDesignId;
     // Optimistic UI Update
     p.coverDesignId = designId;
+    if (typeof curProduct !== 'undefined' && curProduct && ((docId && curProduct.docId === docId) || (pid && curProduct.id === pid))) {
+        curProduct.coverDesignId = designId;
+    }
 
     try {
         var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=updateTime&updateMask.fieldPaths=coverDesignId";
@@ -7184,25 +7212,54 @@ window.promptSetAsCover = async function (docId, pid, designId) {
 
         if (!fsRes.ok) throw new Error("Failed to update Firestore");
 
+        // Update local offline cache of products so reload/restart immediately has this coverDesignId
+        try {
+            var offlineDocs = JSON.parse(localStorage.getItem("dsOfflineProducts") || "[]");
+            if (Array.isArray(offlineDocs)) {
+                var docItem = offlineDocs.find(d => (d.name && d.name.endsWith('/' + docId)) || d.docId === docId);
+                if (docItem) {
+                    if (docItem.fields) {
+                        docItem.fields.coverDesignId = { stringValue: designId };
+                    } else {
+                        docItem.coverDesignId = designId;
+                    }
+                    localStorage.setItem("dsOfflineProducts", JSON.stringify(offlineDocs));
+                }
+            }
+        } catch (e) { }
+
         // Clear local cache for this cover image
         if (window.coverExistsMap) {
             window.coverExistsMap[p.gridUrl] = true;
             if (typeof window.saveCoverExistsMap === 'function') window.saveCoverExistsMap();
         }
-        if (window.dsFallbackMap) {
-            delete window.dsFallbackMap[p.gridUrl];
-            if (typeof window.saveFallbackMap === 'function') window.saveFallbackMap();
-        }
-        if (window.dsCoverTimeCache) {
-            delete window.dsCoverTimeCache[p.gridUrl];
-            try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
-        }
+        var designFileName = designId.includes('.') ? designId : designId + '.webp';
+        if (!window.dsFallbackMap) window.dsFallbackMap = {};
+        window.dsFallbackMap[p.gridUrl] = designFileName;
+        if (typeof window.saveFallbackMap === 'function') window.saveFallbackMap();
+
+        if (!window.dsCoverTimeCache) window.dsCoverTimeCache = {};
+        window.dsCoverTimeCache[p.gridUrl] = { file: designFileName, time: Date.now() };
+        try { localStorage.setItem("dsCoverTimeCache", JSON.stringify(window.dsCoverTimeCache)); } catch (e) { }
 
         if (typeof window.deleteImageFromDB === 'function') {
             await window.deleteImageFromDB(p.gridUrl);
         } else if (typeof deleteImageFromDB === 'function') {
             await deleteImageFromDB(p.gridUrl);
         }
+
+        // Update star icons in active detail deck if viewing
+        var starIcons = document.querySelectorAll('#deck .fa-star');
+        starIcons.forEach(icon => {
+            var isNowCover = icon.getAttribute('onclick') && icon.getAttribute('onclick').includes("'" + designId + "'");
+            if (isNowCover) {
+                icon.classList.remove('far');
+                icon.classList.add('fas');
+            } else {
+                icon.classList.remove('fas');
+                icon.classList.add('far');
+            }
+        });
 
         alert("Successfully set " + designId + " as the new cover!");
 
@@ -7212,6 +7269,9 @@ window.promptSetAsCover = async function (docId, pid, designId) {
     } catch (e) {
         // Optimistic Revert
         p.coverDesignId = oldCoverId;
+        if (typeof curProduct !== 'undefined' && curProduct && ((docId && curProduct.docId === docId) || (pid && curProduct.id === pid))) {
+            curProduct.coverDesignId = oldCoverId;
+        }
         if (typeof applyFilter === 'function') applyFilter();
         alert("Error setting cover: " + e.message + ". Reverted to previous cover.");
     } finally {
@@ -7341,7 +7401,7 @@ window.generateShareMessage = function (prod) {
         details.push("");
     }
 
-    details.push(`Check Ready Stock Designs here`);
+    details.push(`Check Live Designs & Stock here`);
     details.push(link);
     details.push("");
 
