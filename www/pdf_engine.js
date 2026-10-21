@@ -24,9 +24,14 @@ async function getActualDesignsForProduct(p, shareType, action) {
             cards.forEach(card => {
                 if (card.querySelector('video')) return; // Skip videos for image/PDF share
                 var dName = card.getAttribute('data-design');
-                if (!dName || dName === 'DIRECT' || dName.toLowerCase().startsWith('cover')) {
-                    if (cards.length === 1 && dName) {
-                        rawFiles.push(dName.includes('.') ? dName : dName + '.webp');
+                var cleanDName = (dName || '').replace(/\.[^/.]+$/, '').trim();
+                var isCoverCard = (!cleanDName || cleanDName.toUpperCase() === 'DIRECT' || cleanDName.toLowerCase().startsWith('cover'));
+                if (isCoverCard) {
+                    if (cards.length === 1) {
+                        var dsFallbackMap = {};
+                        try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+                        var cFile = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl] || 'cover.webp';
+                        rawFiles.push(cFile.includes('.') ? cFile : cFile + '.webp');
                     }
                     return;
                 }
@@ -222,103 +227,140 @@ function blobToJpegForPDF(blob) {
 /**
  * ROUTING & DOWNGRADE INTERCEPTOR
  * forceJpeg = false -> Engine 1 (Sharing)
- * forceJpeg = true  -> Engine 2 (PDF)
+ * forceJpeg = true  -> Engine 2 (PDF / Native Share)
  */
 function getBase64FromCache(cacheKey, forceJpeg = false) {
     if (!cacheKey) return Promise.resolve(null);
     var isCoverOrGarbage = false;
     var lowerKey = cacheKey.toLowerCase();
-    if (lowerKey.includes('cover.webp') || lowerKey.includes('01.webp') || lowerKey.includes('cover1.webp') || lowerKey.includes('1.webp')) {
+    if (lowerKey.includes('cover.webp') || lowerKey.includes('01.webp') || lowerKey.includes('cover1.webp') || lowerKey.includes('1.webp') || lowerKey.includes('direct.webp') || lowerKey.includes('direct')) {
         isCoverOrGarbage = true;
     }
 
-    var urlsToTry = [cacheKey];
-    if (lowerKey.includes('.webp?alt=media')) {
-        urlsToTry.push(cacheKey.replace(/\.webp\?alt=media/i, '.jpg?alt=media'));
-        urlsToTry.push(cacheKey.replace(/\.webp\?alt=media/i, '.jpeg?alt=media'));
-        urlsToTry.push(cacheKey.replace(/\.webp\?alt=media/i, '.png?alt=media'));
-    } else if (lowerKey.includes('.jpg?alt=media')) {
-        urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.webp?alt=media'));
-        urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.jpeg?alt=media'));
-        urlsToTry.push(cacheKey.replace(/\.jpg\?alt=media/i, '.png?alt=media'));
+    var isZoomRequest = cacheKey.includes('/Zoom%2F') || cacheKey.includes('/Zoom/');
+    var matchingProd = (typeof curProduct !== 'undefined' && curProduct) ? curProduct : null;
+    if (typeof allProducts !== 'undefined' && Array.isArray(allProducts)) {
+        var found = allProducts.find(p => {
+            if (p.zoomUrl && p.zoomUrl !== 'None' && cacheKey.includes(encodeURIComponent(p.zoomUrl.trim().replace(/\\/g, '/')))) return true;
+            if (p.gridUrl && cacheKey.includes(encodeURIComponent(p.gridUrl.trim().replace(/\\/g, '/')))) return true;
+            return false;
+        });
+        if (found) matchingProd = found;
     }
 
-    // 🔄 Automatic Zoom <-> Grid URL Swapping
-    if (cacheKey.includes('/Zoom%2F') || cacheKey.includes('/Zoom/')) {
-        var gUrl = cacheKey.replace(/\/Zoom(%2F|\/)/i, '/Grid$1');
-        if (!urlsToTry.includes(gUrl)) urlsToTry.push(gUrl);
-    } else if (cacheKey.includes('/Grid%2F') || cacheKey.includes('/Grid/')) {
-        var zUrl = cacheKey.replace(/\/Grid(%2F|\/)/i, '/Zoom$1');
-        if (!urlsToTry.includes(zUrl)) urlsToTry.push(zUrl);
-    }
-
-    if (typeof curProduct !== 'undefined' && curProduct && curProduct.zoomUrl && curProduct.gridUrl) {
-        var encZoom = encodeURIComponent(curProduct.zoomUrl.trim().replace(/\\/g, '/'));
-        var encGrid = encodeURIComponent(curProduct.gridUrl.trim().replace(/\\/g, '/'));
-        if (cacheKey.includes(encZoom)) {
-            var gUrl = cacheKey.replace(encZoom, encGrid);
-            if (!urlsToTry.includes(gUrl)) urlsToTry.push(gUrl);
-        } else if (cacheKey.includes(encGrid)) {
-            var zUrl = cacheKey.replace(encGrid, encZoom);
-            if (!urlsToTry.includes(zUrl)) urlsToTry.push(zUrl);
+    if (!isZoomRequest && matchingProd && matchingProd.zoomUrl && matchingProd.zoomUrl !== "None") {
+        var encZoom = encodeURIComponent(matchingProd.zoomUrl.trim().replace(/\\/g, '/'));
+        if (cacheKey.includes(encZoom) || cacheKey.includes(matchingProd.zoomUrl)) {
+            isZoomRequest = true;
         }
     }
 
-    // 🗄️ Include raw IndexedDB folder paths (covers are stored under folder path as key)
-    try {
-        var decoded = decodeURIComponent(cacheKey);
-        if (decoded.includes('/o/')) {
-            var afterO = decoded.split('/o/')[1].split('?')[0];
-            var lastSlashPos = afterO.lastIndexOf('/');
-            if (lastSlashPos > -1) {
-                var folderWithSlash = afterO.substring(0, lastSlashPos + 1);
-                var folderNoSlash = afterO.substring(0, lastSlashPos);
-                [folderWithSlash, folderNoSlash].forEach(function(f) {
-                    if (f && !urlsToTry.includes(f)) urlsToTry.push(f);
-                    var swapped = f.startsWith('Zoom/') ? f.replace(/^Zoom\//i, 'Grid/') : (f.startsWith('Grid/') ? f.replace(/^Grid\//i, 'Zoom/') : null);
-                    if (swapped && !urlsToTry.includes(swapped)) urlsToTry.push(swapped);
-                });
+    var zoomBaseKey = null;
+    var gridBaseKey = null;
+
+    if (isZoomRequest) {
+        zoomBaseKey = cacheKey;
+        gridBaseKey = cacheKey.replace(/\/Zoom(%2F|\/)/i, '/Grid$1');
+        if (matchingProd && matchingProd.zoomUrl && matchingProd.gridUrl) {
+            var encZoomStr = encodeURIComponent(matchingProd.zoomUrl.trim().replace(/\\/g, '/'));
+            var encGridStr = encodeURIComponent(matchingProd.gridUrl.trim().replace(/\\/g, '/'));
+            if (gridBaseKey.includes(encZoomStr)) {
+                gridBaseKey = gridBaseKey.replace(encZoomStr, encGridStr);
             }
         }
-    } catch(e){}
+    } else if (cacheKey.includes('/Grid%2F') || cacheKey.includes('/Grid/')) {
+        gridBaseKey = cacheKey;
+        zoomBaseKey = cacheKey.replace(/\/Grid(%2F|\/)/i, '/Zoom$1');
+        if (matchingProd && matchingProd.zoomUrl && matchingProd.gridUrl) {
+            var encZoomStr = encodeURIComponent(matchingProd.zoomUrl.trim().replace(/\\/g, '/'));
+            var encGridStr = encodeURIComponent(matchingProd.gridUrl.trim().replace(/\\/g, '/'));
+            if (zoomBaseKey.includes(encGridStr)) {
+                zoomBaseKey = zoomBaseKey.replace(encGridStr, encZoomStr);
+            }
+        }
+    } else {
+        gridBaseKey = cacheKey;
+    }
 
-    if (isCoverOrGarbage) {
-        var baseUrls = [...urlsToTry];
-        baseUrls.forEach(function(u) {
-            if (typeof u === 'string' && u.includes('?alt=media')) {
-                var extIndex = u.indexOf('.webp?alt=media');
-                if (extIndex > -1) {
-                    var lastSlash = Math.max(u.lastIndexOf('%2F'), u.lastIndexOf('/'));
-                    if (lastSlash > -1 && lastSlash < extIndex) {
-                        var folderUrl = u.substring(0, lastSlash + (u.charAt(lastSlash) === '%' ? 3 : 1));
-                        ['cover.webp', 'cover1.webp', '01.webp', '1.webp'].forEach(function(cName) {
-                            var tryUrl = folderUrl + cName + '?alt=media';
-                            if (!urlsToTry.includes(tryUrl)) urlsToTry.push(tryUrl);
-                        });
-                    }
+    function buildVariants(baseKey) {
+        if (!baseKey) return [];
+        var list = [baseKey];
+        var lk = baseKey.toLowerCase();
+        if (lk.includes('.webp?alt=media')) {
+            list.push(baseKey.replace(/\.webp\?alt=media/i, '.jpg?alt=media'));
+            list.push(baseKey.replace(/\.webp\?alt=media/i, '.jpeg?alt=media'));
+            list.push(baseKey.replace(/\.webp\?alt=media/i, '.png?alt=media'));
+        } else if (lk.includes('.jpg?alt=media')) {
+            list.push(baseKey.replace(/\.jpg\?alt=media/i, '.webp?alt=media'));
+            list.push(baseKey.replace(/\.jpg\?alt=media/i, '.jpeg?alt=media'));
+            list.push(baseKey.replace(/\.jpg\?alt=media/i, '.png?alt=media'));
+        }
+
+        try {
+            var decoded = decodeURIComponent(baseKey);
+            if (decoded.includes('/o/')) {
+                var afterO = decoded.split('/o/')[1].split('?')[0];
+                var lastSlashPos = afterO.lastIndexOf('/');
+                if (lastSlashPos > -1) {
+                    var folderWithSlash = afterO.substring(0, lastSlashPos + 1);
+                    var folderNoSlash = afterO.substring(0, lastSlashPos);
+                    [folderWithSlash, folderNoSlash].forEach(function(f) {
+                        if (f && !list.includes(f)) list.push(f);
+                    });
                 }
             }
+        } catch(e){}
+
+        if (isCoverOrGarbage) {
+            var baseList = [...list];
+            baseList.forEach(function(u) {
+                if (typeof u === 'string' && u.includes('?alt=media')) {
+                    var extIndex = u.indexOf('.webp?alt=media');
+                    if (extIndex > -1) {
+                        var lastSlash = Math.max(u.lastIndexOf('%2F'), u.lastIndexOf('/'));
+                        if (lastSlash > -1 && lastSlash < extIndex) {
+                            var folderUrl = u.substring(0, lastSlash + (u.charAt(lastSlash) === '%' ? 3 : 1));
+                            ['cover.webp', 'cover1.webp', '01.webp', '1.webp'].forEach(function(cName) {
+                                var tryUrl = folderUrl + cName + '?alt=media';
+                                if (!list.includes(tryUrl)) list.push(tryUrl);
+                            });
+                        }
+                    }
+                }
+            });
+        }
+        return list;
+    }
+
+    var zoomUrlsToTry = zoomBaseKey ? buildVariants(zoomBaseKey) : [];
+    var gridUrlsToTry = gridBaseKey ? buildVariants(gridBaseKey) : [];
+
+    // Helper: convert blob to base64 or JPEG
+    function processBlob(blob) {
+        if (!blob || blob.size === 0) return Promise.resolve(null);
+        return (forceJpeg ? blobToJpegForPDF(blob) : blobToBase64Direct(blob));
+    }
+
+    // Helper: Try IDB for a list of keys
+    function tryIDBList(keys, index) {
+        if (index >= keys.length) return Promise.resolve(null);
+        return getImageFromDB(keys[index]).then(function(blob) {
+            if (blob && blob.size > 0) {
+                return processBlob(blob).then(function(res) {
+                    if (res) return res;
+                    return tryIDBList(keys, index + 1);
+                });
+            }
+            return tryIDBList(keys, index + 1);
+        }).catch(function() {
+            return tryIDBList(keys, index + 1);
         });
     }
 
-    // Phase 1: Try IDB for all possible URLs
-    function tryIDB(index) {
-        if (index >= urlsToTry.length) return tryDOM();
-        return getImageFromDB(urlsToTry[index]).then(function(blob) {
-            if (blob && blob.size > 0) {
-                return (forceJpeg ? blobToJpegForPDF(blob) : blobToBase64Direct(blob)).then(function(res) {
-                    if (res) return res; // Success!
-                    return tryIDB(index + 1); // Blob corrupt, try next
-                });
-            }
-            return tryIDB(index + 1);
-        }).catch(function() { return tryIDB(index + 1); });
-    }
-
-    // Phase 1.5: Instant DOM Extraction (if image is already rendered on screen)
-    function tryDOM() {
+    // Helper: Try DOM extraction for Zoom (high-res swipe card only)
+    function tryZoomDOM() {
         try {
-            var decoded = decodeURIComponent(cacheKey);
+            var decoded = decodeURIComponent(zoomBaseKey || cacheKey);
             var filename = decoded.substring(decoded.lastIndexOf('/') + 1).split('?')[0].toLowerCase();
             var designNum = parseInt(filename.replace(/\D/g, ''), 10);
 
@@ -329,7 +371,8 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
                 var dNum = parseInt(d.replace(/\D/g, ''), 10);
                 if (d === filename || d === filename.replace(/\.[^.]+$/, '') || (!isNaN(designNum) && !isNaN(dNum) && designNum === dNum)) {
                     var img = c.querySelector('img');
-                    if (img && img.naturalWidth > 0) {
+                    // ONLY extract from DOM if Zoom is CONFIRMED loaded and >= 600px!
+                    if (img && img.getAttribute('data-loaded-zoom') === 'true' && img.naturalWidth >= 600) {
                         var canvas = document.createElement('canvas');
                         canvas.width = img.naturalWidth;
                         canvas.height = img.naturalHeight;
@@ -340,60 +383,16 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
                     }
                 }
             }
-
-            var gridImgs = document.querySelectorAll('img.ci-img');
-            for (var j = 0; j < gridImgs.length; j++) {
-                var gImg = gridImgs[j];
-                if (gImg.src && (gImg.src.includes(filename) || (cacheKey.includes('/o/') && gImg.src.includes(cacheKey.split('/o/')[1].split('?')[0])))) {
-                    if (gImg.naturalWidth > 0) {
-                        var canvas2 = document.createElement('canvas');
-                        canvas2.width = gImg.naturalWidth;
-                        canvas2.height = gImg.naturalHeight;
-                        var ctx2 = canvas2.getContext('2d');
-                        ctx2.drawImage(gImg, 0, 0);
-                        var dataUrl2 = canvas2.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
-                        if (dataUrl2 && dataUrl2.length > 100) return Promise.resolve(dataUrl2);
-                    }
-                }
-            }
         } catch(e){}
-        return tryNetwork(0);
+        return Promise.resolve(null);
     }
 
-    // Phase 2: Try Network for all possible URLs (never abort early)
-    function tryNetwork(index) {
-        if (index >= urlsToTry.length) {
-            // Phase 3: Ultimate Fallback (Directory Scan) for Covers
-            if (isCoverOrGarbage) {
-                try {
-                    var bucket = "durga-sarees.firebasestorage.app";
-                    var urlObj = new URL(cacheKey);
-                    var pathName = decodeURIComponent(urlObj.pathname.split('/o/')[1]); 
-                    var fwdPath = pathName.substring(0, pathName.lastIndexOf('/'));
-                    var listPrefix = fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('/') + '/';
-                    var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
-                    
-                    return window.fetchWithRetry(listUrl, {}, 0)
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) {
-                            var files = (data.items || [])
-                                .map(function(item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
-                                .filter(function(f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
-                            if (files.length > 0) {
-                                files.sort(function(a, b) { return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999); });
-                                var finalUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('%2F') + "%2F" + encodeURIComponent(files[0]) + "?alt=media";
-                                return window.fetchWithRetry(finalUrl, {}, 0).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? (forceJpeg ? blobToJpegForPDF(b) : blobToBase64Direct(b)) : null; });
-                            }
-                            return null;
-                        }).catch(function() { return null; });
-                } catch (e) { return Promise.resolve(null); }
-            }
-            return Promise.resolve(null);
-        }
-        
-        var fetchUrl = urlsToTry[index];
+    // Helper: Try Network for a list of URLs
+    function tryNetworkList(keys, index) {
+        if (index >= keys.length) return Promise.resolve(null);
+        var fetchUrl = keys[index];
         if (!fetchUrl || !fetchUrl.startsWith('http') || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
-            return tryNetwork(index + 1);
+            return tryNetworkList(keys, index + 1);
         }
 
         var ctrlC = new AbortController();
@@ -409,19 +408,126 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
                 if (typeof saveImageToDB === 'function') {
                     saveImageToDB(fetchUrl, netBlob).catch(() => {});
                 }
-                return forceJpeg ? blobToJpegForPDF(netBlob) : blobToBase64Direct(netBlob); 
+                if (window.sessionImageCache) {
+                    try { window.sessionImageCache.set(fetchUrl, netBlob); } catch(e){}
+                }
+                return processBlob(netBlob); 
             })
             .then(function(res) {
                 if (res) return res;
-                return tryNetwork(index + 1);
+                return tryNetworkList(keys, index + 1);
             })
             .catch(function() {
                 clearTimeout(tidC);
-                return tryNetwork(index + 1); 
+                return tryNetworkList(keys, index + 1); 
             });
     }
 
-    return tryIDB(0);
+    // Emergency Fallback: Try Grid from IDB, DOM, Network, and Directory Scan
+    function tryGridFallback() {
+        if (gridUrlsToTry.length === 0) return Promise.resolve(null);
+
+        // 1. Check IDB for Grid
+        return tryIDBList(gridUrlsToTry, 0).then(function(idbRes) {
+            if (idbRes) return idbRes;
+
+            // 2. Check DOM for Grid
+            try {
+                var decoded = decodeURIComponent(gridBaseKey || cacheKey);
+                var filename = decoded.substring(decoded.lastIndexOf('/') + 1).split('?')[0].toLowerCase();
+                var designNum = parseInt(filename.replace(/\D/g, ''), 10);
+
+                var cards = document.querySelectorAll('.swipe-card');
+                for (var i = 0; i < cards.length; i++) {
+                    var c = cards[i];
+                    var d = (c.getAttribute('data-design') || '').toLowerCase();
+                    var dNum = parseInt(d.replace(/\D/g, ''), 10);
+                    if (d === filename || d === filename.replace(/\.[^.]+$/, '') || (!isNaN(designNum) && !isNaN(dNum) && designNum === dNum)) {
+                        var img = c.querySelector('img');
+                        if (img && img.naturalWidth > 0) {
+                            var canvas = document.createElement('canvas');
+                            canvas.width = img.naturalWidth;
+                            canvas.height = img.naturalHeight;
+                            var ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+                            var dataUrl = canvas.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
+                            if (dataUrl && dataUrl.length > 100) return dataUrl;
+                        }
+                    }
+                }
+
+                var gridImgs = document.querySelectorAll('img.ci-img');
+                for (var j = 0; j < gridImgs.length; j++) {
+                    var gImg = gridImgs[j];
+                    if (gImg.src && (gImg.src.includes(filename) || (cacheKey.includes('/o/') && gImg.src.includes(cacheKey.split('/o/')[1].split('?')[0])))) {
+                        if (gImg.naturalWidth > 0) {
+                            var canvas2 = document.createElement('canvas');
+                            canvas2.width = gImg.naturalWidth;
+                            canvas2.height = gImg.naturalHeight;
+                            var ctx2 = canvas2.getContext('2d');
+                            ctx2.drawImage(gImg, 0, 0);
+                            var dataUrl2 = canvas2.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
+                            if (dataUrl2 && dataUrl2.length > 100) return dataUrl2;
+                        }
+                    }
+                }
+            } catch(e){}
+
+            // 3. Check Network for Grid
+            return tryNetworkList(gridUrlsToTry, 0).then(function(netRes) {
+                if (netRes) return netRes;
+
+                // 4. Directory Scan for Covers
+                if (isCoverOrGarbage) {
+                    try {
+                        var bucket = "durga-sarees.firebasestorage.app";
+                        var urlObj = new URL(cacheKey);
+                        var pathName = decodeURIComponent(urlObj.pathname.split('/o/')[1]); 
+                        var fwdPath = pathName.substring(0, pathName.lastIndexOf('/'));
+                        var listPrefix = fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('/') + '/';
+                        var listUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o?prefix=" + listPrefix + "&delimiter=/";
+                        
+                        return (window.fetchWithRetry ? window.fetchWithRetry(listUrl, {}, 0) : fetch(listUrl))
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                var files = (data.items || [])
+                                    .map(function(item) { return item.name.substring(item.name.lastIndexOf('/') + 1); })
+                                    .filter(function(f) { return /\.(webp|jpg|jpeg|png)$/i.test(f); });
+                                if (files.length > 0) {
+                                    files.sort(function(a, b) { return (parseInt(a.replace(/\D/g, '')) || 999) - (parseInt(b.replace(/\D/g, '')) || 999); });
+                                    var finalUrl = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + fwdPath.split('/').map(function(s) { return encodeURIComponent(s); }).join('%2F') + "%2F" + encodeURIComponent(files[0]) + "?alt=media";
+                                    return (window.fetchWithRetry ? window.fetchWithRetry(finalUrl, {}, 0) : fetch(finalUrl)).then(function(r) { return r.ok ? r.blob() : null; }).then(function(b) { return b ? processBlob(b) : null; });
+                                }
+                                return null;
+                            }).catch(function() { return null; });
+                    } catch (e) { return null; }
+                }
+                return null;
+            });
+        });
+    }
+
+    // Pipeline:
+    // If zoom requested:
+    // 1. Try Zoom in IDB (only Zoom URLs)
+    // 2. Try Zoom in DOM (only if data-loaded-zoom === 'true' and naturalWidth >= 600)
+    // 3. Try Zoom from Network (full HD)
+    // 4. Emergency fallback: Grid IDB -> Grid DOM -> Grid Network -> List Scan
+    if (zoomUrlsToTry.length > 0) {
+        return tryIDBList(zoomUrlsToTry, 0).then(function(idbRes) {
+            if (idbRes) return idbRes;
+            return tryZoomDOM().then(function(domRes) {
+                if (domRes) return domRes;
+                return tryNetworkList(zoomUrlsToTry, 0).then(function(netRes) {
+                    if (netRes) return netRes;
+                    return tryGridFallback();
+                });
+            });
+        });
+    }
+
+    // If not a Zoom request (Grid URL requested explicitly):
+    return tryGridFallback();
 }
 window.getBase64FromCache = getBase64FromCache;
 
@@ -436,23 +542,24 @@ async function resolveCorrectUrl(p, dId, overrideFolder) {
     if (!p) return null;
     
     // 1. Check if the cover is explicitly remapped via dsFallbackMap
-    var isCover = (!dId || dId === 'DIRECT' || dId === 'Cover');
-    if (isCover) {
-        var dsFallbackMap = {};
-        try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
-        var fallbackFileName = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
-        if (fallbackFileName) {
-            dId = fallbackFileName;
-            isCover = false; // treat as named design now
-        }
-    }
+    var cleanDId = (dId || '').replace(/\.[^/.]+$/, '').trim();
+    var isCover = (!cleanDId || cleanDId.toUpperCase() === 'DIRECT' || cleanDId.toLowerCase() === 'cover' || cleanDId.toLowerCase() === 'cover1');
+    var dsFallbackMap = {};
+    try { dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}"); } catch(e){}
+    var fallbackFileName = p.coverDesignId || dsFallbackMap[p.gridUrl] || dsFallbackMap[p.zoomUrl];
 
-    // Covers live in gridUrl (fallback to zoomUrl); high-res designs live in zoomUrl (fallback to gridUrl)
-    var folderPath = overrideFolder || (isCover ? (p.gridUrl || p.zoomUrl) : ((p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl));
-    if (!folderPath) folderPath = p.gridUrl || p.zoomUrl || "";
+    if (isCover && fallbackFileName) {
+        dId = fallbackFileName;
+        isCover = false; // treat as named design now
+    }
 
     var bucket = "durga-sarees.firebasestorage.app";
     var fbBase = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/";
+    
+    // Always default to high-res zoomUrl for high-res sharing & PDF.
+    // overrideFolder is only used if explicitly provided (e.g. PDF multi-item thumbnail grid)
+    var folderPath = overrideFolder || ((p.zoomUrl && p.zoomUrl !== "None") ? p.zoomUrl : p.gridUrl);
+    if (!folderPath) folderPath = p.zoomUrl || p.gridUrl || "";
     var encPath = folderPath.trim().replace(/\\/g, '/').split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('%2F');
     
     var fileName;

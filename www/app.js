@@ -30,10 +30,7 @@ window.matchCoverFile = function (coverDesignId, folderFiles) {
 
 window.getRobustStock = function (p, fname, isCoverFallback) {
     if (!p || !p.stock) return 999;
-    if (p.stock['FULLY_PACKED'] === 1) {
-        var hasStock = Object.keys(p.stock).some(k => k !== 'FULLY_PACKED' && k !== 'DIRECT' && !k.toLowerCase().startsWith('cover') && (parseInt(p.stock[k]) || 0) > 0);
-        if (!hasStock) return 0;
-    }
+    if (p.stock['FULLY_PACKED'] === 1) return 0;
     if (p.stock[fname] !== undefined) return p.stock[fname];
     if (isCoverFallback && p.stock['Cover'] !== undefined) return p.stock['Cover'];
     if (isCoverFallback && p.stock['DIRECT'] !== undefined) return p.stock['DIRECT'];
@@ -51,10 +48,7 @@ window.getRobustStock = function (p, fname, isCoverFallback) {
 
 window.isDesignInStock = function (p, fname) {
     if (!p) return false;
-    if (p.stock && p.stock['FULLY_PACKED'] === 1) {
-        var hasStock = Object.keys(p.stock).some(k => k !== 'FULLY_PACKED' && k !== 'DIRECT' && !k.toLowerCase().startsWith('cover') && (parseInt(p.stock[k]) || 0) > 0);
-        if (!hasStock) return false;
-    }
+    if (p.stock && p.stock['FULLY_PACKED'] === 1) return false;
 
     var cleanName = String(fname || '').replace(/\.[^/.]+$/, "").trim();
     var num = parseInt(cleanName.replace(/\D/g, ''), 10);
