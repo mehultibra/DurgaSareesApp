@@ -532,12 +532,12 @@ async function sendOtp() {
     var errEl = document.getElementById('lErr');
     if (!phoneEl) return;
 
-    var phone = phoneEl.value.trim();
+    var phone = phoneEl.value.trim().replace(/[\s\-\(\)]/g, '');
     var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
     if (!phone) { if (errEl) errEl.innerText = "Enter phone number"; return; }
 
     if (!phone.startsWith('+')) {
-        phone = countryCode + phone;
+        phone = countryCode + phone.replace(/^0+/, '');
     }
 
     var btn = document.getElementById('btnSendOtp');
@@ -608,9 +608,22 @@ async function verifyOtp() {
             await webConfirmationResult.confirm(code);
         }
 
+        // Invalidate cached token so we get fresh token for newly verified user
+        _cachedIdToken = null;
+        _cachedIdTokenExp = 0;
+
         var inputPhone = document.getElementById('lPhone').value.trim();
         var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
-        phoneStr = inputPhone.startsWith('+') ? inputPhone : countryCode + inputPhone;
+        
+        if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.phoneNumber) {
+            phoneStr = firebase.auth().currentUser.phoneNumber;
+        } else {
+            var cleanInput = inputPhone.replace(/[\s\-\(\)]/g, '');
+            phoneStr = cleanInput.startsWith('+') ? cleanInput : countryCode + cleanInput.replace(/^0+/, '');
+        }
+
+        window.pendingUserPhone = phoneStr;
+        try { localStorage.setItem("dsUserPhone", phoneStr); } catch (e) { }
 
         checkUserInFirestore(phoneStr).then(function (exists) {
             if (exists) {
@@ -618,7 +631,6 @@ async function verifyOtp() {
             } else {
                 document.getElementById('loginBoxOtp').style.display = 'none';
                 document.getElementById('loginBoxRegister').style.display = 'block';
-                window.pendingUserPhone = phoneStr;
             }
         });
     } catch (err) {
@@ -629,13 +641,7 @@ async function verifyOtp() {
 
 async function checkUserInFirestore(phone) {
     try {
-        var token = "";
-        if (window.CapacitorFirebaseAuthentication) {
-            var tRes = await window.CapacitorFirebaseAuthentication.getIdToken();
-            if (tRes && tRes.token) token = tRes.token;
-        } else if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
-            token = await firebase.auth().currentUser.getIdToken();
-        }
+        var token = await getCachedAuthToken(true);
         var headers = {};
         if (token) headers['Authorization'] = 'Bearer ' + token;
 
@@ -657,12 +663,16 @@ async function checkUserInFirestore(phone) {
             return false;
         }
 
-        var found = await doQuery(phone);
+        var cleanPhone = (phone || '').trim().replace(/[\s\-\(\)]/g, '');
+        var found = await doQuery(cleanPhone);
         if (found) return true;
 
-        var altPhone = phone.replace(/^\+91/, '');
-        if (phone !== altPhone) {
+        var altPhone = cleanPhone.replace(/^\+91/, '');
+        if (cleanPhone !== altPhone) {
             found = await doQuery(altPhone);
+            if (found) return true;
+        } else {
+            found = await doQuery('+91' + cleanPhone.replace(/^0+/, ''));
             if (found) return true;
         }
         return false;
@@ -676,38 +686,44 @@ async function saveProfile() {
     var nameEl = document.getElementById('rName');
     var stationEl = document.getElementById('rStation');
     var stateEl = document.getElementById('rState');
-    var firm = document.getElementById('rFirm').value.trim();
+    var firm = document.getElementById('rFirm') ? document.getElementById('rFirm').value.trim() : "";
     var err = document.getElementById('rErr');
 
-    var name = nameEl.value.trim();
-    var station = stationEl.value.trim();
-    var state = stateEl.value.trim();
+    var name = nameEl ? nameEl.value.trim() : "";
+    var station = stationEl ? stationEl.value.trim() : "";
+    var state = stateEl ? stateEl.value.trim() : "";
 
     var hasErr = false;
 
     if (!name) {
-        nameEl.classList.add("error");
-        nameEl.placeholder = "Name is Required *";
+        if (nameEl) {
+            nameEl.classList.add("error");
+            nameEl.placeholder = "Name is Required *";
+        }
         hasErr = true;
-    } else {
+    } else if (nameEl) {
         nameEl.classList.remove("error");
         nameEl.placeholder = "Name *";
     }
 
     if (!station) {
-        stationEl.classList.add("error");
-        stationEl.placeholder = "Station is Required *";
+        if (stationEl) {
+            stationEl.classList.add("error");
+            stationEl.placeholder = "Station is Required *";
+        }
         hasErr = true;
-    } else {
+    } else if (stationEl) {
         stationEl.classList.remove("error");
         stationEl.placeholder = "Station *";
     }
 
     if (!state) {
-        stateEl.classList.add("error");
-        stateEl.placeholder = "State is Required *";
+        if (stateEl) {
+            stateEl.classList.add("error");
+            stateEl.placeholder = "State is Required *";
+        }
         hasErr = true;
-    } else {
+    } else if (stateEl) {
         stateEl.classList.remove("error");
         stateEl.placeholder = "State *";
     }
@@ -717,21 +733,30 @@ async function saveProfile() {
         return;
     }
 
-    var phone = window.pendingUserPhone;
+    // Determine the exact phone number matching Firebase Auth token
+    var phone = "";
+    if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.phoneNumber) {
+        phone = firebase.auth().currentUser.phoneNumber;
+    }
+    if (!phone && window.pendingUserPhone) {
+        phone = window.pendingUserPhone;
+    }
+    if (!phone && window.dsCustomerDetails && window.dsCustomerDetails.phone) {
+        phone = window.dsCustomerDetails.phone;
+    }
     if (!phone) {
-        if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
-            phone = firebase.auth().currentUser.phoneNumber;
-        } else if (window.dsCustomerDetails && window.dsCustomerDetails.phone) {
-            phone = window.dsCustomerDetails.phone;
-        } else {
-            // Very last resort: pull from localstorage if strictly available
-            phone = localStorage.getItem("dsUserPhone") || "";
-        }
+        phone = localStorage.getItem("dsUserPhone") || localStorage.getItem("dsUserToken") || "";
     }
 
-    // Ensure we don't send undefined, otherwise Firestore Rules fail
+    // Clean and normalize phone to strict E.164 (+91XXXXXXXXXX)
+    phone = (phone || "").trim().replace(/[\s\-\(\)]/g, "");
+    if (phone && !phone.startsWith('+')) {
+        var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
+        phone = countryCode + phone.replace(/^0+/, '');
+    }
+
     if (!phone) {
-        err.innerText = "Error: Phone number is missing. Please login again.";
+        if (err) err.innerText = "Error: Phone number is missing. Please login again.";
         return;
     }
 
@@ -746,24 +771,99 @@ async function saveProfile() {
         }
     };
 
-    document.getElementById('btnSaveProfile').innerText = "Saving...";
+    var btnSave = document.getElementById('btnSaveProfile');
+    if (btnSave) btnSave.innerText = "Saving...";
+    if (err) err.innerText = "";
+
     try {
+        var token = await getCachedAuthToken(true);
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) {
+            headers['Authorization'] = 'Bearer ' + token;
+        }
+
         var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
             method: "POST",
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify(doc)
         });
+
         if (res.ok) {
+            var data = await res.json();
+            var userProfile = {
+                name: name,
+                firm: firm,
+                station: station,
+                state: state,
+                phone: phone,
+                docId: data.name ? data.name.split('/').pop() : ""
+            };
+            try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
             completeLogin(phone);
         } else {
             var errData = await res.json();
             console.error("Profile Save Error:", errData);
-            err.innerText = "Error saving profile: " + (errData.error ? errData.error.message : "");
-            document.getElementById('btnSaveProfile').innerText = "SAVE & CONTINUE";
+            
+            // Try Firebase Web SDK fallback
+            if (typeof firebase !== 'undefined' && firebase.firestore && firebase.auth && firebase.auth().currentUser) {
+                try {
+                    var docRef = await firebase.firestore().collection('Users').add({
+                        name: name,
+                        firm: firm,
+                        station: station,
+                        state: state,
+                        phone: phone,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    var userProfile = {
+                        name: name,
+                        firm: firm,
+                        station: station,
+                        state: state,
+                        phone: phone,
+                        docId: docRef.id
+                    };
+                    try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
+                    completeLogin(phone);
+                    return;
+                } catch (fsErr) {
+                    console.error("Firebase SDK fallback error:", fsErr);
+                }
+            }
+
+            var errMsg = (errData && errData.error && errData.error.message) ? errData.error.message : "Permission denied or failed to save";
+            if (err) err.innerText = "Error saving profile: " + errMsg;
+            if (btnSave) btnSave.innerText = "SAVE & CONTINUE";
         }
     } catch (e) {
-        err.innerText = "Network error: " + e.message;
-        document.getElementById('btnSaveProfile').innerText = "SAVE & CONTINUE";
+        // Try Firebase Web SDK fallback on network / fetch error
+        if (typeof firebase !== 'undefined' && firebase.firestore && firebase.auth && firebase.auth().currentUser) {
+            try {
+                var docRef = await firebase.firestore().collection('Users').add({
+                    name: name,
+                    firm: firm,
+                    station: station,
+                    state: state,
+                    phone: phone,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                var userProfile = {
+                    name: name,
+                    firm: firm,
+                    station: station,
+                    state: state,
+                    phone: phone,
+                    docId: docRef.id
+                };
+                try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
+                completeLogin(phone);
+                return;
+            } catch (fsErr) {
+                console.error("Firebase SDK fallback error:", fsErr);
+            }
+        }
+        if (err) err.innerText = "Network error: " + e.message;
+        if (btnSave) btnSave.innerText = "SAVE & CONTINUE";
     }
 }
 
@@ -3769,28 +3869,55 @@ window.goToHome = function () {
 };
 var _cachedIdToken = null;
 var _cachedIdTokenExp = 0;
-async function getCachedAuthToken() {
+async function getCachedAuthToken(forceRefresh = false) {
     var now = Date.now();
-    if (_cachedIdToken && now < _cachedIdTokenExp) return _cachedIdToken;
-    try {
-        if (window.CapacitorFirebaseAuthentication) {
-            var tRes = await window.CapacitorFirebaseAuthentication.getIdToken();
+    if (!forceRefresh && _cachedIdToken && now < _cachedIdTokenExp) return _cachedIdToken;
+    
+    var isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+
+    // 1. If Native app, check Capacitor Firebase Auth first
+    if (isNative && window.CapacitorFirebaseAuthentication) {
+        try {
+            var tRes = await window.CapacitorFirebaseAuthentication.getIdToken({ forceRefresh: forceRefresh });
             if (tRes && tRes.token) {
                 _cachedIdToken = tRes.token;
                 _cachedIdTokenExp = now + (20 * 60 * 1000); // 20 mins
                 return _cachedIdToken;
             }
-        } else if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
-            var tok = await firebase.auth().currentUser.getIdToken();
+        } catch (e) {
+            console.warn("CapacitorFirebaseAuthentication getIdToken error:", e);
+        }
+    }
+
+    // 2. Check Firebase Web SDK (Web / iOS Safari / PWA)
+    if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+        try {
+            var tok = await firebase.auth().currentUser.getIdToken(forceRefresh);
             if (tok) {
                 _cachedIdToken = tok;
                 _cachedIdTokenExp = now + (20 * 60 * 1000);
                 return _cachedIdToken;
             }
+        } catch (e) {
+            console.warn("firebase.auth getIdToken error:", e);
         }
-    } catch (e) { }
+    }
+
+    // 3. Fallback: try Capacitor plugin even if not detected as native
+    if (!isNative && window.CapacitorFirebaseAuthentication) {
+        try {
+            var tRes2 = await window.CapacitorFirebaseAuthentication.getIdToken({ forceRefresh: forceRefresh });
+            if (tRes2 && tRes2.token) {
+                _cachedIdToken = tRes2.token;
+                _cachedIdTokenExp = now + (20 * 60 * 1000);
+                return _cachedIdToken;
+            }
+        } catch (e) { }
+    }
+
     return "";
 }
+window.getCachedAuthToken = getCachedAuthToken;
 
 window.fetchWithRetry = async function (url, options = {}, retries = 3) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -5169,10 +5296,7 @@ var _currentEditProductId = null;
 async function fetchCustomerDetailsFromDB() {
     if (!activeUser) return null;
     try {
-        var token = "";
-        if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
-            token = await firebase.auth().currentUser.getIdToken();
-        }
+        var token = await getCachedAuthToken();
         var headers = {};
         if (token) headers['Authorization'] = 'Bearer ' + token;
 
