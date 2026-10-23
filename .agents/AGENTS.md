@@ -1,1 +1,2 @@
 - Always automatically commit and push changes to git after completing a task or bugfix without waiting for the user to explicitly ask 'update git'.
+- Only edit the exact minimal lines of code required for a bugfix or task. Never rewrite entire functions, files, or surrounding logic as it can destabilize the APK and disrupt the user experience.
