@@ -17,6 +17,32 @@ window.isSameDesign = function (d1, d2) {
     return false;
 };
 
+window.getProductReadyDesigns = function (readyStr) {
+    if (!readyStr || typeof readyStr !== 'string') return [];
+    var str = readyStr.trim();
+    if (!str) return [];
+
+    // Auto-heal dates created by Excel/Sheets converting ranges like 1-2, 1-2-3 into Date objects
+    if (str.includes("GMT") || str.includes("India Standard Time")) {
+        var d = new Date(str);
+        if (!isNaN(d.getTime())) {
+            var day = d.getDate();
+            var month = d.getMonth() + 1;
+            var yr = d.getFullYear();
+            var shortYear = yr % 100;
+            var isOldYear = yr < 2020 && shortYear > 0 && shortYear < 50;
+
+            var nums = [day, month];
+            if (isOldYear) nums.push(shortYear);
+            nums.sort((a, b) => a - b);
+            nums = Array.from(new Set(nums));
+            return nums.map(n => String(n).padStart(2, '0'));
+        }
+    }
+
+    return str.split(',').map(s => s.trim().replace(/\.[^/.]+$/, '')).filter(Boolean);
+};
+
 window.matchCoverFile = function (coverDesignId, folderFiles) {
     if (!coverDesignId || !folderFiles || folderFiles.length === 0) return null;
     var cleanCover = String(coverDesignId).replace(/\.[^/.]+$/, '').trim().toLowerCase();
@@ -86,7 +112,7 @@ window.isDesignInStock = function (p, fname) {
     }
 
     if (p.ready && String(p.ready).trim().length > 0) {
-        var rArr = String(p.ready).split(',').map(s => s.trim().replace(/\.[^/.]+$/, '').toLowerCase()).filter(Boolean);
+        var rArr = window.getProductReadyDesigns(p.ready).map(s => s.toLowerCase());
         if (rArr.length > 0) {
             return rArr.includes(cleanName.toLowerCase()) ||
                 (numStr && rArr.includes(numStr.toLowerCase())) ||
@@ -947,6 +973,7 @@ function initApp() {
     function processProducts(docs) {
         var validCounter = 0;
         allProducts = [];
+        var productByName = {};
 
         docs.forEach(d => {
             var f = d.fields || {};
@@ -967,37 +994,127 @@ function initApp() {
                         stockMap[k] = parseInt(vObj.integerValue || vObj.doubleValue || vObj.stringValue || 0);
                     }
                 }
+
+                var rawFullyPacked = stockMap['FULLY_PACKED'] === 1 || (f.stock && f.stock.mapValue && f.stock.mapValue.fields && f.stock.mapValue.fields['FULLY_PACKED'] && String(f.stock.mapValue.fields['FULLY_PACKED'].integerValue) === '1');
+                var readyRaw = d.ready !== undefined ? d.ready : (f.ready ? f.ready.stringValue : "");
+                var readyList = window.getProductReadyDesigns(readyRaw);
                 var tStock = d.totalStock !== undefined ? d.totalStock : 999;
+
                 if (f.stock || d.stock) {
                     var specificKeys = Object.keys(stockMap).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
-                    if (specificKeys.length > 0) {
+
+                    // 1. If product explicitly specifies READY designs, availability is strictly dictated by those ready designs
+                    if (readyList.length > 0) {
+                        var readySum = 0;
+                        var hasExplicitStockForReady = false;
+                        readyList.forEach(rd => {
+                            var val = undefined;
+                            if (stockMap[rd] !== undefined) val = stockMap[rd];
+                            else {
+                                var clean = rd.replace(/^0+/, '');
+                                var pad2 = rd.padStart(2, '0');
+                                if (stockMap[clean] !== undefined) val = stockMap[clean];
+                                else if (stockMap[pad2] !== undefined) val = stockMap[pad2];
+                            }
+                            if (val !== undefined) {
+                                hasExplicitStockForReady = true;
+                                readySum += Math.max(0, parseInt(val) || 0);
+                            }
+                        });
+
+                        if (hasExplicitStockForReady) {
+                            if (readySum === 0 || rawFullyPacked) {
+                                tStock = 0;
+                                stockMap['FULLY_PACKED'] = 1;
+                            } else {
+                                tStock = readySum;
+                                stockMap['FULLY_PACKED'] = 0;
+                            }
+                        } else if (rawFullyPacked) {
+                            tStock = 0;
+                            stockMap['FULLY_PACKED'] = 1;
+                        } else if (stockMap['Cover'] !== undefined && parseInt(stockMap['Cover']) === 0 && (!specificKeys.length || rawFullyPacked)) {
+                            tStock = 0;
+                            stockMap['FULLY_PACKED'] = 1;
+                        } else if (specificKeys.length > 0) {
+                            var designSum = specificKeys.reduce((a, k) => a + (parseInt(stockMap[k]) || 0), 0);
+                            if (rawFullyPacked) {
+                                tStock = 0;
+                                stockMap['FULLY_PACKED'] = 1;
+                            } else {
+                                tStock = designSum;
+                                stockMap['FULLY_PACKED'] = designSum === 0 ? 1 : 0;
+                            }
+                        } else {
+                            tStock = rawFullyPacked ? 0 : 999;
+                            stockMap['FULLY_PACKED'] = rawFullyPacked ? 1 : 0;
+                        }
+                    } else if (rawFullyPacked) {
+                        // Explicitly marked as FULLY_PACKED in database
+                        tStock = 0;
+                        stockMap['FULLY_PACKED'] = 1;
+                    } else if (specificKeys.length > 0) {
                         var designSum = specificKeys.reduce((a, k) => a + (parseInt(stockMap[k]) || 0), 0);
                         if (designSum > 0) {
                             tStock = designSum;
                             stockMap['FULLY_PACKED'] = 0;
-                            // Auto-heal Firestore in background if stale FULLY_PACKED was 1
-                            if (actualDocId && f.stock && f.stock.mapValue && f.stock.mapValue.fields && f.stock.mapValue.fields['FULLY_PACKED'] && String(f.stock.mapValue.fields['FULLY_PACKED'].integerValue) === '1') {
-                                fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + actualDocId + "?updateMask.fieldPaths=stock.FULLY_PACKED", {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ fields: { stock: { mapValue: { fields: { 'FULLY_PACKED': { integerValue: 0 } } } } } })
-                                }).catch(() => { });
-                            }
                         } else {
                             tStock = 0;
                             stockMap['FULLY_PACKED'] = 1;
                         }
-                    } else if (stockMap['FULLY_PACKED'] === 1) {
-                        tStock = 0;
                     } else if (stockMap['DIRECT'] !== undefined || stockMap['Cover'] !== undefined) {
                         var directStock = parseInt(stockMap['Cover'] !== undefined ? stockMap['Cover'] : stockMap['DIRECT']) || 0;
                         tStock = directStock;
+                        stockMap['FULLY_PACKED'] = directStock === 0 ? 1 : 0;
                     } else {
                         tStock = 999;
                     }
+                } else if (rawFullyPacked) {
+                    tStock = 0;
+                    stockMap['FULLY_PACKED'] = 1;
                 }
 
-                allProducts.push({
+                var normName = name.trim().toLowerCase();
+                var existingP = productByName[normName];
+
+                if (existingP) {
+                    // DEDUPLICATION: Merge duplicate document data (e.g. bombay-king + 0US7ljzpUZMjzcKISaQn)
+                    // 1. Merge stock
+                    for (var sk in stockMap) {
+                        if (stockMap[sk] > 0) {
+                            existingP.stock[sk] = stockMap[sk];
+                        } else if (existingP.stock[sk] === undefined) {
+                            existingP.stock[sk] = stockMap[sk];
+                        }
+                    }
+                    // 2. Keep richest metadata
+                    if (!existingP.coverDesignId && (d.coverDesignId || (f.coverDesignId && f.coverDesignId.stringValue))) {
+                        existingP.coverDesignId = d.coverDesignId || f.coverDesignId.stringValue;
+                    }
+                    if (!existingP.ready && readyRaw) {
+                        existingP.ready = readyRaw;
+                    }
+                    if ((!existingP.gridUrl || existingP.gridUrl.endsWith('/')) && d.gridUrl && !d.gridUrl.endsWith('/')) {
+                        existingP.gridUrl = d.gridUrl;
+                    }
+                    if ((!existingP.zoomUrl || existingP.zoomUrl.endsWith('/')) && d.zoomUrl && !d.zoomUrl.endsWith('/')) {
+                        existingP.zoomUrl = d.zoomUrl;
+                    }
+                    // 3. Recalculate merged total stock
+                    if (existingP.stock['FULLY_PACKED'] === 1 && !Object.keys(existingP.stock).some(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover') && existingP.stock[k] > 0)) {
+                        existingP.totalStock = 0;
+                    } else {
+                        var mKeys = Object.keys(existingP.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
+                        if (mKeys.length > 0) {
+                            var mSum = mKeys.reduce((a, k) => a + (parseInt(existingP.stock[k]) || 0), 0);
+                            existingP.totalStock = mSum;
+                            existingP.stock['FULLY_PACKED'] = mSum === 0 ? 1 : 0;
+                        }
+                    }
+                    return; // Skip adding duplicate to allProducts!
+                }
+
+                var newProd = {
                     docId: actualDocId,
                     stock: stockMap,
                     totalStock: tStock,
@@ -1013,7 +1130,7 @@ function initApp() {
                     fabric: d.fabric !== undefined ? d.fabric : (f.fabric ? f.fabric.stringValue : ""),
                     packing: finalPacking,
                     mult: d.mult !== undefined ? d.mult : (f.mult ? (f.mult.integerValue || 8) : 8),
-                    ready: d.ready !== undefined ? d.ready : (f.ready ? f.ready.stringValue : ""),
+                    ready: readyRaw,
                     jari: d.jari !== undefined ? d.jari : (f.jari ? f.jari.stringValue : ""),
                     border: d.border !== undefined ? d.border : (f.border ? f.border.stringValue : ""),
                     cut: d.cut !== undefined ? d.cut : (f.cut ? f.cut.stringValue : ""),
@@ -1022,7 +1139,10 @@ function initApp() {
                     work: d.work !== undefined ? d.work : (f.work ? f.work.stringValue : ""),
                     igLinks: d.igLinks !== undefined ? d.igLinks : (f.igLinks ? f.igLinks.stringValue : "[]"),
                     updateTime: d.updateTime || (f.latestImageAddedAt ? (f.latestImageAddedAt.timestampValue || f.latestImageAddedAt.stringValue) : (d.updateTime || d.createTime || ""))
-                });
+                };
+
+                productByName[normName] = newProd;
+                allProducts.push(newProd);
                 validCounter++;
             }
         });
@@ -5906,10 +6026,23 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
             } else if (newVal === 0) {
                 var p = allProducts.find(x => x.id === pid);
                 if (p && p.stock) {
-                    var otherKeys = Object.keys(p.stock).filter(k => k !== 'FULLY_PACKED' && k !== 'DIRECT' && !k.toLowerCase().startsWith('cover') && k !== dId);
-                    var sum = otherKeys.reduce((a, k) => a + (parseInt(p.stock[k]) || 0), 0);
-                    if (sum === 0) {
-                        autoHealPackedValue = 1;
+                    var rList = window.getProductReadyDesigns ? window.getProductReadyDesigns(p.ready) : [];
+                    if (rList.length > 0) {
+                        var rSum = 0;
+                        rList.forEach(rd => {
+                            if (rd === dId) return;
+                            var v = p.stock[rd] !== undefined ? p.stock[rd] : (p.stock[rd.replace(/^0+/, '')] || 0);
+                            rSum += parseInt(v) || 0;
+                        });
+                        if (rSum === 0 && (dId.toLowerCase().startsWith('cover') || rList.includes(dId))) {
+                            autoHealPackedValue = 1;
+                        }
+                    } else {
+                        var otherKeys = Object.keys(p.stock).filter(k => k !== 'FULLY_PACKED' && k !== 'DIRECT' && !k.toLowerCase().startsWith('cover') && k !== dId);
+                        var sum = otherKeys.reduce((a, k) => a + (parseInt(p.stock[k]) || 0), 0);
+                        if (sum === 0) {
+                            autoHealPackedValue = 1;
+                        }
                     }
                 }
             }
@@ -5936,22 +6069,48 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
                     p.stock['FULLY_PACKED'] = autoHealPackedValue;
                 }
 
-                var specificKeys = Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
-                if (specificKeys.length > 0) {
-                    var designSum = specificKeys.reduce((a, k) => a + (parseInt(p.stock[k]) || 0), 0);
-                    if (designSum > 0) {
-                        p.totalStock = designSum;
-                        p.stock['FULLY_PACKED'] = 0;
-                    } else {
-                        p.totalStock = 0;
-                        p.stock['FULLY_PACKED'] = 1;
-                    }
-                } else if (p.stock['FULLY_PACKED'] === 1) {
+                if (p.stock['FULLY_PACKED'] === 1) {
                     p.totalStock = 0;
-                } else if (p.stock['DIRECT'] !== undefined || p.stock['Cover'] !== undefined) {
-                    p.totalStock = parseInt(p.stock['Cover'] !== undefined ? p.stock['Cover'] : p.stock['DIRECT']) || 0;
                 } else {
-                    p.totalStock = 999;
+                    var readyList = window.getProductReadyDesigns ? window.getProductReadyDesigns(p.ready) : [];
+                    if (readyList.length > 0) {
+                        var readySum = 0;
+                        var hasExplicitStockForReady = false;
+                        readyList.forEach(rd => {
+                            var val = undefined;
+                            if (p.stock[rd] !== undefined) val = p.stock[rd];
+                            else {
+                                var clean = rd.replace(/^0+/, '');
+                                var pad2 = rd.padStart(2, '0');
+                                if (p.stock[clean] !== undefined) val = p.stock[clean];
+                                else if (p.stock[pad2] !== undefined) val = p.stock[pad2];
+                            }
+                            if (val !== undefined) {
+                                hasExplicitStockForReady = true;
+                                readySum += Math.max(0, parseInt(val) || 0);
+                            }
+                        });
+                        if (hasExplicitStockForReady) {
+                            p.totalStock = readySum;
+                            p.stock['FULLY_PACKED'] = readySum === 0 ? 1 : 0;
+                        } else if (p.stock['Cover'] !== undefined && parseInt(p.stock['Cover']) === 0) {
+                            p.totalStock = 0;
+                            p.stock['FULLY_PACKED'] = 1;
+                        }
+                    } else {
+                        var specificKeys = Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
+                        if (specificKeys.length > 0) {
+                            var designSum = specificKeys.reduce((a, k) => a + (parseInt(p.stock[k]) || 0), 0);
+                            p.totalStock = designSum;
+                            p.stock['FULLY_PACKED'] = designSum === 0 ? 1 : 0;
+                        } else if (p.stock['DIRECT'] !== undefined || p.stock['Cover'] !== undefined) {
+                            var dVal = parseInt(p.stock['Cover'] !== undefined ? p.stock['Cover'] : p.stock['DIRECT']) || 0;
+                            p.totalStock = dVal;
+                            p.stock['FULLY_PACKED'] = dVal === 0 ? 1 : 0;
+                        } else {
+                            p.totalStock = 999;
+                        }
+                    }
                 }
 
                 // Immediately refresh the main page card UI

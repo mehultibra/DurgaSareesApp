@@ -94,7 +94,10 @@ async function getActualDesignsForProduct(p, shareType, action) {
                     if (k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')) knownKeys.push(k);
                 });
             }
-            if (p.ready) String(p.ready).split(',').forEach(k => knownKeys.push(k.trim()));
+            if (p.ready) {
+                var rList = window.getProductReadyDesigns ? window.getProductReadyDesigns(p.ready) : String(p.ready).split(',');
+                rList.forEach(k => knownKeys.push(k.trim()));
+            }
             var uniqueKeys = Array.from(new Set(knownKeys)).filter(Boolean);
             
             if (uniqueKeys.length > 0) {
@@ -1363,7 +1366,7 @@ window.generateFavoritesPDF = async function (favProducts, shareType, actionType
                 }
                 var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
                 var fallbackFile = product.coverDesignId || dsFallbackMap[product.gridUrl] || dsFallbackMap[product.zoomUrl];
-                var readyFallback = (product.ready) ? String(product.ready).split(',').map(d => d.trim()).filter(d => d && checkStock(product, d)) : [];
+                var readyFallback = (product.ready) ? (window.getProductReadyDesigns ? window.getProductReadyDesigns(product.ready) : String(product.ready).split(',')).map(d => d.trim()).filter(d => d && checkStock(product, d)) : [];
                 var coverDesignId = 'DIRECT';
                 
                 if (fallbackFile) {
@@ -1774,11 +1777,22 @@ window.triggerShare = async function (action) {
 
     if (!isDetailOpen) {
         // --- MAIN PAGE SHARE (Favorites) ---
-        var favProducts = allProducts.filter(p => favorites[p.id]);
-        if (favProducts.length === 0) {
+        var rawFavs = allProducts.filter(p => favorites[p.id]);
+        if (rawFavs.length === 0) {
             history.back(); // Pop the shareModal state we were hiding
             return alert("No favorite items to share. Please mark some products as favorites first.");
         }
+
+        // Deduplicate favorite products by normalized name so duplicates never share multiple cards
+        var favProducts = [];
+        var seenFavNames = {};
+        rawFavs.forEach(fp => {
+            var nKey = (fp.name || '').trim().toLowerCase();
+            if (!nKey || !seenFavNames[nKey]) {
+                if (nKey) seenFavNames[nKey] = true;
+                favProducts.push(fp);
+            }
+        });
 
         var shareType = await askShareTypeAsync(true);
         if (!shareType) return;
@@ -1786,24 +1800,12 @@ window.triggerShare = async function (action) {
         var allHighResUrls = [];
         var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
 
-        for (var i = 0; i < favProducts.length; i++) {
-            var fp = favProducts[i];
-            var folderPath = (fp.zoomUrl && fp.zoomUrl !== "None") ? fp.zoomUrl : fp.gridUrl;
-
-            var dArr = await getActualDesignsForProduct(fp, shareType, action);
-            if (dArr.length > 0) {
-                for (var j = 0; j < dArr.length; j++) {
-                    var dUrl = await resolveCorrectUrl(fp, dArr[j]);
-                    if (dUrl && !allHighResUrls.includes(dUrl)) {
-                        allHighResUrls.push(dUrl);
-                    }
-                }
-            } else {
-                if (shareType === 'ready') {
-                    continue; // Skip products with 0 ready stock
-                }
+        if (shareType === 'cover') {
+            // GUARANTEED: Exactly 1 cover image per unique favorite product
+            for (var i = 0; i < favProducts.length; i++) {
+                var fp = favProducts[i];
                 var fallbackFile = fp.coverDesignId || dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
-                var readyDesigns = (fp.ready) ? String(fp.ready).split(',').map(d => d.trim()).filter(d => d && checkStock(fp, d)) : [];
+                var readyDesigns = (fp.ready) ? (window.getProductReadyDesigns ? window.getProductReadyDesigns(fp.ready) : String(fp.ready).split(',')).map(d => d.trim()).filter(d => d && checkStock(fp, d)) : [];
                 var coverDesignId = 'DIRECT';
 
                 if (fallbackFile) {
@@ -1813,8 +1815,39 @@ window.triggerShare = async function (action) {
                 }
 
                 var cUrl = await resolveCorrectUrl(fp, coverDesignId);
-                if (cUrl && !allHighResUrls.includes(cUrl)) {
-                    allHighResUrls.push(cUrl);
+                if (cUrl) {
+                    cUrl = cUrl.replace(/%2F%2F/g, '%2F');
+                    if (!allHighResUrls.includes(cUrl)) {
+                        allHighResUrls.push(cUrl);
+                    }
+                }
+            }
+        } else {
+            // 'ready' or 'full' designs
+            for (var i = 0; i < favProducts.length; i++) {
+                var fp = favProducts[i];
+                var dArr = await getActualDesignsForProduct(fp, shareType, action);
+                if (dArr.length > 0) {
+                    for (var j = 0; j < dArr.length; j++) {
+                        var dUrl = await resolveCorrectUrl(fp, dArr[j]);
+                        if (dUrl) {
+                            dUrl = dUrl.replace(/%2F%2F/g, '%2F');
+                            if (!allHighResUrls.includes(dUrl)) {
+                                allHighResUrls.push(dUrl);
+                            }
+                        }
+                    }
+                } else if (shareType !== 'ready') {
+                    var fallbackFile = fp.coverDesignId || dsFallbackMap[fp.gridUrl] || dsFallbackMap[fp.zoomUrl];
+                    var readyDesigns = (fp.ready) ? (window.getProductReadyDesigns ? window.getProductReadyDesigns(fp.ready) : String(fp.ready).split(',')).map(d => d.trim()).filter(d => d && checkStock(fp, d)) : [];
+                    var coverDesignId = fallbackFile || (readyDesigns.length > 0 ? readyDesigns[0] : 'DIRECT');
+                    var cUrl = await resolveCorrectUrl(fp, coverDesignId);
+                    if (cUrl) {
+                        cUrl = cUrl.replace(/%2F%2F/g, '%2F');
+                        if (!allHighResUrls.includes(cUrl)) {
+                            allHighResUrls.push(cUrl);
+                        }
+                    }
                 }
             }
         }
@@ -1871,7 +1904,7 @@ window.triggerShare = async function (action) {
         // Cover mode: Use curProduct.coverDesignId first, then dsFallbackMap, then ready designs, then DIRECT
         var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
         var fallbackFile = curProduct.coverDesignId || dsFallbackMap[curProduct.gridUrl] || dsFallbackMap[curProduct.zoomUrl];
-        var readyDesigns = (curProduct.ready) ? String(curProduct.ready).split(',').map(d => d.trim()).filter(d => d && checkStock(curProduct, d)) : [];
+        var readyDesigns = (curProduct.ready) ? (window.getProductReadyDesigns ? window.getProductReadyDesigns(curProduct.ready) : String(curProduct.ready).split(',')).map(d => d.trim()).filter(d => d && checkStock(curProduct, d)) : [];
         var coverDesignId = 'DIRECT';
 
         if (fallbackFile) {
