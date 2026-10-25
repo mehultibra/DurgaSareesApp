@@ -4064,6 +4064,14 @@ window.fetchWithRetry = async function (url, options = {}, retries = 3) {
 
 window.isSyncing = false;
 window.isHDSyncing = false;
+window.catalogSyncProgress = {
+    running: false,
+    count: 0,
+    total: 0,
+    percent: 0,
+    completedAt: 0
+};
+window.catalogSyncToastTimer = null;
 window.hdSyncProgress = {
     running: false,
     count: 0,
@@ -4072,6 +4080,117 @@ window.hdSyncProgress = {
     completedAt: 0
 };
 window.hdSyncToastTimer = null;
+
+window.showCatalogSyncStatusToast = function () {
+    var p = window.catalogSyncProgress;
+    var toastId = 'catalogSyncStatusToast';
+    var existing = document.getElementById(toastId);
+
+    if (window.catalogSyncToastTimer) {
+        clearTimeout(window.catalogSyncToastTimer);
+        window.catalogSyncToastTimer = null;
+    }
+
+    if (!p || !p.running) {
+        var msg = (p && p.completedAt && (Date.now() - p.completedAt < 60000))
+            ? "✅ Catalog Sync complete! All " + (p.total || "") + " products synced."
+            : "ℹ️ Catalog sync is idle. All products up to date.";
+        window.showSyncNoticeToast(msg);
+        return;
+    }
+
+    var percent = p.total > 0 ? Math.min(100, Math.round((p.count / p.total) * 100)) : 0;
+
+    if (existing) {
+        var textEl = document.getElementById(toastId + '_text');
+        var barEl = document.getElementById(toastId + '_bar');
+        var pctEl = document.getElementById(toastId + '_pct');
+        if (textEl) textEl.innerText = p.count + " / " + p.total + " products";
+        if (pctEl) pctEl.innerText = percent + "%";
+        if (barEl) barEl.style.width = percent + "%";
+
+        window.catalogSyncToastTimer = setTimeout(function () {
+            window.hideCatalogSyncStatusToast();
+        }, 8000);
+        return;
+    }
+
+    var toastHtml = `
+    <div id="${toastId}" style="position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:rgba(20,20,24,0.96); color:#fff; padding:14px 20px; border-radius:18px; font-size:13px; font-family:inherit; box-shadow:0 8px 30px rgba(0,0,0,0.5); z-index:999999; display:flex; flex-direction:column; gap:10px; min-width:280px; max-width:92vw; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.12); transition:opacity 0.3s ease, transform 0.3s ease;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <i class="fas fa-sync-alt fa-spin" style="color:#ff3f6c; font-size:14px;"></i>
+                <span style="font-weight:700; font-size:13px; letter-spacing:0.3px;">Catalog Sync in Progress</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span id="${toastId}_pct" style="font-weight:700; color:#ff3f6c; font-size:13px;">${percent}%</span>
+                <i class="fas fa-times" onclick="window.hideCatalogSyncStatusToast()" style="cursor:pointer; color:#aaa; font-size:15px; padding:2px 6px; margin-left:4px;" title="Dismiss"></i>
+            </div>
+        </div>
+        <div style="width:100%; height:6px; background:rgba(255,255,255,0.15); border-radius:10px; overflow:hidden;">
+            <div id="${toastId}_bar" style="width:${percent}%; height:100%; background:linear-gradient(90deg, #ff3f6c, #ff6b8b); border-radius:10px; transition:width 0.3s ease;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#aaa;">
+            <span id="${toastId}_text">${p.count} / ${p.total} products</span>
+            <span>Live catalog sync active</span>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', toastHtml);
+
+    window.catalogSyncToastTimer = setTimeout(function () {
+        window.hideCatalogSyncStatusToast();
+    }, 8000);
+};
+
+window.hideCatalogSyncStatusToast = function () {
+    if (window.catalogSyncToastTimer) {
+        clearTimeout(window.catalogSyncToastTimer);
+        window.catalogSyncToastTimer = null;
+    }
+    var el = document.getElementById('catalogSyncStatusToast');
+    if (el) {
+        el.style.opacity = '0';
+        el.style.transform = 'translate(-50%, 15px)';
+        setTimeout(function () { if (el) el.remove(); }, 350);
+    }
+};
+
+window.updateCatalogSyncStatusToast = function () {
+    var el = document.getElementById('catalogSyncStatusToast');
+    if (!el) return;
+    var p = window.catalogSyncProgress;
+    if (!p) return;
+    var percent = p.total > 0 ? Math.min(100, Math.round((p.count / p.total) * 100)) : 0;
+    var textEl = document.getElementById('catalogSyncStatusToast_text');
+    var barEl = document.getElementById('catalogSyncStatusToast_bar');
+    var pctEl = document.getElementById('catalogSyncStatusToast_pct');
+    if (textEl) textEl.innerText = p.count + " / " + p.total + " products";
+    if (pctEl) pctEl.innerText = percent + "%";
+    if (barEl) barEl.style.width = percent + "%";
+};
+
+window.finishCatalogSyncStatusToast = function (totalCount) {
+    var el = document.getElementById('catalogSyncStatusToast');
+    if (!el) return;
+    if (window.catalogSyncToastTimer) {
+        clearTimeout(window.catalogSyncToastTimer);
+        window.catalogSyncToastTimer = null;
+    }
+    el.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <i class="fas fa-check-circle" style="color:#25D366; font-size:16px;"></i>
+                <span style="font-weight:700; font-size:13px; color:#25D366;">Catalog Sync Complete!</span>
+            </div>
+            <i class="fas fa-times" onclick="window.hideCatalogSyncStatusToast()" style="cursor:pointer; color:#aaa; font-size:15px; padding:2px 6px;" title="Dismiss"></i>
+        </div>
+        <div style="font-size:12px; color:#eee; margin-top:2px;">All ${totalCount} products updated successfully.</div>
+    `;
+    setTimeout(function () {
+        window.hideCatalogSyncStatusToast();
+    }, 3500);
+};
 
 window.showHDSyncStatusToast = function () {
     var p = window.hdSyncProgress;
@@ -4212,8 +4331,7 @@ async function syncImages(silent = false) {
 
     if (window.isSyncing) {
         if (!silent) {
-            var msg = (bootMsg && bootMsg.innerText) ? bootMsg.innerText : "Catalog sync is already in progress...";
-            window.showSyncNoticeToast("🔄 " + msg);
+            window.showCatalogSyncStatusToast();
         }
         return;
     }
@@ -4278,6 +4396,10 @@ async function syncImages(silent = false) {
 
         var total = productsToSync.length;
         var count = 0;
+        window.catalogSyncProgress.running = true;
+        window.catalogSyncProgress.count = 0;
+        window.catalogSyncProgress.total = total;
+        window.catalogSyncProgress.percent = 0;
         var failed = 0;
         var failedList = [];
         var bucket = "durga-sarees.firebasestorage.app";
@@ -4514,7 +4636,10 @@ async function syncImages(silent = false) {
                 }
 
                 count++;
+                window.catalogSyncProgress.count = count;
+                window.catalogSyncProgress.percent = total > 0 ? Math.min(100, Math.round((count / total) * 100)) : 0;
                 if (bootMsg) bootMsg.innerText = "Smart syncing " + count + " / " + total + "...";
+                window.updateCatalogSyncStatusToast();
             }));
 
             // Yield the main thread to keep UI smooth
@@ -4523,6 +4648,11 @@ async function syncImages(silent = false) {
         // Close boot screen and unlock UI before Phase 2 starts!
         if (bootScreen) bootScreen.style.display = 'none';
         window.isSyncing = false;
+        window.catalogSyncProgress.running = false;
+        window.catalogSyncProgress.count = total;
+        window.catalogSyncProgress.percent = 100;
+        window.catalogSyncProgress.completedAt = Date.now();
+        window.finishCatalogSyncStatusToast(total);
         if (syncIcon) syncIcon.classList.remove('fa-spin');
 
         // 🚀 PHASE 2: NON-BLOCKING BACKGROUND ZOOM SYNC
@@ -4627,12 +4757,12 @@ async function syncImages(silent = false) {
                         }
                         await handleZoomImage(sortedFiles[iFile], iFile);
                     }
+                    zCount++;
+                    window.hdSyncProgress.count = zCount;
+                    window.hdSyncProgress.percent = total > 0 ? Math.min(100, Math.round((zCount / total) * 100)) : 0;
+                    window.updateHDSyncStatusToast();
                 }));
 
-                zCount += batch.length;
-                window.hdSyncProgress.count = zCount;
-                window.hdSyncProgress.percent = total > 0 ? Math.min(100, Math.round((zCount / total) * 100)) : 0;
-                window.updateHDSyncStatusToast();
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 
