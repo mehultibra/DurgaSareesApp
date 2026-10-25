@@ -1018,10 +1018,9 @@ function initApp() {
                 if (f.stock || d.stock) {
                     var specificKeys = Object.keys(stockMap).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
 
-                    // 1. If product explicitly specifies READY designs, availability is strictly dictated by those ready designs
+                    var readySum = 0;
+                    var hasExplicitStockForReady = false;
                     if (readyList.length > 0) {
-                        var readySum = 0;
-                        var hasExplicitStockForReady = false;
                         readyList.forEach(rd => {
                             var val = undefined;
                             if (stockMap[rd] !== undefined) val = stockMap[rd];
@@ -1036,53 +1035,32 @@ function initApp() {
                                 readySum += Math.max(0, parseInt(val) || 0);
                             }
                         });
+                    }
 
-                        if (hasExplicitStockForReady) {
-                            if (readySum === 0) {
-                                tStock = 0;
-                                stockMap['FULLY_PACKED'] = 1;
-                            } else {
-                                tStock = readySum;
-                                stockMap['FULLY_PACKED'] = 0;
-                            }
-                        } else if (rawFullyPacked) {
-                            tStock = 0;
-                            stockMap['FULLY_PACKED'] = 1;
-                        } else if (stockMap['Cover'] !== undefined && parseInt(stockMap['Cover']) === 0 && (!specificKeys.length || rawFullyPacked)) {
-                            tStock = 0;
-                            stockMap['FULLY_PACKED'] = 1;
-                        } else if (specificKeys.length > 0) {
-                            var designSum = specificKeys.reduce((a, k) => a + (parseInt(stockMap[k]) || 0), 0);
-                            if (rawFullyPacked) {
-                                tStock = 0;
-                                stockMap['FULLY_PACKED'] = 1;
-                            } else {
-                                tStock = designSum;
-                                stockMap['FULLY_PACKED'] = designSum === 0 ? 1 : 0;
-                            }
-                        } else {
-                            tStock = rawFullyPacked ? 0 : 999;
-                            stockMap['FULLY_PACKED'] = rawFullyPacked ? 1 : 0;
-                        }
-                    } else if (rawFullyPacked) {
-                        // Explicitly marked as FULLY_PACKED in database
+                    var designSum = specificKeys.reduce((a, k) => a + Math.max(0, parseInt(stockMap[k]) || 0), 0);
+
+                    if (hasExplicitStockForReady && readySum > 0) {
+                        tStock = readySum;
+                        stockMap['FULLY_PACKED'] = 0;
+                    } else if (designSum > 0) {
+                        tStock = designSum;
+                        stockMap['FULLY_PACKED'] = 0;
+                    } else if (hasExplicitStockForReady && readySum === 0) {
                         tStock = 0;
                         stockMap['FULLY_PACKED'] = 1;
                     } else if (specificKeys.length > 0) {
-                        var designSum = specificKeys.reduce((a, k) => a + (parseInt(stockMap[k]) || 0), 0);
-                        if (designSum > 0) {
-                            tStock = designSum;
-                            stockMap['FULLY_PACKED'] = 0;
-                        } else {
-                            tStock = 0;
-                            stockMap['FULLY_PACKED'] = 1;
-                        }
-                    } else if (stockMap['DIRECT'] !== undefined || stockMap['Cover'] !== undefined) {
+                        tStock = 0;
+                        stockMap['FULLY_PACKED'] = 1;
+                    } else if (stockMap['Cover'] !== undefined || stockMap['DIRECT'] !== undefined) {
                         var directStock = parseInt(stockMap['Cover'] !== undefined ? stockMap['Cover'] : stockMap['DIRECT']) || 0;
                         tStock = directStock;
                         stockMap['FULLY_PACKED'] = directStock === 0 ? 1 : 0;
-                    } else {
+                    } else if (readyList.length > 0 && !rawFullyPacked) {
                         tStock = 999;
+                        stockMap['FULLY_PACKED'] = 0;
+                    } else {
+                        tStock = rawFullyPacked ? 0 : 999;
+                        stockMap['FULLY_PACKED'] = rawFullyPacked ? 1 : 0;
                     }
                 } else if (rawFullyPacked) {
                     tStock = 0;
@@ -6088,9 +6066,9 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
                     p.totalStock = 0;
                 } else {
                     var readyList = window.getProductReadyDesigns ? window.getProductReadyDesigns(p.ready) : [];
+                    var readySum = 0;
+                    var hasExplicitStockForReady = false;
                     if (readyList.length > 0) {
-                        var readySum = 0;
-                        var hasExplicitStockForReady = false;
                         readyList.forEach(rd => {
                             var val = undefined;
                             if (p.stock[rd] !== undefined) val = p.stock[rd];
@@ -6105,26 +6083,29 @@ window.updateAdminStock = async function (element, docId, pid, dId, overrideVal 
                                 readySum += Math.max(0, parseInt(val) || 0);
                             }
                         });
-                        if (hasExplicitStockForReady) {
-                            p.totalStock = readySum;
-                            p.stock['FULLY_PACKED'] = readySum === 0 ? 1 : 0;
-                        } else if (p.stock['Cover'] !== undefined && parseInt(p.stock['Cover']) === 0) {
-                            p.totalStock = 0;
-                            p.stock['FULLY_PACKED'] = 1;
-                        }
+                    }
+
+                    var specificKeys = Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
+                    var designSum = specificKeys.reduce((a, k) => a + Math.max(0, parseInt(p.stock[k]) || 0), 0);
+
+                    if (hasExplicitStockForReady && readySum > 0) {
+                        p.totalStock = readySum;
+                        p.stock['FULLY_PACKED'] = 0;
+                    } else if (designSum > 0) {
+                        p.totalStock = designSum;
+                        p.stock['FULLY_PACKED'] = 0;
+                    } else if (hasExplicitStockForReady && readySum === 0) {
+                        p.totalStock = 0;
+                        p.stock['FULLY_PACKED'] = 1;
+                    } else if (specificKeys.length > 0) {
+                        p.totalStock = 0;
+                        p.stock['FULLY_PACKED'] = 1;
+                    } else if (p.stock['DIRECT'] !== undefined || p.stock['Cover'] !== undefined) {
+                        var dVal = parseInt(p.stock['Cover'] !== undefined ? p.stock['Cover'] : p.stock['DIRECT']) || 0;
+                        p.totalStock = dVal;
+                        p.stock['FULLY_PACKED'] = dVal === 0 ? 1 : 0;
                     } else {
-                        var specificKeys = Object.keys(p.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
-                        if (specificKeys.length > 0) {
-                            var designSum = specificKeys.reduce((a, k) => a + (parseInt(p.stock[k]) || 0), 0);
-                            p.totalStock = designSum;
-                            p.stock['FULLY_PACKED'] = designSum === 0 ? 1 : 0;
-                        } else if (p.stock['DIRECT'] !== undefined || p.stock['Cover'] !== undefined) {
-                            var dVal = parseInt(p.stock['Cover'] !== undefined ? p.stock['Cover'] : p.stock['DIRECT']) || 0;
-                            p.totalStock = dVal;
-                            p.stock['FULLY_PACKED'] = dVal === 0 ? 1 : 0;
-                        } else {
-                            p.totalStock = 999;
-                        }
+                        p.totalStock = 999;
                     }
                 }
 
