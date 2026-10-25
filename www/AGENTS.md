@@ -25,3 +25,4 @@ This repository is a lightweight static frontend for Durga Sarees, built with pl
 - Focus on code correctness, DOM consistency, and safe refactoring.
 - Use the current app structure as the primary source of truth.
 - If a backend URL is required, instruct the user to replace the placeholder in `app.js`.
+- Strictly edit ONLY the exact minimal lines of code required for a bugfix or task. Never rewrite entire code blocks, functions, or surrounding logic as full rewrites disrupt the user experience and destabilize the app.
