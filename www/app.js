@@ -6342,13 +6342,105 @@ window.showGlobalErrorLogs = function () {
 };
 
 // --- OUTBOX SYSTEM ---
-window.saveToOutbox = function (docId, designId, fileUri, productName, bypass = false) {
+window.readBlobFromUri = async function (uri) {
+    if (!uri) throw new Error("Empty file URI");
+    if (uri.startsWith('data:') || uri.startsWith('blob:')) {
+        var r = await fetch(uri);
+        if (r.ok) return await r.blob();
+    }
+    var webUri = uri;
+    if (window.Capacitor && window.Capacitor.convertFileSrc) {
+        if (!webUri.startsWith('http://') && !webUri.startsWith('https://')) {
+            webUri = window.Capacitor.convertFileSrc(webUri);
+        }
+    }
+    try {
+        var fRes = await fetch(webUri);
+        if (fRes.ok) {
+            var b = await fRes.blob();
+            if (b && b.size > 0) return b;
+        }
+    } catch (e1) { }
+    try {
+        var decodedWebUri = decodeURI(webUri);
+        if (decodedWebUri !== webUri) {
+            var fRes2 = await fetch(decodedWebUri);
+            if (fRes2.ok) {
+                var b2 = await fRes2.blob();
+                if (b2 && b2.size > 0) return b2;
+            }
+        }
+    } catch (e2) { }
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
+        var candidates = [uri];
+        if (uri.includes('_capacitor_file_')) {
+            var stripped = uri.replace(/^https?:\/\/[^\/]+\/_capacitor_file_\/?/, '/');
+            candidates.push(stripped);
+            candidates.push(decodeURIComponent(stripped));
+            candidates.push('file://' + decodeURIComponent(stripped));
+        } else if (uri.startsWith('file://')) {
+            var noPrefix = uri.replace('file://', '');
+            candidates.push(noPrefix);
+            candidates.push(decodeURIComponent(noPrefix));
+        }
+        for (var i = 0; i < candidates.length; i++) {
+            try {
+                var fileData = await window.Capacitor.Plugins.Filesystem.readFile({ path: candidates[i] });
+                if (fileData && fileData.data) {
+                    var dataUrl = fileData.data.startsWith('data:') ? fileData.data : `data:image/jpeg;base64,${fileData.data}`;
+                    var fRes3 = await fetch(dataUrl);
+                    if (fRes3.ok) {
+                        var b3 = await fRes3.blob();
+                        if (b3 && b3.size > 0) return b3;
+                    }
+                }
+            } catch (fsErr) { }
+        }
+    }
+    try {
+        var cvsBlob = await new Promise((res, rej) => {
+            var img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                try {
+                    var cvs = document.createElement('canvas');
+                    cvs.width = img.naturalWidth || img.width;
+                    cvs.height = img.naturalHeight || img.height;
+                    var ctx = cvs.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    cvs.toBlob((b) => (b && b.size > 0) ? res(b) : rej(new Error("Canvas toBlob empty")), 'image/jpeg', 0.95);
+                } catch (err) { rej(err); }
+            };
+            img.onerror = () => rej(new Error("Image element failed to load"));
+            img.src = webUri;
+        });
+        if (cvsBlob) return cvsBlob;
+    } catch (e3) { }
+    throw new Error("Unable to read image file from " + uri);
+};
+
+window.saveToOutbox = function (docId, designId, fileUri, productName, bypass = false, blob = null) {
     return getDB().then(db => {
         return new Promise((resolve) => {
             var tx = db.transaction("outbox", "readwrite");
-            var req = tx.objectStore("outbox").put({ docId, designId, fileUri, productName, bypass, ts: Date.now(), processAfter: Date.now() + 5000 });
+            var item = { docId, designId, fileUri, blob, productName, bypass, ts: Date.now(), processAfter: Date.now() + 5000 };
+            var req = tx.objectStore("outbox").put(item);
             req.onsuccess = () => resolve(req.result);
-            req.onerror = () => resolve(null);
+            req.onerror = () => {
+                if (blob) {
+                    try {
+                        var tx2 = db.transaction("outbox", "readwrite");
+                        delete item.blob;
+                        var req2 = tx2.objectStore("outbox").put(item);
+                        req2.onsuccess = () => resolve(req2.result);
+                        req2.onerror = () => resolve(null);
+                    } catch (e2) {
+                        resolve(null);
+                    }
+                } else {
+                    resolve(null);
+                }
+            };
         });
     });
 };
@@ -6436,7 +6528,7 @@ window.triggerAdminGallery = async function (docId, pid, productName = "Product 
             limit: 0 // unlimited selection
         });
         if (res && res.photos && res.photos.length > 0) {
-            window.pendingSharedImages = res.photos.map(p => ({ webPath: p.webPath }));
+            window.pendingSharedImages = res.photos.map(p => ({ uri: p.path || p.webPath, path: p.path, webPath: p.webPath }));
             window.tempCamDocId = docId;
             window.tempCamPid = pid;
             window.tempCamProductName = productName;
@@ -6513,7 +6605,22 @@ window.confirmAdminUpload = async function () {
     }
 
     try {
-        var outboxId = await window.saveToOutbox(window.tempCamDocId, finalDesignId, window.tempCamPhotoPath, window.tempCamProductName || "", bypass);
+        var currentBlob = null;
+        var previewImg = document.getElementById('adminPreviewImg');
+        if (previewImg && previewImg.complete && previewImg.naturalWidth > 0) {
+            try {
+                var cvs = document.createElement('canvas');
+                cvs.width = previewImg.naturalWidth;
+                cvs.height = previewImg.naturalHeight;
+                var ctx = cvs.getContext('2d');
+                ctx.drawImage(previewImg, 0, 0);
+                currentBlob = await new Promise((res) => cvs.toBlob(res, 'image/jpeg', 0.95));
+            } catch (cvsErr) { }
+        }
+        if (!currentBlob && typeof window.readBlobFromUri === 'function') {
+            try { currentBlob = await window.readBlobFromUri(window.tempCamPhotoPath); } catch (eB) { }
+        }
+        var outboxId = await window.saveToOutbox(window.tempCamDocId, finalDesignId, window.tempCamPhotoPath, window.tempCamProductName || "", bypass, currentBlob);
         if (outboxId) {
             var toastId = 'undoToast_' + Date.now();
             var toastHtml = `<div id="${toastId}" style="position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:12px 20px; border-radius:4px; font-size:14px; box-shadow:0 3px 10px rgba(0,0,0,0.3); z-index:9999; display:flex; align-items:center; gap:15px;">
@@ -6606,20 +6713,16 @@ window.processCameraOutbox = async function () {
             var filename = `${item.docId}___${item.designId}___${safeName}___${item.ts}.jpg`;
             try {
                 var uploadStartTime = Date.now();
-                var blob;
-                try {
-                    // Modern way to read local file URL (Capacitor handles it)
+                var blob = item.blob;
+                if (!blob && typeof window.readBlobFromUri === 'function') {
+                    blob = await window.readBlobFromUri(item.fileUri);
+                } else if (!blob) {
                     var capUri = item.fileUri;
                     if (window.Capacitor && window.Capacitor.convertFileSrc) {
                         capUri = window.Capacitor.convertFileSrc(capUri);
                     }
                     var fRes = await fetch(capUri);
                     if (!fRes.ok) throw new Error("Fetch failed");
-                    blob = await fRes.blob();
-                } catch (e) {
-                    // Fallback to Filesystem base64 string
-                    var fileData = await Capacitor.Plugins.Filesystem.readFile({ path: item.fileUri });
-                    var fRes = await fetch(`data:image/jpeg;base64,${fileData.data}`);
                     blob = await fRes.blob();
                 }
 
@@ -7165,7 +7268,7 @@ window.showNextSharedImagePreview = async function () {
     }
 
     let sFile = window.pendingSharedImages[window.sharedImagePasteIndex];
-    window.tempCamPhotoPath = sFile.uri || sFile.webPath;
+    window.tempCamPhotoPath = sFile.path || sFile.uri || sFile.webPath;
 
     var maxNum = 0; // Default if no previous designs exist
     if (window.lastRenderedDesignNames && !window.tempCamIsNewProduct) {
@@ -7189,7 +7292,7 @@ window.showNextSharedImagePreview = async function () {
     var nameLabel = document.getElementById('adminPreviewProductName');
 
     if (previewImg) {
-        var capUri = window.tempCamPhotoPath;
+        var capUri = sFile.webPath || window.tempCamPhotoPath;
         if (capUri && window.Capacitor && window.Capacitor.convertFileSrc) {
             capUri = window.Capacitor.convertFileSrc(capUri);
         }
@@ -7240,7 +7343,11 @@ window.submitCustomerSharedImages = async function () {
         for (let idx = 0; idx < window.pendingSharedImages.length; idx++) {
             let sFile = window.pendingSharedImages[idx];
             let designNum = (idx + 1).toString().padStart(2, '0');
-            await window.saveToOutbox(tempDocId, designNum, sFile.uri, uploaderName + " - " + notes, true);
+            var shareBlob = null;
+            if (typeof window.readBlobFromUri === 'function') {
+                try { shareBlob = await window.readBlobFromUri(sFile.path || sFile.uri || sFile.webPath); } catch (e) { }
+            }
+            await window.saveToOutbox(tempDocId, designNum, sFile.path || sFile.uri || sFile.webPath, uploaderName + " - " + notes, true, shareBlob);
         }
 
         window.pendingSharedImages = null;
