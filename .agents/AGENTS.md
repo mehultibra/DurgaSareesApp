@@ -1,2 +1,3 @@
 - Always automatically commit and push changes to git after completing a task or bugfix without waiting for the user to explicitly ask 'update git'.
-- Only edit the exact minimal lines of code required for a bugfix or task. Never rewrite entire functions, files, or surrounding logic as it can destabilize the APK and disrupt the user experience.
+- Change ONLY the exact minimal lines of code required for a bugfix or task. NEVER rewrite entire functions, files, helper architectures, or surrounding logic as it destabilizes the APK and disrupts the in-app user experience.
+- Strictly avoid introducing large new helper functions, new abstractions, or altering established data flows unless explicitly requested by the user. Keep fixes to surgical 1-2 line changes whenever possible.
