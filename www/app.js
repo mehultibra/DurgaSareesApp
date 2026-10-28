@@ -1852,7 +1852,7 @@ function buildCardDetails(p) {
     var parsedPrice = parseInt(p.price) || 0;
     var displayMrp = parseInt(p.mrp) || Math.round(parsedPrice / 0.70);
     var offPercent = displayMrp > parsedPrice ? Math.round(((displayMrp - parsedPrice) / displayMrp) * 100) : 30;
-    var favClass = favorites[p.id] ? "fas fa-heart fav-active" : "far fa-heart fav-inactive";
+    var favClass = (favorites[p.id] || (p.docId && favorites[p.docId])) ? "fas fa-heart fav-active" : "far fa-heart fav-inactive";
 
     var h = [];
     h.push('<div style="display:flex; align-items:center; width:100%; gap:4px; overflow:hidden;">');
@@ -2085,12 +2085,19 @@ function chgMainRow(pid, dir) {
 
 function toggleFav(pid, event) {
     if (event) event.stopPropagation();
-    if (favorites[pid]) delete favorites[pid]; else favorites[pid] = true;
+    var p = allProducts.find(x => x.id === pid);
+    var isFav = !favorites[pid] && (!p || !p.docId || !favorites[p.docId]);
+    if (isFav) {
+        favorites[pid] = true;
+        if (p && p.docId) favorites[p.docId] = true;
+    } else {
+        delete favorites[pid];
+        if (p && p.docId) delete favorites[p.docId];
+    }
     try { localStorage.setItem("dsFavs", JSON.stringify(favorites)); } catch (err) { }
     refreshCardUI(pid);
 
-    var p = allProducts.find(x => x.id === pid);
-    if (p) manageProductHDCache(p, favorites[pid] ? 'CACHE' : 'DELETE');
+    if (p) manageProductHDCache(p, isFav ? 'CACHE' : 'DELETE');
 }
 
 function updateCartHeader() {
@@ -5323,7 +5330,7 @@ window.applyFilter = function () {
 
         // 4. Favorites
         if (query === "" && showOnlyFavs) {
-            if (!favorites[p.id]) return false;
+            if (!favorites[p.id] && (!p.docId || !favorites[p.docId])) return false;
         }
 
         return true;
@@ -7859,7 +7866,7 @@ window.shareWhatsAppLink = async function () {
 
     if (!targetProd) {
         // Main page share link: Share favorites if available, or store catalog
-        var favProducts = (typeof allProducts !== 'undefined' && Array.isArray(allProducts) && typeof favorites !== 'undefined') ? allProducts.filter(p => favorites[p.id]) : [];
+        var favProducts = (typeof allProducts !== 'undefined' && Array.isArray(allProducts) && typeof favorites !== 'undefined') ? allProducts.filter(p => favorites[p.id] || (p.docId && favorites[p.docId])) : [];
         if (favProducts.length > 0) {
             var lines = ["*Durga Sarees, Surat - Favorite Catalog*", ""];
             lines.push("Here are " + favProducts.length + " selected items from our collection:");

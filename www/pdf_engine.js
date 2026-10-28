@@ -241,14 +241,24 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
     }
 
     var isZoomRequest = cacheKey.includes('/Zoom%2F') || cacheKey.includes('/Zoom/');
-    var matchingProd = (typeof curProduct !== 'undefined' && curProduct) ? curProduct : null;
+    var matchingProd = null;
     if (typeof allProducts !== 'undefined' && Array.isArray(allProducts)) {
-        var found = allProducts.find(p => {
-            if (p.zoomUrl && p.zoomUrl !== 'None' && cacheKey.includes(encodeURIComponent(p.zoomUrl.trim().replace(/\\/g, '/')))) return true;
-            if (p.gridUrl && cacheKey.includes(encodeURIComponent(p.gridUrl.trim().replace(/\\/g, '/')))) return true;
+        var decodedKey = decodeURIComponent(cacheKey).toLowerCase();
+        matchingProd = allProducts.find(p => {
+            if (p.zoomUrl && p.zoomUrl !== 'None') {
+                var normZ = p.zoomUrl.trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+                if (normZ && (cacheKey.includes(encodeURIComponent(normZ)) || decodedKey.includes(normZ))) return true;
+            }
+            if (p.gridUrl && p.gridUrl !== 'None') {
+                var normG = p.gridUrl.trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+                if (normG && (cacheKey.includes(encodeURIComponent(normG)) || decodedKey.includes(normG))) return true;
+            }
             return false;
         });
-        if (found) matchingProd = found;
+    }
+    if (!matchingProd && typeof curProduct !== 'undefined' && curProduct) {
+        var isDetailOpen = document.getElementById('detailPanel') && document.getElementById('detailPanel').classList.contains('open');
+        if (isDetailOpen) matchingProd = curProduct;
     }
 
     if (!isZoomRequest && matchingProd && matchingProd.zoomUrl && matchingProd.zoomUrl !== "None") {
@@ -362,6 +372,10 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
 
     // Helper: Try DOM extraction for Zoom (high-res swipe card only)
     function tryZoomDOM() {
+        var isDetailOpen = document.getElementById('detailPanel') && document.getElementById('detailPanel').classList.contains('open');
+        if (!isDetailOpen || (matchingProd && typeof curProduct !== 'undefined' && curProduct && matchingProd.id !== curProduct.id && matchingProd.docId !== curProduct.docId)) {
+            return Promise.resolve(null);
+        }
         try {
             var decoded = decodeURIComponent(zoomBaseKey || cacheKey);
             var filename = decoded.substring(decoded.lastIndexOf('/') + 1).split('?')[0].toLowerCase();
@@ -440,38 +454,38 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
                 var filename = decoded.substring(decoded.lastIndexOf('/') + 1).split('?')[0].toLowerCase();
                 var designNum = parseInt(filename.replace(/\D/g, ''), 10);
 
-                var cards = document.querySelectorAll('.swipe-card');
-                for (var i = 0; i < cards.length; i++) {
-                    var c = cards[i];
-                    var d = (c.getAttribute('data-design') || '').toLowerCase();
-                    var dNum = parseInt(d.replace(/\D/g, ''), 10);
-                    if (d === filename || d === filename.replace(/\.[^.]+$/, '') || (!isNaN(designNum) && !isNaN(dNum) && designNum === dNum)) {
-                        var img = c.querySelector('img');
-                        if (img && img.naturalWidth > 0) {
-                            var canvas = document.createElement('canvas');
-                            canvas.width = img.naturalWidth;
-                            canvas.height = img.naturalHeight;
-                            var ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0);
-                            var dataUrl = canvas.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
-                            if (dataUrl && dataUrl.length > 100) return dataUrl;
+                var isDetailOpen = document.getElementById('detailPanel') && document.getElementById('detailPanel').classList.contains('open');
+                if (isDetailOpen && (!matchingProd || !curProduct || matchingProd.id === curProduct.id || (matchingProd.docId && matchingProd.docId === curProduct.docId))) {
+                    var cards = document.querySelectorAll('.swipe-card');
+                    for (var i = 0; i < cards.length; i++) {
+                        var c = cards[i];
+                        var d = (c.getAttribute('data-design') || '').toLowerCase();
+                        var dNum = parseInt(d.replace(/\D/g, ''), 10);
+                        if (d === filename || d === filename.replace(/\.[^.]+$/, '') || (!isNaN(designNum) && !isNaN(dNum) && designNum === dNum)) {
+                            var img = c.querySelector('img');
+                            if (img && img.naturalWidth > 0) {
+                                var canvas = document.createElement('canvas');
+                                canvas.width = img.naturalWidth;
+                                canvas.height = img.naturalHeight;
+                                var ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0);
+                                var dataUrl = canvas.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
+                                if (dataUrl && dataUrl.length > 100) return dataUrl;
+                            }
                         }
                     }
                 }
 
-                var gridImgs = document.querySelectorAll('img.ci-img');
-                for (var j = 0; j < gridImgs.length; j++) {
-                    var gImg = gridImgs[j];
-                    if (gImg.src && (gImg.src.includes(filename) || (cacheKey.includes('/o/') && gImg.src.includes(cacheKey.split('/o/')[1].split('?')[0])))) {
-                        if (gImg.naturalWidth > 0) {
-                            var canvas2 = document.createElement('canvas');
-                            canvas2.width = gImg.naturalWidth;
-                            canvas2.height = gImg.naturalHeight;
-                            var ctx2 = canvas2.getContext('2d');
-                            ctx2.drawImage(gImg, 0, 0);
-                            var dataUrl2 = canvas2.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
-                            if (dataUrl2 && dataUrl2.length > 100) return dataUrl2;
-                        }
+                if (matchingProd && matchingProd.id) {
+                    var gImg = document.getElementById('img_' + matchingProd.id);
+                    if (gImg && gImg.naturalWidth > 0 && gImg.src && !gImg.src.startsWith('data:') && !gImg.src.includes('missing')) {
+                        var canvas2 = document.createElement('canvas');
+                        canvas2.width = gImg.naturalWidth;
+                        canvas2.height = gImg.naturalHeight;
+                        var ctx2 = canvas2.getContext('2d');
+                        ctx2.drawImage(gImg, 0, 0);
+                        var dataUrl2 = canvas2.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
+                        if (dataUrl2 && dataUrl2.length > 100) return dataUrl2;
                     }
                 }
             } catch(e){}
@@ -1777,7 +1791,9 @@ window.triggerShare = async function (action) {
 
     if (!isDetailOpen) {
         // --- MAIN PAGE SHARE (Favorites) ---
-        var rawFavs = allProducts.filter(p => favorites[p.id]);
+        var rawFavs = (typeof showOnlyFavs !== 'undefined' && showOnlyFavs && typeof displayList !== 'undefined' && Array.isArray(displayList) && displayList.length > 0)
+            ? displayList.filter(p => favorites[p.id] || (p.docId && favorites[p.docId]))
+            : allProducts.filter(p => favorites[p.id] || (p.docId && favorites[p.docId]));
         if (rawFavs.length === 0) {
             history.back(); // Pop the shareModal state we were hiding
             return alert("No favorite items to share. Please mark some products as favorites first.");
