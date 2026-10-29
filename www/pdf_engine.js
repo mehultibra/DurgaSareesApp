@@ -210,8 +210,8 @@ function blobToJpegForPDF(blob) {
         var img = new Image();
         img.onload = function() {
             var canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
             var ctx = canvas.getContext('2d');
             ctx.fillStyle = "#FFFFFF";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -347,6 +347,16 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
 
     var zoomUrlsToTry = zoomBaseKey ? buildVariants(zoomBaseKey) : [];
     var gridUrlsToTry = gridBaseKey ? buildVariants(gridBaseKey) : [];
+    if (matchingProd) {
+        if (matchingProd.gridUrl && !gridUrlsToTry.includes(matchingProd.gridUrl)) gridUrlsToTry.push(matchingProd.gridUrl);
+        if (typeof window.resolveImageUrlSync === 'function') {
+            try {
+                var sUrl = window.resolveImageUrlSync(matchingProd);
+                if (sUrl && !sUrl.startsWith('data:') && !gridUrlsToTry.includes(sUrl)) gridUrlsToTry.push(sUrl);
+            } catch(e){}
+        }
+        if (matchingProd.zoomUrl && matchingProd.zoomUrl !== "None" && !zoomUrlsToTry.includes(matchingProd.zoomUrl)) zoomUrlsToTry.push(matchingProd.zoomUrl);
+    }
 
     // Helper: convert blob to base64 or JPEG
     function processBlob(blob) {
@@ -473,19 +483,6 @@ function getBase64FromCache(cacheKey, forceJpeg = false) {
                                 if (dataUrl && dataUrl.length > 100) return dataUrl;
                             }
                         }
-                    }
-                }
-
-                if (matchingProd && matchingProd.id) {
-                    var gImg = document.getElementById('img_' + matchingProd.id);
-                    if (gImg && gImg.naturalWidth > 0 && gImg.src && !gImg.src.startsWith('data:') && !gImg.src.includes('missing')) {
-                        var canvas2 = document.createElement('canvas');
-                        canvas2.width = gImg.naturalWidth;
-                        canvas2.height = gImg.naturalHeight;
-                        var ctx2 = canvas2.getContext('2d');
-                        ctx2.drawImage(gImg, 0, 0);
-                        var dataUrl2 = canvas2.toDataURL(forceJpeg ? 'image/jpeg' : 'image/webp', 0.92);
-                        if (dataUrl2 && dataUrl2.length > 100) return dataUrl2;
                     }
                 }
             } catch(e){}
