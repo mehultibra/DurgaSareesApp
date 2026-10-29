@@ -92,7 +92,7 @@ html {
 }
 
 #favTopIcon.fas {
-    color: #ff3f6c !important;
+    color: var(--myntra-pink) !important;
 }
 #favTopIcon.far {
     color: #000000 !important;
@@ -280,7 +280,7 @@ html {
 }
 .cat-circle-item.active .cat-circle-img-wrap {
     border-color: var(--myntra-pink);
-    box-shadow: 0 2px 8px rgba(255, 63, 108, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 .cat-circle-img-wrap img {
     width: 100%;

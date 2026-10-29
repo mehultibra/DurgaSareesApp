@@ -838,7 +838,8 @@ async function generateCartOrderPDF(actionType) {
             doc.setFontSize(13);
             doc.setFont("helvetica", "bold");
             doc.setTextColor(139, 0, 0);
-            var nameText = p.name || "Unknown";
+            var secBadge = (p.section && p.section.trim()) ? "[" + p.section.toUpperCase() + "] " : "";
+            var nameText = secBadge + (p.name || "Unknown");
             doc.textWithLink(nameText, margin + 10, y + 16, { url: wixUrl });
 
             // Underline the name

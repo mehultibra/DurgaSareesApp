@@ -213,7 +213,7 @@ window.livePresenceHistory = [];
 // 🚀 MYNTRA-STYLE MULTI-SECTION REGISTRY
 // ==========================================
 window.DEFAULT_SECTIONS = [
-    { id: "sarees", name: "Sarees", order: 1, themeColor: "#ff3f6c", lightColor: "#fff0f3", gradient: "linear-gradient(to bottom, #dcfce7 0%, #ffffff 250px)", isDefault: true, enabled: true },
+    { id: "sarees", name: "Sarees", order: 1, themeColor: "#ff3f6c", lightColor: "#fff0f3", gradient: "linear-gradient(to bottom, #ffe4e6 0%, #ffffff 250px)", isDefault: true, enabled: true },
     { id: "blouse", name: "Blouse", order: 2, themeColor: "#8b5cf6", lightColor: "#f5f3ff", gradient: "linear-gradient(to bottom, #ede9fe 0%, #ffffff 250px)", isDefault: false, enabled: true }
 ];
 var _cachedSecs = null;
@@ -222,16 +222,25 @@ window.appSections = (Array.isArray(_cachedSecs) && _cachedSecs.length > 0) ? _c
 window.activeSection = "sarees";
 
 window.applySectionTheme = function (secId) {
+    var root = document.documentElement;
+    var gridWrapper = document.getElementById('gridWrapper');
+
+    if (secId === 'all') {
+        root.style.setProperty('--myntra-pink', '#ff3f6c');
+        root.style.setProperty('--section-theme', '#ff3f6c');
+        root.style.setProperty('--section-light', '#fff0f3');
+        if (gridWrapper) gridWrapper.style.backgroundImage = 'linear-gradient(to bottom, #ffe4e6 0%, #ffffff 250px)';
+        return;
+    }
+
     var sec = (window.appSections || window.DEFAULT_SECTIONS).find(s => s.id === secId) || window.DEFAULT_SECTIONS[0];
     if (!sec) return;
-    var root = document.documentElement;
     var themeColor = sec.themeColor || "#ff3f6c";
     var lightColor = sec.lightColor || "#fff0f3";
     root.style.setProperty('--myntra-pink', themeColor);
     root.style.setProperty('--section-theme', themeColor);
     root.style.setProperty('--section-light', lightColor);
 
-    var gridWrapper = document.getElementById('gridWrapper');
     if (gridWrapper && sec.gradient) {
         gridWrapper.style.backgroundImage = sec.gradient;
     }
@@ -242,7 +251,10 @@ window.renderSectionTabBar = function () {
     if (!bar) return;
 
     var sections = window.appSections || window.DEFAULT_SECTIONS;
-    var html = '';
+    var isAllActive = (window.activeSection === 'all');
+    var html = `<button class="section-tab ${isAllActive ? 'active' : ''}" onclick="window.switchSection('all')" data-section="all">
+        <span>ALL</span>
+    </button>`;
 
     sections.filter(s => s.enabled !== false).sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(sec => {
         var isActive = (sec.id === window.activeSection);
@@ -266,6 +278,14 @@ window.switchSection = function (secId) {
     window.activeCategories = [];
     window.applySectionTheme(secId);
     window.renderSectionTabBar();
+
+    var secName = secId === 'all' ? 'All Products' : (((window.appSections || window.DEFAULT_SECTIONS).find(s => s.id === secId) || {}).name || secId);
+    var placeholderText = "Search " + secName + " Name or SKU...";
+    ['srchMainInput', 'srch', 'dtSearchInput'].forEach(id => {
+        var el = document.getElementById(id);
+        if (el) el.placeholder = placeholderText;
+    });
+
     if (typeof window.renderHorizontalCategories === 'function') window.renderHorizontalCategories();
     if (typeof window.populateCategories === 'function') window.populateCategories();
     if (typeof applyFilter === 'function') applyFilter();
@@ -324,20 +344,26 @@ window.openManageSectionsModal = function () {
     var listEl = document.getElementById('sectionsListContainer');
     if (!listEl) return;
 
-    var sections = window.appSections || window.DEFAULT_SECTIONS;
+    var sections = (window.appSections || window.DEFAULT_SECTIONS).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
     var html = '';
 
-    sections.forEach(sec => {
+    sections.forEach((sec, idx) => {
         var isDeletable = !sec.isDefault && sec.id !== 'sarees';
         var col = sec.themeColor || '#ff3f6c';
+        var canMoveUp = idx > 0;
+        var canMoveDown = idx < sections.length - 1;
+
         html += `
         <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: ${col}; border: 1px solid rgba(0,0,0,0.1);"></span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="color" value="${col}" onchange="window.adminUpdateSectionColor('${sec.id}', this.value)" style="width: 26px; height: 26px; border: 1px solid #ccc; border-radius: 50%; cursor: pointer; padding: 0; background: none;" title="Change Theme Color">
                 <span style="font-weight: bold; font-size: 14px; color: var(--text-main);">${esc(sec.name)}</span>
                 ${sec.isDefault ? '<span style="font-size: 10px; background: #e2e8f0; color: #64748b; padding: 2px 6px; border-radius: 10px; font-weight: bold;">Default</span>' : ''}
             </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <button type="button" onclick="window.adminMoveSection('${sec.id}', -1)" style="border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; padding: 4px 7px; cursor: pointer; ${canMoveUp ? '' : 'opacity: 0.3; pointer-events: none;'}" title="Move Up"><i class="fas fa-arrow-up" style="font-size: 11px; color: #475569;"></i></button>
+                <button type="button" onclick="window.adminMoveSection('${sec.id}', 1)" style="border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; padding: 4px 7px; cursor: pointer; ${canMoveDown ? '' : 'opacity: 0.3; pointer-events: none;'}" title="Move Down"><i class="fas fa-arrow-down" style="font-size: 11px; color: #475569;"></i></button>
+                <i class="fas fa-pencil-alt" style="color: #64748b; cursor: pointer; padding: 6px;" onclick="window.adminRenameSection('${sec.id}')" title="Rename Section"></i>
                 ${isDeletable ? `<i class="fas fa-trash" style="color: #ef4444; cursor: pointer; padding: 6px;" onclick="window.adminDeleteSection('${sec.id}')" title="Delete Section"></i>` : ''}
             </div>
         </div>`;
@@ -345,6 +371,52 @@ window.openManageSectionsModal = function () {
 
     listEl.innerHTML = html;
     openModal('manageSectionsModal');
+};
+
+window.adminUpdateSectionColor = async function (secId, newColor) {
+    var sec = (window.appSections || []).find(s => s.id === secId);
+    if (!sec) return;
+    sec.themeColor = newColor;
+    sec.lightColor = newColor + '18';
+    sec.gradient = `linear-gradient(to bottom, ${newColor}22 0%, #ffffff 250px)`;
+
+    await window.saveSectionsToFirestore();
+    if (window.activeSection === secId || (window.activeSection === 'all' && secId === 'sarees')) {
+        window.applySectionTheme(window.activeSection);
+    }
+    window.renderSectionTabBar();
+};
+
+window.adminRenameSection = async function (secId) {
+    var sec = (window.appSections || []).find(s => s.id === secId);
+    if (!sec) return;
+    var newName = prompt("Enter new name for section:", sec.name);
+    if (!newName || !newName.trim()) return;
+    sec.name = newName.trim();
+
+    await window.saveSectionsToFirestore();
+    window.renderSectionTabBar();
+    window.openManageSectionsModal();
+};
+
+window.adminMoveSection = async function (secId, dir) {
+    var sections = (window.appSections || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    var idx = sections.findIndex(s => s.id === secId);
+    if (idx === -1) return;
+    var targetIdx = idx + dir;
+    if (targetIdx < 0 || targetIdx >= sections.length) return;
+
+    var temp = sections[idx].order;
+    sections[idx].order = sections[targetIdx].order;
+    sections[targetIdx].order = temp;
+
+    sections.sort((a, b) => (a.order || 0) - (b.order || 0));
+    sections.forEach((s, i) => s.order = i + 1);
+    window.appSections = sections;
+
+    await window.saveSectionsToFirestore();
+    window.renderSectionTabBar();
+    window.openManageSectionsModal();
 };
 
 window.adminAddNewSection = async function () {
@@ -2607,6 +2679,17 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     curProduct = p;
     window.viewStartTime = Date.now();
 
+    // Sync Active Section Theme on Deep Link / openDetail (Audit Fix 6)
+    var pSec = p.section || 'sarees';
+    if (pSec && window.activeSection !== 'all' && pSec !== window.activeSection) {
+        if (window.applySectionTheme) window.applySectionTheme(pSec);
+        var urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('pid')) {
+            window.activeSection = pSec;
+            if (window.renderSectionTabBar) window.renderSectionTabBar();
+        }
+    }
+
     if (p && p.name) {
         if (!window.livePresenceHistory) window.livePresenceHistory = [];
         if (!window.livePresenceHistory.includes(p.name)) {
@@ -3320,6 +3403,10 @@ function closeDetail(fromHistory) {
 
     window.recordTimeSpent();
 
+    if (window.applySectionTheme) {
+        window.applySectionTheme(window.activeSection);
+    }
+
     if (typeof window.updateLivePresence === 'function') {
         window.updateLivePresence(null, true);
     }
@@ -3870,10 +3957,15 @@ function openCart(preserveScroll) {
             g.items.forEach(function (i) { pTot += (parseInt(i.qty) || 0); });
             var isEditing = window.cartEditingMap[g.p.id];
 
+            var pSecId = g.p.section || 'sarees';
+            var pSecDef = (window.appSections || window.DEFAULT_SECTIONS).find(s => s.id === pSecId);
+            var pSecName = pSecDef ? pSecDef.name : pSecId.toUpperCase();
+            var pSecColor = pSecDef ? (pSecDef.themeColor || '#ff3f6c') : '#ff3f6c';
+
             cHtml.push('<div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden;">');
             cHtml.push('<div style="background:#f5f5f6; padding:10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">');
             cHtml.push('<div style="' + (!isEditing ? 'cursor:pointer;' : '') + ' flex:1;" ' + (!isEditing ? 'onclick="closeCart(true); openDetail(\'' + g.p.id + '\');"' : '') + '>');
-            cHtml.push('<div style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></div>');
+            cHtml.push('<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"><span style="font-size:10px; font-weight:bold; background:' + pSecColor + '18; color:' + pSecColor + '; border:1px solid ' + pSecColor + '44; padding:2px 6px; border-radius:10px; text-transform:uppercase;">' + safeText(pSecName) + '</span><span style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></span></div>');
 
             if (isEditing) {
                 cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) +
@@ -4108,7 +4200,8 @@ function sendWhatsappText() {
 
     for (var r in groups) {
         var g = groups[r];
-        msg += "🏷️ *" + g.p.name + "* (SKU: " + (g.p.sku || "-") + ")\n";
+        var secLabel = (g.p.section && g.p.section.trim()) ? "[" + g.p.section.toUpperCase() + "] " : "";
+        msg += "🏷️ *" + secLabel + g.p.name + "* (SKU: " + (g.p.sku || "-") + ")\n";
         g.items.forEach(function (item) {
             var dName = item.design === 'DIRECT' ? 'Cover' : item.design;
             msg += "  - " + dName + ": " + item.qty + " pcs\n";
@@ -5301,7 +5394,7 @@ window.renderHorizontalCategories = function () {
     var cats = {};
 
     allProducts.forEach(p => {
-        if ((p.section || 'sarees') === curSec && p.cat) {
+        if ((curSec === 'all' || (p.section || 'sarees') === curSec) && p.cat) {
             if (!cats[p.cat]) {
                 cats[p.cat] = p;
             } else if (!cats[p.cat].coverDesignId && p.coverDesignId) {
@@ -5312,11 +5405,21 @@ window.renderHorizontalCategories = function () {
         }
     });
 
-    var secDef = (window.appSections || []).find(s => s.id === curSec);
-    if (secDef && Array.isArray(secDef.categories)) {
-        secDef.categories.forEach(c => {
-            if (c && !cats[c]) cats[c] = null;
+    if (curSec === 'all') {
+        (window.appSections || []).forEach(s => {
+            if (Array.isArray(s.categories)) {
+                s.categories.forEach(c => {
+                    if (c && !cats[c]) cats[c] = null;
+                });
+            }
         });
+    } else {
+        var secDef = (window.appSections || []).find(s => s.id === curSec);
+        if (secDef && Array.isArray(secDef.categories)) {
+            secDef.categories.forEach(c => {
+                if (c && !cats[c]) cats[c] = null;
+            });
+        }
     }
 
     var sortedCats = Object.keys(cats).sort();
@@ -5352,12 +5455,20 @@ window.populateCategories = function () {
     var curSec = window.activeSection || 'sarees';
     var cats = {};
     allProducts.forEach(p => {
-        if ((p.section || 'sarees') === curSec && p.cat) cats[p.cat] = true;
+        if ((curSec === 'all' || (p.section || 'sarees') === curSec) && p.cat) cats[p.cat] = true;
     });
 
-    var secDef = (window.appSections || []).find(s => s.id === curSec);
-    if (secDef && Array.isArray(secDef.categories)) {
-        secDef.categories.forEach(c => { if (c) cats[c] = true; });
+    if (curSec === 'all') {
+        (window.appSections || []).forEach(s => {
+            if (Array.isArray(s.categories)) {
+                s.categories.forEach(c => { if (c) cats[c] = true; });
+            }
+        });
+    } else {
+        var secDef = (window.appSections || []).find(s => s.id === curSec);
+        if (secDef && Array.isArray(secDef.categories)) {
+            secDef.categories.forEach(c => { if (c) cats[c] = true; });
+        }
     }
     var sortedCats = Object.keys(cats).sort();
 
@@ -5514,8 +5625,8 @@ window.applyFilter = function () {
     var query = srch ? srch.value.trim().toLowerCase() : '';
 
     var filtered = allProducts.filter(p => {
-        // Section Filtering: When favorites are active, show favorites across ALL sections!
-        if (!showOnlyFavs && (!window.activeSection || (p.section || 'sarees') !== window.activeSection)) {
+        // Section Filtering: When favorites are active or 'all' is selected, show across sections!
+        if (!showOnlyFavs && window.activeSection && window.activeSection !== 'all' && (p.section || 'sarees') !== window.activeSection) {
             return false;
         }
 
@@ -5554,29 +5665,33 @@ window.applyFilter = function () {
         return true;
     });
 
-    // Cross-Section Search Notification Banner (Safeguard 5)
+    // Cross-Section Search Notification Banner (Safeguard 5 & Audit Fix 5)
     var searchBanner = document.getElementById('crossSectionSearchBanner');
     if (searchBanner) {
-        if (query !== "" && !showOnlyFavs) {
-            var otherMatchesCount = 0;
-            var otherSecId = null;
+        if (query !== "" && !showOnlyFavs && window.activeSection !== 'all') {
+            var countsBySec = {};
             allProducts.forEach(p => {
-                if ((p.section || 'sarees') !== window.activeSection) {
+                var pSec = p.section || 'sarees';
+                if (pSec !== window.activeSection) {
                     var m = (p.name && p.name.toLowerCase().includes(query)) ||
                             (p.sku && p.sku.toLowerCase().includes(query)) ||
                             (p.fabric && p.fabric.toLowerCase().includes(query));
                     if (m) {
-                        otherMatchesCount++;
-                        if (!otherSecId) otherSecId = (p.section || 'sarees');
+                        countsBySec[pSec] = (countsBySec[pSec] || 0) + 1;
                     }
                 }
             });
 
-            if (otherMatchesCount > 0) {
+            var secKeys = Object.keys(countsBySec);
+            if (secKeys.length > 0) {
                 var curSecName = ((window.appSections || []).find(s => s.id === window.activeSection) || {}).name || "Current Section";
-                var otherSecName = ((window.appSections || []).find(s => s.id === otherSecId) || {}).name || "other section";
+                var linksHtml = secKeys.map(sid => {
+                    var sName = ((window.appSections || []).find(s => s.id === sid) || {}).name || sid;
+                    return `<span style="text-decoration:underline; font-weight:bold; cursor:pointer; color:var(--myntra-pink);" onclick="window.switchSection('${sid}')">${countsBySec[sid]} in ${esc(sName)}</span>`;
+                }).join(' • ');
+
                 searchBanner.style.display = 'flex';
-                searchBanner.innerHTML = `<span>Showing <strong>${filtered.length}</strong> in ${curSecName} • <span style="text-decoration:underline; font-weight:bold; cursor:pointer; color:var(--myntra-pink);" onclick="window.switchSection('${otherSecId}')">Tap to view ${otherMatchesCount} in ${otherSecName}</span></span>`;
+                searchBanner.innerHTML = `<span>Showing <strong>${filtered.length}</strong> in ${esc(curSecName)} • Tap to view: ${linksHtml}</span>`;
             } else {
                 searchBanner.style.display = 'none';
             }
@@ -8583,6 +8698,8 @@ window.saveProductDetails = async function () {
 
     var secSelect = document.getElementById('editProdSection');
     var sectionVal = secSelect ? secSelect.value : (p.section || 'sarees');
+    var catInput = document.getElementById('editProdCat');
+    var catVal = catInput ? catInput.value.trim() : (p.cat || '');
 
     var price = document.getElementById('editProdPrice').value.trim();
     var sku = document.getElementById('editProdSku').value.trim();
@@ -8599,6 +8716,7 @@ window.saveProductDetails = async function () {
     var patchPayload = {
         fields: {
             section: { stringValue: sectionVal },
+            cat: { stringValue: catVal },
             price: { doubleValue: Number(price || 0) },
             sku: { stringValue: sku },
             packing: { stringValue: packing },
@@ -8613,7 +8731,7 @@ window.saveProductDetails = async function () {
         }
     };
 
-    var updateMask = "?updateMask.fieldPaths=section&updateMask.fieldPaths=price&updateMask.fieldPaths=sku&updateMask.fieldPaths=packing&updateMask.fieldPaths=mult&updateMask.fieldPaths=fabric&updateMask.fieldPaths=work&updateMask.fieldPaths=jari&updateMask.fieldPaths=pallu&updateMask.fieldPaths=border&updateMask.fieldPaths=blouse&updateMask.fieldPaths=cut";
+    var updateMask = "?updateMask.fieldPaths=section&updateMask.fieldPaths=cat&updateMask.fieldPaths=price&updateMask.fieldPaths=sku&updateMask.fieldPaths=packing&updateMask.fieldPaths=mult&updateMask.fieldPaths=fabric&updateMask.fieldPaths=work&updateMask.fieldPaths=jari&updateMask.fieldPaths=pallu&updateMask.fieldPaths=border&updateMask.fieldPaths=blouse&updateMask.fieldPaths=cut";
 
     var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/Products/" + p.docId + updateMask;
 
@@ -8631,6 +8749,7 @@ window.saveProductDetails = async function () {
 
         // 1. Update Local Memory
         p.section = sectionVal;
+        p.cat = catVal;
         p.price = parseFloat(price) || 0;
         p.sku = sku;
         p.packing = packing;
