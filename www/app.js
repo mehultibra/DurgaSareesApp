@@ -1385,7 +1385,7 @@ function initApp() {
                     mrp: d.mrp !== undefined ? d.mrp : (f.mrp ? (f.mrp.doubleValue || f.mrp.integerValue || 0) : 0),
                     fabric: d.fabric !== undefined ? d.fabric : (f.fabric ? f.fabric.stringValue : ""),
                     packing: finalPacking,
-                    mult: d.mult !== undefined ? d.mult : (f.mult ? (f.mult.integerValue || 8) : 8),
+                    mult: d.mult !== undefined ? (parseInt(d.mult) || 1) : (f.mult ? (parseInt(f.mult.integerValue || f.mult.doubleValue || f.mult.stringValue) || 1) : 1),
                     ready: readyRaw,
                     jari: d.jari !== undefined ? d.jari : (f.jari ? f.jari.stringValue : ""),
                     border: d.border !== undefined ? d.border : (f.border ? f.border.stringValue : ""),
@@ -8663,6 +8663,7 @@ window.openProductDetailsModal = function (pid, event) {
             { label: 'Border', val: p.border },
             { label: 'Blouse', val: p.blouse },
             { label: 'Packing', val: p.packing },
+            { label: 'Colours Matching', val: p.mult ? (p.mult + (p.mult > 1 ? ' Colours Set' : ' Colour')) : '' },
             { label: 'SKU', val: p.sku }
         ];
 
