@@ -447,6 +447,16 @@ window.adminAddNewSection = async function () {
     window.appSections.push(newSec);
     nameInput.value = '';
 
+    // Auto-create corresponding Tracker Sheet in Google Sheets asynchronously
+    if (window.DS_APP_SCRIPT_URL) {
+        fetch(window.DS_APP_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'createSectionSheet', section: id, sectionName: name })
+        }).catch(function (err) { console.warn("Auto-create sheet background error:", err); });
+    }
+
     await window.saveSectionsToFirestore();
     window.renderSectionTabBar();
     window.openManageSectionsModal();
