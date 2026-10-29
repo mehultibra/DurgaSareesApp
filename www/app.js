@@ -348,7 +348,6 @@ window.openManageSectionsModal = function () {
     var html = '';
 
     sections.forEach((sec, idx) => {
-        var isDeletable = !sec.isDefault && sec.id !== 'sarees';
         var col = sec.themeColor || '#ff3f6c';
         var canMoveUp = idx > 0;
         var canMoveDown = idx < sections.length - 1;
@@ -364,7 +363,6 @@ window.openManageSectionsModal = function () {
                 <button type="button" onclick="window.adminMoveSection('${sec.id}', -1)" style="border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; padding: 4px 7px; cursor: pointer; ${canMoveUp ? '' : 'opacity: 0.3; pointer-events: none;'}" title="Move Up"><i class="fas fa-arrow-up" style="font-size: 11px; color: #475569;"></i></button>
                 <button type="button" onclick="window.adminMoveSection('${sec.id}', 1)" style="border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; padding: 4px 7px; cursor: pointer; ${canMoveDown ? '' : 'opacity: 0.3; pointer-events: none;'}" title="Move Down"><i class="fas fa-arrow-down" style="font-size: 11px; color: #475569;"></i></button>
                 <i class="fas fa-pencil-alt" style="color: #64748b; cursor: pointer; padding: 6px;" onclick="window.adminRenameSection('${sec.id}')" title="Rename Section"></i>
-                ${isDeletable ? `<i class="fas fa-trash" style="color: #ef4444; cursor: pointer; padding: 6px;" onclick="window.adminDeleteSection('${sec.id}')" title="Delete Section"></i>` : ''}
             </div>
         </div>`;
     });
@@ -463,19 +461,8 @@ window.adminAddNewSection = async function () {
     alert("Section '" + name + "' added successfully!");
 };
 
-window.adminDeleteSection = async function (secId) {
-    if (!confirm("Are you sure you want to remove this section?")) return;
-
-    window.appSections = window.appSections.filter(s => s.id !== secId);
-    if (window.activeSection === secId) {
-        window.activeSection = 'sarees';
-        window.applySectionTheme('sarees');
-    }
-
-    await window.saveSectionsToFirestore();
-    window.renderSectionTabBar();
-    window.openManageSectionsModal();
-    if (typeof applyFilter === 'function') applyFilter();
+window.adminDeleteSection = function (secId) {
+    alert("Deleting sections is disabled to protect catalog products. You can rename the section instead.");
 };
 
 function getActiveUserId() {
