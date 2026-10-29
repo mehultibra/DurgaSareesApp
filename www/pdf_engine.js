@@ -1003,7 +1003,8 @@ async function generateCartOrderPDF(actionType) {
         }
         for (var gi2 = 0; gi2 < groupArr.length; gi2++) {
             var gg = groupArr[gi2];
-            waText += "*" + gg.p.name + "*";
+            var secTag = (gg.p.section && gg.p.section.trim()) ? "[" + gg.p.section.toUpperCase() + "] " : "";
+            waText += "*" + secTag + gg.p.name + "*";
             if (gg.p.sku) waText += " (SKU: " + gg.p.sku + ")";
             waText += "\n";
             gg.items.forEach(function(item) {

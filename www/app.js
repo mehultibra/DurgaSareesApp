@@ -5,6 +5,25 @@
 const FIRESTORE_PRODUCTS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products?pageSize=1000";
 const FIRESTORE_USERS_URL = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users?pageSize=100";
 
+window.fetchAllProductsFromFirestore = async function () {
+    var allDocs = [];
+    var pageToken = "";
+    do {
+        var url = FIRESTORE_PRODUCTS_URL + (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
+        var res = await window.fetchWithRetry(url, {}, 2);
+        if (!res || !res.ok) {
+            if (allDocs.length === 0) throw new Error("Firestore fetch failed: " + (res ? res.status : "network error"));
+            break;
+        }
+        var data = await res.json();
+        if (data && data.documents && data.documents.length > 0) {
+            allDocs = allDocs.concat(data.documents);
+        }
+        pageToken = (data && data.nextPageToken) ? data.nextPageToken : "";
+    } while (pageToken);
+    return allDocs;
+};
+
 window.isSameDesign = function (d1, d2) {
     if (!d1 || !d2) return false;
     var c1 = String(d1).replace(/\.[^/.]+$/, '').trim().toLowerCase();
@@ -1410,7 +1429,7 @@ function initApp() {
             for (var k in cart) {
                 var c = cart[k];
                 if (c && c.p) {
-                    var match = allProducts.find(x => (c.p.sku && x.sku === c.p.sku) || (x.name === c.p.name));
+                    var match = allProducts.find(x => ((x.section || 'sarees') === (c.p.section || 'sarees')) && ((c.p.sku && x.sku === c.p.sku) || (x.name === c.p.name)));
                     if (match) {
                         c.p = match;
                         var newKey = match.id + '_' + c.design;
@@ -1436,6 +1455,7 @@ function initApp() {
         let pidParam = new URLSearchParams(window.location.search).get('pid') || (typeof window.pendingDeepLinkPid !== 'undefined' ? window.pendingDeepLinkPid : null);
         if (pidParam) {
             window.pendingDeepLinkPid = null;
+            window.isDeepLinkOpen = true;
             if (!window.isGuestMode) {
                 history.replaceState(null, '', window.location.pathname);
             }
@@ -1469,13 +1489,12 @@ function initApp() {
             }
         }).catch(e => console.log("Master cache fetch failed:", e));
 
-    var fetchPromise = window.fetchWithRetry(FIRESTORE_PRODUCTS_URL, {}, 2);
+    var fetchPromise = window.fetchAllProductsFromFirestore();
     var timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Boot timeout")), 10000));
 
     Promise.race([fetchPromise, timeoutPromise])
-        .then(res => res.json())
-        .then(data => {
-            var docs = data.documents || [];
+        .then(docs => {
+            docs = docs || [];
             if (docs.length > 0) {
                 // Only save to cache and re-render if data actually changed
                 var newDataStr = JSON.stringify(docs);
@@ -2678,7 +2697,12 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
     // Sync Active Section Theme on Deep Link / openDetail (Audit Fix 6)
     var pSec = p.section || 'sarees';
-    if (pSec && window.activeSection !== 'all' && pSec !== window.activeSection) {
+    if (window.isDeepLinkOpen) {
+        window.isDeepLinkOpen = false;
+        window.activeSection = pSec;
+        if (window.applySectionTheme) window.applySectionTheme(pSec);
+        if (window.renderSectionTabBar) window.renderSectionTabBar();
+    } else if (pSec && window.activeSection !== 'all' && pSec !== window.activeSection) {
         if (window.applySectionTheme) window.applySectionTheme(pSec);
         var urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('pid')) {
@@ -4652,9 +4676,8 @@ async function syncImages(silent = false) {
     if (bootMsg) bootMsg.innerText = "Fetching latest product list...";
 
     try {
-        const res = await window.fetchWithRetry(FIRESTORE_PRODUCTS_URL);
-        const data = await res.json();
-        var docs = data.documents || [];
+        var docs = await window.fetchAllProductsFromFirestore();
+        if (!docs || docs.length === 0) docs = [];
 
         var productsToSync = [];
         docs.forEach(d => {
@@ -8803,34 +8826,19 @@ window.saveProductDetails = async function () {
 };
 window.isSkuManuallyEdited = false;
 
-window.autoGenerateSku = function () {
-    if (window.isSkuManuallyEdited) return;
-
-    var secEl = document.getElementById('addProdSection');
-    var secVal = secEl ? secEl.value.toLowerCase() : (window.activeSection || 'sarees');
-
-    var catSelect = document.getElementById('addProdCat');
-    var catVal = catSelect ? catSelect.value : "";
-    var newCatInput = document.getElementById('addProdNewCatInput');
-    var cat = (catVal === '__NEW__' && newCatInput) ? newCatInput.value : catVal;
-
-    var name = document.getElementById('addProdName').value || "";
-    if (!name) {
-        document.getElementById('addProdSku').value = "";
-        return;
-    }
-
+window.generateSkuForProduct = function (name, cat, sec) {
+    var secVal = (sec || 'sarees').toLowerCase();
     var prefix = "S";
     if (secVal === 'blouse') prefix = "B";
     else if (secVal === 'sarees') prefix = "S";
     else if (secVal) prefix = secVal.substring(0, 2).toUpperCase();
 
     var subCat = "GN";
-    var num = String(name).replace(/[^0-9]/g, '');
+    var num = String(name || '').replace(/[^0-9]/g, '');
     if (num === "") {
         var hash = 0;
-        for (var i = 0; i < name.length; i++) {
-            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        for (var i = 0; i < (name || '').length; i++) {
+            hash = (name || '').charCodeAt(i) + ((hash << 5) - hash);
         }
         num = Math.abs(hash).toString().substring(0, 3);
         if (num.length < 3) num = Math.floor(100 + Math.random() * 900);
@@ -8847,7 +8855,27 @@ window.autoGenerateSku = function () {
         else subCat = cleanCat.substring(0, 2).replace(/[^A-Z]/g, '');
     }
 
-    document.getElementById('addProdSku').value = (prefix + subCat + num).toUpperCase();
+    return (prefix + subCat + num).toUpperCase();
+};
+
+window.autoGenerateSku = function () {
+    if (window.isSkuManuallyEdited) return;
+
+    var secEl = document.getElementById('addProdSection');
+    var secVal = secEl ? secEl.value : (window.activeSection || 'sarees');
+
+    var catSelect = document.getElementById('addProdCat');
+    var catVal = catSelect ? catSelect.value : "";
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    var cat = (catVal === '__NEW__' && newCatInput) ? newCatInput.value : catVal;
+
+    var name = document.getElementById('addProdName').value || "";
+    if (!name) {
+        document.getElementById('addProdSku').value = "";
+        return;
+    }
+
+    document.getElementById('addProdSku').value = window.generateSkuForProduct(name, cat, secVal);
 };
 
 window.openAddProductModal = function () {
@@ -9124,5 +9152,423 @@ window.submitNewProduct = async function () {
     } finally {
         btn.innerHTML = '<i class="fas fa-save" style="margin-right: 6px;"></i> Create Product';
         btn.disabled = false;
+    }
+};
+
+// ==========================================
+// 📂 ADMIN BULK FOLDER PRODUCT IMPORTER
+// ==========================================
+
+window.handleBulkFolderSelection = async function (files) {
+    if (!window.isSuperAdmin) return alert("Access Denied: Admin only");
+    if (!files || files.length === 0) return;
+
+    var catSelect = document.getElementById('addProdCat');
+    var catSelectVal = catSelect ? catSelect.value.trim() : '';
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    var cat = (catSelectVal === '__NEW__' && newCatInput) ? newCatInput.value.trim() : catSelectVal;
+    var secSelect = document.getElementById('addProdSection');
+    var secVal = secSelect ? secSelect.value : (window.activeSection || 'sarees');
+
+    if (!cat) {
+        alert("Please select or enter a Category before uploading product folders.");
+        var inputEl = document.getElementById('bulkFolderInput');
+        if (inputEl) inputEl.value = '';
+        return;
+    }
+
+    var isBypass = !!(document.getElementById('bulkBypassCloudinary') && document.getElementById('bulkBypassCloudinary').checked);
+    var statusEl = document.getElementById('bulkImportStatus');
+    if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.innerText = "Analyzing selected product folders...";
+    }
+
+    // Filter valid images and group by immediate parent folder
+    var folders = {};
+    for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        if (!/\.(jpe?g|png|webp)$/i.test(file.name)) continue;
+        var relPath = file.webkitRelativePath || file.name;
+        var parts = relPath.split('/').filter(Boolean);
+        var folderName = parts.length >= 2 ? parts[parts.length - 2].trim() : parts[0].replace(/\.[^/.]+$/, '').trim();
+        if (!folderName) continue;
+        if (!folders[folderName]) folders[folderName] = [];
+        folders[folderName].push(file);
+    }
+
+    var folderNames = Object.keys(folders);
+    var totalImages = 0;
+    folderNames.forEach(fn => totalImages += folders[fn].length);
+
+    if (folderNames.length === 0) {
+        if (statusEl) statusEl.innerText = "No valid product folders with image files (.jpg, .jpeg, .png, .webp) found.";
+        alert("No valid product folders with image files (.jpg, .jpeg, .png, .webp) found.");
+        var inputEl = document.getElementById('bulkFolderInput');
+        if (inputEl) inputEl.value = '';
+        return;
+    }
+
+    var confirmMsg = `Found ${folderNames.length} product folders with ${totalImages} total images for Section [${secVal.toUpperCase()}], Category [${cat}].\n\nStart bulk creation?`;
+    if (!confirm(confirmMsg)) {
+        if (statusEl) statusEl.style.display = 'none';
+        var inputEl = document.getElementById('bulkFolderInput');
+        if (inputEl) inputEl.value = '';
+        return;
+    }
+
+    var createdProductsCount = 0;
+    var uploadedImagesCount = 0;
+
+    for (var fIdx = 0; fIdx < folderNames.length; fIdx++) {
+        var productName = folderNames[fIdx];
+        var imgFiles = folders[productName];
+
+        if (statusEl) {
+            statusEl.innerText = `Processing product ${fIdx + 1} of ${folderNames.length}: [${productName}]...`;
+        }
+
+        // a. Check if product already exists
+        var existingProd = (window.allProducts || []).find(p => 
+            ((p.section || 'sarees').toLowerCase() === secVal.toLowerCase()) && 
+            (p.name && p.name.trim().toLowerCase() === productName.toLowerCase())
+        );
+
+        var docId = "";
+        if (existingProd) {
+            docId = existingProd.docId || existingProd.id;
+        } else {
+            // b. Create new product
+            var sku = window.generateSkuForProduct ? window.generateSkuForProduct(productName, cat, secVal) : "";
+            var gridUrl = "Grid/" + cat + "/" + productName + "/";
+            var zoomUrl = "Zoom/" + cat + "/" + productName + "/";
+
+            var payload = {
+                fields: {
+                    name: { stringValue: productName },
+                    cat: { stringValue: cat },
+                    section: { stringValue: secVal },
+                    price: { doubleValue: 0 },
+                    packing: { stringValue: "1" },
+                    mult: { doubleValue: 1 },
+                    fabric: { stringValue: "" },
+                    work: { stringValue: "" },
+                    jari: { stringValue: "" },
+                    pallu: { stringValue: "" },
+                    border: { stringValue: "" },
+                    blouse: { stringValue: "" },
+                    cut: { stringValue: "" },
+                    sku: { stringValue: sku },
+                    gridUrl: { stringValue: gridUrl },
+                    zoomUrl: { stringValue: zoomUrl },
+                    stock: { mapValue: { fields: { DIRECT: { integerValue: "999" } } } }
+                }
+            };
+
+            try {
+                var fbRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }, 2);
+
+                if (!fbRes.ok) {
+                    console.error("Failed to create product in Firestore:", productName);
+                    continue;
+                }
+
+                var fbData = await fbRes.json();
+                docId = fbData.name.split('/').pop();
+                var localPid = "p_" + Date.now() + "_" + fIdx;
+
+                if (window.DS_APP_SCRIPT_URL) {
+                    try {
+                        await fetch(window.DS_APP_SCRIPT_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify({
+                                action: 'createProduct',
+                                docId: docId,
+                                section: secVal,
+                                category: cat,
+                                name: productName,
+                                price: 0,
+                                packing: "1",
+                                mult: 1,
+                                fabric: "",
+                                work: "",
+                                jari: "",
+                                pallu: "",
+                                border: "",
+                                blouse: "",
+                                cut: "",
+                                sku: sku,
+                                gridUrl: gridUrl,
+                                zoomUrl: zoomUrl
+                            })
+                        });
+                    } catch (sheetErr) {
+                        console.error("Sheet sync error (soft fail)", sheetErr);
+                    }
+                }
+
+                var newP = {
+                    docId: docId,
+                    id: localPid,
+                    name: productName,
+                    cat: cat,
+                    section: secVal,
+                    price: 0,
+                    mrp: 0,
+                    packing: "1",
+                    mult: 1,
+                    fabric: "",
+                    work: "",
+                    jari: "",
+                    pallu: "",
+                    border: "",
+                    blouse: "",
+                    cut: "",
+                    sku: sku,
+                    gridUrl: gridUrl,
+                    zoomUrl: zoomUrl,
+                    stock: { DIRECT: 999 },
+                    totalStock: 999,
+                    updateTime: new Date().toISOString()
+                };
+                window.allProducts.push(newP);
+                createdProductsCount++;
+            } catch (e) {
+                console.error("Error creating product:", productName, e);
+                continue;
+            }
+        }
+
+        // c. Sort images naturally and upload with concurrency of 2
+        imgFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+        var uploadTasks = imgFiles.map((imgFile, imgIdx) => {
+            return async function () {
+                var designId = imgFile.name.replace(/\.[^/.]+$/, '').trim() || String(imgIdx + 1).padStart(2, '0');
+                var safeName = encodeURIComponent(productName);
+                if (isBypass) safeName += "___BYPASS";
+                var filename = `${docId}___${designId}___${safeName}___${Date.now()}.jpg`;
+                var uploadUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F" + encodeURIComponent(filename);
+
+                try {
+                    var upRes = await window.fetchWithRetry(uploadUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'image/jpeg' },
+                        body: imgFile
+                    }, 2);
+                    if (upRes.ok) {
+                        uploadedImagesCount++;
+                    }
+                } catch (upErr) {
+                    console.error("Failed to upload image:", filename, upErr);
+                }
+            };
+        });
+
+        var poolLimit = 2;
+        var taskCursor = 0;
+        var workers = [];
+        for (var w = 0; w < Math.min(poolLimit, uploadTasks.length); w++) {
+            workers.push((async function worker() {
+                while (taskCursor < uploadTasks.length) {
+                    var curr = taskCursor++;
+                    if (statusEl) {
+                        statusEl.innerText = `Product ${fIdx + 1}/${folderNames.length} [${productName}]: Uploading image ${curr + 1}/${uploadTasks.length}...`;
+                    }
+                    await uploadTasks[curr]();
+                }
+            })());
+        }
+        await Promise.all(workers);
+    }
+
+    try {
+        localStorage.setItem("dsOfflineProducts", JSON.stringify(window.allProducts));
+    } catch (e) { }
+    window.displayList = [...window.allProducts];
+    if (typeof applyFilter === 'function') applyFilter();
+
+    var inputEl = document.getElementById('bulkFolderInput');
+    if (inputEl) inputEl.value = '';
+
+    if (statusEl) {
+        statusEl.innerText = `✅ Bulk import complete! ${folderNames.length} products processed, ${uploadedImagesCount} images uploaded.`;
+    }
+    alert(`Bulk Import Finished!\n\n• ${folderNames.length} product folders processed (${createdProductsCount} newly created)\n• ${uploadedImagesCount} images uploaded to processing queue`);
+};
+
+window.scanStorageCategoryForProducts = async function () {
+    if (!window.isSuperAdmin) return alert("Access Denied: Admin only");
+
+    var catSelect = document.getElementById('addProdCat');
+    var catSelectVal = catSelect ? catSelect.value.trim() : '';
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    var cat = (catSelectVal === '__NEW__' && newCatInput) ? newCatInput.value.trim() : catSelectVal;
+    var secSelect = document.getElementById('addProdSection');
+    var secVal = secSelect ? secSelect.value : (window.activeSection || 'sarees');
+
+    if (!cat) {
+        return alert("Please select or enter a Category first.");
+    }
+
+    var statusEl = document.getElementById('bulkImportStatus');
+    if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.innerText = `Scanning Cloud Storage for Grid/${cat}/...`;
+    }
+
+    try {
+        var cleanPrefix = "Grid/" + encodeURIComponent(cat) + "/";
+        var listUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?prefix=" + cleanPrefix + "&delimiter=/";
+        var res = await window.fetchWithRetry(listUrl, {}, 2);
+        if (!res.ok) throw new Error("Storage list failed with status " + res.status);
+        var data = await res.json();
+        var prefixes = data.prefixes || [];
+
+        if (prefixes.length === 0) {
+            if (statusEl) statusEl.innerText = `No product folders found in Cloud Storage for Category "${cat}".`;
+            alert(`No folders found under Grid/${cat}/ in Cloud Storage.`);
+            return;
+        }
+
+        var discoveredNames = [];
+        for (var i = 0; i < prefixes.length; i++) {
+            var raw = prefixes[i].replace(/\/+$/, '');
+            var pParts = raw.split('/');
+            var pName = decodeURIComponent(pParts[pParts.length - 1]).trim();
+            if (pName && !discoveredNames.includes(pName)) discoveredNames.push(pName);
+        }
+
+        var newNames = discoveredNames.filter(name => {
+            return !window.allProducts.some(x => 
+                (x.section || 'sarees').toLowerCase() === secVal.toLowerCase() &&
+                x.name && x.name.trim().toLowerCase() === name.toLowerCase()
+            );
+        });
+
+        if (newNames.length === 0) {
+            if (statusEl) statusEl.innerText = `All ${discoveredNames.length} folders in Cloud Storage already exist in section [${secVal.toUpperCase()}].`;
+            alert(`All ${discoveredNames.length} product folders in Cloud Storage already exist in section [${secVal.toUpperCase()}]. No new products needed.`);
+            return;
+        }
+
+        var confirmMsg = `Found ${newNames.length} new product folders in Cloud Storage under Grid/${cat}/.\n\nCreate ${newNames.length} products in Section [${secVal.toUpperCase()}], Category [${cat}]?`;
+        if (!confirm(confirmMsg)) {
+            if (statusEl) statusEl.style.display = 'none';
+            return;
+        }
+
+        var createdCount = 0;
+        for (var j = 0; j < newNames.length; j++) {
+            var prodName = newNames[j];
+            if (statusEl) statusEl.innerText = `Creating product ${j + 1} of ${newNames.length}: ${prodName}...`;
+
+            var sku = window.generateSkuForProduct ? window.generateSkuForProduct(prodName, cat, secVal) : "";
+            var gridUrl = "Grid/" + cat + "/" + prodName + "/";
+            var zoomUrl = "Zoom/" + cat + "/" + prodName + "/";
+
+            var payload = {
+                fields: {
+                    name: { stringValue: prodName },
+                    cat: { stringValue: cat },
+                    section: { stringValue: secVal },
+                    price: { doubleValue: 0 },
+                    packing: { stringValue: "1" },
+                    mult: { doubleValue: 1 },
+                    fabric: { stringValue: "" },
+                    work: { stringValue: "" },
+                    jari: { stringValue: "" },
+                    pallu: { stringValue: "" },
+                    border: { stringValue: "" },
+                    blouse: { stringValue: "" },
+                    cut: { stringValue: "" },
+                    sku: { stringValue: sku },
+                    gridUrl: { stringValue: gridUrl },
+                    zoomUrl: { stringValue: zoomUrl },
+                    stock: { mapValue: { fields: { DIRECT: { integerValue: "999" } } } }
+                }
+            };
+
+            var fbRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }, 2);
+
+            if (!fbRes.ok) continue;
+            var fbData = await fbRes.json();
+            var newDocId = fbData.name.split('/').pop();
+
+            if (window.DS_APP_SCRIPT_URL) {
+                try {
+                    await fetch(window.DS_APP_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'createProduct',
+                            docId: newDocId,
+                            section: secVal,
+                            category: cat,
+                            name: prodName,
+                            price: 0,
+                            packing: "1",
+                            mult: 1,
+                            fabric: "",
+                            work: "",
+                            jari: "",
+                            pallu: "",
+                            border: "",
+                            blouse: "",
+                            cut: "",
+                            sku: sku,
+                            gridUrl: gridUrl,
+                            zoomUrl: zoomUrl
+                        })
+                    });
+                } catch (sheetErr) { }
+            }
+
+            var newP = {
+                docId: newDocId,
+                id: "p_" + Date.now() + "_" + j,
+                name: prodName,
+                cat: cat,
+                section: secVal,
+                price: 0,
+                mrp: 0,
+                packing: "1",
+                mult: 1,
+                fabric: "",
+                work: "",
+                jari: "",
+                pallu: "",
+                border: "",
+                blouse: "",
+                cut: "",
+                sku: sku,
+                gridUrl: gridUrl,
+                zoomUrl: zoomUrl,
+                stock: { DIRECT: 999 },
+                totalStock: 999,
+                updateTime: new Date().toISOString()
+            };
+            window.allProducts.push(newP);
+            createdCount++;
+        }
+
+        try { localStorage.setItem("dsOfflineProducts", JSON.stringify(window.allProducts)); } catch (e) { }
+        window.displayList = [...window.allProducts];
+        if (typeof applyFilter === 'function') applyFilter();
+
+        if (statusEl) statusEl.innerText = `✅ Created ${createdCount} products from Cloud Storage!`;
+        alert(`Successfully scanned Cloud Storage and created ${createdCount} products!`);
+    } catch (err) {
+        if (statusEl) statusEl.innerText = `Scan failed: ${err.message}`;
+        alert("Cloud storage scan failed: " + err.message);
     }
 };
