@@ -131,7 +131,7 @@
       </div>
       <div class="hdr-icons" style="display:flex; gap:12px; align-items:center; flex-shrink:0;">
         <i class="fas fa-search" onclick="toggleSearch()" style="cursor:pointer;"></i>
-        <i class="far fa-heart" id="favTopIcon" onclick="toggleFavView()" style="cursor:pointer; color:#ff3f6c;"></i>
+        <i class="far fa-heart" id="favTopIcon" onclick="toggleFavView()" style="cursor:pointer; color:var(--myntra-pink);"></i>
         <div style="position:relative; cursor:pointer;" onclick="openCart()">
           <i class="fas fa-shopping-bag"></i>
           <div class="cart-badge-top" id="cartCountHeader">0</div>
@@ -146,6 +146,9 @@
             <div onclick="openSyncReportModal()"
               style="padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text-main); font-size:14px; display:flex; align-items:center; gap:8px;">
               <i class="fas fa-file-contract" style="color:var(--myntra-pink);"></i> Sync Report</div>
+            <div id="menuManageSections" onclick="window.openManageSectionsModal()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text-main); font-size:14px; font-weight:bold; align-items:center; gap:8px;">
+              <i class="fas fa-layer-group" style="color:var(--myntra-pink);"></i> Manage Sections
+            </div>
             <div id="menuLiveAdmin" onclick="window.openLiveAdmin()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:#2e7d32; font-size:14px; font-weight:bold; align-items:center; gap:8px;">
               <i class="fas fa-users" style="color:#4caf50;"></i> Live Customers 🟢
             </div>
@@ -169,6 +172,12 @@
     </div>
 
     <div id="gridWrapper" onpointerdown="if(document.activeElement) document.activeElement.blur();">
+      <!-- 🚀 Myntra-Style Top Section Tab Bar -->
+      <div id="sectionTabBar" class="myntra-section-bar"></div>
+
+      <!-- Cross-Section Search Match Notification Banner -->
+      <div id="crossSectionSearchBanner" class="cross-section-banner" style="display:none;"></div>
+
       <!-- Horizontal Category Strip (Myntra-style) -->
       <div id="horizontalCategoryStrip" class="horizontal-cat-strip"></div>
       
@@ -447,7 +456,7 @@
         </div>
         <div onclick="triggerShare('wa')" style="cursor: pointer;">
           <div
-            style="background: #ff3f6c; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
+            style="background: var(--myntra-pink); color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;">
             <i class="fas fa-file-pdf"></i>
           </div>
           <div style="font-size: 11px; color: var(--text-light);">WhatsApp<br>PDF</div>
@@ -703,8 +712,13 @@
       
       <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px; max-height: 60vh; overflow-y: auto; padding-right: 5px;">
         <div>
+          <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Section / Department</label>
+          <select id="addProdSection" onchange="window.updateAddProdCatDropdown(); if(window.autoGenerateSku) window.autoGenerateSku();" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"></select>
+        </div>
+        <div>
           <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Category</label>
           <select id="addProdCat" onchange="window.onAddProdCatChange(); if(window.autoGenerateSku) window.autoGenerateSku();" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"></select>
+          <input type="text" id="addProdNewCatInput" placeholder="Type new category name..." style="display:none; width: 100%; padding: 8px; border: 1.5px solid var(--myntra-pink); border-radius: 6px; margin-top: 6px;" oninput="if(window.autoGenerateSku) window.autoGenerateSku();">
         </div>
         <div>
           <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Clone From (Optional)</label>
@@ -793,6 +807,10 @@
       <!-- Admin View: Editable Form -->
       <div id="pdAdminView" style="display: none; flex-direction: column; gap: 12px; font-size: 14px; max-height: 60vh; overflow-y: auto; padding-right: 5px;">
         <input type="hidden" id="editProdId">
+        <div>
+          <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Section / Department</label>
+          <select id="editProdSection" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"></select>
+        </div>
         <div>
           <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Category (Read-Only)</label>
           <input type="text" id="editProdCat" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin-top: 4px; background: #f5f5f5;" readonly disabled>
@@ -935,6 +953,37 @@
       <div style="display:flex; gap:10px;">
         <button onclick="closeModals()" style="flex:1; background: #eee; color: #333; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer;">Cancel</button>
         <button onclick="window.saveIgLinks()" style="flex:1; background: var(--myntra-pink); color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer;">Save Links</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MANAGE SECTIONS MODAL (ADMIN) -->
+  <div class="action-modal" id="manageSectionsModal" onclick="if(event.target===this) closeModals()"
+    style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; flex-direction: column; justify-content: flex-end;">
+    <div class="modal-content"
+      style="background: #fff; border-radius: 16px 16px 0 0; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); text-align: left; max-height: 80vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="margin: 0; font-size: 16px; color: var(--text-main);"><i class="fas fa-layer-group" style="color:var(--myntra-pink); margin-right:6px;"></i> Manage Sections</h3>
+        <i class="fas fa-times" style="cursor: pointer; font-size: 18px; color: var(--text-light);" onclick="closeModals()"></i>
+      </div>
+
+      <div style="font-size: 12px; color: var(--text-light); margin-bottom: 12px;">
+        Add, remove, or customize departments like Sarees, Blouse, Kurtis with their own unique themes.
+      </div>
+
+      <div id="sectionsListContainer" style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: 250px;">
+        <!-- Injected via JS -->
+      </div>
+
+      <div style="border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="font-weight: bold; font-size: 12px; color: var(--text-main);">Add New Section</div>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="newSectionName" placeholder="Section Name (e.g. Blouse, Kurtis)" style="flex: 2; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px;">
+          <input type="color" id="newSectionColor" value="#8b5cf6" style="width: 44px; height: 36px; padding: 2px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;" title="Choose Theme Color">
+        </div>
+        <button onclick="window.adminAddNewSection()" style="width: 100%; background: var(--myntra-pink); color: #fff; border: none; padding: 10px; border-radius: 6px; font-weight: bold; font-size: 14px; cursor: pointer;">
+          <i class="fas fa-plus" style="margin-right: 6px;"></i> Add Section
+        </button>
       </div>
     </div>
   </div>

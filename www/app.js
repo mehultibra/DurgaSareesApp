@@ -209,6 +209,193 @@ var favorites = {};
 var activeUser = null;
 window.livePresenceHistory = [];
 
+// ==========================================
+// 🚀 MYNTRA-STYLE MULTI-SECTION REGISTRY
+// ==========================================
+window.DEFAULT_SECTIONS = [
+    { id: "sarees", name: "Sarees", order: 1, themeColor: "#ff3f6c", lightColor: "#fff0f3", gradient: "linear-gradient(to bottom, #dcfce7 0%, #ffffff 250px)", isDefault: true, enabled: true },
+    { id: "blouse", name: "Blouse", order: 2, themeColor: "#8b5cf6", lightColor: "#f5f3ff", gradient: "linear-gradient(to bottom, #ede9fe 0%, #ffffff 250px)", isDefault: false, enabled: true }
+];
+var _cachedSecs = null;
+try { _cachedSecs = JSON.parse(localStorage.getItem('ds_sections')); } catch (e) { }
+window.appSections = (Array.isArray(_cachedSecs) && _cachedSecs.length > 0) ? _cachedSecs : window.DEFAULT_SECTIONS;
+window.activeSection = "sarees";
+
+window.applySectionTheme = function (secId) {
+    var sec = (window.appSections || window.DEFAULT_SECTIONS).find(s => s.id === secId) || window.DEFAULT_SECTIONS[0];
+    if (!sec) return;
+    var root = document.documentElement;
+    var themeColor = sec.themeColor || "#ff3f6c";
+    var lightColor = sec.lightColor || "#fff0f3";
+    root.style.setProperty('--myntra-pink', themeColor);
+    root.style.setProperty('--section-theme', themeColor);
+    root.style.setProperty('--section-light', lightColor);
+
+    var gridWrapper = document.getElementById('gridWrapper');
+    if (gridWrapper && sec.gradient) {
+        gridWrapper.style.backgroundImage = sec.gradient;
+    }
+};
+
+window.renderSectionTabBar = function () {
+    var bar = document.getElementById('sectionTabBar');
+    if (!bar) return;
+
+    var sections = window.appSections || window.DEFAULT_SECTIONS;
+    var html = '';
+
+    sections.filter(s => s.enabled !== false).sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(sec => {
+        var isActive = (sec.id === window.activeSection);
+        var activeClass = isActive ? 'active' : '';
+        html += `<button class="section-tab ${activeClass}" onclick="window.switchSection('${sec.id}')" data-section="${sec.id}">
+            <span>${esc(sec.name)}</span>
+        </button>`;
+    });
+
+    if (window.isAdminMode) {
+        html += `<button class="section-tab-add" onclick="window.openManageSectionsModal()" title="Manage Sections">
+            <i class="fas fa-plus"></i>
+        </button>`;
+    }
+
+    bar.innerHTML = html;
+};
+
+window.switchSection = function (secId) {
+    window.activeSection = secId;
+    window.activeCategories = [];
+    window.applySectionTheme(secId);
+    window.renderSectionTabBar();
+    if (typeof window.renderHorizontalCategories === 'function') window.renderHorizontalCategories();
+    if (typeof window.populateCategories === 'function') window.populateCategories();
+    if (typeof applyFilter === 'function') applyFilter();
+};
+
+window.loadSectionsFromFirestore = async function () {
+    try {
+        if (!firebaseConfig || !firebaseConfig.projectId) return;
+        var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/AppConfig/sections";
+        var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, {}, 1) : fetch(url));
+        if (res.ok) {
+            var data = await res.json();
+            var rawJson = data.fields && data.fields.data ? data.fields.data.stringValue : null;
+            if (rawJson) {
+                var parsed = JSON.parse(rawJson);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    window.appSections = parsed;
+                    try { localStorage.setItem('ds_sections', JSON.stringify(parsed)); } catch (e) { }
+                    if (window.renderSectionTabBar) window.renderSectionTabBar();
+                    if (window.applySectionTheme) window.applySectionTheme(window.activeSection);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("Could not load sections from Firestore:", e);
+    }
+};
+
+window.saveSectionsToFirestore = async function () {
+    try {
+        if (!firebaseConfig || !firebaseConfig.projectId) return false;
+        var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/AppConfig/sections";
+        var payload = {
+            fields: {
+                data: { stringValue: JSON.stringify(window.appSections) }
+            }
+        };
+        var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }, 1) : fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }));
+        try { localStorage.setItem('ds_sections', JSON.stringify(window.appSections)); } catch (e) { }
+        return res.ok;
+    } catch (e) {
+        console.error("Save sections error:", e);
+        return false;
+    }
+};
+
+window.openManageSectionsModal = function () {
+    var listEl = document.getElementById('sectionsListContainer');
+    if (!listEl) return;
+
+    var sections = window.appSections || window.DEFAULT_SECTIONS;
+    var html = '';
+
+    sections.forEach(sec => {
+        var isDeletable = !sec.isDefault && sec.id !== 'sarees';
+        var col = sec.themeColor || '#ff3f6c';
+        html += `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: ${col}; border: 1px solid rgba(0,0,0,0.1);"></span>
+                <span style="font-weight: bold; font-size: 14px; color: var(--text-main);">${esc(sec.name)}</span>
+                ${sec.isDefault ? '<span style="font-size: 10px; background: #e2e8f0; color: #64748b; padding: 2px 6px; border-radius: 10px; font-weight: bold;">Default</span>' : ''}
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                ${isDeletable ? `<i class="fas fa-trash" style="color: #ef4444; cursor: pointer; padding: 6px;" onclick="window.adminDeleteSection('${sec.id}')" title="Delete Section"></i>` : ''}
+            </div>
+        </div>`;
+    });
+
+    listEl.innerHTML = html;
+    openModal('manageSectionsModal');
+};
+
+window.adminAddNewSection = async function () {
+    var nameInput = document.getElementById('newSectionName');
+    var colorInput = document.getElementById('newSectionColor');
+    var name = nameInput ? nameInput.value.trim() : '';
+    var color = colorInput ? colorInput.value : '#8b5cf6';
+
+    if (!name) return alert("Please enter a section name.");
+
+    var id = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    if (window.appSections.some(s => s.id === id)) {
+        return alert("A section with this name already exists.");
+    }
+
+    var newSec = {
+        id: id,
+        name: name,
+        order: window.appSections.length + 1,
+        themeColor: color,
+        lightColor: color + '18',
+        gradient: `linear-gradient(to bottom, ${color}22 0%, #ffffff 250px)`,
+        isDefault: false,
+        enabled: true,
+        categories: []
+    };
+
+    window.appSections.push(newSec);
+    nameInput.value = '';
+
+    await window.saveSectionsToFirestore();
+    window.renderSectionTabBar();
+    window.openManageSectionsModal();
+    alert("Section '" + name + "' added successfully!");
+};
+
+window.adminDeleteSection = async function (secId) {
+    if (!confirm("Are you sure you want to remove this section?")) return;
+
+    window.appSections = window.appSections.filter(s => s.id !== secId);
+    if (window.activeSection === secId) {
+        window.activeSection = 'sarees';
+        window.applySectionTheme('sarees');
+    }
+
+    await window.saveSectionsToFirestore();
+    window.renderSectionTabBar();
+    window.openManageSectionsModal();
+    if (typeof applyFilter === 'function') applyFilter();
+};
+
 function getActiveUserId() {
     if (activeUser && activeUser !== "null" && activeUser !== "undefined") return activeUser;
     let uid = localStorage.getItem('app_session_uid');
@@ -391,6 +578,9 @@ window.addEventListener('DOMContentLoaded', function () {
                     document.getElementById('appLogoImg').style.borderRadius = '4px';
                     var fabAdd = document.getElementById('fabAddProduct');
                     if (fabAdd) fabAdd.style.display = window.isAdminMode ? 'flex' : 'none';
+                    var menuManageSec = document.getElementById('menuManageSections');
+                    if (menuManageSec) menuManageSec.style.display = window.isAdminMode ? 'flex' : 'none';
+                    if (typeof window.renderSectionTabBar === 'function') window.renderSectionTabBar();
                     alert("Admin Mode: " + (window.isAdminMode ? "ON" : "OFF"));
                     if (typeof applyFilter === 'function') applyFilter();
                 } else {
@@ -941,6 +1131,7 @@ async function checkAdminStatus(phone) {
                 localStorage.setItem('dsIsAdmin', 'true');
                 window.isSuperAdmin = true;
                 if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
+                if (document.getElementById('menuManageSections')) document.getElementById('menuManageSections').style.display = 'flex';
                 if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
                 var fabAdd = document.getElementById('fabAddProduct');
                 if (fabAdd) fabAdd.style.display = window.isAdminMode ? 'flex' : 'none';
@@ -948,6 +1139,7 @@ async function checkAdminStatus(phone) {
                 localStorage.setItem('dsIsAdmin', 'false');
                 window.isSuperAdmin = false;
                 if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'none';
+                if (document.getElementById('menuManageSections')) document.getElementById('menuManageSections').style.display = 'none';
                 if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'none';
             }
         }
@@ -1067,11 +1259,12 @@ function initApp() {
                     stockMap['FULLY_PACKED'] = 1;
                 }
 
-                var normName = name.trim().toLowerCase();
+                var prodSection = d.section !== undefined ? d.section : (f.section ? f.section.stringValue : "sarees");
+                var normName = (prodSection.trim() + "::" + name.trim()).toLowerCase();
                 var existingP = productByName[normName];
 
                 if (existingP) {
-                    // DEDUPLICATION: Merge duplicate document data (e.g. bombay-king + 0US7ljzpUZMjzcKISaQn)
+                    // DEDUPLICATION: Merge duplicate document data
                     // 1. Merge stock
                     for (var sk in stockMap) {
                         if (stockMap[sk] > 0) {
@@ -1112,6 +1305,7 @@ function initApp() {
                     stock: stockMap,
                     totalStock: tStock,
                     id: "p_" + validCounter,
+                    section: prodSection,
                     name: name,
                     sku: d.sku !== undefined ? d.sku : (f.sku ? f.sku.stringValue : ""),
                     price: finalPrice,
@@ -1161,9 +1355,13 @@ function initApp() {
             localStorage.setItem("dsCart", JSON.stringify(cart));
         } catch (e) { console.error("Cart sync error:", e); }
 
+        if (window.applySectionTheme) window.applySectionTheme(window.activeSection);
+        if (window.renderSectionTabBar) window.renderSectionTabBar();
+        if (window.loadSectionsFromFirestore) window.loadSectionsFromFirestore();
         if (typeof populateCategories === "function") populateCategories();
         if (typeof renderHorizontalCategories === "function") renderHorizontalCategories();
-        renderProductGrid(displayList);
+        if (typeof applyFilter === 'function') applyFilter();
+        else renderProductGrid(displayList);
         updateCartHeader();
 
         let pidParam = new URLSearchParams(window.location.search).get('pid') || (typeof window.pendingDeepLinkPid !== 'undefined' ? window.pendingDeepLinkPid : null);
@@ -5099,9 +5297,11 @@ window.renderHorizontalCategories = function () {
     var stripEl = document.getElementById('horizontalCategoryStrip');
     if (!stripEl) return;
 
+    var curSec = window.activeSection || 'sarees';
     var cats = {};
+
     allProducts.forEach(p => {
-        if (p.cat) {
+        if ((p.section || 'sarees') === curSec && p.cat) {
             if (!cats[p.cat]) {
                 cats[p.cat] = p;
             } else if (!cats[p.cat].coverDesignId && p.coverDesignId) {
@@ -5111,6 +5311,13 @@ window.renderHorizontalCategories = function () {
             }
         }
     });
+
+    var secDef = (window.appSections || []).find(s => s.id === curSec);
+    if (secDef && Array.isArray(secDef.categories)) {
+        secDef.categories.forEach(c => {
+            if (c && !cats[c]) cats[c] = null;
+        });
+    }
 
     var sortedCats = Object.keys(cats).sort();
     var html = '';
@@ -5131,7 +5338,7 @@ window.renderHorizontalCategories = function () {
         // Schedule image render
         setTimeout(() => {
             var el = document.getElementById(imgId);
-            if (el && window.renderWebpFromFolder) window.renderWebpFromFolder(el, p.gridUrl, null, p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : null);
+            if (el && p && window.renderWebpFromFolder) window.renderWebpFromFolder(el, p.gridUrl, null, p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : null);
         }, 10);
     });
 
@@ -5142,10 +5349,16 @@ window.populateCategories = function () {
     var catListEl = document.getElementById('categoryList');
     if (!catListEl) return;
 
+    var curSec = window.activeSection || 'sarees';
     var cats = {};
     allProducts.forEach(p => {
-        if (p.cat) cats[p.cat] = true;
+        if ((p.section || 'sarees') === curSec && p.cat) cats[p.cat] = true;
     });
+
+    var secDef = (window.appSections || []).find(s => s.id === curSec);
+    if (secDef && Array.isArray(secDef.categories)) {
+        secDef.categories.forEach(c => { if (c) cats[c] = true; });
+    }
     var sortedCats = Object.keys(cats).sort();
 
     var html = '';
@@ -5301,6 +5514,11 @@ window.applyFilter = function () {
     var query = srch ? srch.value.trim().toLowerCase() : '';
 
     var filtered = allProducts.filter(p => {
+        // Section Filtering: When favorites are active, show favorites across ALL sections!
+        if (!showOnlyFavs && (!window.activeSection || (p.section || 'sarees') !== window.activeSection)) {
+            return false;
+        }
+
         // 1. Search Query
         if (query !== "") {
             var nameMatch = p.name && p.name.toLowerCase().includes(query);
@@ -5335,6 +5553,37 @@ window.applyFilter = function () {
 
         return true;
     });
+
+    // Cross-Section Search Notification Banner (Safeguard 5)
+    var searchBanner = document.getElementById('crossSectionSearchBanner');
+    if (searchBanner) {
+        if (query !== "" && !showOnlyFavs) {
+            var otherMatchesCount = 0;
+            var otherSecId = null;
+            allProducts.forEach(p => {
+                if ((p.section || 'sarees') !== window.activeSection) {
+                    var m = (p.name && p.name.toLowerCase().includes(query)) ||
+                            (p.sku && p.sku.toLowerCase().includes(query)) ||
+                            (p.fabric && p.fabric.toLowerCase().includes(query));
+                    if (m) {
+                        otherMatchesCount++;
+                        if (!otherSecId) otherSecId = (p.section || 'sarees');
+                    }
+                }
+            });
+
+            if (otherMatchesCount > 0) {
+                var curSecName = ((window.appSections || []).find(s => s.id === window.activeSection) || {}).name || "Current Section";
+                var otherSecName = ((window.appSections || []).find(s => s.id === otherSecId) || {}).name || "other section";
+                searchBanner.style.display = 'flex';
+                searchBanner.innerHTML = `<span>Showing <strong>${filtered.length}</strong> in ${curSecName} • <span style="text-decoration:underline; font-weight:bold; cursor:pointer; color:var(--myntra-pink);" onclick="window.switchSection('${otherSecId}')">Tap to view ${otherMatchesCount} in ${otherSecName}</span></span>`;
+            } else {
+                searchBanner.style.display = 'none';
+            }
+        } else {
+            searchBanner.style.display = 'none';
+        }
+    }
 
     // 5. Sorting
     if (currentSort === 'priceAsc') {
@@ -8238,6 +8487,10 @@ window.openLiveAdmin = function () {
 
 window.closeLiveAdmin = function () {
     closeModals();
+    if (window.liveAdminInterval) {
+        clearInterval(window.liveAdminInterval);
+        window.liveAdminInterval = null;
+    }
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
     }
@@ -8258,6 +8511,16 @@ window.openProductDetailsModal = function (pid, event) {
     if (window.isAdminMode) {
         cv.style.display = 'none';
         av.style.display = 'flex';
+
+        var secSelect = document.getElementById('editProdSection');
+        if (secSelect) {
+            var secHtml = '';
+            (window.appSections || window.DEFAULT_SECTIONS).forEach(s => {
+                var isSel = (s.id === (p.section || 'sarees')) ? 'selected' : '';
+                secHtml += `<option value="${s.id}" ${isSel}>${esc(s.name)}</option>`;
+            });
+            secSelect.innerHTML = secHtml;
+        }
 
         document.getElementById('editProdId').value = p.id;
         document.getElementById('editProdCat').value = p.cat || '';
@@ -8306,11 +8569,7 @@ window.openProductDetailsModal = function (pid, event) {
         cv.innerHTML = html;
     }
 
-    if (typeof pushModalState === 'function') {
-        pushModalState('productDetailsModal');
-    } else {
-        document.getElementById('productDetailsModal').style.display = 'flex';
-    }
+    openModal('productDetailsModal');
 };
 
 window.saveProductDetails = async function () {
@@ -8321,6 +8580,9 @@ window.saveProductDetails = async function () {
     var btn = document.getElementById('pdSaveBtn');
     btn.innerText = "Saving...";
     btn.disabled = true;
+
+    var secSelect = document.getElementById('editProdSection');
+    var sectionVal = secSelect ? secSelect.value : (p.section || 'sarees');
 
     var price = document.getElementById('editProdPrice').value.trim();
     var sku = document.getElementById('editProdSku').value.trim();
@@ -8336,6 +8598,7 @@ window.saveProductDetails = async function () {
 
     var patchPayload = {
         fields: {
+            section: { stringValue: sectionVal },
             price: { doubleValue: Number(price || 0) },
             sku: { stringValue: sku },
             packing: { stringValue: packing },
@@ -8350,7 +8613,7 @@ window.saveProductDetails = async function () {
         }
     };
 
-    var updateMask = "?updateMask.fieldPaths=price&updateMask.fieldPaths=sku&updateMask.fieldPaths=packing&updateMask.fieldPaths=mult&updateMask.fieldPaths=fabric&updateMask.fieldPaths=work&updateMask.fieldPaths=jari&updateMask.fieldPaths=pallu&updateMask.fieldPaths=border&updateMask.fieldPaths=blouse&updateMask.fieldPaths=cut";
+    var updateMask = "?updateMask.fieldPaths=section&updateMask.fieldPaths=price&updateMask.fieldPaths=sku&updateMask.fieldPaths=packing&updateMask.fieldPaths=mult&updateMask.fieldPaths=fabric&updateMask.fieldPaths=work&updateMask.fieldPaths=jari&updateMask.fieldPaths=pallu&updateMask.fieldPaths=border&updateMask.fieldPaths=blouse&updateMask.fieldPaths=cut";
 
     var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/Products/" + p.docId + updateMask;
 
@@ -8367,6 +8630,7 @@ window.saveProductDetails = async function () {
         }
 
         // 1. Update Local Memory
+        p.section = sectionVal;
         p.price = parseFloat(price) || 0;
         p.sku = sku;
         p.packing = packing;
@@ -8393,6 +8657,7 @@ window.saveProductDetails = async function () {
                 body: JSON.stringify({
                     action: 'updateProductDetailsFull', // NEW ACTION TO PREVENT CLASH
                     productName: p.name,
+                    section: p.section,
                     category: p.cat,
                     price: p.price,
                     sku: p.sku,
@@ -8424,7 +8689,14 @@ window.isSkuManuallyEdited = false;
 window.autoGenerateSku = function () {
     if (window.isSkuManuallyEdited) return;
 
-    var cat = document.getElementById('addProdCat').value || "";
+    var secEl = document.getElementById('addProdSection');
+    var secVal = secEl ? secEl.value.toLowerCase() : (window.activeSection || 'sarees');
+
+    var catSelect = document.getElementById('addProdCat');
+    var catVal = catSelect ? catSelect.value : "";
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    var cat = (catVal === '__NEW__' && newCatInput) ? newCatInput.value : catVal;
+
     var name = document.getElementById('addProdName').value || "";
     if (!name) {
         document.getElementById('addProdSku').value = "";
@@ -8432,6 +8704,10 @@ window.autoGenerateSku = function () {
     }
 
     var prefix = "S";
+    if (secVal === 'blouse') prefix = "B";
+    else if (secVal === 'sarees') prefix = "S";
+    else if (secVal) prefix = secVal.substring(0, 2).toUpperCase();
+
     var subCat = "GN";
     var num = String(name).replace(/[^0-9]/g, '');
     if (num === "") {
@@ -8445,10 +8721,6 @@ window.autoGenerateSku = function () {
 
     if (cat) {
         var cleanCat = cat.toUpperCase().trim();
-        if (cleanCat.indexOf("BLOUSE") > -1) prefix = "B";
-        else if (cleanCat.indexOf("SHIRT") > -1) prefix = "SH";
-        else if (cleanCat.indexOf("DRESS") > -1) prefix = "D";
-
         if (cleanCat.indexOf("TOPDYED") > -1 || cleanCat.indexOf("TOP DYED") > -1) subCat = "TD";
         else if (cleanCat.indexOf("PRINT") > -1) subCat = "PR";
         else if (cleanCat.indexOf("DYED") > -1 || cleanCat.indexOf("DYEING") > -1) subCat = "DY";
@@ -8463,18 +8735,19 @@ window.autoGenerateSku = function () {
 
 window.openAddProductModal = function () {
     window.isSkuManuallyEdited = false;
-    // Populate categories
-    var catSelect = document.getElementById('addProdCat');
-    var catSet = new Set();
-    window.allProducts.forEach(p => {
-        if (p.cat) catSet.add(p.cat);
-    });
-    var cats = Array.from(catSet).sort();
-    var catHtml = '<option value="">Select a Category...</option>';
-    cats.forEach(c => {
-        catHtml += `<option value="${c}">${c}</option>`;
-    });
-    catSelect.innerHTML = catHtml;
+
+    // Populate sections in #addProdSection
+    var secSelect = document.getElementById('addProdSection');
+    if (secSelect) {
+        var secHtml = '';
+        (window.appSections || window.DEFAULT_SECTIONS).forEach(s => {
+            var sel = (s.id === (window.activeSection || 'sarees')) ? 'selected' : '';
+            secHtml += `<option value="${s.id}" ${sel}>${esc(s.name)}</option>`;
+        });
+        secSelect.innerHTML = secHtml;
+    }
+
+    window.updateAddProdCatDropdown();
 
     // Reset other fields
     document.getElementById('addProdClone').innerHTML = '<option value="">Select a product to clone details...</option>';
@@ -8494,15 +8767,60 @@ window.openAddProductModal = function () {
     openModal('addProductModal');
 };
 
+window.updateAddProdCatDropdown = function () {
+    var secSelect = document.getElementById('addProdSection');
+    var selectedSec = secSelect ? secSelect.value : (window.activeSection || 'sarees');
+    var catSelect = document.getElementById('addProdCat');
+    if (!catSelect) return;
+
+    var catSet = new Set();
+    window.allProducts.forEach(p => {
+        if ((p.section || 'sarees') === selectedSec && p.cat) catSet.add(p.cat);
+    });
+
+    var secDef = (window.appSections || []).find(s => s.id === selectedSec);
+    if (secDef && Array.isArray(secDef.categories)) {
+        secDef.categories.forEach(c => { if (c) catSet.add(c); });
+    }
+
+    var cats = Array.from(catSet).sort();
+    var catHtml = '<option value="">Select a Category...</option>';
+    cats.forEach(c => {
+        catHtml += `<option value="${esc(c)}">${esc(c)}</option>`;
+    });
+    catHtml += '<option value="__NEW__" style="color:var(--myntra-pink); font-weight:bold;">+ Add New Category...</option>';
+    catSelect.innerHTML = catHtml;
+
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    if (newCatInput) {
+        newCatInput.value = '';
+        newCatInput.style.display = 'none';
+    }
+};
+
 window.onAddProdCatChange = function () {
-    var cat = document.getElementById('addProdCat').value;
+    var catSelect = document.getElementById('addProdCat');
+    var cat = catSelect ? catSelect.value : '';
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    if (cat === '__NEW__') {
+        if (newCatInput) {
+            newCatInput.style.display = 'block';
+            newCatInput.focus();
+        }
+    } else {
+        if (newCatInput) newCatInput.style.display = 'none';
+    }
+
     var cloneSelect = document.getElementById('addProdClone');
-    if (!cat) {
+    if (!cloneSelect) return;
+    if (!cat || cat === '__NEW__') {
         cloneSelect.innerHTML = '<option value="">Select a product to clone details...</option>';
         return;
     }
 
-    var matches = window.allProducts.filter(p => p.cat === cat).sort((a, b) => a.name.localeCompare(b.name));
+    var secSelect = document.getElementById('addProdSection');
+    var selectedSec = secSelect ? secSelect.value : (window.activeSection || 'sarees');
+    var matches = window.allProducts.filter(p => (p.section || 'sarees') === selectedSec && p.cat === cat).sort((a, b) => a.name.localeCompare(b.name));
     var html = '<option value="">(None - Blank Product)</option>';
     matches.forEach(p => {
         html += `<option value="${p.id}">${p.name}</option>`;
@@ -8535,7 +8853,13 @@ window.submitNewProduct = async function () {
 
     var btn = event.currentTarget;
 
-    var cat = document.getElementById('addProdCat').value.trim();
+    var catSelect = document.getElementById('addProdCat');
+    var catSelectVal = catSelect ? catSelect.value.trim() : '';
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    var cat = (catSelectVal === '__NEW__' && newCatInput) ? newCatInput.value.trim() : catSelectVal;
+    var secSelect = document.getElementById('addProdSection');
+    var secVal = secSelect ? secSelect.value : (window.activeSection || 'sarees');
+
     var name = document.getElementById('addProdName').value.trim();
     var price = document.getElementById('addProdPrice').value.trim();
     var packing = document.getElementById('addProdPacking').value.trim();
@@ -8560,6 +8884,7 @@ window.submitNewProduct = async function () {
         fields: {
             name: { stringValue: name },
             cat: { stringValue: cat },
+            section: { stringValue: secVal },
             price: { doubleValue: Number(price || 0) },
             packing: { stringValue: packing },
             mult: { doubleValue: Number(mult || 1) },
@@ -8619,6 +8944,7 @@ window.submitNewProduct = async function () {
                     body: JSON.stringify({
                         action: 'createProduct',
                         docId: newDocId,
+                        section: secVal,
                         category: cat,
                         name: name,
                         price: parseFloat(price),
@@ -8647,6 +8973,7 @@ window.submitNewProduct = async function () {
             id: localPid,
             name: name,
             cat: cat,
+            section: secVal,
             price: parseFloat(price),
             mrp: 0,
             packing: packing,
