@@ -6768,6 +6768,17 @@ window.tempCamDocId = null;
 window.tempCamPhotoPath = null;
 window.tempCamPid = null;
 
+window.formatProductBreadcrumb = function (sec, cat, prodName) {
+    var pSec = (sec || '').trim();
+    var pCat = (cat || '').trim();
+    var pName = (prodName || '').trim();
+    var parts = [];
+    if (pSec) parts.push(pSec.charAt(0).toUpperCase() + pSec.slice(1));
+    if (pCat) parts.push(pCat);
+    if (pName) parts.push(pName);
+    return parts.join(' > ');
+};
+
 window.triggerAdminCamera = async function (docId, pid, productName = "Product Preview") {
     var defaultDesignId = "02";
     if (window.lastRenderedDesignNames) {
@@ -6784,8 +6795,6 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
     }
 
     try {
-        // High Quality Native Camera or Gallery Selection
-        // High Quality Native Camera or Gallery Selection
         var photo = await Capacitor.Plugins.Camera.getPhoto({
             quality: 100,
             allowEditing: false,
@@ -6803,14 +6812,31 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
         var previewImg = document.getElementById('adminPreviewImg');
         var designInput = document.getElementById('adminDesignNumberInput');
         var nameLabel = document.getElementById('adminPreviewProductName');
+        var counterEl = document.getElementById('adminPreviewCounter');
 
         if (previewImg) previewImg.src = photo.webPath;
-        if (designInput) designInput.value = defaultDesignId;
 
-        // Grab product name dynamically if not passed cleanly
-        var detailTitle = document.getElementById('detailTitle');
+        var p = (window.allProducts || []).find(x => x.id === pid || x.docId === docId) || window.curProduct;
+        var pSec = (p && p.section) || window.activeSection || 'Sarees';
+        var pCat = (p && p.cat) || '';
+        var pName = (p && p.name) || productName;
+        var breadcrumb = window.formatProductBreadcrumb(pSec, pCat, pName);
+
         if (nameLabel) {
-            nameLabel.value = (detailTitle && detailTitle.innerText) ? detailTitle.innerText : productName;
+            nameLabel.value = breadcrumb;
+            nameLabel.title = breadcrumb;
+        }
+
+        if (counterEl) counterEl.style.display = 'none';
+
+        if (designInput) {
+            designInput.readOnly = false;
+            designInput.disabled = false;
+            designInput.value = defaultDesignId;
+            setTimeout(function () {
+                designInput.focus();
+                designInput.select();
+            }, 120);
         }
 
         if (modal) modal.style.display = 'flex';
@@ -6827,10 +6853,21 @@ window.triggerAdminGallery = async function (docId, pid, productName = "Product 
             limit: 0 // unlimited selection
         });
         if (res && res.photos && res.photos.length > 0) {
-            window.pendingSharedImages = res.photos.map(p => ({ uri: p.path || p.webPath, webPath: p.webPath }));
+            var p = (window.allProducts || []).find(x => x.id === pid || x.docId === docId) || window.curProduct;
+            window.pendingSharedImages = res.photos.map(pPhoto => ({
+                uri: pPhoto.path || pPhoto.webPath,
+                webPath: pPhoto.webPath,
+                docId: docId,
+                pid: pid,
+                productName: (p && p.name) || productName,
+                category: (p && p.cat) || '',
+                section: (p && p.section) || window.activeSection || 'Sarees'
+            }));
             window.tempCamDocId = docId;
             window.tempCamPid = pid;
-            window.tempCamProductName = productName;
+            window.tempCamProductName = (p && p.name) || productName;
+            window.tempCamCat = (p && p.cat) || '';
+            window.tempCamSection = (p && p.section) || window.activeSection || 'Sarees';
             window.sharedImagePasteIndex = 0;
             window.showNextSharedImagePreview();
         }
@@ -6844,9 +6881,17 @@ window.retakeAdminPhoto = function () {
     if (modal) modal.style.display = 'none';
 
     if (window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.sharedImagePasteIndex !== undefined) {
-        // Cancel/Skip this shared image and move to the next one
+        // Skip this shared image and move to the next one
         window.sharedImagePasteIndex++;
-        window.showNextSharedImagePreview();
+        if (window.sharedImagePasteIndex < window.pendingSharedImages.length) {
+            setTimeout(window.showNextSharedImagePreview, 150);
+        } else {
+            window.pendingSharedImages = null;
+            window.sharedImagePasteIndex = 0;
+            var fabPaste = document.getElementById('fabPasteImages');
+            if (fabPaste) fabPaste.style.display = 'none';
+            if (window.processCameraOutbox) window.processCameraOutbox();
+        }
     } else {
         window.triggerAdminCamera(window.tempCamDocId, window.tempCamPid);
     }
@@ -6855,46 +6900,23 @@ window.retakeAdminPhoto = function () {
 window.confirmAdminUpload = async function () {
     var modal = document.getElementById('adminCameraPreviewModal');
     var designInput = document.getElementById('adminDesignNumberInput');
-    var finalDesignId = (designInput && designInput.value) ? designInput.value.trim().toUpperCase() : "02";
+    var finalDesignId = (designInput && designInput.value) ? designInput.value.trim().toUpperCase() : "";
 
-    // Auto-append -A, -B, -C if the exact design ID already exists!
-    var names = window.lastRenderedDesignNames ? window.lastRenderedDesignNames.toLowerCase().split(',') : [];
-    var baseName = finalDesignId.toLowerCase();
-
-    var conflictCount = 0;
-    var hasExactMatch = false;
-
-    names.forEach(n => {
-        var nClean = n.trim().replace(/\.(webp|jpg|jpeg|png)$/i, '');
-        if (nClean === baseName) {
-            hasExactMatch = true;
-        } else if (nClean.startsWith(baseName + "-")) {
-            // We check if the suffix is a single letter to accurately count
-            var suffix = nClean.replace(baseName + "-", "");
-            if (/^[a-z]$/.test(suffix)) {
-                var charCode = suffix.charCodeAt(0) - 97; // a=0, b=1
-                if (charCode >= conflictCount) conflictCount = charCode + 1;
-            }
-        }
-    });
-
-    if (hasExactMatch) {
-        var letter = String.fromCharCode(97 + conflictCount); // 97 is 'a'
-        finalDesignId = finalDesignId + "-" + letter;
+    if (!finalDesignId) {
+        alert("Please enter a Design Number");
+        if (designInput) designInput.focus();
+        return;
     }
-
-    // Instantly append it to the local string so the next rapid photo doesn't get the same letter
-    window.lastRenderedDesignNames = (window.lastRenderedDesignNames ? window.lastRenderedDesignNames + "," : "") + finalDesignId + ".jpg";
 
     var bypassCb = document.getElementById('adminBypassCloudinary');
     var bypass = bypassCb ? bypassCb.checked : false;
 
     if (modal) modal.style.display = 'none';
 
-    var p = window.allProducts ? window.allProducts.find(x => x.id === window.tempCamPid) : null;
+    var p = window.allProducts ? window.allProducts.find(x => x.id === window.tempCamPid || x.docId === window.tempCamDocId) : null;
     if (p && (!p.gridUrl || p.gridUrl.trim() === "" || p.gridUrl.toLowerCase() === "none")) {
-        p.gridUrl = "Grid/" + p.cat + "/" + p.name + "/";
-        p.zoomUrl = "Zoom/" + p.cat + "/" + p.name + "/";
+        p.gridUrl = "Grid/" + (p.cat || window.tempCamCat || 'General') + "/" + (p.name || window.tempCamProductName) + "/";
+        p.zoomUrl = "Zoom/" + (p.cat || window.tempCamCat || 'General') + "/" + (p.name || window.tempCamProductName) + "/";
         var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + window.tempCamDocId + "?updateMask.fieldPaths=gridUrl&updateMask.fieldPaths=zoomUrl";
         fetch(patchUrl, {
             method: 'PATCH',
@@ -6903,22 +6925,52 @@ window.confirmAdminUpload = async function () {
         }).catch(e => console.error("Auto-heal gridUrl failed", e));
     }
 
+    // Register typed design ID directly into stock (fixes 15-minute sink trap)
+    if (p) {
+        if (!p.stock) p.stock = {};
+        p.stock[finalDesignId] = 999;
+        if (p.stock.DIRECT === undefined) p.stock.DIRECT = 999;
+        if (p.stock.FULLY_PACKED === undefined) p.stock.FULLY_PACKED = 0;
+        if (!p.coverDesignId || p.coverDesignId === 'None') p.coverDesignId = finalDesignId;
+        var rList = p.ready ? String(p.ready).split(',').map(s => s.trim()).filter(Boolean) : [];
+        if (!rList.includes(finalDesignId)) rList.push(finalDesignId);
+        p.ready = rList.join(',');
+        p.updateTime = new Date().toISOString();
+
+        var patchStockUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + window.tempCamDocId + "?updateMask.fieldPaths=stock.%60" + encodeURIComponent(finalDesignId) + "%60&updateMask.fieldPaths=coverDesignId&updateMask.fieldPaths=ready&updateMask.fieldPaths=updateTime";
+        fetch(patchStockUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fields: {
+                    stock: { mapValue: { fields: { [finalDesignId]: { integerValue: "999" } } } },
+                    coverDesignId: { stringValue: p.coverDesignId },
+                    ready: { stringValue: p.ready },
+                    updateTime: { timestampValue: p.updateTime }
+                }
+            })
+        }).catch(e => console.warn("Stock update failed", e));
+
+        if (window.clearProductFolderCache) {
+            window.clearProductFolderCache(p.gridUrl);
+        }
+    }
+
     try {
         var outboxId = await window.saveToOutbox(window.tempCamDocId, finalDesignId, window.tempCamPhotoPath, window.tempCamProductName || "", bypass);
         if (outboxId) {
             var toastId = 'undoToast_' + Date.now();
             var toastHtml = `<div id="${toastId}" style="position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:12px 20px; border-radius:4px; font-size:14px; box-shadow:0 3px 10px rgba(0,0,0,0.3); z-index:9999; display:flex; align-items:center; gap:15px;">
-                <span>Photo Saved to Outbox.</span>
+                <span>Design "${finalDesignId}" Saved to Outbox.</span>
             </div>`;
             document.body.insertAdjacentHTML('beforeend', toastHtml);
 
-            // Bump the product to the top of the main screen by updating updateTime locally
-            var pToBump = window.allProducts ? window.allProducts.find(x => x.id === window.tempCamPid) : null;
+            // Bump product to the top
+            var pToBump = window.allProducts ? window.allProducts.find(x => x.id === window.tempCamPid || x.docId === window.tempCamDocId) : null;
             if (pToBump) {
                 pToBump.updateTime = new Date().toISOString();
                 if (typeof window.applyFilter === 'function') window.applyFilter();
 
-                // Aggressively force Firestore updateTime bump so it survives reloads instantly
                 var fsUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + window.tempCamDocId + "?updateMask.fieldPaths=updateTime";
                 fetch(fsUrl, {
                     method: 'PATCH',
@@ -6927,18 +6979,17 @@ window.confirmAdminUpload = async function () {
                 }).catch(e => console.error("Auto-bump failed", e));
             }
 
-            // INSTANT UI UPDATE: Show the image immediately in the grid if looking at the product
             var detailPanel = document.getElementById('detailPanel');
             var grid = document.getElementById('detailImageGrid');
-            if (detailPanel && detailPanel.classList.contains('open') && window.curProduct && window.curProduct.id === window.tempCamPid) {
+            if (detailPanel && detailPanel.classList.contains('open') && window.curProduct && (window.curProduct.id === window.tempCamPid || window.curProduct.docId === window.tempCamDocId)) {
                 if (grid) {
                     var capUri = window.tempCamPhotoPath;
-                    if (capUri && window.Capacitor && window.Capacitor.convertFileSrc) {
+                    if (capUri && window.Capacitor && window.Capacitor.convertFileSrc && !capUri.startsWith('blob:') && !capUri.startsWith('data:')) {
                         capUri = window.Capacitor.convertFileSrc(capUri);
                     }
                     var newImgHtml = `<div style="position:relative; border-radius:8px; overflow:hidden; background:#eee; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
                         <img src="${capUri}" style="width:100%; display:block; aspect-ratio:3/4; object-fit:cover; opacity:0.7;">
-                        <div style="position:absolute; bottom:5px; right:5px; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; padding:2px 6px; border-radius:4px;">Uploading...</div>
+                        <div style="position:absolute; bottom:5px; right:5px; background:rgba(0,0,0,0.6); color:#fff; font-size:10px; padding:2px 6px; border-radius:4px;">Uploading ${finalDesignId}...</div>
                     </div>`;
                     grid.insertAdjacentHTML('beforeend', newImgHtml);
                 }
@@ -6947,19 +6998,26 @@ window.confirmAdminUpload = async function () {
             setTimeout(() => {
                 var toastEl = document.getElementById(toastId);
                 if (toastEl) toastEl.remove();
-
-                if (!(window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.sharedImagePasteIndex !== undefined)) {
-                    window.processCameraOutbox();
-                }
-            }, 5000);
-
-            if (window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.sharedImagePasteIndex !== undefined) {
-                window.sharedImagePasteIndex++;
-                setTimeout(window.showNextSharedImagePreview, 300);
-            }
+            }, 3000);
         }
     } catch (e) {
         window.logAppError('Confirm Upload', e.message);
+    }
+
+    if (window.pendingSharedImages && window.pendingSharedImages.length > 0 && window.sharedImagePasteIndex !== undefined) {
+        window.sharedImagePasteIndex++;
+        if (window.sharedImagePasteIndex < window.pendingSharedImages.length) {
+            setTimeout(window.showNextSharedImagePreview, 150);
+        } else {
+            window.pendingSharedImages = null;
+            window.sharedImagePasteIndex = 0;
+            var fabPaste = document.getElementById('fabPasteImages');
+            if (fabPaste) fabPaste.style.display = 'none';
+            if (window.processCameraOutbox) window.processCameraOutbox();
+            alert("All images confirmed and queued for upload!");
+        }
+    } else {
+        if (window.processCameraOutbox) window.processCameraOutbox();
     }
 };
 
@@ -7558,20 +7616,33 @@ window.pasteSharedImages = async function () {
 
 window.showNextSharedImagePreview = async function () {
     if (!window.pendingSharedImages || window.sharedImagePasteIndex >= window.pendingSharedImages.length) {
-        // Done pasting all images
         window.pendingSharedImages = null;
         window.sharedImagePasteIndex = 0;
         var fabPaste = document.getElementById('fabPasteImages');
         if (fabPaste) fabPaste.style.display = 'none';
-        window.processCameraOutbox();
-        alert("All shared images pasted successfully!");
+        var modal = document.getElementById('adminCameraPreviewModal');
+        if (modal) modal.style.display = 'none';
+        if (window.processCameraOutbox) window.processCameraOutbox();
+        alert("All images confirmed and queued for upload!");
         return;
     }
 
     let sFile = window.pendingSharedImages[window.sharedImagePasteIndex];
-    window.tempCamPhotoPath = sFile.uri || sFile.webPath;
+    if (sFile.file && (sFile.file instanceof Blob || (typeof File !== 'undefined' && sFile.file instanceof File))) {
+        window.tempCamPhotoBlob = sFile.file;
+        window.tempCamPhotoPath = sFile.uri || URL.createObjectURL(sFile.file);
+    } else {
+        window.tempCamPhotoBlob = null;
+        window.tempCamPhotoPath = sFile.uri || sFile.webPath;
+    }
 
-    var maxNum = 0; // Default if no previous designs exist
+    if (sFile.docId) window.tempCamDocId = sFile.docId;
+    if (sFile.pid) window.tempCamPid = sFile.pid;
+    if (sFile.productName) window.tempCamProductName = sFile.productName;
+    if (sFile.category) window.tempCamCat = sFile.category;
+    if (sFile.section) window.tempCamSection = sFile.section;
+
+    var maxNum = 0;
     if (window.lastRenderedDesignNames && !window.tempCamIsNewProduct) {
         var names = window.lastRenderedDesignNames.split(',');
         names.forEach(n => {
@@ -7582,28 +7653,50 @@ window.showNextSharedImagePreview = async function () {
             }
         });
     }
-    // If it's a new product, or no designs exist, start from 1. 
-    // Add the current paste index so it increments automatically for each image.
     var nextNum = maxNum + 1 + window.sharedImagePasteIndex;
-    var defaultDesignId = nextNum.toString().padStart(2, '0');
+    var defaultDesignId = sFile.cleanName || nextNum.toString().padStart(2, '0');
 
     var modal = document.getElementById('adminCameraPreviewModal');
     var previewImg = document.getElementById('adminPreviewImg');
     var designInput = document.getElementById('adminDesignNumberInput');
     var nameLabel = document.getElementById('adminPreviewProductName');
+    var counterEl = document.getElementById('adminPreviewCounter');
 
     if (previewImg) {
         var capUri = window.tempCamPhotoPath;
-        if (capUri && window.Capacitor && window.Capacitor.convertFileSrc) {
+        if (capUri && window.Capacitor && window.Capacitor.convertFileSrc && !capUri.startsWith('blob:') && !capUri.startsWith('data:')) {
             capUri = window.Capacitor.convertFileSrc(capUri);
         }
         previewImg.src = capUri;
     }
 
-    if (designInput) designInput.value = defaultDesignId;
+    if (designInput) {
+        designInput.readOnly = false;
+        designInput.disabled = false;
+        designInput.value = defaultDesignId;
+        setTimeout(function () {
+            designInput.focus();
+            designInput.select();
+        }, 120);
+    }
 
     if (nameLabel) {
-        nameLabel.value = window.tempCamProductName || "";
+        var p = (window.allProducts || []).find(x => x.id === window.tempCamPid || x.docId === window.tempCamDocId) || window.curProduct;
+        var pSec = window.tempCamSection || (p && p.section) || window.activeSection || 'Sarees';
+        var pCat = window.tempCamCat || (p && p.cat) || '';
+        var pName = (p && p.name) || window.tempCamProductName || '';
+        var breadcrumb = window.formatProductBreadcrumb(pSec, pCat, pName);
+        nameLabel.value = breadcrumb;
+        nameLabel.title = breadcrumb;
+    }
+
+    if (counterEl) {
+        if (window.pendingSharedImages.length > 1) {
+            counterEl.style.display = 'block';
+            counterEl.innerText = `Image ${window.sharedImagePasteIndex + 1} of ${window.pendingSharedImages.length}`;
+        } else {
+            counterEl.style.display = 'none';
+        }
     }
 
     if (modal) modal.style.display = 'flex';
@@ -9370,22 +9463,9 @@ window.handleBulkFolderSelection = async function (files) {
             return;
         }
 
-        var defaultName = document.getElementById('addProdName') ? document.getElementById('addProdName').value.trim() : '';
-        if (!defaultName) {
-            defaultName = prompt(`You selected ${validFiles.length} image(s).\n\nPlease enter the Product Name for these images:`, "");
-            if (!defaultName || !defaultName.trim()) {
-                if (statusEl) statusEl.style.display = 'none';
-                var inputEl = document.getElementById('bulkFolderInput');
-                if (inputEl) inputEl.value = '';
-                var mInput = document.getElementById('bulkMobileFileInput');
-                if (mInput) mInput.value = '';
-                return;
-            }
-            defaultName = defaultName.trim();
-            if (document.getElementById('addProdName')) document.getElementById('addProdName').value = defaultName;
-        }
-        var groupKey = pCat + "___" + defaultName;
-        folders[groupKey] = { cat: pCat, name: defaultName, files: validFiles };
+        if (statusEl) statusEl.style.display = 'none';
+        window.queueSelectedImagesForProduct(validFiles, secVal, pCat, isBypass);
+        return;
     }
 
     var groupKeys = Object.keys(folders);
@@ -9719,12 +9799,205 @@ window.openPcFolderPicker = function () {
     if (input) input.click();
 };
 
+window.queueSelectedImagesForProduct = async function (items, secVal, catVal, isBypass) {
+    if (!items || items.length === 0) return;
+    var nameInput = document.getElementById('addProdName');
+    var prodName = nameInput ? nameInput.value.trim() : '';
+    if (!prodName) {
+        prodName = prompt(`You selected ${items.length} image(s).\n\nEnter Product Name for Section [${secVal.toUpperCase()}], Category [${catVal}]:`, "");
+        if (!prodName || !prodName.trim()) {
+            var inputEl = document.getElementById('bulkFolderInput');
+            if (inputEl) inputEl.value = '';
+            var mInput = document.getElementById('bulkMobileFileInput');
+            if (mInput) mInput.value = '';
+            return;
+        }
+        prodName = prodName.trim();
+        if (nameInput) nameInput.value = prodName;
+    }
+
+    var existingProd = (window.allProducts || []).find(p =>
+        ((p.section || 'sarees').toLowerCase() === secVal.toLowerCase()) &&
+        p.cat && p.cat.trim().toLowerCase() === catVal.toLowerCase() &&
+        p.name && p.name.trim().toLowerCase() === prodName.toLowerCase()
+    );
+    if (!existingProd) {
+        existingProd = (window.allProducts || []).find(p =>
+            ((p.section || 'sarees').toLowerCase() === secVal.toLowerCase()) &&
+            p.name && p.name.trim().toLowerCase() === prodName.toLowerCase()
+        );
+    }
+
+    var docId = "";
+    var pid = "";
+    if (existingProd) {
+        docId = existingProd.docId || existingProd.id;
+        pid = existingProd.id || docId;
+    } else {
+        var sku = window.generateSkuForProduct ? window.generateSkuForProduct(prodName, catVal, secVal) : "";
+        var gridUrl = "Grid/" + catVal + "/" + prodName + "/";
+        var zoomUrl = "Zoom/" + catVal + "/" + prodName + "/";
+        var nowIso = new Date().toISOString();
+        var payload = {
+            fields: {
+                name: { stringValue: prodName },
+                cat: { stringValue: catVal },
+                section: { stringValue: secVal },
+                price: { doubleValue: 0 },
+                packing: { stringValue: "1" },
+                mult: { doubleValue: 1 },
+                fabric: { stringValue: "" },
+                work: { stringValue: "" },
+                jari: { stringValue: "" },
+                pallu: { stringValue: "" },
+                border: { stringValue: "" },
+                blouse: { stringValue: "" },
+                cut: { stringValue: "" },
+                sku: { stringValue: sku },
+                gridUrl: { stringValue: gridUrl },
+                zoomUrl: { stringValue: zoomUrl },
+                coverDesignId: { stringValue: "01" },
+                ready: { stringValue: "" },
+                updateTime: { timestampValue: nowIso },
+                stock: { mapValue: { fields: { DIRECT: { integerValue: "999" }, FULLY_PACKED: { integerValue: "0" } } } }
+            }
+        };
+        try {
+            var fbRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }, 2);
+            if (!fbRes.ok) return alert("Failed to create product in Firestore");
+            var fbData = await fbRes.json();
+            docId = fbData.name.split('/').pop();
+            pid = "p_" + Date.now();
+
+            if (window.DS_APP_SCRIPT_URL) {
+                try {
+                    fetch(window.DS_APP_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'createProduct',
+                            docId: docId,
+                            section: secVal,
+                            category: catVal,
+                            name: prodName,
+                            price: 0,
+                            packing: "1",
+                            mult: 1,
+                            sku: sku,
+                            gridUrl: gridUrl,
+                            zoomUrl: zoomUrl
+                        })
+                    }).catch(e => {});
+                } catch (e) {}
+            }
+
+            var newP = {
+                docId: docId,
+                id: pid,
+                name: prodName,
+                cat: catVal,
+                section: secVal,
+                price: 0,
+                mrp: 0,
+                packing: "1",
+                mult: 1,
+                fabric: "",
+                work: "",
+                jari: "",
+                pallu: "",
+                border: "",
+                blouse: "",
+                cut: "",
+                sku: sku,
+                gridUrl: gridUrl,
+                zoomUrl: zoomUrl,
+                coverDesignId: "01",
+                ready: "",
+                stock: { DIRECT: 999, FULLY_PACKED: 0 },
+                totalStock: 999,
+                updateTime: nowIso
+            };
+            window.allProducts.push(newP);
+            existingProd = newP;
+        } catch (e) {
+            console.error("Error creating product:", e);
+            return alert("Failed to create product: " + e.message);
+        }
+    }
+
+    // Queue images into pendingSharedImages
+    window.pendingSharedImages = [];
+    for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        var isFile = (typeof File !== 'undefined' && it instanceof File) || (typeof Blob !== 'undefined' && it instanceof Blob);
+        var rawName = (it.name || '').replace(/\.[^/.]+$/, '').trim();
+        var isRaw = /^(IMG|DSC|PXL|WA|WhatsApp|Screenshot|photo_)/i.test(rawName) || !rawName;
+        var cleanName = (!isRaw && rawName.length <= 20) ? rawName : '';
+
+        window.pendingSharedImages.push({
+            uri: it.path || it.webPath || (isFile ? URL.createObjectURL(it) : ''),
+            webPath: it.webPath || (isFile ? URL.createObjectURL(it) : ''),
+            file: isFile ? it : null,
+            cleanName: cleanName,
+            docId: docId,
+            pid: pid,
+            productName: prodName,
+            category: catVal,
+            section: secVal,
+            isBypass: isBypass
+        });
+    }
+
+    window.tempCamDocId = docId;
+    window.tempCamPid = pid;
+    window.tempCamSection = secVal;
+    window.tempCamCat = catVal;
+    window.tempCamProductName = prodName;
+    window.tempCamIsNewProduct = false;
+    window.sharedImagePasteIndex = 0;
+
+    var bypassCb = document.getElementById('adminBypassCloudinary');
+    if (bypassCb) bypassCb.checked = !!isBypass;
+
+    if (typeof closeModals === 'function') closeModals();
+
+    window.showNextSharedImagePreview();
+};
+
+window.handleMobileFileSelection = function (files) {
+    if (!files || files.length === 0) return;
+    var catSelect = document.getElementById('addProdCat');
+    var catSelectVal = catSelect ? catSelect.value.trim() : '';
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    var cat = (catSelectVal === '__NEW__' && newCatInput) ? newCatInput.value.trim() : catSelectVal;
+    var secSelect = document.getElementById('addProdSection');
+    var secVal = secSelect ? secSelect.value : (window.activeSection || 'sarees');
+    if (!cat) return alert("Please select or enter a Category first.");
+    var isBypass = !!(document.getElementById('bulkBypassCloudinary') && document.getElementById('bulkBypassCloudinary').checked);
+
+    var validFiles = [];
+    for (var i = 0; i < files.length; i++) {
+        if (/\.(jpe?g|png|webp)$/i.test(files[i].name)) validFiles.push(files[i]);
+    }
+    if (validFiles.length === 0) return alert("No valid image files selected.");
+
+    window.queueSelectedImagesForProduct(validFiles, secVal, cat, isBypass);
+};
+
 window.pickMobileImages = async function () {
     var catSelect = document.getElementById('addProdCat');
     var catSelectVal = catSelect ? catSelect.value.trim() : '';
     var newCatInput = document.getElementById('addProdNewCatInput');
     var cat = (catSelectVal === '__NEW__' && newCatInput) ? newCatInput.value.trim() : catSelectVal;
+    var secSelect = document.getElementById('addProdSection');
+    var secVal = secSelect ? secSelect.value : (window.activeSection || 'sarees');
     if (!cat) return alert("Please select or enter a Category first.");
+
+    var isBypass = !!(document.getElementById('bulkBypassCloudinary') && document.getElementById('bulkBypassCloudinary').checked);
 
     if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.Camera) {
         try {
@@ -9733,31 +10006,7 @@ window.pickMobileImages = async function () {
                 limit: 0
             });
             if (res && res.photos && res.photos.length > 0) {
-                var files = [];
-                for (var i = 0; i < res.photos.length; i++) {
-                    var p = res.photos[i];
-                    var uri = p.path || p.webPath;
-                    if (window.Capacitor.convertFileSrc) uri = window.Capacitor.convertFileSrc(uri);
-                    try {
-                        var fRes = await fetch(uri);
-                        var blob = await fRes.blob();
-                        var fileName = (p.path ? p.path.split('/').pop() : '') || ("photo_" + (i + 1) + ".jpg");
-                        if (!/\.[^/.]+$/.test(fileName)) fileName += ".jpg";
-                        var fObj = null;
-                        try {
-                            fObj = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
-                        } catch (e) {
-                            blob.name = fileName;
-                            fObj = blob;
-                        }
-                        files.push(fObj);
-                    } catch (e) {
-                        console.error("Error reading photo:", e);
-                    }
-                }
-                if (files.length > 0) {
-                    window.handleBulkFolderSelection(files);
-                }
+                window.queueSelectedImagesForProduct(res.photos, secVal, cat, isBypass);
                 return;
             }
         } catch (e) {

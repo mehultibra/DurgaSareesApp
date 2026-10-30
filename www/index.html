@@ -514,12 +514,15 @@
     
     <img id="adminPreviewImg" style="width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0; z-index: 1;">
     
-    <input type="text" id="adminPreviewProductName"
-      style="position: absolute; top: 0; left: 0; width: 100%; background: linear-gradient(rgba(0,0,0,0.8), transparent); color: white; padding: 20px 10px; font-weight: bold; font-size: 20px; text-align: center; z-index: 2; text-shadow: 0 2px 4px rgba(0,0,0,0.8); border: none; outline: none;">
+    <input type="text" id="adminPreviewProductName" readonly
+      style="position: absolute; top: 0; left: 0; width: 100%; background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.4) 70%, transparent); color: white; padding: 18px 15px; font-weight: bold; font-size: 16px; text-align: center; z-index: 2; text-shadow: 0 2px 4px rgba(0,0,0,0.9); border: none; outline: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;">
     
-    <input type="text" id="adminDesignNumberInput" placeholder="Design No."
+    <div id="adminPreviewCounter" style="position: absolute; top: 55px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.65); color: #fbcfe8; font-size: 12px; font-weight: 600; padding: 3px 12px; border-radius: 12px; z-index: 2; display: none; border: 1px solid rgba(255,255,255,0.2);"></div>
+
+    <input type="text" id="adminDesignNumberInput" placeholder="Design No." autocomplete="off" autocorrect="off"
       style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); background: transparent; color: white; border: none; border-bottom: 2px dashed rgba(255,255,255,0.5); padding: 5px; font-size: 40px; font-weight: bold; width: 80%; text-align: center; z-index: 2; text-transform: uppercase; text-shadow: 0 4px 12px rgba(0,0,0,0.9); outline: none;"
-      onblur="this.value = this.value.toUpperCase()">
+      onblur="this.value = this.value.toUpperCase()"
+      onkeydown="if(event.key === 'Enter'){ event.preventDefault(); window.confirmAdminUpload(); }">
 
     <label style="position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); color: white; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 4px; font-size: 14px; z-index: 2; display: flex; align-items: center; gap: 8px;">
         <input type="checkbox" id="adminBypassCloudinary" style="transform: scale(1.2);"> Already Edited (Skip Logo)
@@ -733,7 +736,7 @@
             Upload product folders from PC, select multiple images from mobile gallery, or auto-scan cloud folders.
           </div>
           <input type="file" id="bulkFolderInput" webkitdirectory directory multiple style="display:none" onchange="window.handleBulkFolderSelection(this.files)">
-          <input type="file" id="bulkMobileFileInput" multiple accept="image/*" style="display:none" onchange="window.handleBulkFolderSelection(this.files)">
+          <input type="file" id="bulkMobileFileInput" multiple accept="image/*" style="display:none" onchange="window.handleMobileFileSelection(this.files)">
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <button type="button" onclick="window.pickMobileImages()" style="flex: 1; min-width: 130px; background: #be185d; color: #fff; border: none; padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
               <i class="fas fa-mobile-alt"></i> Select Images (Mobile)
