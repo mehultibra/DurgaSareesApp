@@ -7015,6 +7015,18 @@ window.processCameraOutbox = async function () {
                     blob = await fRes.blob();
                 }
 
+                // Direct immediate Grid & Zoom WebP generation & upload
+                try {
+                    var pMatch = (window.allProducts || []).find(x => x.docId === item.docId || x.id === item.docId);
+                    if (pMatch && pMatch.gridUrl && window.convertAndUploadGridAndZoom) {
+                        var zUrl = (pMatch.zoomUrl && pMatch.zoomUrl !== "None") ? pMatch.zoomUrl : pMatch.gridUrl;
+                        await window.convertAndUploadGridAndZoom(blob, pMatch.gridUrl, zUrl, item.designId);
+                        if (window.clearProductFolderCache) window.clearProductFolderCache(pMatch.gridUrl);
+                    }
+                } catch (gzErr) {
+                    console.warn("Direct grid/zoom upload in outbox skipped:", gzErr);
+                }
+
                 var uploadUrl = `https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F` + encodeURIComponent(filename);
 
                 var uploadRes = await window.fetchWithRetry(uploadUrl, {
@@ -9156,8 +9168,118 @@ window.submitNewProduct = async function () {
 };
 
 // ==========================================
-// 📂 ADMIN BULK FOLDER PRODUCT IMPORTER
+// 📂 ADMIN BULK FOLDER PRODUCT IMPORTER & WEBP ENGINE
 // ==========================================
+
+window.clearProductFolderCache = function (gridPath) {
+    if (!gridPath) return;
+    var cleanGrid = String(gridPath).trim().replace(/\\/g, '/').replace(/^[\/]+|[\/]+$/g, '');
+    var encPrefix = cleanGrid.split('/').filter(Boolean).map(s => encodeURIComponent(s.trim())).join('/') + '/';
+    if (window.dsFolderCache) {
+        Object.keys(window.dsFolderCache).forEach(k => {
+            if (k.includes(encPrefix) || k.includes(cleanGrid)) {
+                delete window.dsFolderCache[k];
+            }
+        });
+        try { localStorage.setItem("dsFolderCache", JSON.stringify(window.dsFolderCache)); } catch (e) { }
+    }
+};
+
+window.convertAndUploadGridAndZoom = async function (fileOrBlob, gridFolder, zoomFolder, designId) {
+    if (!fileOrBlob || !gridFolder || !designId) return false;
+    var cleanGridFolder = String(gridFolder || '').replace(/\\/g, '/').replace(/^[\/]+|[\/]+$/g, '').trim();
+    var cleanZoomFolder = String(zoomFolder || '').replace(/\\/g, '/').replace(/^[\/]+|[\/]+$/g, '').trim();
+    if (!cleanZoomFolder || cleanZoomFolder.toLowerCase() === 'none') {
+        cleanZoomFolder = cleanGridFolder;
+    }
+
+    function resizeToWebpBlob(sourceImg, maxDim, quality) {
+        var w = sourceImg.naturalWidth || sourceImg.width || 400;
+        var h = sourceImg.naturalHeight || sourceImg.height || 400;
+        var scale = Math.min(1, maxDim / Math.max(w, h));
+        var tw = Math.max(1, Math.round(w * scale));
+        var th = Math.max(1, Math.round(h * scale));
+
+        var canvas = document.createElement('canvas');
+        canvas.width = tw;
+        canvas.height = th;
+        var ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(sourceImg, 0, 0, tw, th);
+
+        return new Promise(function (resolve) {
+            canvas.toBlob(function (blob) {
+                resolve(blob);
+            }, 'image/webp', quality);
+        });
+    }
+
+    var imgUrl = null;
+    try {
+        var sourceImg;
+        if (typeof HTMLImageElement !== 'undefined' && fileOrBlob instanceof HTMLImageElement) {
+            sourceImg = fileOrBlob;
+        } else {
+            imgUrl = URL.createObjectURL(fileOrBlob);
+            sourceImg = await new Promise(function (resolve, reject) {
+                var img = new Image();
+                img.onload = function () { resolve(img); };
+                img.onerror = function (e) { reject(new Error("Image load failed")); };
+                img.src = imgUrl;
+            });
+        }
+
+        var gridBlob = await resizeToWebpBlob(sourceImg, 400, 0.80);
+        var zoomBlob = await resizeToWebpBlob(sourceImg, 1300, 0.88);
+
+        var gridPath = cleanGridFolder + '/' + designId + '.webp';
+        var zoomPath = cleanZoomFolder + '/' + designId + '.webp';
+
+        var gridUploadUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=" + encodeURIComponent(gridPath);
+        var zoomUploadUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=" + encodeURIComponent(zoomPath);
+
+        var gridPromise = window.fetchWithRetry(gridUploadUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'image/webp' },
+            body: gridBlob
+        }, 2).catch(function (e) {
+            console.warn("Grid WebP upload fail:", e);
+        });
+
+        var zoomPromise = window.fetchWithRetry(zoomUploadUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'image/webp' },
+            body: zoomBlob
+        }, 2).catch(function (e) {
+            console.warn("Zoom WebP upload fail:", e);
+        });
+
+        await Promise.all([gridPromise, zoomPromise]);
+
+        if (typeof saveImageToDB === 'function') {
+            try {
+                var encGridName = cleanGridFolder.split('/').map(encodeURIComponent).join('%2F') + "%2F" + encodeURIComponent(designId + ".webp");
+                var gridFullUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encGridName + "?alt=media";
+                if (gridBlob) {
+                    saveImageToDB(gridFullUrl, gridBlob);
+                    saveImageToDB(gridPath, gridBlob);
+                }
+                var encZoomName = cleanZoomFolder.split('/').map(encodeURIComponent).join('%2F') + "%2F" + encodeURIComponent(designId + ".webp");
+                var zoomFullUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o/" + encZoomName + "?alt=media";
+                if (zoomBlob) {
+                    saveImageToDB(zoomFullUrl, zoomBlob);
+                }
+            } catch (ce) { }
+        }
+
+        return true;
+    } finally {
+        if (imgUrl) {
+            try { URL.revokeObjectURL(imgUrl); } catch (e) { }
+        }
+    }
+};
 
 window.handleBulkFolderSelection = async function (files) {
     if (!window.isSuperAdmin) return alert("Access Denied: Admin only");
@@ -9166,18 +9288,9 @@ window.handleBulkFolderSelection = async function (files) {
     var catSelect = document.getElementById('addProdCat');
     var catSelectVal = catSelect ? catSelect.value.trim() : '';
     var newCatInput = document.getElementById('addProdNewCatInput');
-    var cat = (catSelectVal === '__NEW__' && newCatInput) ? newCatInput.value.trim() : catSelectVal;
+    var selectedCat = (catSelectVal === '__NEW__' && newCatInput) ? newCatInput.value.trim() : catSelectVal;
     var secSelect = document.getElementById('addProdSection');
     var secVal = secSelect ? secSelect.value : (window.activeSection || 'sarees');
-
-    if (!cat) {
-        alert("Please select or enter a Category before selecting images or product folders.");
-        var inputEl = document.getElementById('bulkFolderInput');
-        if (inputEl) inputEl.value = '';
-        var mInput = document.getElementById('bulkMobileFileInput');
-        if (mInput) mInput.value = '';
-        return;
-    }
 
     var isBypass = !!(document.getElementById('bulkBypassCloudinary') && document.getElementById('bulkBypassCloudinary').checked);
     var statusEl = document.getElementById('bulkImportStatus');
@@ -9205,23 +9318,61 @@ window.handleBulkFolderSelection = async function (files) {
 
     // Check if files have parent directory paths (PC folder upload)
     var hasDirectoryPath = validFiles.some(f => f.webkitRelativePath && f.webkitRelativePath.split('/').filter(Boolean).length >= 2);
-    var folders = {};
+    var folders = {}; // key: groupKey -> { cat: ..., name: ..., files: [] }
 
     if (hasDirectoryPath) {
-        // Desktop / Folder structure with subfolders
         for (var i = 0; i < validFiles.length; i++) {
             var file = validFiles[i];
             var parts = (file.webkitRelativePath || '').split('/').filter(Boolean);
-            var folderName = parts.length >= 2 ? parts[parts.length - 2].trim() : parts[0].replace(/\.[^/.]+$/, '').trim();
-            if (!folderName) continue;
-            if (!folders[folderName]) folders[folderName] = [];
-            folders[folderName].push(file);
+            var pName = "";
+            var pCat = selectedCat;
+
+            if (parts.length >= 3) {
+                // Support 3-level or deeper: [Master/Section, Category, Product, image.jpg]
+                if (!pCat) {
+                    pCat = parts[parts.length - 3].trim();
+                }
+                pName = parts[parts.length - 2].trim();
+            } else if (parts.length === 2) {
+                // 2-level: [Product, image.jpg]
+                pName = parts[0].trim();
+            } else if (parts.length === 1) {
+                pName = parts[0].replace(/\.[^/.]+$/, '').trim();
+            }
+
+            if (!pName) continue;
+            if (!pCat) {
+                alert("Please select or enter a Category before uploading product folders.");
+                if (statusEl) statusEl.style.display = 'none';
+                var inputEl = document.getElementById('bulkFolderInput');
+                if (inputEl) inputEl.value = '';
+                var mInput = document.getElementById('bulkMobileFileInput');
+                if (mInput) mInput.value = '';
+                return;
+            }
+
+            var groupKey = pCat + "___" + pName;
+            if (!folders[groupKey]) {
+                folders[groupKey] = { cat: pCat, name: pName, files: [] };
+            }
+            folders[groupKey].files.push(file);
         }
     } else {
         // Mobile selection or flat files: all belong to one product
+        var pCat = selectedCat;
+        if (!pCat) {
+            alert("Please select or enter a Category before choosing images.");
+            if (statusEl) statusEl.style.display = 'none';
+            var inputEl = document.getElementById('bulkFolderInput');
+            if (inputEl) inputEl.value = '';
+            var mInput = document.getElementById('bulkMobileFileInput');
+            if (mInput) mInput.value = '';
+            return;
+        }
+
         var defaultName = document.getElementById('addProdName') ? document.getElementById('addProdName').value.trim() : '';
         if (!defaultName) {
-            defaultName = prompt(`You selected ${validFiles.length} image(s) on mobile.\n\nPlease enter the Product Name for these images:`, "");
+            defaultName = prompt(`You selected ${validFiles.length} image(s).\n\nPlease enter the Product Name for these images:`, "");
             if (!defaultName || !defaultName.trim()) {
                 if (statusEl) statusEl.style.display = 'none';
                 var inputEl = document.getElementById('bulkFolderInput');
@@ -9233,14 +9384,15 @@ window.handleBulkFolderSelection = async function (files) {
             defaultName = defaultName.trim();
             if (document.getElementById('addProdName')) document.getElementById('addProdName').value = defaultName;
         }
-        folders[defaultName] = validFiles;
+        var groupKey = pCat + "___" + defaultName;
+        folders[groupKey] = { cat: pCat, name: defaultName, files: validFiles };
     }
 
-    var folderNames = Object.keys(folders);
+    var groupKeys = Object.keys(folders);
     var totalImages = 0;
-    folderNames.forEach(fn => totalImages += folders[fn].length);
+    groupKeys.forEach(k => totalImages += folders[k].files.length);
 
-    if (folderNames.length === 0) {
+    if (groupKeys.length === 0) {
         if (statusEl) statusEl.innerText = "No valid product folders with image files found.";
         alert("No valid product folders with image files found.");
         var inputEl = document.getElementById('bulkFolderInput');
@@ -9250,7 +9402,7 @@ window.handleBulkFolderSelection = async function (files) {
         return;
     }
 
-    var confirmMsg = `Found ${folderNames.length} product(s) with ${totalImages} total images for Section [${secVal.toUpperCase()}], Category [${cat}].\n\nStart upload & creation?`;
+    var confirmMsg = `Found ${groupKeys.length} product(s) with ${totalImages} total images for Section [${secVal.toUpperCase()}].\n\nStart upload & creation?`;
     if (!confirm(confirmMsg)) {
         if (statusEl) statusEl.style.display = 'none';
         var inputEl = document.getElementById('bulkFolderInput');
@@ -9260,36 +9412,131 @@ window.handleBulkFolderSelection = async function (files) {
         return;
     }
 
+    function getCleanDesignId(fileName, index) {
+        var raw = String(fileName || '').replace(/\.[^/.]+$/, '').trim();
+        var isCameraOrWA = /^(IMG|DSC|PXL|WA|WhatsApp|Screenshot)[_\-\s0-9]/i.test(raw) || /^IMG$/i.test(raw);
+        var isClean = raw.length > 0 && raw.length <= 20 && !isCameraOrWA && !/[\/\\?%*:|"<>#]/.test(raw);
+        if (isClean) {
+            return raw;
+        }
+        return String(index + 1).padStart(2, '0');
+    }
+
     var createdProductsCount = 0;
     var uploadedImagesCount = 0;
 
-    for (var fIdx = 0; fIdx < folderNames.length; fIdx++) {
-        var productName = folderNames[fIdx];
-        var imgFiles = folders[productName];
+    for (var fIdx = 0; fIdx < groupKeys.length; fIdx++) {
+        var gKey = groupKeys[fIdx];
+        var group = folders[gKey];
+        var productName = group.name;
+        var productCat = group.cat;
+        var imgFiles = group.files;
 
         if (statusEl) {
-            statusEl.innerText = `Processing product ${fIdx + 1} of ${folderNames.length}: [${productName}]...`;
+            statusEl.innerText = `Processing product ${fIdx + 1} of ${groupKeys.length}: [${productName}]...`;
         }
 
-        // a. Check if product already exists
-        var existingProd = (window.allProducts || []).find(p => 
-            ((p.section || 'sarees').toLowerCase() === secVal.toLowerCase()) && 
-            (p.name && p.name.trim().toLowerCase() === productName.toLowerCase())
+        // Natural sort images
+        imgFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+        // Extract clean design IDs
+        var fileDesignIds = [];
+        var usedDids = {};
+        imgFiles.forEach((file, idx) => {
+            var did = getCleanDesignId(file.name, idx);
+            if (usedDids[did]) {
+                var seq = String(idx + 1).padStart(2, '0');
+                if (usedDids[seq]) seq = seq + "_" + (idx + 1);
+                did = seq;
+            }
+            usedDids[did] = true;
+            fileDesignIds.push(did);
+        });
+
+        var coverDesignId = fileDesignIds[0] || "01";
+        var readyStr = fileDesignIds.join(",");
+        var nowIso = new Date().toISOString();
+
+        // Check if product already exists
+        var existingProd = (window.allProducts || []).find(p =>
+            ((p.section || 'sarees').toLowerCase() === secVal.toLowerCase()) &&
+            p.cat && p.cat.trim().toLowerCase() === productCat.toLowerCase() &&
+            p.name && p.name.trim().toLowerCase() === productName.toLowerCase()
         );
+        if (!existingProd) {
+            existingProd = (window.allProducts || []).find(p =>
+                ((p.section || 'sarees').toLowerCase() === secVal.toLowerCase()) &&
+                p.name && p.name.trim().toLowerCase() === productName.toLowerCase()
+            );
+        }
 
         var docId = "";
+        var gridUrl = "";
+        var zoomUrl = "";
+
         if (existingProd) {
             docId = existingProd.docId || existingProd.id;
+            gridUrl = existingProd.gridUrl || ("Grid/" + productCat + "/" + productName + "/");
+            zoomUrl = (existingProd.zoomUrl && existingProd.zoomUrl !== "None") ? existingProd.zoomUrl : ("Zoom/" + productCat + "/" + productName + "/");
+
+            var stockMap = Object.assign({}, existingProd.stock || {});
+            fileDesignIds.forEach(did => {
+                stockMap[did] = 999;
+            });
+            if (stockMap.DIRECT === undefined) stockMap.DIRECT = 999;
+            if (stockMap.FULLY_PACKED === undefined) stockMap.FULLY_PACKED = 0;
+
+            var stockFields = {};
+            Object.keys(stockMap).forEach(k => {
+                stockFields[k] = { integerValue: String(stockMap[k]) };
+            });
+
+            var existingReadyList = existingProd.ready ? String(existingProd.ready).split(',').map(s => s.trim()).filter(Boolean) : [];
+            var mergedReady = Array.from(new Set(existingReadyList.concat(fileDesignIds))).join(',');
+            var finalCover = (existingProd.coverDesignId && existingProd.coverDesignId !== 'None') ? existingProd.coverDesignId : coverDesignId;
+
+            try {
+                var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + docId + "?updateMask.fieldPaths=stock&updateMask.fieldPaths=coverDesignId&updateMask.fieldPaths=ready&updateMask.fieldPaths=updateTime";
+                await window.fetchWithRetry(patchUrl, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fields: {
+                            stock: { mapValue: { fields: stockFields } },
+                            coverDesignId: { stringValue: finalCover },
+                            ready: { stringValue: mergedReady },
+                            updateTime: { timestampValue: nowIso }
+                        }
+                    })
+                }, 2);
+
+                existingProd.stock = stockMap;
+                existingProd.coverDesignId = finalCover;
+                existingProd.ready = mergedReady;
+                existingProd.updateTime = nowIso;
+            } catch (patchErr) {
+                console.error("Failed to patch existing product stock:", patchErr);
+            }
         } else {
-            // b. Create new product
-            var sku = window.generateSkuForProduct ? window.generateSkuForProduct(productName, cat, secVal) : "";
-            var gridUrl = "Grid/" + cat + "/" + productName + "/";
-            var zoomUrl = "Zoom/" + cat + "/" + productName + "/";
+            // Create new product
+            var sku = window.generateSkuForProduct ? window.generateSkuForProduct(productName, productCat, secVal) : "";
+            gridUrl = "Grid/" + productCat + "/" + productName + "/";
+            zoomUrl = "Zoom/" + productCat + "/" + productName + "/";
+
+            var stockMap = { DIRECT: 999, FULLY_PACKED: 0 };
+            var stockFields = {
+                DIRECT: { integerValue: "999" },
+                FULLY_PACKED: { integerValue: "0" }
+            };
+            fileDesignIds.forEach(did => {
+                stockMap[did] = 999;
+                stockFields[did] = { integerValue: "999" };
+            });
 
             var payload = {
                 fields: {
                     name: { stringValue: productName },
-                    cat: { stringValue: cat },
+                    cat: { stringValue: productCat },
                     section: { stringValue: secVal },
                     price: { doubleValue: 0 },
                     packing: { stringValue: "1" },
@@ -9304,7 +9551,10 @@ window.handleBulkFolderSelection = async function (files) {
                     sku: { stringValue: sku },
                     gridUrl: { stringValue: gridUrl },
                     zoomUrl: { stringValue: zoomUrl },
-                    stock: { mapValue: { fields: { DIRECT: { integerValue: "999" } } } }
+                    coverDesignId: { stringValue: coverDesignId },
+                    ready: { stringValue: readyStr },
+                    updateTime: { timestampValue: nowIso },
+                    stock: { mapValue: { fields: stockFields } }
                 }
             };
 
@@ -9333,7 +9583,7 @@ window.handleBulkFolderSelection = async function (files) {
                                 action: 'createProduct',
                                 docId: docId,
                                 section: secVal,
-                                category: cat,
+                                category: productCat,
                                 name: productName,
                                 price: 0,
                                 packing: "1",
@@ -9359,7 +9609,7 @@ window.handleBulkFolderSelection = async function (files) {
                     docId: docId,
                     id: localPid,
                     name: productName,
-                    cat: cat,
+                    cat: productCat,
                     section: secVal,
                     price: 0,
                     mrp: 0,
@@ -9375,9 +9625,11 @@ window.handleBulkFolderSelection = async function (files) {
                     sku: sku,
                     gridUrl: gridUrl,
                     zoomUrl: zoomUrl,
-                    stock: { DIRECT: 999 },
+                    coverDesignId: coverDesignId,
+                    ready: readyStr,
+                    stock: stockMap,
                     totalStock: 999,
-                    updateTime: new Date().toISOString()
+                    updateTime: nowIso
                 };
                 window.allProducts.push(newP);
                 createdProductsCount++;
@@ -9387,29 +9639,40 @@ window.handleBulkFolderSelection = async function (files) {
             }
         }
 
-        // c. Sort images naturally and upload with concurrency of 2
-        imgFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        // Clear folder cache so newly uploaded designs display immediately
+        if (window.clearProductFolderCache) {
+            window.clearProductFolderCache(gridUrl);
+        }
 
+        // Upload images
         var uploadTasks = imgFiles.map((imgFile, imgIdx) => {
             return async function () {
-                var designId = imgFile.name.replace(/\.[^/.]+$/, '').trim() || String(imgIdx + 1).padStart(2, '0');
-                var safeName = encodeURIComponent(productName);
-                if (isBypass) safeName += "___BYPASS";
-                var filename = `${docId}___${designId}___${safeName}___${Date.now()}.jpg`;
-                var uploadUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F" + encodeURIComponent(filename);
-
+                var designId = fileDesignIds[imgIdx];
+                
+                // 1. Direct immediate Grid & Zoom WebP generation & upload
                 try {
-                    var upRes = await window.fetchWithRetry(uploadUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'image/jpeg' },
-                        body: imgFile
-                    }, 2);
-                    if (upRes.ok) {
-                        uploadedImagesCount++;
-                    }
-                } catch (upErr) {
-                    console.error("Failed to upload image:", filename, upErr);
+                    await window.convertAndUploadGridAndZoom(imgFile, gridUrl, zoomUrl, designId);
+                } catch (gzErr) {
+                    console.error("Direct Grid/Zoom upload failed:", productName, designId, gzErr);
                 }
+
+                // 2. If logo processing is not bypassed, also upload raw JPEG to Uploads/Raw/
+                if (!isBypass) {
+                    var safeName = encodeURIComponent(productName);
+                    var rawFilename = `${docId}___${designId}___${safeName}___${Date.now()}.jpg`;
+                    var rawUploadUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?name=Uploads%2FRaw%2F" + encodeURIComponent(rawFilename);
+
+                    try {
+                        await window.fetchWithRetry(rawUploadUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'image/jpeg' },
+                            body: imgFile
+                        }, 2);
+                    } catch (rawErr) {
+                        console.error("Failed to upload raw image:", rawFilename, rawErr);
+                    }
+                }
+                uploadedImagesCount++;
             };
         });
 
@@ -9421,7 +9684,7 @@ window.handleBulkFolderSelection = async function (files) {
                 while (taskCursor < uploadTasks.length) {
                     var curr = taskCursor++;
                     if (statusEl) {
-                        statusEl.innerText = `Product ${fIdx + 1}/${folderNames.length} [${productName}]: Uploading image ${curr + 1}/${uploadTasks.length}...`;
+                        statusEl.innerText = `Product ${fIdx + 1}/${groupKeys.length} [${productName}]: Uploading image ${curr + 1}/${uploadTasks.length}...`;
                     }
                     await uploadTasks[curr]();
                 }
@@ -9442,9 +9705,9 @@ window.handleBulkFolderSelection = async function (files) {
     if (mInput) mInput.value = '';
 
     if (statusEl) {
-        statusEl.innerText = `✅ Bulk import complete! ${folderNames.length} products processed, ${uploadedImagesCount} images uploaded.`;
+        statusEl.innerText = `✅ Bulk import complete! ${groupKeys.length} products processed, ${uploadedImagesCount} images uploaded.`;
     }
-    alert(`Bulk Import Finished!\n\n• ${folderNames.length} product(s) processed (${createdProductsCount} newly created)\n• ${uploadedImagesCount} images uploaded to processing queue`);
+    alert(`Bulk Import Finished!\n\n• ${groupKeys.length} product(s) processed (${createdProductsCount} newly created)\n• ${uploadedImagesCount} images converted & saved directly to Grid/Zoom`);
 };
 
 window.openPcFolderPicker = function () {
@@ -9554,19 +9817,33 @@ window.scanStorageCategoryForProducts = async function () {
             );
         });
 
-        if (newNames.length === 0) {
-            if (statusEl) statusEl.innerText = `All ${discoveredNames.length} folders in Cloud Storage already exist in section [${secVal.toUpperCase()}].`;
-            alert(`All ${discoveredNames.length} product folders in Cloud Storage already exist in section [${secVal.toUpperCase()}]. No new products needed.`);
+        // Also check if any existing products in this category need their stock designs restored
+        var existingNeedingFix = discoveredNames.filter(name => {
+            var ex = window.allProducts.find(x => 
+                (x.section || 'sarees').toLowerCase() === secVal.toLowerCase() &&
+                x.name && x.name.trim().toLowerCase() === name.toLowerCase()
+            );
+            if (!ex) return false;
+            var keys = ex.stock ? Object.keys(ex.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')) : [];
+            return keys.length === 0;
+        });
+
+        if (newNames.length === 0 && existingNeedingFix.length === 0) {
+            if (statusEl) statusEl.innerText = `All ${discoveredNames.length} folders in Cloud Storage are already up-to-date in section [${secVal.toUpperCase()}].`;
+            alert(`All ${discoveredNames.length} product folders in Cloud Storage already exist and have active stock in section [${secVal.toUpperCase()}].`);
             return;
         }
 
-        var confirmMsg = `Found ${newNames.length} new product folders in Cloud Storage under Grid/${cat}/.\n\nCreate ${newNames.length} products in Section [${secVal.toUpperCase()}], Category [${cat}]?`;
+        var confirmMsg = `Found ${discoveredNames.length} product folders in Cloud Storage under Grid/${cat}/.\n\n• New Products to Create: ${newNames.length}\n• Existing Products to Sync Stock: ${existingNeedingFix.length}\n\nProceed?`;
         if (!confirm(confirmMsg)) {
             if (statusEl) statusEl.style.display = 'none';
             return;
         }
 
         var createdCount = 0;
+        var updatedCount = 0;
+
+        // Process new products
         for (var j = 0; j < newNames.length; j++) {
             var prodName = newNames[j];
             if (statusEl) statusEl.innerText = `Creating product ${j + 1} of ${newNames.length}: ${prodName}...`;
@@ -9574,6 +9851,42 @@ window.scanStorageCategoryForProducts = async function () {
             var sku = window.generateSkuForProduct ? window.generateSkuForProduct(prodName, cat, secVal) : "";
             var gridUrl = "Grid/" + cat + "/" + prodName + "/";
             var zoomUrl = "Zoom/" + cat + "/" + prodName + "/";
+
+            // Query storage folder for actual designs
+            var prodFolderPrefix = "Grid/" + encodeURIComponent(cat) + "/" + encodeURIComponent(prodName) + "/";
+            var prodListUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?prefix=" + prodFolderPrefix + "&delimiter=/";
+            var designIds = [];
+            try {
+                var pRes = await window.fetchWithRetry(prodListUrl, {}, 2);
+                if (pRes && pRes.ok) {
+                    var pData = await pRes.json();
+                    var pItems = pData.items || [];
+                    for (var k = 0; k < pItems.length; k++) {
+                        var fPath = pItems[k].name || '';
+                        var fName = fPath.substring(fPath.lastIndexOf('/') + 1);
+                        if (/\.(jpe?g|png|webp)$/i.test(fName)) {
+                            var did = fName.replace(/\.[^/.]+$/, '').trim();
+                            if (did && !designIds.includes(did)) designIds.push(did);
+                        }
+                    }
+                }
+            } catch (pErr) { }
+
+            if (designIds.length === 0) designIds = ["01"];
+
+            var coverDesignId = designIds[0] || "01";
+            var readyStr = designIds.join(",");
+            var nowIso = new Date().toISOString();
+
+            var stockMap = { DIRECT: 999, FULLY_PACKED: 0 };
+            var stockFields = {
+                DIRECT: { integerValue: "999" },
+                FULLY_PACKED: { integerValue: "0" }
+            };
+            designIds.forEach(function (did) {
+                stockMap[did] = 999;
+                stockFields[did] = { integerValue: "999" };
+            });
 
             var payload = {
                 fields: {
@@ -9593,7 +9906,10 @@ window.scanStorageCategoryForProducts = async function () {
                     sku: { stringValue: sku },
                     gridUrl: { stringValue: gridUrl },
                     zoomUrl: { stringValue: zoomUrl },
-                    stock: { mapValue: { fields: { DIRECT: { integerValue: "999" } } } }
+                    coverDesignId: { stringValue: coverDesignId },
+                    ready: { stringValue: readyStr },
+                    updateTime: { timestampValue: nowIso },
+                    stock: { mapValue: { fields: stockFields } }
                 }
             };
 
@@ -9656,20 +9972,104 @@ window.scanStorageCategoryForProducts = async function () {
                 sku: sku,
                 gridUrl: gridUrl,
                 zoomUrl: zoomUrl,
-                stock: { DIRECT: 999 },
+                coverDesignId: coverDesignId,
+                ready: readyStr,
+                stock: stockMap,
                 totalStock: 999,
-                updateTime: new Date().toISOString()
+                updateTime: nowIso
             };
             window.allProducts.push(newP);
             createdCount++;
+
+            if (window.clearProductFolderCache) {
+                window.clearProductFolderCache(gridUrl);
+            }
+        }
+
+        // Process existing products that need stock repair
+        for (var eIdx = 0; eIdx < existingNeedingFix.length; eIdx++) {
+            var fixName = existingNeedingFix[eIdx];
+            var exProd = window.allProducts.find(x => 
+                (x.section || 'sarees').toLowerCase() === secVal.toLowerCase() &&
+                x.name && x.name.trim().toLowerCase() === fixName.toLowerCase()
+            );
+            if (!exProd) continue;
+
+            if (statusEl) statusEl.innerText = `Syncing stock for existing product ${eIdx + 1} of ${existingNeedingFix.length}: ${fixName}...`;
+
+            var fixPrefix = "Grid/" + encodeURIComponent(cat) + "/" + encodeURIComponent(fixName) + "/";
+            var fixListUrl = "https://firebasestorage.googleapis.com/v0/b/durga-sarees.firebasestorage.app/o?prefix=" + fixPrefix + "&delimiter=/";
+            var exDesignIds = [];
+            try {
+                var pRes = await window.fetchWithRetry(fixListUrl, {}, 2);
+                if (pRes && pRes.ok) {
+                    var pData = await pRes.json();
+                    var pItems = pData.items || [];
+                    for (var k = 0; k < pItems.length; k++) {
+                        var fPath = pItems[k].name || '';
+                        var fName = fPath.substring(fPath.lastIndexOf('/') + 1);
+                        if (/\.(jpe?g|png|webp)$/i.test(fName)) {
+                            var did = fName.replace(/\.[^/.]+$/, '').trim();
+                            if (did && !exDesignIds.includes(did)) exDesignIds.push(did);
+                        }
+                    }
+                }
+            } catch (pErr) { }
+
+            if (exDesignIds.length === 0) exDesignIds = ["01"];
+
+            var fixCover = exDesignIds[0] || "01";
+            var fixReady = exDesignIds.join(",");
+            var fixIso = new Date().toISOString();
+
+            var exStock = Object.assign({}, exProd.stock || {});
+            var exStockFields = {};
+            exDesignIds.forEach(function (did) {
+                exStock[did] = 999;
+            });
+            if (exStock.DIRECT === undefined) exStock.DIRECT = 999;
+            if (exStock.FULLY_PACKED === undefined) exStock.FULLY_PACKED = 0;
+
+            Object.keys(exStock).forEach(function (k) {
+                exStockFields[k] = { integerValue: String(exStock[k]) };
+            });
+
+            var patchDocId = exProd.docId || exProd.id;
+            var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + patchDocId + "?updateMask.fieldPaths=stock&updateMask.fieldPaths=coverDesignId&updateMask.fieldPaths=ready&updateMask.fieldPaths=updateTime";
+            try {
+                await window.fetchWithRetry(patchUrl, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fields: {
+                            stock: { mapValue: { fields: exStockFields } },
+                            coverDesignId: { stringValue: (exProd.coverDesignId && exProd.coverDesignId !== 'None') ? exProd.coverDesignId : fixCover },
+                            ready: { stringValue: fixReady },
+                            updateTime: { timestampValue: fixIso }
+                        }
+                    })
+                }, 2);
+
+                exProd.stock = exStock;
+                if (!exProd.coverDesignId || exProd.coverDesignId === 'None') exProd.coverDesignId = fixCover;
+                exProd.ready = fixReady;
+                exProd.updateTime = fixIso;
+                updatedCount++;
+            } catch (patchErr) {
+                console.error("Failed to patch existing product stock:", fixName, patchErr);
+            }
+
+            if (window.clearProductFolderCache) {
+                window.clearProductFolderCache(exProd.gridUrl || ("Grid/" + cat + "/" + fixName + "/"));
+            }
         }
 
         try { localStorage.setItem("dsOfflineProducts", JSON.stringify(window.allProducts)); } catch (e) { }
         window.displayList = [...window.allProducts];
         if (typeof applyFilter === 'function') applyFilter();
 
-        if (statusEl) statusEl.innerText = `✅ Created ${createdCount} products from Cloud Storage!`;
-        alert(`Successfully scanned Cloud Storage and created ${createdCount} products!`);
+        if (statusEl) statusEl.innerText = `✅ Completed Cloud Scan: ${createdCount} created, ${updatedCount} synced!`;
+        alert(`Cloud Storage Scan Complete!\n\n• ${createdCount} new product(s) created\n• ${updatedCount} existing product(s) synced with active design stock`);
     } catch (err) {
         if (statusEl) statusEl.innerText = `Scan failed: ${err.message}`;
         alert("Cloud storage scan failed: " + err.message);

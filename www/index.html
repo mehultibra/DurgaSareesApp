@@ -710,33 +710,6 @@
       style="background: #fff; border-radius: 16px 16px 0 0; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); text-align: left;">
       <h3 style="margin-top: 0; margin-bottom: 16px; font-size: 16px; color: var(--text-main);">Add New Product</h3>
       
-      <!-- 📂 Admin Bulk Folder Importer -->
-      <div style="background: #fdf2f8; border: 1.5px dashed #f472b6; border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-weight: bold; color: #be185d; font-size: 13px;">📂 Bulk Import / Image Upload</span>
-          <label style="font-size: 11px; color: #374151; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
-            <input type="checkbox" id="bulkBypassCloudinary"> Already Edited (Skip Logo)
-          </label>
-        </div>
-        <div style="font-size: 11px; color: #6b7280; margin-bottom: 10px; line-height: 1.4;">
-          Upload product folders from PC, select multiple images from mobile gallery, or auto-scan cloud folders.
-        </div>
-        <input type="file" id="bulkFolderInput" webkitdirectory directory multiple style="display:none" onchange="window.handleBulkFolderSelection(this.files)">
-        <input type="file" id="bulkMobileFileInput" multiple accept="image/*" style="display:none" onchange="window.handleBulkFolderSelection(this.files)">
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button type="button" onclick="window.pickMobileImages()" style="flex: 1; min-width: 130px; background: #be185d; color: #fff; border: none; padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-            <i class="fas fa-mobile-alt"></i> Select Images (Mobile)
-          </button>
-          <button type="button" onclick="window.openPcFolderPicker()" style="flex: 1; min-width: 130px; background: #7c3aed; color: #fff; border: none; padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-            <i class="fas fa-folder-open"></i> Folders (PC / Laptop)
-          </button>
-          <button type="button" onclick="window.scanStorageCategoryForProducts()" style="flex: 1; min-width: 130px; background: #0284c7; color: #fff; border: none; padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-            <i class="fas fa-cloud-download-alt"></i> Auto-Scan Cloud
-          </button>
-        </div>
-        <div id="bulkImportStatus" style="display:none; font-size:12px; margin-top:8px; padding: 6px 10px; background: #ffffff; border-radius: 4px; border: 1px solid #fbcfe8; color: #9d174d; font-weight: 500;"></div>
-      </div>
-
       <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px; max-height: 60vh; overflow-y: auto; padding-right: 5px;">
         <div>
           <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Section / Department</label>
@@ -747,6 +720,34 @@
           <select id="addProdCat" onchange="window.onAddProdCatChange(); if(window.autoGenerateSku) window.autoGenerateSku();" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"></select>
           <input type="text" id="addProdNewCatInput" placeholder="Type new category name..." style="display:none; width: 100%; padding: 8px; border: 1.5px solid var(--myntra-pink); border-radius: 6px; margin-top: 6px;" oninput="if(window.autoGenerateSku) window.autoGenerateSku();">
         </div>
+
+        <!-- 📂 Admin Bulk Folder Importer -->
+        <div style="background: #fdf2f8; border: 1.5px dashed #f472b6; border-radius: 8px; padding: 12px; margin-top: 4px; margin-bottom: 4px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-weight: bold; color: #be185d; font-size: 13px;">📂 Bulk Import / Image Upload</span>
+            <label style="font-size: 11px; color: #374151; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+              <input type="checkbox" id="bulkBypassCloudinary"> Already Edited (Skip Logo)
+            </label>
+          </div>
+          <div style="font-size: 11px; color: #6b7280; margin-bottom: 10px; line-height: 1.4;">
+            Upload product folders from PC, select multiple images from mobile gallery, or auto-scan cloud folders.
+          </div>
+          <input type="file" id="bulkFolderInput" webkitdirectory directory multiple style="display:none" onchange="window.handleBulkFolderSelection(this.files)">
+          <input type="file" id="bulkMobileFileInput" multiple accept="image/*" style="display:none" onchange="window.handleBulkFolderSelection(this.files)">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" onclick="window.pickMobileImages()" style="flex: 1; min-width: 130px; background: #be185d; color: #fff; border: none; padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <i class="fas fa-mobile-alt"></i> Select Images (Mobile)
+            </button>
+            <button type="button" onclick="window.openPcFolderPicker()" style="flex: 1; min-width: 130px; background: #7c3aed; color: #fff; border: none; padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <i class="fas fa-folder-open"></i> Folders (PC / Laptop)
+            </button>
+            <button type="button" onclick="window.scanStorageCategoryForProducts()" style="flex: 1; min-width: 130px; background: #0284c7; color: #fff; border: none; padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <i class="fas fa-cloud-download-alt"></i> Auto-Scan Cloud
+            </button>
+          </div>
+          <div id="bulkImportStatus" style="display:none; font-size:12px; margin-top:8px; padding: 6px 10px; background: #ffffff; border-radius: 4px; border: 1px solid #fbcfe8; color: #9d174d; font-weight: 500;"></div>
+        </div>
+
         <div>
           <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Clone From (Optional)</label>
           <select id="addProdClone" onchange="window.onAddProdCloneChange()" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;">
