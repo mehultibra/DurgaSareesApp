@@ -9171,9 +9171,11 @@ window.handleBulkFolderSelection = async function (files) {
     var secVal = secSelect ? secSelect.value : (window.activeSection || 'sarees');
 
     if (!cat) {
-        alert("Please select or enter a Category before uploading product folders.");
+        alert("Please select or enter a Category before selecting images or product folders.");
         var inputEl = document.getElementById('bulkFolderInput');
         if (inputEl) inputEl.value = '';
+        var mInput = document.getElementById('bulkMobileFileInput');
+        if (mInput) mInput.value = '';
         return;
     }
 
@@ -9181,20 +9183,57 @@ window.handleBulkFolderSelection = async function (files) {
     var statusEl = document.getElementById('bulkImportStatus');
     if (statusEl) {
         statusEl.style.display = 'block';
-        statusEl.innerText = "Analyzing selected product folders...";
+        statusEl.innerText = "Analyzing selected files...";
     }
 
-    // Filter valid images and group by immediate parent folder
-    var folders = {};
+    // Filter valid images
+    var validFiles = [];
     for (var i = 0; i < files.length; i++) {
         var file = files[i];
-        if (!/\.(jpe?g|png|webp)$/i.test(file.name)) continue;
-        var relPath = file.webkitRelativePath || file.name;
-        var parts = relPath.split('/').filter(Boolean);
-        var folderName = parts.length >= 2 ? parts[parts.length - 2].trim() : parts[0].replace(/\.[^/.]+$/, '').trim();
-        if (!folderName) continue;
-        if (!folders[folderName]) folders[folderName] = [];
-        folders[folderName].push(file);
+        if (/\.(jpe?g|png|webp)$/i.test(file.name)) validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) {
+        if (statusEl) statusEl.innerText = "No valid image files (.jpg, .jpeg, .png, .webp) found.";
+        alert("No valid image files (.jpg, .jpeg, .png, .webp) found.");
+        var inputEl = document.getElementById('bulkFolderInput');
+        if (inputEl) inputEl.value = '';
+        var mInput = document.getElementById('bulkMobileFileInput');
+        if (mInput) mInput.value = '';
+        return;
+    }
+
+    // Check if files have parent directory paths (PC folder upload)
+    var hasDirectoryPath = validFiles.some(f => f.webkitRelativePath && f.webkitRelativePath.split('/').filter(Boolean).length >= 2);
+    var folders = {};
+
+    if (hasDirectoryPath) {
+        // Desktop / Folder structure with subfolders
+        for (var i = 0; i < validFiles.length; i++) {
+            var file = validFiles[i];
+            var parts = (file.webkitRelativePath || '').split('/').filter(Boolean);
+            var folderName = parts.length >= 2 ? parts[parts.length - 2].trim() : parts[0].replace(/\.[^/.]+$/, '').trim();
+            if (!folderName) continue;
+            if (!folders[folderName]) folders[folderName] = [];
+            folders[folderName].push(file);
+        }
+    } else {
+        // Mobile selection or flat files: all belong to one product
+        var defaultName = document.getElementById('addProdName') ? document.getElementById('addProdName').value.trim() : '';
+        if (!defaultName) {
+            defaultName = prompt(`You selected ${validFiles.length} image(s) on mobile.\n\nPlease enter the Product Name for these images:`, "");
+            if (!defaultName || !defaultName.trim()) {
+                if (statusEl) statusEl.style.display = 'none';
+                var inputEl = document.getElementById('bulkFolderInput');
+                if (inputEl) inputEl.value = '';
+                var mInput = document.getElementById('bulkMobileFileInput');
+                if (mInput) mInput.value = '';
+                return;
+            }
+            defaultName = defaultName.trim();
+            if (document.getElementById('addProdName')) document.getElementById('addProdName').value = defaultName;
+        }
+        folders[defaultName] = validFiles;
     }
 
     var folderNames = Object.keys(folders);
@@ -9202,18 +9241,22 @@ window.handleBulkFolderSelection = async function (files) {
     folderNames.forEach(fn => totalImages += folders[fn].length);
 
     if (folderNames.length === 0) {
-        if (statusEl) statusEl.innerText = "No valid product folders with image files (.jpg, .jpeg, .png, .webp) found.";
-        alert("No valid product folders with image files (.jpg, .jpeg, .png, .webp) found.");
+        if (statusEl) statusEl.innerText = "No valid product folders with image files found.";
+        alert("No valid product folders with image files found.");
         var inputEl = document.getElementById('bulkFolderInput');
         if (inputEl) inputEl.value = '';
+        var mInput = document.getElementById('bulkMobileFileInput');
+        if (mInput) mInput.value = '';
         return;
     }
 
-    var confirmMsg = `Found ${folderNames.length} product folders with ${totalImages} total images for Section [${secVal.toUpperCase()}], Category [${cat}].\n\nStart bulk creation?`;
+    var confirmMsg = `Found ${folderNames.length} product(s) with ${totalImages} total images for Section [${secVal.toUpperCase()}], Category [${cat}].\n\nStart upload & creation?`;
     if (!confirm(confirmMsg)) {
         if (statusEl) statusEl.style.display = 'none';
         var inputEl = document.getElementById('bulkFolderInput');
         if (inputEl) inputEl.value = '';
+        var mInput = document.getElementById('bulkMobileFileInput');
+        if (mInput) mInput.value = '';
         return;
     }
 
@@ -9395,11 +9438,71 @@ window.handleBulkFolderSelection = async function (files) {
 
     var inputEl = document.getElementById('bulkFolderInput');
     if (inputEl) inputEl.value = '';
+    var mInput = document.getElementById('bulkMobileFileInput');
+    if (mInput) mInput.value = '';
 
     if (statusEl) {
         statusEl.innerText = `✅ Bulk import complete! ${folderNames.length} products processed, ${uploadedImagesCount} images uploaded.`;
     }
-    alert(`Bulk Import Finished!\n\n• ${folderNames.length} product folders processed (${createdProductsCount} newly created)\n• ${uploadedImagesCount} images uploaded to processing queue`);
+    alert(`Bulk Import Finished!\n\n• ${folderNames.length} product(s) processed (${createdProductsCount} newly created)\n• ${uploadedImagesCount} images uploaded to processing queue`);
+};
+
+window.openPcFolderPicker = function () {
+    var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+        alert("ℹ️ Note for Mobile Phones:\n\nAndroid & iOS do not support selecting folders.\n\nTo add products from mobile, please tap 'Select Images (Mobile)' to pick photos directly from your Gallery, or use 'Auto-Scan Cloud'!");
+    }
+    var input = document.getElementById('bulkFolderInput');
+    if (input) input.click();
+};
+
+window.pickMobileImages = async function () {
+    var catSelect = document.getElementById('addProdCat');
+    var catSelectVal = catSelect ? catSelect.value.trim() : '';
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    var cat = (catSelectVal === '__NEW__' && newCatInput) ? newCatInput.value.trim() : catSelectVal;
+    if (!cat) return alert("Please select or enter a Category first.");
+
+    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.Camera) {
+        try {
+            var res = await window.Capacitor.Plugins.Camera.pickImages({
+                quality: 100,
+                limit: 0
+            });
+            if (res && res.photos && res.photos.length > 0) {
+                var files = [];
+                for (var i = 0; i < res.photos.length; i++) {
+                    var p = res.photos[i];
+                    var uri = p.path || p.webPath;
+                    if (window.Capacitor.convertFileSrc) uri = window.Capacitor.convertFileSrc(uri);
+                    try {
+                        var fRes = await fetch(uri);
+                        var blob = await fRes.blob();
+                        var fileName = (p.path ? p.path.split('/').pop() : '') || ("photo_" + (i + 1) + ".jpg");
+                        if (!/\.[^/.]+$/.test(fileName)) fileName += ".jpg";
+                        var fObj = null;
+                        try {
+                            fObj = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+                        } catch (e) {
+                            blob.name = fileName;
+                            fObj = blob;
+                        }
+                        files.push(fObj);
+                    } catch (e) {
+                        console.error("Error reading photo:", e);
+                    }
+                }
+                if (files.length > 0) {
+                    window.handleBulkFolderSelection(files);
+                }
+                return;
+            }
+        } catch (e) {
+            console.warn("Native camera pick failed, using file input", e);
+        }
+    }
+    var mInput = document.getElementById('bulkMobileFileInput');
+    if (mInput) mInput.click();
 };
 
 window.scanStorageCategoryForProducts = async function () {
