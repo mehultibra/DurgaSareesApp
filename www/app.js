@@ -6816,15 +6816,14 @@ window.triggerAdminCamera = async function (docId, pid, productName = "Product P
 
         if (previewImg) previewImg.src = photo.webPath;
 
+        window.tempCamIsBulk = false;
+        var detailTitle = document.getElementById('detailTitle');
         var p = (window.allProducts || []).find(x => x.id === pid || x.docId === docId) || window.curProduct;
-        var pSec = (p && p.section) || window.activeSection || 'Sarees';
-        var pCat = (p && p.cat) || '';
-        var pName = (p && p.name) || productName;
-        var breadcrumb = window.formatProductBreadcrumb(pSec, pCat, pName);
+        var pName = (detailTitle && detailTitle.innerText) ? detailTitle.innerText : ((p && p.name) || productName);
 
         if (nameLabel) {
-            nameLabel.value = breadcrumb;
-            nameLabel.title = breadcrumb;
+            nameLabel.value = pName;
+            nameLabel.title = pName;
         }
 
         if (counterEl) counterEl.style.display = 'none';
@@ -6853,6 +6852,7 @@ window.triggerAdminGallery = async function (docId, pid, productName = "Product 
             limit: 0 // unlimited selection
         });
         if (res && res.photos && res.photos.length > 0) {
+            window.tempCamIsBulk = false;
             var p = (window.allProducts || []).find(x => x.id === pid || x.docId === docId) || window.curProduct;
             window.pendingSharedImages = res.photos.map(pPhoto => ({
                 uri: pPhoto.path || pPhoto.webPath,
@@ -6861,7 +6861,8 @@ window.triggerAdminGallery = async function (docId, pid, productName = "Product 
                 pid: pid,
                 productName: (p && p.name) || productName,
                 category: (p && p.cat) || '',
-                section: (p && p.section) || window.activeSection || 'Sarees'
+                section: (p && p.section) || window.activeSection || 'Sarees',
+                isBulk: false
             }));
             window.tempCamDocId = docId;
             window.tempCamPid = pid;
@@ -6888,6 +6889,7 @@ window.retakeAdminPhoto = function () {
         } else {
             window.pendingSharedImages = null;
             window.sharedImagePasteIndex = 0;
+            window.tempCamIsBulk = false;
             var fabPaste = document.getElementById('fabPasteImages');
             if (fabPaste) fabPaste.style.display = 'none';
             if (window.processCameraOutbox) window.processCameraOutbox();
@@ -7011,6 +7013,7 @@ window.confirmAdminUpload = async function () {
         } else {
             window.pendingSharedImages = null;
             window.sharedImagePasteIndex = 0;
+            window.tempCamIsBulk = false;
             var fabPaste = document.getElementById('fabPasteImages');
             if (fabPaste) fabPaste.style.display = 'none';
             if (window.processCameraOutbox) window.processCameraOutbox();
@@ -7618,6 +7621,7 @@ window.showNextSharedImagePreview = async function () {
     if (!window.pendingSharedImages || window.sharedImagePasteIndex >= window.pendingSharedImages.length) {
         window.pendingSharedImages = null;
         window.sharedImagePasteIndex = 0;
+        window.tempCamIsBulk = false;
         var fabPaste = document.getElementById('fabPasteImages');
         if (fabPaste) fabPaste.style.display = 'none';
         var modal = document.getElementById('adminCameraPreviewModal');
@@ -7681,13 +7685,21 @@ window.showNextSharedImagePreview = async function () {
     }
 
     if (nameLabel) {
+        var isBulk = !!(sFile && sFile.isBulk) || !!window.tempCamIsBulk;
         var p = (window.allProducts || []).find(x => x.id === window.tempCamPid || x.docId === window.tempCamDocId) || window.curProduct;
-        var pSec = window.tempCamSection || (p && p.section) || window.activeSection || 'Sarees';
-        var pCat = window.tempCamCat || (p && p.cat) || '';
         var pName = (p && p.name) || window.tempCamProductName || '';
-        var breadcrumb = window.formatProductBreadcrumb(pSec, pCat, pName);
-        nameLabel.value = breadcrumb;
-        nameLabel.title = breadcrumb;
+        if (isBulk) {
+            var pSec = window.tempCamSection || (p && p.section) || window.activeSection || 'Sarees';
+            var pCat = window.tempCamCat || (p && p.cat) || '';
+            var breadcrumb = window.formatProductBreadcrumb(pSec, pCat, pName);
+            nameLabel.value = breadcrumb;
+            nameLabel.title = breadcrumb;
+        } else {
+            var detailTitle = document.getElementById('detailTitle');
+            var regularName = (detailTitle && detailTitle.innerText) ? detailTitle.innerText : (pName || 'Product Preview');
+            nameLabel.value = regularName;
+            nameLabel.title = regularName;
+        }
     }
 
     if (counterEl) {
@@ -9948,7 +9960,8 @@ window.queueSelectedImagesForProduct = async function (items, secVal, catVal, is
             productName: prodName,
             category: catVal,
             section: secVal,
-            isBypass: isBypass
+            isBypass: isBypass,
+            isBulk: true
         });
     }
 
@@ -9958,6 +9971,7 @@ window.queueSelectedImagesForProduct = async function (items, secVal, catVal, is
     window.tempCamCat = catVal;
     window.tempCamProductName = prodName;
     window.tempCamIsNewProduct = false;
+    window.tempCamIsBulk = true;
     window.sharedImagePasteIndex = 0;
 
     var bypassCb = document.getElementById('adminBypassCloudinary');
