@@ -721,33 +721,17 @@
       <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:1px solid #eee;">
         <div>
           <div style="font-weight:bold; font-size:16px; color:var(--text-main); display:flex; align-items:center; gap:8px;">
-            <i class="fas fa-address-book" style="color:var(--myntra-pink);"></i> Customers &amp; Ledger (ERP)
+            <i class="fas fa-address-book" style="color:var(--myntra-pink);"></i> Customers (ERP)
           </div>
-          <div id="custDirSubtitle" style="font-size:11px; color:#6b7280; margin-top:2px;">Live Accounting Sync: Realtime Database</div>
+          <div id="custDirSubtitle" style="font-size:11px; color:#6b7280; margin-top:2px;">Tap any customer to view Ledger, Sales, Transport &amp; Outstanding</div>
         </div>
         <i class="fas fa-times" style="font-size:22px; color:#9ca3af; cursor:pointer; padding:4px;" onclick="closeModals()"></i>
       </div>
 
-      <!-- Financial Metrics Pill Banner -->
-      <div style="display:flex; gap:8px; margin:10px 0; overflow-x:auto; padding-bottom:2px;">
-        <div style="flex:1; min-width:90px; background:#fdf2f8; border:1px solid #fbcfe8; border-radius:8px; padding:6px 10px; text-align:center;">
-          <div style="font-size:10px; color:#be185d; font-weight:600; text-transform:uppercase;">Parties</div>
-          <div id="custDirTotalCount" style="font-size:15px; font-weight:bold; color:#831843;">--</div>
-        </div>
-        <div style="flex:1.4; min-width:120px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:6px 10px; text-align:center;">
-          <div style="font-size:10px; color:#b91c1c; font-weight:600; text-transform:uppercase;">Total Receivables</div>
-          <div id="custDirTotalReceivables" style="font-size:15px; font-weight:bold; color:#991b1b;">--</div>
-        </div>
-        <div style="flex:1; min-width:90px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:6px 10px; text-align:center;">
-          <div style="font-size:10px; color:#15803d; font-weight:600; text-transform:uppercase;">Pending Bills</div>
-          <div id="custDirPendingBillsCount" style="font-size:15px; font-weight:bold; color:#14532d;">--</div>
-        </div>
-      </div>
-
       <!-- Search Input -->
-      <div style="position:relative; margin-bottom:8px;">
+      <div style="position:relative; margin-top:10px; margin-bottom:8px;">
         <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#9ca3af; font-size:13px;"></i>
-        <input type="text" id="custSearchInput" placeholder="Search by name, phone, city, GST, or code..."
+        <input type="text" id="custSearchInput" placeholder="Search customer by name, city, phone, GST..."
           oninput="window.renderCustomerDirectoryUI()"
           style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; outline:none;">
       </div>
@@ -762,13 +746,13 @@
           style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
           Due Balance (Dr)
         </button>
-        <button type="button" class="cust-filter-chip" id="chipCustCredit" onclick="window.setCustDirectoryFilter('credit')"
-          style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
-          Advance (Cr)
-        </button>
         <button type="button" class="cust-filter-chip" id="chipCustBills" onclick="window.setCustDirectoryFilter('bills')"
           style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
           Has Invoices
+        </button>
+        <button type="button" class="cust-filter-chip" id="chipCustReports" onclick="window.setCustDirectoryFilter('reports')"
+          style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
+          With History
         </button>
       </div>
 
@@ -776,16 +760,79 @@
       <div id="customerListContainer" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px; padding-right:2px;">
         <div style="text-align:center; padding:30px; color:#6b7280; font-size:13px;">
           <i class="fas fa-spinner fa-spin" style="font-size:20px; color:var(--myntra-pink); margin-bottom:8px;"></i>
-          <div>Loading accounting customer directory...</div>
+          <div>Loading customer accounts...</div>
         </div>
       </div>
 
       <!-- Footer Action Bar -->
-      <div style="display:flex; gap:8px; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+      <div style="display:flex; gap:8px; margin-top:8px; border-top:1px solid #eee; padding-top:8px;">
         <button type="button" onclick="window.loadAccountingDirectoryData(true)"
-          style="flex:1; background:var(--myntra-pink); color:#fff; border:none; padding:10px 14px; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
-          <i class="fas fa-sync-alt" id="custSyncIcon"></i> Sync from Accounting DB
+          style="flex:1; background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; padding:8px 12px; border-radius:8px; font-weight:600; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+          <i class="fas fa-sync-alt" id="custSyncIcon"></i> Refresh Customer List
         </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Dedicated Customer Reports Modal (Ledger, Sales Item Wise, Transport Receipt, Outstanding) - Admin Only -->
+  <div id="customerDetailReportsModal" class="action-modal" onclick="if(event.target===this) window.closeCustomerReportsModal()"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10000; flex-direction:column; justify-content:flex-end;">
+    <div class="modal-content"
+      style="background:#fff; border-radius:16px 16px 0 0; padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom)); text-align:left; height:92vh; display:flex; flex-direction:column; max-width:650px; margin:0 auto; width:100%; box-sizing:border-box;">
+      
+      <!-- Top Bar: Back, Name & Balance -->
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:8px; border-bottom:1px solid #eee; gap:8px;">
+        <div style="display:flex; align-items:center; gap:10px; flex:1;">
+          <button type="button" onclick="window.closeCustomerReportsModal()"
+            style="background:#f1f5f9; border:none; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#475569;">
+            <i class="fas fa-arrow-left"></i>
+          </button>
+          <div style="flex:1;">
+            <div id="custRepName" style="font-weight:bold; font-size:15px; color:var(--text-main); line-height:1.2;">Customer Name</div>
+            <div style="display:flex; gap:6px; align-items:center; margin-top:2px; flex-wrap:wrap;">
+              <span id="custRepCity" style="font-size:11px; color:#64748b;"><i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> City</span>
+              <span id="custRepGst" style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 5px; border-radius:3px;">GST</span>
+              <span id="custRepCode" style="font-size:10px; font-weight:600; color:#475569; background:#f1f5f9; padding:1px 5px; border-radius:3px;">Code</span>
+            </div>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div id="custRepBalBadge" style="font-size:13px; font-weight:bold; padding:4px 8px; border-radius:6px; background:#f3f4f6; color:#374151;">₹ 0.00</div>
+        </div>
+      </div>
+
+      <!-- Quick Actions: WhatsApp & Call -->
+      <div style="display:flex; gap:8px; padding:8px 0; border-bottom:1px solid #f1f5f9; align-items:center; justify-content:space-between;">
+        <div id="custRepActionButtons" style="display:flex; gap:8px;">
+          <!-- Injected dynamically: WhatsApp & Call -->
+        </div>
+        <div style="font-size:10px; color:#94a3b8; font-style:italic;">ERP Accounting Data</div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div style="display:flex; border-bottom:2px solid #e2e8f0; margin-top:6px; gap:4px; overflow-x:auto;">
+        <button type="button" id="tabBtnLedger" onclick="window.switchCustomerReportTab('ledger')"
+          style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:var(--myntra-pink); border-bottom:2px solid var(--myntra-pink); margin-bottom:-2px; white-space:nowrap;">
+          <i class="fas fa-book"></i> Ledger
+        </button>
+        <button type="button" id="tabBtnSales" onclick="window.switchCustomerReportTab('sales')"
+          style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap;">
+          <i class="fas fa-box"></i> Sales (Item Wise)
+        </button>
+        <button type="button" id="tabBtnTransport" onclick="window.switchCustomerReportTab('transport')"
+          style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap;">
+          <i class="fas fa-truck"></i> Transport Receipt
+        </button>
+        <button type="button" id="tabBtnOutstanding" onclick="window.switchCustomerReportTab('outstanding')"
+          style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap;">
+          <i class="fas fa-exclamation-circle"></i> Outstanding
+        </button>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div id="custReportContentArea" style="flex:1; overflow-y:auto; padding:10px 0 4px 0;">
+        <!-- Injected dynamically based on active tab -->
       </div>
 
     </div>

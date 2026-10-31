@@ -5915,6 +5915,15 @@ async function logout() {
             }
         }
         localStorage.removeItem('dsUserToken');
+        localStorage.removeItem('dsIsAdmin');
+        window.isAdminMode = false;
+        window.isSuperAdmin = false;
+        window._compiledCustomersList = [];
+        window._accountingReportsCache = null;
+        if (typeof closeModals === 'function') closeModals(true);
+        if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'none';
+        if (document.getElementById('customerDetailReportsModal')) document.getElementById('customerDetailReportsModal').style.display = 'none';
+        if (document.getElementById('customerDirectoryModal')) document.getElementById('customerDirectoryModal').style.display = 'none';
         document.getElementById("appBody").style.display = "none";
         document.getElementById("loginScreen").style.display = "flex";
         document.getElementById("loginBoxPhone").style.display = "block";
@@ -10633,12 +10642,25 @@ window.testAccountingConnection = async function () {
 };
 
 // ==========================================
-// 👥 ADMIN CUSTOMER DIRECTORY & LEDGER UI CONTROLLER
+// 👥 ADMIN CUSTOMER DIRECTORY & ERP REPORTS CONTROLLER (ADMIN ONLY)
 // ==========================================
 window._currentCustDirFilter = 'all';
 window._compiledCustomersList = [];
+window._accountingReportsCache = null;
+window._currentReportingCustomer = null;
+window._activeCustomerReportTab = 'ledger';
 
-// 1. Open Modal with Admin Verification Guard
+function escHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// 1. Open Directory Modal (Strict Admin-Only Guard)
 window.openCustomerDirectoryModal = function () {
     if (!window.isAdminMode && !window.isSuperAdmin) {
         alert("🔒 Access Denied: Customer Directory is restricted to Durga Sarees Administrators.");
@@ -10647,7 +10669,6 @@ window.openCustomerDirectoryModal = function () {
     if (typeof closeModals === 'function') closeModals();
     if (typeof openModal === 'function') openModal('customerDirectoryModal');
 
-    // Load from memory/cache or fetch fresh
     if (window._compiledCustomersList && window._compiledCustomersList.length > 0) {
         window.renderCustomerDirectoryUI();
     } else {
@@ -10655,13 +10676,14 @@ window.openCustomerDirectoryModal = function () {
     }
 };
 
-// 2. Fetch and compile complete accounting data
+// 2. Load Customers Master List (Local Fast Path)
 window.loadAccountingDirectoryData = async function (forceRefresh = false) {
+    if (!window.isAdminMode && !window.isSuperAdmin) return;
+
     var container = document.getElementById('customerListContainer');
     var syncIcon = document.getElementById('custSyncIcon');
     if (syncIcon) syncIcon.classList.add('fa-spin');
 
-    // 1. If memory cache already exists and not forcing refresh, render immediately!
     if (!forceRefresh && window._compiledCustomersList && window._compiledCustomersList.length > 0) {
         if (syncIcon) syncIcon.classList.remove('fa-spin');
         window.renderCustomerDirectoryUI();
@@ -10672,151 +10694,55 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
         container.innerHTML = `
         <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
           <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
-          <div style="font-weight:600; color:#374151;">Compiling Accounting Directory...</div>
-          <div style="font-size:11px; margin-top:4px;">Loading accounts, balances &amp; pending bills...</div>
+          <div style="font-weight:600; color:#374151;">Loading Customer Directory...</div>
+          <div style="font-size:11px; margin-top:4px;">Retrieving accounts and balances...</div>
         </div>`;
     }
 
-    var localLoaded = false;
-
-    // 2. Fast Path: Load compiled accounting_data.json locally (instant, offline-ready!)
     try {
-        var localRes = await fetch('./accounting_data.json');
-        if (localRes && localRes.ok) {
-            var localData = await localRes.json();
-            if (Array.isArray(localData) && localData.length > 0) {
-                window._compiledCustomersList = localData;
-                localLoaded = true;
-                window.updateCustomerDirectoryMetrics();
+        var res = await fetch('./accounting_customers.json');
+        if (res && res.ok) {
+            var data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+                window._compiledCustomersList = data;
                 window.renderCustomerDirectoryUI();
             }
         }
-    } catch (localErr) {
-        console.warn("Local accounting_data.json fetch skipped:", localErr.message);
+    } catch (e) {
+        console.warn("Could not load accounting_customers.json:", e);
     }
 
-    // 3. If forceRefresh OR local file wasn't present, try Cloud Realtime Database sync
-    if (forceRefresh || !localLoaded) {
-        try {
-            var [customers, balances, allBills] = await Promise.all([
-                window.getAccountingCustomers(true),
-                window.getAccountingBalances(true),
-                window.getAccountingBills(null, true)
-            ]);
-
-            if (balances.length > 0 || customers.length > 0) {
-                var balancesByCode = window._accountingCache.balancesByCode || {};
-                var billsByParty = {};
-
-                (allBills || []).forEach(b => {
-                    var pCode = String(b.partyCode || '').trim().toUpperCase();
-                    if (pCode) {
-                        if (!billsByParty[pCode]) billsByParty[pCode] = [];
-                        billsByParty[pCode].push(b);
-                    }
-                });
-
-                var compiled = [];
-                var processedCodes = new Set();
-
-                (customers || []).forEach(c => {
-                    var code = String(c.code || '').trim().toUpperCase();
-                    if (code) processedCodes.add(code);
-
-                    var balRec = balancesByCode[code] || null;
-                    var cBills = billsByParty[code] || [];
-                    var balAmount = balRec ? balRec.balance : 0;
-                    var drCr = balRec ? balRec.drCr : 'Dr';
-                    var signedBal = balRec ? balRec.signedBalance : 0;
-
-                    var totalBillPending = 0;
-                    cBills.forEach(b => { totalBillPending += (b.balanceAmount || 0); });
-
-                    compiled.push({
-                        code: code || c.phone || 'PARTY',
-                        name: c.name || ('Customer ' + code),
-                        phone: c.phone || '',
-                        phoneRaw: c.phoneRaw || c.phone || '',
-                        city: c.city || '',
-                        address: c.address || '',
-                        gst: c.gst || '',
-                        group: c.group || 'Sundry Debtors',
-                        balance: balAmount,
-                        signedBalance: signedBal,
-                        drCr: drCr,
-                        bills: cBills,
-                        pendingBillsCount: cBills.length,
-                        totalBillPending: totalBillPending
-                    });
-                });
-
-                compiled.sort((a, b) => {
-                    if (b.signedBalance !== a.signedBalance) return b.signedBalance - a.signedBalance;
-                    return a.name.localeCompare(b.name);
-                });
-
-                window._compiledCustomersList = compiled;
-                window.updateCustomerDirectoryMetrics();
-                window.renderCustomerDirectoryUI();
-
-            } else if (!localLoaded) {
-                if (container) {
-                    container.innerHTML = `
-                    <div style="text-align:center; padding:35px 20px; color:#b91c1c; font-size:13px;">
-                      <i class="fas fa-exclamation-circle" style="font-size:26px; color:#ef4444; margin-bottom:8px;"></i>
-                      <div style="font-weight:bold;">No Records Returned from Cloud</div>
-                      <div style="font-size:11px; color:#6b7280; margin-top:6px; line-height:1.4;">
-                        Firebase returned Permission Denied or Empty.<br>
-                        In <b>Firebase Console &gt; Realtime Database &gt; Rules</b>, ensure <code>".read": true</code> is set.
-                      </div>
-                    </div>`;
-                }
-            }
-        } catch (cloudErr) {
-            console.error("Cloud accounting sync error:", cloudErr);
-            if (!localLoaded && container) {
-                container.innerHTML = `
-                <div style="text-align:center; padding:30px; color:#dc2626; font-size:13px;">
-                  <i class="fas fa-exclamation-triangle" style="font-size:24px; margin-bottom:8px;"></i>
-                  <div>Failed to load accounting data: ${esc(cloudErr.message)}</div>
-                </div>`;
-            }
-        }
-    }
+    // Trigger pre-loading of reports in background for instant opening
+    window.loadAccountingReportsData();
 
     if (syncIcon) syncIcon.classList.remove('fa-spin');
 };
 
-// Helper: Calculate Header Metrics
-window.updateCustomerDirectoryMetrics = function () {
-    var list = window._compiledCustomersList || [];
-    var totalParties = list.length;
-    var totalReceivables = 0;
-    var totalPendingBills = 0;
+// 3. Background / On-Demand Loader for Detailed Customer Reports
+window.loadAccountingReportsData = async function () {
+    if (!window.isAdminMode && !window.isSuperAdmin) return null;
+    if (window._accountingReportsCache) return window._accountingReportsCache;
 
-    list.forEach(c => {
-        if (c.drCr === 'Dr' && c.balance > 0) totalReceivables += c.balance;
-        totalPendingBills += (c.pendingBillsCount || (c.bills ? c.bills.length : 0));
-    });
-
-    var cntEl = document.getElementById('custDirTotalCount');
-    if (cntEl) cntEl.innerText = totalParties.toLocaleString('en-IN');
-
-    var recEl = document.getElementById('custDirTotalReceivables');
-    if (recEl) recEl.innerText = '₹ ' + Math.round(totalReceivables).toLocaleString('en-IN');
-
-    var billsEl = document.getElementById('custDirPendingBillsCount');
-    if (billsEl) billsEl.innerText = totalPendingBills.toLocaleString('en-IN');
+    try {
+        var res = await fetch('./accounting_reports.json');
+        if (res && res.ok) {
+            window._accountingReportsCache = await res.json();
+            return window._accountingReportsCache;
+        }
+    } catch (e) {
+        console.warn("Could not load accounting_reports.json:", e);
+    }
+    return null;
 };
 
-// 3. Filter switching handler
+// 4. Quick Filter Selector
 window.setCustDirectoryFilter = function (filterType) {
     window._currentCustDirFilter = filterType;
     var chipIds = {
         all: 'chipCustAll',
         debit: 'chipCustDebit',
-        credit: 'chipCustCredit',
-        bills: 'chipCustBills'
+        bills: 'chipCustBills',
+        reports: 'chipCustReports'
     };
     Object.keys(chipIds).forEach(ft => {
         var btn = document.getElementById(chipIds[ft]);
@@ -10835,12 +10761,14 @@ window.setCustDirectoryFilter = function (filterType) {
     window.renderCustomerDirectoryUI();
 };
 
-// 4. Render the searchable list of customer cards with virtual pagination (Never crashes)
+// 5. Render Virtualized Customer List (Crash-Proof for 10,000+ accounts)
 window._custDirPageSize = 40;
 window._custDirRenderedCount = 40;
 window._currentFilteredCustomers = [];
 
 window.renderCustomerDirectoryUI = function (isAppend = false) {
+    if (!window.isAdminMode && !window.isSuperAdmin) return;
+
     var container = document.getElementById('customerListContainer');
     if (!container) return;
 
@@ -10857,7 +10785,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
             <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
               <i class="fas fa-folder-open" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i>
               <div>No customer records loaded.</div>
-              <div style="font-size:11px; margin-top:4px;">Tap "Sync from Accounting DB" below to fetch.</div>
+              <div style="font-size:11px; margin-top:4px;">Tap "Refresh Customer List" below to reload.</div>
             </div>`;
             return;
         }
@@ -10865,19 +10793,18 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         var filtered = list.filter(c => {
             if (query) {
                 var searchStr = [
-                    c.name,
-                    c.code,
-                    c.phone,
-                    c.phoneRaw,
-                    c.city,
-                    c.address,
-                    c.gst
+                    c.n,
+                    c.c,
+                    c.p,
+                    c.ct,
+                    c.a,
+                    c.g
                 ].join(' ').toLowerCase();
                 if (!searchStr.includes(query)) return false;
             }
-            if (filterType === 'debit') return c.drCr === 'Dr' && c.balance > 0;
-            if (filterType === 'credit') return c.drCr === 'Cr' && c.balance > 0;
-            if (filterType === 'bills') return (c.pendingBillsCount || (c.bills && c.bills.length) || 0) > 0;
+            if (filterType === 'debit') return c.d === 'Dr' && c.b > 0;
+            if (filterType === 'bills') return (c.pb || 0) > 0;
+            if (filterType === 'reports') return c.hl || c.hs || c.ht || c.ho || c.b > 0;
             return true;
         });
 
@@ -10890,7 +10817,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         container.innerHTML = `
         <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
           <i class="fas fa-search" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i>
-          <div>No customers match "${esc(query)}".</div>
+          <div>No customers match "${escHtml(query)}".</div>
         </div>`;
         return;
     }
@@ -10901,91 +10828,66 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
 
     toRender.forEach((c, idx) => {
         var cardId = 'custCard_' + idx;
-        var billsId = 'custBills_' + idx;
 
         var balBadgeColor = '#6b7280';
         var balBg = '#f3f4f6';
-        if (c.balance > 0) {
-            balBadgeColor = (c.drCr === 'Dr') ? '#dc2626' : '#16a34a';
-            balBg = (c.drCr === 'Dr') ? '#fee2e2' : '#dcfce7';
+        if (c.b > 0) {
+            balBadgeColor = (c.d === 'Dr') ? '#dc2626' : '#16a34a';
+            balBg = (c.d === 'Dr') ? '#fee2e2' : '#dcfce7';
         }
 
-        var balText = (c.balance > 0) ? `₹ ${c.balance.toLocaleString('en-IN')} ${c.drCr}` : '₹ 0.00';
-        var billsCount = c.pendingBillsCount || (c.bills ? c.bills.length : 0);
+        var balText = (c.b > 0) ? `₹ ${c.b.toLocaleString('en-IN')} ${c.d}` : 'Clear';
+        var waMsg = `Namaste ${c.n},\nGreeting from Durga Sarees!\nYour current ledger balance is ${balText}.\nKindly let us know if you require any invoices or statements. Thank you!`;
+        var waPhone = (c.p && c.p.length === 10) ? ('91' + c.p) : (c.p || '');
 
-        var waMsg = `Namaste ${c.name},\nGreeting from Durga Sarees!\nYour current ledger balance is ${balText}.\nKindly review and let us know if you need invoice copies. Thank you!`;
-        var waPhone = (c.phone && c.phone.length === 10) ? ('91' + c.phone) : (c.phone || '');
+        var codeSafe = encodeURIComponent(c.c);
 
         html += `
         <div id="${cardId}" style="border:1px solid #e5e7eb; border-radius:10px; background:#fff; padding:12px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          
+          <!-- Top Row: Name, Balance & Click to View Reports -->
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; cursor:pointer;" onclick="window.openCustomerReportsModal(decodeURIComponent('${codeSafe}'))">
             <div style="flex:1;">
               <div style="font-weight:bold; font-size:14px; color:var(--text-main); line-height:1.3;">
-                ${esc(c.name)}
+                ${escHtml(c.n)}
               </div>
               <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
-                <span style="font-size:10px; font-weight:700; background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; border:1px solid #e2e8f0;">
-                  Code: ${esc(c.code)}
-                </span>
-                ${c.city ? `<span style="font-size:11px; color:#64748b;"><i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${esc(c.city)}</span>` : ''}
-                ${c.gst ? `<span style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 5px; border-radius:3px;">GST: ${esc(c.gst)}</span>` : ''}
+                ${c.ct ? `<span style="font-size:11px; color:#64748b;"><i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${escHtml(c.ct)}</span>` : ''}
+                ${c.g ? `<span style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 5px; border-radius:3px;">GST: ${escHtml(c.g)}</span>` : ''}
+                ${c.pb > 0 ? `<span style="font-size:10px; font-weight:700; color:#be185d; background:#fdf2f8; border:1px solid #fbcfe8; padding:1px 5px; border-radius:3px;"><i class="fas fa-file-invoice"></i> ${c.pb} Due</span>` : ''}
               </div>
             </div>
             <div style="text-align:right; min-width:85px;">
-              <div style="font-size:9px; color:#6b7280; text-transform:uppercase; font-weight:600;">Ledger Balance</div>
-              <div style="display:inline-block; font-size:13px; font-weight:bold; color:${balBadgeColor}; background:${balBg}; padding:3px 8px; border-radius:6px; margin-top:2px;">
+              <div style="font-size:9px; color:#6b7280; text-transform:uppercase; font-weight:600;">Balance</div>
+              <div style="display:inline-block; font-size:12px; font-weight:bold; color:${balBadgeColor}; background:${balBg}; padding:2px 7px; border-radius:5px; margin-top:2px;">
                 ${balText}
               </div>
             </div>
           </div>
 
-          ${c.address ? `<div style="font-size:11px; color:#64748b; line-height:1.3;">${esc(c.address)}</div>` : ''}
+          ${c.a ? `<div style="font-size:11px; color:#64748b; line-height:1.3;">${escHtml(c.a)}</div>` : ''}
 
-          <div style="display:flex; justify-content:space-between; align-items:center; padding-top:6px; border-top:1px dashed #f1f5f9; margin-top:2px;">
+          <!-- History Indicators & Action Buttons -->
+          <div style="display:flex; justify-content:space-between; align-items:center; padding-top:6px; border-top:1px dashed #f1f5f9; margin-top:2px; flex-wrap:wrap; gap:6px;">
             <div style="display:flex; gap:6px;">
-              ${c.phone ? `
+              ${c.p ? `
                 <a href="https://wa.me/${waPhone}?text=${encodeURIComponent(waMsg)}" target="_blank"
-                   style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
+                   style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
                   <i class="fab fa-whatsapp"></i> WhatsApp
                 </a>
-                <a href="tel:${c.phone}"
-                   style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #e5e7eb;">
+                <a href="tel:${c.p}"
+                   style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #e5e7eb;">
                   <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
                 </a>
-              ` : `<span style="font-size:11px; color:#9ca3af; font-style:italic;">No phone recorded</span>`}
+              ` : `<span style="font-size:11px; color:#9ca3af; font-style:italic;">No phone</span>`}
             </div>
 
-            ${(billsCount > 0) ? `
-              <button type="button" onclick="window.toggleCustomerBillsExpand('${billsId}')"
-                style="background:#fdf2f8; border:1px solid #fbcfe8; color:#be185d; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
-                <i class="fas fa-file-invoice"></i> ${billsCount} Bill${billsCount > 1 ? 's' : ''} <i class="fas fa-chevron-down" style="font-size:9px;"></i>
-              </button>
-            ` : `<span style="font-size:11px; color:#9ca3af;">0 Bills</span>`}
+            <!-- Prominent View Reports Button -->
+            <button type="button" onclick="window.openCustomerReportsModal(decodeURIComponent('${codeSafe}'))"
+              style="background:var(--myntra-pink); color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+              <i class="fas fa-chart-line"></i> View Reports <i class="fas fa-chevron-right" style="font-size:9px;"></i>
+            </button>
           </div>
-
-          ${(billsCount > 0 && Array.isArray(c.bills)) ? `
-            <div id="${billsId}" style="display:none; background:#fafafa; border:1px solid #eee; border-radius:6px; padding:8px; margin-top:4px;">
-              <div style="font-size:11px; font-weight:bold; color:#475569; margin-bottom:6px;">Pending Invoices (${esc(c.name)}):</div>
-              <div style="display:flex; flex-direction:column; gap:4px; max-height:200px; overflow-y:auto;">
-                ${c.bills.map(b => `
-                  <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; padding:4px 6px; background:#fff; border-radius:4px; border:1px solid #f1f5f9;">
-                    <div>
-                      <div style="font-weight:700; color:#1e293b;">${esc(b.billNo || b.b || 'INVOICE')}</div>
-                      <div style="font-size:10px; color:#64748b;">
-                        Date: ${esc(b.date || b.d || 'N/A')}
-                        ${(b.transport || b.t) ? (' • ' + esc(b.transport || b.t)) : ''}
-                        ${(b.rrNo || b.r) ? (' (LR: ' + esc(b.rrNo || b.r) + ')') : ''}
-                      </div>
-                    </div>
-                    <div style="text-align:right;">
-                      <div style="font-weight:bold; color:#dc2626;">Due: ₹ ${(b.pendingAmount || b.p || 0).toLocaleString('en-IN')}</div>
-                      ${((b.billAmount || b.a) && (b.billAmount || b.a) !== (b.pendingAmount || b.p)) ? `<div style="font-size:9px; color:#94a3b8;">Total: ₹ ${(b.billAmount || b.a).toLocaleString('en-IN')}</div>` : ''}
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          ` : ''}
 
         </div>`;
     });
@@ -11002,7 +10904,6 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         container.scrollTop = prevScroll;
     }
 
-    // Attach scroll listener for infinite scrolling
     container.onscroll = function () {
         if (container.scrollTop + container.clientHeight >= container.scrollHeight - 100) {
             if (window._custDirRenderedCount < (window._currentFilteredCustomers || []).length) {
@@ -11013,9 +10914,454 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
     };
 };
 
-// 5. Expand / Collapse Pending Bills
-window.toggleCustomerBillsExpand = function (billsId) {
-    var el = document.getElementById(billsId);
-    if (!el) return;
-    el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+// ==========================================
+// 📊 CUSTOMER DETAILED REPORTS CONTROLLER
+// (Ledger, Sales Item Wise, Transport Receipt, Outstanding)
+// ==========================================
+
+// 6. Open Customer Detail Reports Modal
+window.openCustomerReportsModal = async function (partyCode) {
+    if (!window.isAdminMode && !window.isSuperAdmin) {
+        alert("🔒 Access Denied: Admin privileges required.");
+        return;
+    }
+
+    var list = window._compiledCustomersList || [];
+    var pCodeNorm = String(partyCode || '').trim().toUpperCase();
+    var cust = list.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm) || {
+        c: partyCode,
+        n: partyCode,
+        p: '',
+        ct: '',
+        g: '',
+        b: 0,
+        d: ''
+    };
+
+    window._currentReportingCustomer = cust;
+
+    // Populate Header
+    var nameEl = document.getElementById('custRepName');
+    if (nameEl) nameEl.innerText = cust.n || cust.c;
+
+    var cityEl = document.getElementById('custRepCity');
+    if (cityEl) {
+        cityEl.innerHTML = cust.ct ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${escHtml(cust.ct)}` : '';
+        cityEl.style.display = cust.ct ? 'inline' : 'none';
+    }
+
+    var gstEl = document.getElementById('custRepGst');
+    if (gstEl) {
+        gstEl.innerText = cust.g ? `GST: ${cust.g}` : '';
+        gstEl.style.display = cust.g ? 'inline' : 'none';
+    }
+
+    var codeEl = document.getElementById('custRepCode');
+    if (codeEl) {
+        codeEl.innerText = `Code: ${cust.c}`;
+    }
+
+    var balBadge = document.getElementById('custRepBalBadge');
+    if (balBadge) {
+        var balText = (cust.b > 0) ? `₹ ${cust.b.toLocaleString('en-IN')} ${cust.d}` : 'Clear';
+        balBadge.innerText = balText;
+        if (cust.b > 0) {
+            balBadge.style.color = (cust.d === 'Dr') ? '#dc2626' : '#16a34a';
+            balBadge.style.background = (cust.d === 'Dr') ? '#fee2e2' : '#dcfce7';
+        } else {
+            balBadge.style.color = '#374151';
+            balBadge.style.background = '#f3f4f6';
+        }
+    }
+
+    // Quick action buttons
+    var actionsEl = document.getElementById('custRepActionButtons');
+    if (actionsEl) {
+        var waPhone = (cust.p && cust.p.length === 10) ? ('91' + cust.p) : (cust.p || '');
+        var waBal = (cust.b > 0) ? `₹ ${cust.b.toLocaleString('en-IN')} ${cust.d}` : '0.00';
+        var waMsg = `Namaste ${cust.n},\nGreeting from Durga Sarees!\nYour current ledger balance is ${waBal}.\nKindly let us know if you require any invoices or ledger statements. Thank you!`;
+
+        var actHtml = '';
+        if (cust.p) {
+            actHtml += `
+            <a href="https://wa.me/${waPhone}?text=${encodeURIComponent(waMsg)}" target="_blank"
+               style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
+              <i class="fab fa-whatsapp"></i> WhatsApp
+            </a>
+            <a href="tel:${cust.p}"
+               style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #e5e7eb;">
+              <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
+            </a>`;
+        } else {
+            actHtml += `<span style="font-size:11px; color:#94a3b8; font-style:italic;">No phone on record</span>`;
+        }
+        actionsEl.innerHTML = actHtml;
+    }
+
+    // Open Modal
+    var modal = document.getElementById('customerDetailReportsModal');
+    if (modal) modal.style.display = 'flex';
+
+    // Set Default Tab
+    window.switchCustomerReportTab('ledger');
+};
+
+// 7. Close Customer Detail Reports Modal
+window.closeCustomerReportsModal = function () {
+    var modal = document.getElementById('customerDetailReportsModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// 8. Tab Switcher
+window.switchCustomerReportTab = function (tabName) {
+    window._activeCustomerReportTab = tabName;
+    var tabs = ['ledger', 'sales', 'transport', 'outstanding'];
+    var tabNamesMap = {
+        ledger: 'tabBtnLedger',
+        sales: 'tabBtnSales',
+        transport: 'tabBtnTransport',
+        outstanding: 'tabBtnOutstanding'
+    };
+
+    tabs.forEach(t => {
+        var btn = document.getElementById(tabNamesMap[t]);
+        if (btn) {
+            if (t === tabName) {
+                btn.style.color = 'var(--myntra-pink)';
+                btn.style.borderBottom = '2px solid var(--myntra-pink)';
+            } else {
+                btn.style.color = '#64748b';
+                btn.style.borderBottom = '2px solid transparent';
+            }
+        }
+    });
+
+    window.renderCustomerReportActiveTab();
+};
+
+// 9. Render Content of the Active Tab
+window.renderCustomerReportActiveTab = async function () {
+    if (!window.isAdminMode && !window.isSuperAdmin) return;
+
+    var area = document.getElementById('custReportContentArea');
+    if (!area) return;
+
+    var cust = window._currentReportingCustomer;
+    if (!cust) return;
+
+    var codeKey = String(cust.c || '').trim().toUpperCase();
+
+    // If cache not ready, show spinner and wait
+    if (!window._accountingReportsCache) {
+        area.innerHTML = `
+        <div style="text-align:center; padding:40px 20px; color:#6b7280; font-size:13px;">
+          <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
+          <div style="font-weight:600; color:#374151;">Loading ERP Reports...</div>
+          <div style="font-size:11px; margin-top:4px;">Extracting ledger, sales &amp; dispatch records...</div>
+        </div>`;
+        await window.loadAccountingReportsData();
+    }
+
+    var partyReports = (window._accountingReportsCache && window._accountingReportsCache[codeKey]) || {
+        ledger: [],
+        salesItems: [],
+        transport: [],
+        outstanding: []
+    };
+
+    var activeTab = window._activeCustomerReportTab || 'ledger';
+
+    // TAB 1: LEDGER
+    if (activeTab === 'ledger') {
+        var ledgerList = partyReports.ledger || [];
+        if (ledgerList.length === 0) {
+            area.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
+              <i class="fas fa-book-open" style="font-size:26px; color:#cbd5e1; margin-bottom:8px;"></i>
+              <div style="font-weight:600;">No Ledger Transactions Recorded</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No financial debit/credit vouchers for this account.</div>
+            </div>`;
+            return;
+        }
+
+        var totalDr = 0, totalCr = 0;
+        ledgerList.forEach(l => {
+            totalDr += (l.dr || 0);
+            totalCr += (l.cr || 0);
+        });
+        var netBal = totalDr - totalCr;
+        var netBalText = (netBal !== 0) ? `₹ ${Math.abs(Math.round(netBal)).toLocaleString('en-IN')} ${netBal > 0 ? 'Dr' : 'Cr'}` : '₹ 0.00';
+
+        var html = `
+        <!-- Ledger Summary Card -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; color:#64748b; font-weight:600;">Total Debit (Dr)</div>
+            <div style="font-size:13px; font-weight:bold; color:#dc2626;">₹ ${Math.round(totalDr).toLocaleString('en-IN')}</div>
+          </div>
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; color:#64748b; font-weight:600;">Total Credit (Cr)</div>
+            <div style="font-size:13px; font-weight:bold; color:#16a34a;">₹ ${Math.round(totalCr).toLocaleString('en-IN')}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:10px; text-transform:uppercase; color:#64748b; font-weight:600;">Closing Balance</div>
+            <div style="font-size:14px; font-weight:bold; color:${netBal > 0 ? '#dc2626' : (netBal < 0 ? '#16a34a' : '#475569')};">${netBalText}</div>
+          </div>
+        </div>
+
+        <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:6px; display:flex; justify-content:space-between;">
+          <span>Transactions (${ledgerList.length}):</span>
+          <span style="font-size:10px; color:#94a3b8;">Sorted Chronologically</span>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+        `;
+
+        ledgerList.forEach((l, idx) => {
+            var isDr = (l.dr > 0);
+            var isCr = (l.cr > 0);
+            var amtText = isDr ? `₹ ${l.dr.toLocaleString('en-IN')} Dr` : (isCr ? `₹ ${l.cr.toLocaleString('en-IN')} Cr` : '₹ 0.00');
+            var amtColor = isDr ? '#dc2626' : (isCr ? '#16a34a' : '#64748b');
+
+            var runningBal = (l.bal !== undefined) ? ((l.bal !== 0) ? `₹ ${Math.abs(l.bal).toLocaleString('en-IN')} ${l.bal > 0 ? 'Dr' : 'Cr'}` : '₹ 0.00') : '';
+
+            html += `
+            <div style="background:#fff; border:1px solid #f1f5f9; border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:3px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="font-weight:700; font-size:12px; color:#1e293b;">
+                  ${escHtml(l.d || 'N/A')}
+                  ${l.v ? `<span style="font-weight:600; color:#64748b; margin-left:6px; font-size:11px;">#${escHtml(l.v)}</span>` : ''}
+                </div>
+                <div style="font-weight:bold; font-size:13px; color:${amtColor};">
+                  ${amtText}
+                </div>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#64748b;">
+                <div>
+                  <span style="background:#f1f5f9; color:#475569; padding:1px 5px; border-radius:3px; font-size:10px; font-weight:600;">${escHtml(l.t || 'TRN')}</span>
+                  <span style="margin-left:4px;">${escHtml(l.r || 'Transaction')}</span>
+                </div>
+                ${runningBal ? `<div style="font-size:10px; color:#94a3b8;">Bal: <b style="color:#475569;">${runningBal}</b></div>` : ''}
+              </div>
+            </div>`;
+        });
+
+        html += `</div>`;
+        area.innerHTML = html;
+        return;
+    }
+
+    // TAB 2: SALES REPORT (ITEM WISE)
+    if (activeTab === 'sales') {
+        var salesList = partyReports.salesItems || [];
+        if (salesList.length === 0) {
+            area.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
+              <i class="fas fa-box-open" style="font-size:26px; color:#cbd5e1; margin-bottom:8px;"></i>
+              <div style="font-weight:600;">No Item-Wise Sales Records</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No saree design purchases recorded in the sales system.</div>
+            </div>`;
+            return;
+        }
+
+        var totalPcs = 0, totalMts = 0, totalVal = 0;
+        salesList.forEach(s => {
+            totalPcs += (s.pcs || 0);
+            totalMts += (s.mts || 0);
+            totalVal += (s.a || 0);
+        });
+
+        var html = `
+        <!-- Sales Summary -->
+        <div style="background:#fdf2f8; border:1px solid #fbcfe8; border-radius:8px; padding:10px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; color:#9d174d; font-weight:600;">Total Pcs</div>
+            <div style="font-size:13px; font-weight:bold; color:#831843;">${totalPcs.toLocaleString('en-IN')} Pcs</div>
+          </div>
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; color:#9d174d; font-weight:600;">Total Meters</div>
+            <div style="font-size:13px; font-weight:bold; color:#831843;">${Math.round(totalMts).toLocaleString('en-IN')} Mts</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:10px; text-transform:uppercase; color:#9d174d; font-weight:600;">Total Sales Value</div>
+            <div style="font-size:14px; font-weight:bold; color:#be185d;">₹ ${Math.round(totalVal).toLocaleString('en-IN')}</div>
+          </div>
+        </div>
+
+        <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:6px;">
+          Purchased Saree Items (${salesList.length}):
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+        `;
+
+        salesList.forEach((item, idx) => {
+            html += `
+            <div style="background:#fff; border:1px solid #f1f5f9; border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:4px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div style="flex:1;">
+                  <div style="font-weight:700; font-size:12px; color:#1e293b;">
+                    ${escHtml(item.q || 'SAREE ITEM')}
+                  </div>
+                  <div style="font-size:10px; color:#64748b; margin-top:2px;">
+                    Bill: <b style="color:#0369a1;">${escHtml(item.b || 'BILL')}</b> • Date: ${escHtml(item.d || 'N/A')}
+                    ${item.c ? ` • <span style="background:#f1f5f9; padding:1px 4px; border-radius:3px;">${escHtml(item.c)}</span>` : ''}
+                  </div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-weight:bold; font-size:13px; color:#0f172a;">
+                    ₹ ${(item.a || 0).toLocaleString('en-IN')}
+                  </div>
+                  <div style="font-size:10px; color:#64748b;">
+                    ${item.pcs ? `${item.pcs} Pcs` : ''} ${item.r ? `@ ₹${item.r}` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>`;
+        });
+
+        html += `</div>`;
+        area.innerHTML = html;
+        return;
+    }
+
+    // TAB 3: TRANSPORT RECEIPT
+    if (activeTab === 'transport') {
+        var trnspList = partyReports.transport || [];
+        if (trnspList.length === 0) {
+            area.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
+              <i class="fas fa-shipping-fast" style="font-size:26px; color:#cbd5e1; margin-bottom:8px;"></i>
+              <div style="font-weight:600;">No Transport Receipts Found</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No dispatch or LR receipts recorded for this party.</div>
+            </div>`;
+            return;
+        }
+
+        var html = `
+        <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:8px;">
+          Dispatch &amp; Transport Receipts (${trnspList.length}):
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+        `;
+
+        trnspList.forEach(t => {
+            html += `
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px dashed #f1f5f9; padding-bottom:6px;">
+                <div style="font-weight:bold; font-size:12px; color:#1e293b;">
+                  Bill: <span style="color:#0284c7;">#${escHtml(t.b || 'N/A')}</span>
+                  <span style="font-size:10px; font-weight:normal; color:#64748b; margin-left:6px;">Date: ${escHtml(t.d || 'N/A')}</span>
+                </div>
+                ${t.amt ? `<div style="font-weight:bold; font-size:12px; color:#334155;">₹ ${t.amt.toLocaleString('en-IN')}</div>` : ''}
+              </div>
+
+              <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:#334155;">
+                <i class="fas fa-truck" style="color:var(--myntra-pink);"></i>
+                <span>${escHtml(t.t || 'Local Delivery / Direct')}</span>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; background:#f8fafc; padding:6px 8px; border-radius:6px;">
+                <div>
+                  <span style="color:#64748b;">LR / RR No:</span>
+                  <b style="color:#1e293b;">${escHtml(t.lr || 'N/A')}</b>
+                </div>
+                <div>
+                  <span style="color:#64748b;">LR Date:</span>
+                  <b style="color:#1e293b;">${escHtml(t.lrd || t.d || 'N/A')}</b>
+                </div>
+                <div>
+                  <span style="color:#64748b;">Station / City:</span>
+                  <b style="color:#1e293b;">${escHtml(t.st || 'N/A')}</b>
+                </div>
+                <div>
+                  <span style="color:#64748b;">Cases / Bundles:</span>
+                  <b style="color:#1e293b;">${escHtml(t.cs || '1')}</b>
+                </div>
+                ${t.wt ? `<div><span style="color:#64748b;">Weight:</span> <b>${escHtml(t.wt)} KG</b></div>` : ''}
+                ${t.fr ? `<div><span style="color:#64748b;">Freight:</span> <b>₹ ${escHtml(t.fr)}</b></div>` : ''}
+                ${t.ewb ? `<div style="grid-column:span 2;"><span style="color:#64748b;">e-Way Bill:</span> <b style="color:#0369a1;">${escHtml(t.ewb)}</b></div>` : ''}
+              </div>
+            </div>`;
+        });
+
+        html += `</div>`;
+        area.innerHTML = html;
+        return;
+    }
+
+    // TAB 4: OUTSTANDING
+    if (activeTab === 'outstanding') {
+        var ostList = partyReports.outstanding || [];
+        if (ostList.length === 0) {
+            area.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#15803d; font-size:13px;">
+              <i class="fas fa-check-circle" style="font-size:32px; color:#22c55e; margin-bottom:10px;"></i>
+              <div style="font-weight:bold; font-size:15px;">Account Clear!</div>
+              <div style="font-size:11px; color:#64748b; margin-top:4px;">No outstanding or overdue bills pending for this party.</div>
+            </div>`;
+            return;
+        }
+
+        var totalDue = 0;
+        ostList.forEach(o => { totalDue += (o.pamt || 0); });
+
+        var waPhone = (cust.p && cust.p.length === 10) ? ('91' + cust.p) : (cust.p || '');
+        var billListTxt = ostList.slice(0, 5).map(o => `• Bill #${o.b} (${o.d}): ₹ ${o.pamt.toLocaleString('en-IN')}`).join('\n');
+        var waOstMsg = `Namaste ${cust.n},\nGreeting from Durga Sarees!\nThis is a gentle reminder regarding pending invoices totaling ₹ ${Math.round(totalDue).toLocaleString('en-IN')}:\n${billListTxt}\n\nKindly review and process payment at your earliest convenience. Thank you!`;
+
+        var html = `
+        <!-- Outstanding Summary -->
+        <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; color:#b91c1c; font-weight:600;">Total Pending Due</div>
+            <div style="font-size:16px; font-weight:bold; color:#dc2626;">₹ ${Math.round(totalDue).toLocaleString('en-IN')}</div>
+          </div>
+          <div>
+            <div style="font-size:10px; text-transform:uppercase; color:#b91c1c; font-weight:600;">Unpaid Invoices</div>
+            <div style="font-size:15px; font-weight:bold; color:#991b1b; text-align:right;">${ostList.length}</div>
+          </div>
+        </div>
+
+        ${cust.p ? `
+          <div style="margin-bottom:10px;">
+            <a href="https://wa.me/${waPhone}?text=${encodeURIComponent(waOstMsg)}" target="_blank"
+               style="display:flex; align-items:center; justify-content:center; gap:8px; background:#25d366; color:#fff; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:bold; text-decoration:none;">
+              <i class="fab fa-whatsapp" style="font-size:16px;"></i> Send Pending Invoices WhatsApp Reminder
+            </a>
+          </div>
+        ` : ''}
+
+        <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:6px;">
+          Pending Bills Breakdown (${ostList.length}):
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+        `;
+
+        ostList.forEach(b => {
+            html += `
+            <div style="background:#fff; border:1px solid #fee2e2; border-radius:6px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-weight:700; font-size:12px; color:#1e293b;">
+                  Bill #${escHtml(b.b || 'N/A')}
+                </div>
+                <div style="font-size:10px; color:#64748b; margin-top:2px;">
+                  Date: ${escHtml(b.d || 'N/A')}
+                  ${b.pcs ? ` • ${b.pcs} Pcs` : ''}
+                  ${b.amt && b.amt !== b.pamt ? ` • Bill Total: ₹ ${b.amt.toLocaleString('en-IN')}` : ''}
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-weight:bold; font-size:13px; color:#dc2626;">
+                  Due: ₹ ${(b.pamt || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+            </div>`;
+        });
+
+        html += `</div>`;
+        area.innerHTML = html;
+        return;
+    }
 };
