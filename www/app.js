@@ -555,6 +555,14 @@ window.updateLivePresence = function (productId, force = false) {
             cartCount: totalQty,
             cartValue: totalVal,
             cartSummary: cartSummary,
+            approvalStatus: cd.approvalStatus || (cd.linkedAccount ? 'approved' : null),
+            isApproved: cd.isApproved !== undefined ? cd.isApproved : !!cd.linkedAccount,
+            linkedAccount: cd.linkedAccount || cd.accountCode || null,
+            linkedAccountName: cd.linkedAccountName || cd.name || null,
+            approvedByAdmin: cd.approvedByAdmin || null,
+            approvedAt: cd.approvedAt || null,
+            role: cd.role || (cd.isAgent ? 'agent' : 'customer'),
+            matchedAccounts: cd.matchedAccounts || null,
             lastActive: firebase.firestore.FieldValue.serverTimestamp()
         };
 
@@ -947,12 +955,40 @@ async function verifyOtp() {
         window.pendingUserPhone = phoneStr;
         try { localStorage.setItem("dsUserPhone", phoneStr); } catch (e) { }
 
-        checkUserInFirestore(phoneStr).then(function (exists) {
-            if (exists) {
+        checkUserInFirestore(phoneStr).then(async function (userDoc) {
+            if (userDoc && userDoc.fields) {
+                var f = userDoc.fields;
+                var existingProfile = {
+                    name: f.name ? f.name.stringValue : "",
+                    firm: f.firm ? f.firm.stringValue : "",
+                    station: f.station ? f.station.stringValue : "",
+                    state: f.state ? f.state.stringValue : "",
+                    phone: phoneStr,
+                    role: f.role ? f.role.stringValue : "customer",
+                    linkedAccount: f.linkedAccount ? f.linkedAccount.stringValue : "",
+                    linkedAccountName: f.linkedAccountName ? f.linkedAccountName.stringValue : "",
+                    approvalStatus: f.approvalStatus ? f.approvalStatus.stringValue : "approved",
+                    isApproved: f.isApproved ? f.isApproved.booleanValue : true,
+                    approvedByAdmin: f.approvedByAdmin ? f.approvedByAdmin.stringValue : "",
+                    approvedAt: f.approvedAt ? f.approvedAt.timestampValue : ""
+                };
+                if (f.matchedAccountsJson && f.matchedAccountsJson.stringValue) {
+                    try { existingProfile.matchedAccounts = JSON.parse(f.matchedAccountsJson.stringValue); } catch(e){}
+                }
+                localStorage.setItem("dsCustomerDetails", JSON.stringify(existingProfile));
                 completeLogin(phoneStr);
             } else {
-                document.getElementById('loginBoxOtp').style.display = 'none';
-                document.getElementById('loginBoxRegister').style.display = 'block';
+                // Not in Firestore yet: Search our ERP database for Customer or Agent accounts!
+                var matches = await window.findAccountsByPhone(phoneStr);
+                if (matches && matches.length > 0) {
+                    // Number recognized! Skip registration form and auto-link
+                    await window.autoLinkUserAccount(phoneStr, matches);
+                    completeLogin(phoneStr);
+                } else {
+                    // New unknown visitor: show registration form
+                    document.getElementById('loginBoxOtp').style.display = 'none';
+                    document.getElementById('loginBoxRegister').style.display = 'block';
+                }
             }
         });
     } catch (err) {
@@ -981,28 +1017,147 @@ async function checkUserInFirestore(phone) {
                 method: "POST", headers: headers, body: JSON.stringify(query)
             });
             var data = await res.json();
-            if (data && data.length > 0 && data[0].document) return true;
-            return false;
+            if (data && data.length > 0 && data[0].document) return data[0].document;
+            return null;
         }
 
         var cleanPhone = (phone || '').trim().replace(/[\s\-\(\)]/g, '');
-        var found = await doQuery(cleanPhone);
-        if (found) return true;
+        var foundDoc = await doQuery(cleanPhone);
+        if (foundDoc) return foundDoc;
 
         var altPhone = cleanPhone.replace(/^\+91/, '');
         if (cleanPhone !== altPhone) {
-            found = await doQuery(altPhone);
-            if (found) return true;
+            foundDoc = await doQuery(altPhone);
+            if (foundDoc) return foundDoc;
         } else {
-            found = await doQuery('+91' + cleanPhone.replace(/^0+/, ''));
-            if (found) return true;
+            foundDoc = await doQuery('+91' + cleanPhone.replace(/^0+/, ''));
+            if (foundDoc) return foundDoc;
         }
-        return false;
+        return null;
     } catch (e) {
         console.error(e);
-        return false;
+        return null;
     }
 }
+
+// 🔍 Find matching customer or agent accounts by phone from accounting database
+window.findAccountsByPhone = async function (phoneStr) {
+    if (!phoneStr) return [];
+    var clean10 = String(phoneStr).replace(/\D/g, '');
+    if (clean10.length >= 10) clean10 = clean10.slice(-10);
+    if (!clean10) return [];
+
+    var list = window._compiledCustomersList || [];
+    if (!list || list.length === 0) {
+        try {
+            var res = await fetch('./accounting_customers.json?v=4');
+            if (res && res.ok) {
+                list = await res.json();
+                window._compiledCustomersList = list;
+            }
+        } catch(e){}
+    }
+    if (!Array.isArray(list) || list.length === 0) return [];
+
+    var matches = [];
+    var seenCodes = new Set();
+
+    list.forEach(item => {
+        if (!item || !item.p) return;
+        var p10 = String(item.p).replace(/\D/g, '');
+        if (p10.length >= 10) p10 = p10.slice(-10);
+
+        if (p10 === clean10) {
+            var code = (item.c || item.n || '').trim().toUpperCase();
+            if (code && !seenCodes.has(code)) {
+                seenCodes.add(code);
+                var isAgent = !!item.isAgent || item.role === 'agent';
+                matches.push({
+                    code: item.c || item.n,
+                    name: item.n || item.c,
+                    station: item.ct || '',
+                    state: item.st || '',
+                    agent: item.ag || '',
+                    transport: item.tr || '',
+                    gst: item.g || '',
+                    address: item.a || '',
+                    role: isAgent ? 'agent' : 'customer',
+                    isAgent: isAgent,
+                    balance: item.b || 0,
+                    drCr: item.d || 'Dr'
+                });
+            }
+        }
+    });
+
+    return matches;
+};
+
+// 🔗 Auto-link user to matched ERP account & create Firestore record with pending approval
+window.autoLinkUserAccount = async function (phoneStr, matchedAccounts) {
+    if (!phoneStr || !matchedAccounts || matchedAccounts.length === 0) return;
+    var primary = matchedAccounts[0];
+    var isAgent = primary.role === 'agent' || !!primary.isAgent;
+
+    var userProfile = {
+        name: primary.name,
+        firm: primary.code || primary.name,
+        station: primary.station || '',
+        state: primary.state || '',
+        agent: primary.agent || '',
+        transport: primary.transport || '',
+        gst: primary.gst || '',
+        address: primary.address || '',
+        phone: phoneStr,
+        accountCode: primary.code,
+        linkedAccount: primary.code,
+        linkedAccountName: primary.name,
+        role: isAgent ? 'agent' : 'customer',
+        approvalStatus: 'pending',
+        isApproved: false,
+        autoLinkedFromERP: true,
+        matchedAccounts: matchedAccounts
+    };
+
+    try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
+
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        var cleanDocId = phoneStr.replace(/[\s\-\(\)]/g, '');
+        var doc = {
+            fields: {
+                name: { stringValue: userProfile.name },
+                firm: { stringValue: userProfile.firm },
+                station: { stringValue: userProfile.station },
+                state: { stringValue: userProfile.state },
+                phone: { stringValue: phoneStr },
+                role: { stringValue: userProfile.role },
+                accountCode: { stringValue: userProfile.accountCode },
+                linkedAccount: { stringValue: userProfile.linkedAccount },
+                linkedAccountName: { stringValue: userProfile.linkedAccountName },
+                approvalStatus: { stringValue: 'pending' },
+                isApproved: { booleanValue: false },
+                autoLinkedFromERP: { booleanValue: true },
+                matchedAccountsJson: { stringValue: JSON.stringify(matchedAccounts) },
+                createdAt: { timestampValue: new Date().toISOString() }
+            }
+        };
+        if (userProfile.agent) doc.fields.agent = { stringValue: userProfile.agent };
+        if (userProfile.transport) doc.fields.transport = { stringValue: userProfile.transport };
+        if (userProfile.gst) doc.fields.gst = { stringValue: userProfile.gst };
+
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users?documentId=" + encodeURIComponent(cleanDocId), {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(doc)
+        });
+    } catch(err) {
+        console.warn("Firestore auto-link user write skipped:", err);
+    }
+};
 
 async function saveProfile() {
     var nameEl = document.getElementById('rName');
@@ -8831,30 +8986,87 @@ window.openLiveAdmin = function () {
                     let dispName = namePortion + stationPortion;
 
                     if (!window.adminCustomerCache) window.adminCustomerCache = {};
-                    if (dispName === docId && !window.adminCustomerCache[docId] && !isGuest) {
+                    let safeDocId = docId.replace(/\+/g, '');
+
+                    let uData = null;
+                    if (window.adminCustomerCache[docId] && typeof window.adminCustomerCache[docId] === 'object') {
+                        uData = window.adminCustomerCache[docId];
+                        if (uData.name) dispName = uData.name + (uData.station ? ' - ' + uData.station : '');
+                    } else if (d.approvalStatus || d.linkedAccount || (d.matchedAccounts && d.matchedAccounts.length)) {
+                        uData = {
+                            approvalStatus: d.approvalStatus || 'approved',
+                            isApproved: d.isApproved !== undefined ? d.isApproved : !!d.linkedAccount,
+                            linkedAccount: d.linkedAccount || '',
+                            linkedAccountName: d.linkedAccountName || '',
+                            approvedByAdmin: d.approvedByAdmin || '',
+                            approvedAt: d.approvedAt || '',
+                            role: d.role || 'customer',
+                            matchedAccounts: d.matchedAccounts || []
+                        };
+                    }
+
+                    if (!isGuest && !window.adminCustomerCache[docId]) {
                         window.adminCustomerCache[docId] = "fetching";
-                        fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + docId)
+                        fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(docId))
                             .then(res => res.json())
                             .then(uDoc => {
                                 if (uDoc && uDoc.fields) {
                                     let f = uDoc.fields;
                                     let uName = f.name ? f.name.stringValue : "";
                                     let uStation = f.station ? f.station.stringValue : "";
-                                    window.adminCustomerCache[docId] = uName ? (uName + (uStation ? ' - ' + uStation : '')) : docId;
-                                    let safeId = docId.replace(/\+/g, '');
-                                    let el = document.getElementById('admin_name_' + safeId);
-                                    if (el) el.innerText = window.adminCustomerCache[docId];
-                                    let subEl = document.getElementById('admin_sub_' + safeId);
-                                    if (subEl && window.adminCustomerCache[docId] !== docId) {
-                                        subEl.innerHTML = `<span style="font-size:12px; color:#888;">${docId}</span>`;
+                                    let matchesArr = [];
+                                    if (f.matchedAccountsJson && f.matchedAccountsJson.stringValue) {
+                                        try { matchesArr = JSON.parse(f.matchedAccountsJson.stringValue); } catch(e){}
                                     }
+                                    let parsedData = {
+                                        name: uName,
+                                        station: uStation,
+                                        approvalStatus: f.approvalStatus ? f.approvalStatus.stringValue : 'approved',
+                                        isApproved: f.isApproved ? f.isApproved.booleanValue : true,
+                                        approvedByAdmin: f.approvedByAdmin ? f.approvedByAdmin.stringValue : '',
+                                        approvedAt: f.approvedAt ? f.approvedAt.timestampValue : '',
+                                        linkedAccount: f.linkedAccount ? f.linkedAccount.stringValue : '',
+                                        linkedAccountName: f.linkedAccountName ? f.linkedAccountName.stringValue : '',
+                                        role: f.role ? f.role.stringValue : 'customer',
+                                        matchedAccounts: matchesArr
+                                    };
+                                    window.adminCustomerCache[docId] = parsedData;
+
+                                    let el = document.getElementById('admin_name_' + safeDocId);
+                                    if (el && uName) el.innerText = uName + (uStation ? ' - ' + uStation : '');
+                                    let subEl = document.getElementById('admin_sub_' + safeDocId);
+                                    if (subEl) subEl.innerHTML = `<span style="font-size:12px; color:#888;">${docId}</span>`;
+
+                                    let boxEl = document.getElementById('approval_box_' + safeDocId);
+                                    if (boxEl && typeof window.renderApprovalBoxHtml === 'function') {
+                                        boxEl.innerHTML = window.renderApprovalBoxHtml(docId, safeDocId, parsedData);
+                                    }
+                                } else {
+                                    // User not yet in Firestore: dynamically check ERP database for auto-matches!
+                                    window.findAccountsByPhone(docId).then(matches => {
+                                        if (matches && matches.length > 0) {
+                                            let fallbackData = {
+                                                approvalStatus: 'pending',
+                                                isApproved: false,
+                                                role: matches[0].role || 'customer',
+                                                matchedAccounts: matches
+                                            };
+                                            window.adminCustomerCache[docId] = fallbackData;
+                                            let boxEl = document.getElementById('approval_box_' + safeDocId);
+                                            if (boxEl && typeof window.renderApprovalBoxHtml === 'function') {
+                                                boxEl.innerHTML = window.renderApprovalBoxHtml(docId, safeDocId, fallbackData);
+                                            }
+                                        }
+                                    });
                                 }
                             }).catch(() => { });
-                    } else if (window.adminCustomerCache[docId] && window.adminCustomerCache[docId] !== "fetching") {
-                        dispName = window.adminCustomerCache[docId];
                     }
 
-                    let safeDocId = docId.replace(/\+/g, '');
+                    let approvalHtml = '';
+                    if (!isGuest && typeof window.renderApprovalBoxHtml === 'function') {
+                        approvalHtml = window.renderApprovalBoxHtml(docId, safeDocId, uData);
+                    }
+
                     let html = `<div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${isLiveNow ? '#4caf50' : '#9e9e9e'};">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                             <div style="display:flex; flex-direction:column; gap:4px;">
@@ -8867,6 +9079,7 @@ window.openLiveAdmin = function () {
                         <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Viewing:</b> ${viewingProduct}</div>
                         ${historyHtml}
                         ${(d.cartSummary && d.cartSummary.length) ? `<div style="font-size:12px; color:#333; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;"><b>Cart:</b><br>${d.cartSummary.join('<br>')}</div>` : ''}
+                        <div id="approval_box_${safeDocId}">${approvalHtml}</div>
                     </div>`;
                     contentEl.insertAdjacentHTML('beforeend', html);
                 });
@@ -8892,6 +9105,205 @@ window.closeLiveAdmin = function () {
     }
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
+    }
+};
+
+// 📋 Render Account Approval & Linking Card
+window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
+    if (!uData) return '';
+    var isApproved = !!(uData.isApproved || uData.approvalStatus === 'approved');
+    var isAgent = uData.role === 'agent';
+
+    if (isApproved) {
+        var approvedDate = uData.approvedAt ? new Date(uData.approvedAt).toLocaleDateString('en-IN') : 'Approved';
+        var accLabel = uData.linkedAccountName ? `${uData.linkedAccountName} (${uData.linkedAccount})` : (uData.linkedAccount || 'Account Verified');
+        return `
+            <div style="font-size:11px; color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0; padding:6px 10px; border-radius:6px; margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <i class="fas fa-check-circle" style="color:#059669;"></i> <b>Linked Permanently:</b> ${esc(accLabel)}
+                    <div style="font-size:10px; color:#047857; margin-top:2px;">
+                        Approved by: <b>${esc(uData.approvedByAdmin || 'Admin')}</b> on ${approvedDate}
+                    </div>
+                </div>
+                <span style="background:${isAgent ? '#7c3aed' : '#059669'}; color:#fff; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:4px;">
+                    ${isAgent ? 'AGENT APPROVED' : 'APPROVED'}
+                </span>
+            </div>
+        `;
+    }
+
+    var matches = uData.matchedAccounts || [];
+    if (matches.length === 0) return '';
+
+    if (matches.length === 1) {
+        var m = matches[0];
+        var mRole = (m.role === 'agent' || m.isAgent) ? 'agent' : 'customer';
+        var cleanCode = (m.code || '').replace(/'/g, "\\'");
+        var cleanName = (m.name || '').replace(/'/g, "\\'");
+        return `
+            <div style="background:#fffbeb; border:1px solid #fde68a; padding:8px 10px; border-radius:6px; margin-top:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-size:11px; font-weight:bold; color:#92400e;">
+                        <i class="fas fa-clock"></i> PENDING APPROVAL
+                    </span>
+                    <span style="background:${mRole === 'agent' ? '#ede9fe; color:#6b21a8' : '#e0e7ff; color:#3730a3'}; font-size:10px; font-weight:bold; padding:1px 6px; border-radius:3px;">
+                        ${mRole === 'agent' ? 'AGENT' : 'CUSTOMER'}
+                    </span>
+                </div>
+                <div style="font-size:12px; color:#1e293b; margin-bottom:6px;">
+                    <b>Auto-Matched:</b> ${esc(m.name)} ${m.station ? '(' + esc(m.station) + ')' : ''} [${esc(m.code)}]
+                </div>
+                <button type="button" onclick="window.approveUserAccount('${docId}', '${cleanCode}', '${cleanName}', '${mRole}')"
+                        style="background:#059669; color:#fff; border:none; padding:5px 12px; border-radius:5px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
+                    <i class="fas fa-check-circle"></i> Approve &amp; Link Permanently
+                </button>
+            </div>
+        `;
+    }
+
+    // Multiple matched accounts (2, 3+)
+    return `
+        <div style="background:#fffbeb; border:1px solid #fde68a; padding:8px 10px; border-radius:6px; margin-top:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:11px; font-weight:bold; color:#92400e;">
+                    <i class="fas fa-clock"></i> PENDING APPROVAL
+                </span>
+                <span style="background:#be185d; color:#fff; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:4px;">
+                    ${matches.length} ACCOUNTS MATCHED
+                </span>
+            </div>
+            <div style="font-size:11px; font-weight:bold; color:#1e293b; margin-bottom:4px;">
+                Select account to link permanently to ${docId}:
+            </div>
+            <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;">
+                ${matches.map((acc, idx) => {
+                    var aRole = (acc.role === 'agent' || acc.isAgent) ? 'agent' : 'customer';
+                    return `
+                        <label style="display:flex; align-items:center; gap:6px; background:#fff; border:1px solid #cbd5e1; padding:5px 8px; border-radius:5px; cursor:pointer;">
+                            <input type="radio" name="link_acc_${safeDocId}" value="${esc(acc.code)}" ${idx === 0 ? 'checked' : ''} data-name="${esc(acc.name)}" data-role="${aRole}">
+                            <div style="font-size:11px; flex:1; min-width:0;">
+                                <span style="background:${aRole === 'agent' ? '#ede9fe; color:#6b21a8' : '#e0e7ff; color:#3730a3'}; font-size:9px; font-weight:bold; padding:1px 5px; border-radius:2px; margin-right:4px;">
+                                    ${aRole === 'agent' ? 'AGENT' : 'PARTY'}
+                                </span>
+                                <b>${esc(acc.name)}</b> ${acc.station ? '(' + esc(acc.station) + ')' : ''} [${esc(acc.code)}]
+                            </div>
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+            <button type="button" onclick="window.approveUserAccount('${docId}')"
+                    style="background:#059669; color:#fff; border:none; padding:6px 14px; border-radius:5px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
+                <i class="fas fa-check-circle"></i> Approve Selected &amp; Link Permanently
+            </button>
+        </div>
+    `;
+};
+
+// ✍️ Approve and Permanently Link User Account
+window.approveUserAccount = async function (docId, directCode, directName, directRole) {
+    if (!window.isAdminMode && !window.isSuperAdmin) {
+        alert("🔒 Admin access required.");
+        return;
+    }
+
+    var safeId = docId.replace(/\+/g, '');
+    var selectedCode = directCode || '';
+    var selectedName = directName || '';
+    var selectedRole = directRole || 'customer';
+
+    if (!selectedCode) {
+        var radios = document.getElementsByName('link_acc_' + safeId);
+        if (radios && radios.length > 0) {
+            for (var i = 0; i < radios.length; i++) {
+                if (radios[i].checked) {
+                    selectedCode = radios[i].value;
+                    selectedName = radios[i].getAttribute('data-name') || radios[i].value;
+                    selectedRole = radios[i].getAttribute('data-role') || 'customer';
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!selectedCode && window.adminCustomerCache && window.adminCustomerCache[docId]) {
+        var c = window.adminCustomerCache[docId];
+        if (c && typeof c === 'object') {
+            selectedCode = c.linkedAccount || c.accountCode || docId;
+            selectedName = c.linkedAccountName || c.name || docId;
+            selectedRole = c.role || 'customer';
+        }
+    }
+
+    var adminName = "Admin";
+    try {
+        var myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}');
+        adminName = myCd.name ? `${myCd.name} (${activeUser || ''})` : (activeUser || "Admin");
+    } catch(e){}
+
+    if (!confirm(`Approve and permanently link account for:\n\nPhone: ${docId}\nAccount: ${selectedName || selectedCode} [${selectedRole.toUpperCase()}]\n\nApproving Admin: ${adminName}`)) {
+        return;
+    }
+
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        var nowIso = new Date().toISOString();
+        var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(docId) +
+            "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role";
+
+        var patchBody = {
+            fields: {
+                approvalStatus: { stringValue: "approved" },
+                isApproved: { booleanValue: true },
+                approvedByAdmin: { stringValue: adminName },
+                approvedAt: { timestampValue: nowIso },
+                linkedAccount: { stringValue: selectedCode },
+                linkedAccountName: { stringValue: selectedName },
+                role: { stringValue: selectedRole }
+            }
+        };
+
+        await fetch(patchUrl, {
+            method: "PATCH",
+            headers: headers,
+            body: JSON.stringify(patchBody)
+        });
+
+        // Also update LiveSessions
+        try {
+            var livePatchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(docId) +
+                "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role";
+            await fetch(livePatchUrl, {
+                method: "PATCH",
+                headers: headers,
+                body: JSON.stringify(patchBody)
+            });
+        } catch(liveErr){}
+
+        // Update cache
+        if (!window.adminCustomerCache) window.adminCustomerCache = {};
+        window.adminCustomerCache[docId] = {
+            isApproved: true,
+            approvalStatus: 'approved',
+            linkedAccount: selectedCode,
+            linkedAccountName: selectedName,
+            approvedByAdmin: adminName,
+            approvedAt: nowIso,
+            role: selectedRole
+        };
+
+        // Re-render UI card
+        var box = document.getElementById('approval_box_' + safeId);
+        if (box) {
+            box.innerHTML = window.renderApprovalBoxHtml(docId, safeId, window.adminCustomerCache[docId]);
+        }
+
+        alert(`✅ Account Approved & Linked Permanently!\n\nUser: ${docId}\nLinked to: ${selectedName} [${selectedRole.toUpperCase()}]\nApproved by: ${adminName}`);
+    } catch(err) {
+        console.error("Approve error:", err);
+        alert("Approval failed: " + err.message);
     }
 };
 
