@@ -3965,7 +3965,7 @@ function openCart(preserveScroll) {
         var cHtml = [];
 
         var customerHTML = `
-            <div style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden; background:#fff; display:flex; justify-content:space-between; align-items:center; padding:10px;">
+            <div style="margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden; background:#fff; display:flex; justify-content:space-between; align-items:center; padding:10px;">
                 <div style="display:flex; flex-direction:column; gap:4px; max-width:85%;">
                     <div id="cartCustomerDetailsBody" style="font-size:14px; color:var(--text-main); font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                         Loading...
@@ -3975,6 +3975,37 @@ function openCart(preserveScroll) {
             </div>
         `;
         cHtml.push(customerHTML);
+
+        // 🚚 Transport Selection Block
+        var curTransport = '';
+        try {
+            var cdObj = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}');
+            curTransport = cdObj.transport || localStorage.getItem('ds_preferred_transport') || '';
+        } catch(e){}
+
+        var transportHTML = `
+            <div style="margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background:#f8fafc; padding:10px 12px; display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:12px; font-weight:bold; color:#334155; display:flex; align-items:center; gap:6px;">
+                        <i class="fas fa-truck" style="color:var(--myntra-pink);"></i> Preferred Transport
+                    </div>
+                    <span style="font-size:10px; color:#64748b;">For Dispatch</span>
+                </div>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <input type="text" id="orderTransportInput" value="${safeText(curTransport)}" placeholder="e.g. PAWAN TRANSPORT, BATCO, V-TRANS..." 
+                           oninput="window.setOrderTransport(this.value)"
+                           style="flex:1; padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; color:#1e293b; background:#fff;">
+                </div>
+                <div style="display:flex; gap:4px; overflow-x:auto; padding-top:2px;">
+                    ${['PAWAN TRANSPORT', 'BATCO', 'V-TRANS', 'NEW GUJARAT', 'DIRECT'].map(t => `
+                        <button type="button" onclick="window.setOrderTransport('${t}')" style="background:#fff; border:1px solid #cbd5e1; color:#475569; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer; white-space:nowrap;">
+                            ${t}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        cHtml.push(transportHTML);
 
         window.cartEditingMap = window.cartEditingMap || {};
         for (var r in grouped) {
@@ -4221,6 +4252,8 @@ function sendWhatsappText() {
             if (cd.phone) msg += "📞 *Phone:* " + cd.phone + "\n";
             if (cd.station) msg += "📍 *Station:* " + cd.station + (cd.state ? ", " + cd.state : "") + "\n";
             if (cd.gst) msg += "🏛️ *GST:* " + cd.gst + "\n";
+            var tVal = cd.transport || localStorage.getItem('ds_preferred_transport') || '';
+            if (tVal) msg += "🚚 *Transport:* " + tVal + "\n";
             if (cd.onBehalf) msg += "🏷️ *Order Placed: Admin (On Behalf)*\n";
         }
     } catch (e) { }
@@ -6042,6 +6075,8 @@ async function openCustomerDetailsModal() {
     document.getElementById('cdPhone').value = (d && d.phone) ? d.phone : (activeUser || "");
     document.getElementById('cdStation').value = d ? d.station : "";
     document.getElementById('cdState').value = d ? d.state : "";
+    var tInp = document.getElementById('cdTransport');
+    if (tInp) tInp.value = (d && d.transport) ? d.transport : (localStorage.getItem('ds_preferred_transport') || "");
     document.getElementById('cdErr').innerText = "";
 
     openModal('customerDetailsModal');
@@ -6055,6 +6090,7 @@ async function saveCustomerDetails() {
     var phone = document.getElementById('cdPhone').value.trim() || activeUser;
     var station = document.getElementById('cdStation').value.trim();
     var state = document.getElementById('cdState').value.trim();
+    var transport = document.getElementById('cdTransport') ? document.getElementById('cdTransport').value.trim() : "";
 
     if (!name || !station || !state) {
         err.innerText = "Please fill all required fields.";
@@ -6062,7 +6098,12 @@ async function saveCustomerDetails() {
     }
 
     btn.innerText = "Saving...";
-    var d = { name: name, firm: firm, phone: phone, station: station, state: state };
+    var d = { name: name, firm: firm, phone: phone, station: station, state: state, transport: transport };
+    if (transport) {
+        localStorage.setItem('ds_preferred_transport', transport);
+        var tInp = document.getElementById('orderTransportInput');
+        if (tInp) tInp.value = transport;
+    }
     var stored = localStorage.getItem("dsCustomerDetails");
     var docId = null;
     if (stored) {
@@ -11020,6 +11061,12 @@ window.openCustomerReportsModal = async function (partyCode) {
     var modal = document.getElementById('customerDetailReportsModal');
     if (modal) modal.style.display = 'flex';
 
+    // Set Default Date Range (Financial Year 2026-2027)
+    var fromEl = document.getElementById('repFromDate');
+    var toEl = document.getElementById('repToDate');
+    if (fromEl && !fromEl.value) fromEl.value = '2026-04-01';
+    if (toEl && !toEl.value) toEl.value = '2027-03-31';
+
     // Set Default Tab to Finish Sales & Transport
     window.switchCustomerReportTab('sales');
 };
@@ -11056,6 +11103,33 @@ window.switchCustomerReportTab = function (tabName) {
     window.renderCustomerReportActiveTab();
 };
 
+// 8b. Date Range Filter Handlers
+window.applyReportDateFilter = function () {
+    window.renderCustomerReportActiveTab();
+};
+
+window.setReportDatePreset = function (preset) {
+    var fromEl = document.getElementById('repFromDate');
+    var toEl = document.getElementById('repToDate');
+    if (!fromEl || !toEl) return;
+
+    var today = new Date().toISOString().slice(0, 10);
+    if (preset === 'fy') {
+        fromEl.value = '2026-04-01';
+        toEl.value = '2027-03-31';
+    } else if (preset === 'month') {
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = String(now.getMonth() + 1).padStart(2, '0');
+        fromEl.value = `${y}-${m}-01`;
+        toEl.value = today;
+    } else if (preset === 'all') {
+        fromEl.value = '';
+        toEl.value = '';
+    }
+    window.applyReportDateFilter();
+};
+
 // 9. Render Active Report Tab (Exact layouts matching user ERP software)
 window.renderCustomerReportActiveTab = async function () {
     if (!window.isAdminMode && !window.isSuperAdmin) return;
@@ -11084,6 +11158,25 @@ window.renderCustomerReportActiveTab = async function () {
     var partyRep = allReports[codeKey] || allReports[nameKey] || { finishSales: [], outstanding: [], ledger: [] };
     var activeTab = window._activeCustomerReportTab || 'sales';
 
+    var fromDate = document.getElementById('repFromDate') ? document.getElementById('repFromDate').value : '';
+    var toDate = document.getElementById('repToDate') ? document.getElementById('repToDate').value : '';
+
+    function dateInRange(dStr) {
+        if (!dStr) return true;
+        if (fromDate && dStr < fromDate) return false;
+        if (toDate && dStr > toDate) return false;
+        return true;
+    }
+
+    function fmtDate(dStr) {
+        if (!dStr) return '';
+        var parts = dStr.split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`;
+        }
+        return dStr;
+    }
+
     // ==========================================
     // 📋 REPORT 1: FINISH SALES DETAILED REPORT (Image 1 & 2)
     // ==========================================
@@ -11092,14 +11185,15 @@ window.renderCustomerReportActiveTab = async function () {
         // Strictly exclude Credit Notes (/CS, /CN, /CR) and Goods Return (/GR) from Finish Sales Report
         var fsList = rawFsList.filter(r => {
             var b = String(r[1] || '').toUpperCase();
-            return !b.includes('/CS') && !b.includes('/GR') && !b.includes('/CN') && !b.includes('/CR') && !b.endsWith('CS') && !b.endsWith('GR');
+            if (b.includes('/CS') || b.includes('/GR') || b.includes('/CN') || b.includes('/CR') || b.endsWith('CS') || b.endsWith('GR')) return false;
+            return dateInRange(r[0]);
         });
         if (fsList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
               <i class="fas fa-box-open" style="font-size:28px; color:#cbd5e1; margin-bottom:8px;"></i>
               <div style="font-weight:bold;">No Finish Sales Records Found</div>
-              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No saree sales or transport receipts recorded for ${escHtml(cust.n)}.</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No saree sales or transport receipts recorded for ${escHtml(cust.n)}${(fromDate || toDate) ? ' in selected date range' : ''}.</div>
             </div>`;
             return;
         }
@@ -11116,6 +11210,10 @@ window.renderCustomerReportActiveTab = async function () {
         });
         var avgRate = (totMtr > 0) ? (totGross / totMtr) : (totPcs > 0 ? (totGross / totPcs) : 0);
 
+        var fsDateText = (fromDate || toDate)
+            ? `--- FROM DATE:${fmtDate(fromDate || '2026-04-01')} TO DATE:${fmtDate(toDate || '2027-03-31')}`
+            : `--- FINANCIAL YEAR 2026-2027`;
+
         var html = `
         <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b;">
           
@@ -11125,7 +11223,7 @@ window.renderCustomerReportActiveTab = async function () {
           </div>
           <div style="background:#eff6ff; border:1px solid #bfdbfe; border-top:none; padding:8px 10px; font-size:11px; color:#1e3a8a; line-height:1.4; margin-bottom:8px;">
             <div><b>PARTY:</b> ${escHtml(cust.n)} - ${escHtml(cust.c)}${cust.a ? (', ' + escHtml(cust.a)) : ''} ${cust.p ? (' - <b>Mob:</b> ' + escHtml(cust.p)) : ''}</div>
-            <div style="font-size:10px; color:#64748b; margin-top:2px;">--- FINANCIAL YEAR 2026-2027 • Tap any Bill No to open full Tax Invoice</div>
+            <div style="font-size:10px; color:#64748b; margin-top:2px;">${fsDateText} • Tap any Bill No to open full Tax Invoice</div>
           </div>
 
           <!-- Table Container with Horizontal Scroll -->
@@ -11224,13 +11322,14 @@ window.renderCustomerReportActiveTab = async function () {
     // ⏰ REPORT 2: OUTSTANDING REPORT (Image 3 & 4)
     // ==========================================
     if (activeTab === 'outstanding') {
-        var osList = partyRep.outstanding || partyRep.os || [];
+        var rawOsList = partyRep.outstanding || partyRep.os || [];
+        var osList = rawOsList.filter(r => dateInRange(r[0]));
         if (osList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#15803d; font-size:13px;">
               <i class="fas fa-check-circle" style="font-size:32px; color:#22c55e; margin-bottom:10px;"></i>
               <div style="font-weight:bold; font-size:15px;">Account Clear!</div>
-              <div style="font-size:11px; color:#64748b; margin-top:4px;">No outstanding or pending bills recorded for ${escHtml(cust.n)}.</div>
+              <div style="font-size:11px; color:#64748b; margin-top:4px;">No outstanding or pending bills recorded for ${escHtml(cust.n)}${(fromDate || toDate) ? ' in selected date range' : ''}.</div>
             </div>`;
             return;
         }
@@ -11245,6 +11344,10 @@ window.renderCustomerReportActiveTab = async function () {
         });
         var avgDays = osList.length > 0 ? Math.round(totalDays / osList.length) : 0;
 
+        var osDateText = (fromDate || toDate)
+            ? `&nbsp;&nbsp; <b>DATES:</b> ${fmtDate(fromDate || '2026-04-01')} TO ${fmtDate(toDate || '2027-03-31')}`
+            : '';
+
         var html = `
         <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b;">
           
@@ -11254,7 +11357,7 @@ window.renderCustomerReportActiveTab = async function () {
           </div>
           <div style="background:#fef2f2; border:1px solid #fecaca; border-top:none; padding:8px 10px; font-size:11px; color:#991b1b; line-height:1.4; margin-bottom:8px;">
             <div><b>PARTY:</b> ${escHtml(cust.n)} &nbsp;&nbsp; <b>PH:</b> ${escHtml(cust.p || 'N/A')}</div>
-            <div><b>ADDR:</b> ${escHtml(cust.a || 'N/A')}</div>
+            <div><b>ADDR:</b> ${escHtml(cust.a || 'N/A')}${osDateText}</div>
             <div style="font-size:10px; color:#64748b; margin-top:2px;">--- Tap any Bill No to open full Tax Invoice</div>
           </div>
 
@@ -11324,13 +11427,14 @@ window.renderCustomerReportActiveTab = async function () {
     // 📒 REPORT 3: LEDGER STATEMENT (Image 5)
     // ==========================================
     if (activeTab === 'ledger') {
-        var ldList = partyRep.ledger || partyRep.ld || [];
+        var rawLdList = partyRep.ledger || partyRep.ld || [];
+        var ldList = rawLdList.filter(r => dateInRange(r[0]));
         if (ldList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
               <i class="fas fa-book-open" style="font-size:28px; color:#cbd5e1; margin-bottom:8px;"></i>
               <div style="font-weight:bold;">No Ledger Transactions Recorded</div>
-              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No debit/credit entries for ${escHtml(cust.n)}.</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No debit/credit entries for ${escHtml(cust.n)}${(fromDate || toDate) ? ' in selected date range' : ''}.</div>
             </div>`;
             return;
         }
@@ -11343,12 +11447,15 @@ window.renderCustomerReportActiveTab = async function () {
         var closingBal = totDr - totCr;
         var closingBalText = (closingBal !== 0) ? `₹ ${Math.abs(closingBal).toFixed(2)} ${closingBal > 0 ? 'Dr' : 'Cr'}` : '₹ 0.00';
 
+        var ldFrom = fmtDate(fromDate || '2026-04-01');
+        var ldTo = fmtDate(toDate || '2027-03-31');
+
         var html = `
         <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b;">
           
           <!-- Banner Header matching Image 5 -->
           <div style="background:#334155; color:#fff; font-weight:bold; font-size:12px; padding:6px 10px; border-radius:6px 6px 0 0; text-align:center; letter-spacing:0.5px;">
-            DURGA SAREES &nbsp;&nbsp; A/C: ${escHtml(cust.n).toUpperCase()} &nbsp;&nbsp; PHONE: ${escHtml(cust.p || 'N/A')}
+            DURGA SAREES &nbsp;&nbsp; A/C: ${escHtml(cust.n).toUpperCase()} &nbsp;&nbsp; FROM:${ldFrom} &nbsp;&nbsp; TO:${ldTo} &nbsp;&nbsp; PHONE: ${escHtml(cust.p || 'N/A')}
           </div>
           <div style="background:#f8fafc; border:1px solid #e2e8f0; border-top:none; padding:6px 10px; font-size:10px; color:#64748b; margin-bottom:8px;">
             FINANCIAL YEAR STATEMENT • Tap any Bill No to open full Tax Invoice
@@ -11600,19 +11707,104 @@ window.shareBillWhatsApp = function () {
     window.open(url, '_blank');
 };
 
+// Download Active Customer Report as PDF (Landscape Format)
+window.downloadReportPDF = async function () {
+    var printContent = document.getElementById('erpReportPrintWrapper');
+    if (!printContent) return;
+
+    var cust = window._currentReportingCustomer;
+    var custName = (cust && cust.n) ? cust.n.replace(/[^a-zA-Z0-9]/g, '_') : 'Customer';
+    var activeTab = window._activeCustomerReportTab || 'report';
+    var fileName = `DurgaSarees_${activeTab}_${custName}.pdf`;
+
+    var btn = event ? (event.currentTarget || event.target) : null;
+    var oldText = btn ? btn.innerHTML : '';
+    if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PDF...';
+
+    try {
+        if (window.jspdf && window.jspdf.jsPDF && typeof html2canvas === 'function') {
+            var canvas = await html2canvas(printContent, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff'
+            });
+
+            var imgData = canvas.toDataURL('image/jpeg', 0.95);
+            var { jsPDF } = window.jspdf;
+            var pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+            var pdfW = pdf.internal.pageSize.getWidth();
+            var pdfH = pdf.internal.pageSize.getHeight();
+            var margin = 20;
+            var maxW = pdfW - (margin * 2);
+            var maxH = pdfH - (margin * 2);
+
+            var imgW = maxW;
+            var imgH = (canvas.height * imgW) / canvas.width;
+
+            if (imgH <= maxH) {
+                pdf.addImage(imgData, 'JPEG', margin, margin, imgW, imgH);
+            } else {
+                var pageH = Math.floor((canvas.width * maxH) / maxW);
+                var srcY = 0;
+                var pageIndex = 0;
+                while (srcY < canvas.height) {
+                    if (pageIndex > 0) pdf.addPage();
+                    var sliceH = Math.min(pageH, canvas.height - srcY);
+                    var pageCanvas = document.createElement('canvas');
+                    pageCanvas.width = canvas.width;
+                    pageCanvas.height = sliceH;
+                    var pageCtx = pageCanvas.getContext('2d');
+                    pageCtx.fillStyle = '#ffffff';
+                    pageCtx.fillRect(0, 0, pageCanvas.width, sliceH);
+                    pageCtx.drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+                    var pageImg = pageCanvas.toDataURL('image/jpeg', 0.95);
+                    var renderH = (sliceH * maxW) / canvas.width;
+                    pdf.addImage(pageImg, 'JPEG', margin, margin, maxW, renderH);
+                    srcY += pageH;
+                    pageIndex++;
+                }
+            }
+
+            pdf.save(fileName);
+            if (btn) btn.innerHTML = oldText;
+            return;
+        }
+    } catch (e) {
+        console.warn("jsPDF html2canvas error, using print fallback:", e);
+    }
+
+    if (btn) btn.innerHTML = oldText;
+    window.printActiveCustomerReport();
+};
+
 // Print Active Customer Report (Finish Sales, Outstanding, or Ledger)
 window.printActiveCustomerReport = function () {
     var printContent = document.getElementById('erpReportPrintWrapper');
     if (!printContent) return;
-    var printWindow = window.open('', '', 'width=900,height=900');
+    var printWindow = window.open('', '', 'width=950,height=900');
     printWindow.document.write('<html><head><title>ERP Report - Durga Sarees</title>');
-    printWindow.document.write('<style>body { font-family: Segoe UI, sans-serif; padding: 15px; } table { width:100%; border-collapse:collapse; font-size:10px; } th, td { border:1px solid #cbd5e1; padding:4px 6px; } @media print { body { -webkit-print-color-adjust: exact; } }</style>');
+    printWindow.document.write('<style>body { font-family: Segoe UI, sans-serif; padding: 15px; -webkit-print-color-adjust: exact; print-color-adjust: exact; } table { width:100%; border-collapse:collapse; font-size:10px; } th, td { border:1px solid #cbd5e1; padding:4px 6px; } @page { size: landscape; margin: 10mm; } @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }</style>');
     printWindow.document.write('</head><body>');
     printWindow.document.write(printContent.outerHTML);
     printWindow.document.write('</body></html>');
     printWindow.document.close();
     printWindow.focus();
-    setTimeout(() => { printWindow.print(); printWindow.close(); }, 300);
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 350);
+};
+
+// Preferred Transport Setter (Cart & Checkout)
+window.setOrderTransport = function(val) {
+    var valClean = String(val || '').trim();
+    localStorage.setItem('ds_preferred_transport', valClean);
+    try {
+        var cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}');
+        cd.transport = valClean;
+        localStorage.setItem('dsCustomerDetails', JSON.stringify(cd));
+    } catch(e){}
+    var inp = document.getElementById('orderTransportInput');
+    if (inp && inp.value !== valClean) inp.value = valClean;
+    var cdInp = document.getElementById('cdTransport');
+    if (cdInp && cdInp.value !== valClean) cdInp.value = valClean;
 };
 
 // ==========================================
@@ -11624,7 +11816,17 @@ window.startOrderOnBehalf = function () {
     var cust = window._currentReportingCustomer;
     if (!cust) return;
 
-    if (!confirm(`Take order on behalf of:\n\n${cust.n} (${cust.ct || 'Customer'})\n\nAll designs you add to cart will be ordered under this customer, and their Name, Firm, Phone, Station, Address, and GST will print on the Order PDF.`)) {
+    // Auto-detect transport from customer's latest Finish Sales bill
+    var partyTransport = '';
+    try {
+        var rep = (window._accountingReportsCache && window._accountingReportsCache.reports) || {};
+        var pRep = rep[cust.c] || rep[cust.n];
+        if (pRep && pRep.finishSales && pRep.finishSales.length > 0) {
+            partyTransport = pRep.finishSales[0][12] || ''; // TRANSPO column
+        }
+    } catch(e){}
+
+    if (!confirm(`Take order on behalf of:\n\n${cust.n} (${cust.ct || 'Customer'})\n\nPreferred Transport: ${partyTransport || 'Direct'}\n\nAll designs you add to cart will be ordered under this customer, and their Name, Firm, Phone, Station, Address, Transport, and GST will print on the Order PDF.`)) {
         return;
     }
 
@@ -11636,8 +11838,10 @@ window.startOrderOnBehalf = function () {
         state: cust.st || '',
         address: cust.a || '',
         gst: cust.g || '',
+        transport: partyTransport || localStorage.getItem('ds_preferred_transport') || '',
         onBehalf: true
     };
+    if (details.transport) localStorage.setItem('ds_preferred_transport', details.transport);
 
     localStorage.setItem("dsCustomerDetails", JSON.stringify(details));
     localStorage.setItem("ds_active_on_behalf", JSON.stringify(details));

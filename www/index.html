@@ -280,6 +280,8 @@
           style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
         <input type="text" id="cdState" list="stateList" placeholder="State *"
           style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
+        <input type="text" id="cdTransport" placeholder="Preferred Transport (e.g. Pawan, Batco)"
+          style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
       </div>
       <p id="cdErr" style="color:red; font-size:12px; margin-top:8px; height:14px;"></p>
       <button onclick="saveCustomerDetails()" id="btnSaveCustomerDetails"
@@ -520,7 +522,7 @@
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=3"></script>
-  <script src="./app.js?v=17"></script>
+  <script src="./app.js?v=18"></script>
   <script src="./sticker_editor.js?v=12"></script>
 
   <div id="adminCameraPreviewModal"
@@ -705,7 +707,7 @@
   </div>
 
 
-  <script src="./pdf_engine.js?v=4"></script>
+  <script src="./pdf_engine.js?v=5"></script>
   <!-- Barcode & HTML-to-Image Libraries for NAS Printing -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
@@ -826,9 +828,42 @@
           <!-- Injected dynamically: WhatsApp & Call -->
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
+          <button type="button" onclick="window.downloadReportPDF()"
+            style="background:#be185d; color:#fff; border:none; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
+            <i class="fas fa-file-pdf"></i> Download PDF
+          </button>
           <button type="button" onclick="window.printActiveCustomerReport()"
             style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
-            <i class="fas fa-print"></i> Print Report
+            <i class="fas fa-print"></i> Print
+          </button>
+        </div>
+      </div>
+
+      <!-- 📅 Date Range Filter Bar for Reports -->
+      <div style="display:flex; gap:6px; align-items:center; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin-top:6px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:4px; font-size:11px; font-weight:bold; color:#475569;">
+          <i class="fas fa-calendar-alt" style="color:var(--myntra-pink);"></i> Date:
+        </div>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <span style="font-size:10px; color:#64748b;">From</span>
+          <input type="date" id="repFromDate" onchange="window.applyReportDateFilter()"
+            style="padding:3px 5px; border:1px solid #cbd5e1; border-radius:4px; font-size:11px; background:#fff; color:#1e293b; outline:none;">
+          <span style="font-size:10px; color:#64748b;">To</span>
+          <input type="date" id="repToDate" onchange="window.applyReportDateFilter()"
+            style="padding:3px 5px; border:1px solid #cbd5e1; border-radius:4px; font-size:11px; background:#fff; color:#1e293b; outline:none;">
+        </div>
+        <div style="display:flex; gap:4px; align-items:center; margin-left:auto;">
+          <button type="button" onclick="window.setReportDatePreset('fy')"
+            style="background:#fff; border:1px solid #cbd5e1; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">
+            FY 26-27
+          </button>
+          <button type="button" onclick="window.setReportDatePreset('month')"
+            style="background:#fff; border:1px solid #cbd5e1; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">
+            This Month
+          </button>
+          <button type="button" onclick="window.setReportDatePreset('all')"
+            style="background:#fff; border:1px solid #cbd5e1; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">
+            All
           </button>
         </div>
       </div>
