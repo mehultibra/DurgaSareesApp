@@ -10714,7 +10714,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
     }
 
     try {
-        var res = await fetch('./accounting_customers.json');
+        var res = await fetch('./accounting_customers.json?v=3');
         if (res && res.ok) {
             var data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
@@ -10738,7 +10738,7 @@ window.loadAccountingReportsData = async function () {
     if (window._accountingReportsCache) return window._accountingReportsCache;
 
     try {
-        var res = await fetch('./accounting_reports.json?v=2');
+        var res = await fetch('./accounting_reports.json?v=3');
         if (res && res.ok) {
             window._accountingReportsCache = await res.json();
             return window._accountingReportsCache;
@@ -11088,7 +11088,12 @@ window.renderCustomerReportActiveTab = async function () {
     // 📋 REPORT 1: FINISH SALES DETAILED REPORT (Image 1 & 2)
     // ==========================================
     if (activeTab === 'sales') {
-        var fsList = partyRep.finishSales || partyRep.fs || [];
+        var rawFsList = partyRep.finishSales || partyRep.fs || [];
+        // Strictly exclude Credit Notes (/CS, /CN, /CR) and Goods Return (/GR) from Finish Sales Report
+        var fsList = rawFsList.filter(r => {
+            var b = String(r[1] || '').toUpperCase();
+            return !b.includes('/CS') && !b.includes('/GR') && !b.includes('/CN') && !b.includes('/CR') && !b.endsWith('CS') && !b.endsWith('GR');
+        });
         if (fsList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
