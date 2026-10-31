@@ -193,6 +193,82 @@ async function syncAccountingData() {
         });
     });
 
+    const GST_STATE_MAP = {
+        '01': 'JAMMU AND KASHMIR', '02': 'HIMACHAL PRADESH', '03': 'PUNJAB', '04': 'CHANDIGARH',
+        '05': 'UTTARAKHAND', '06': 'HARYANA', '07': 'DELHI', '08': 'RAJASTHAN', '09': 'UTTAR PRADESH',
+        '10': 'BIHAR', '11': 'SIKKIM', '12': 'ARUNACHAL PRADESH', '13': 'NAGALAND', '14': 'MANIPUR',
+        '15': 'MIZORAM', '16': 'TRIPURA', '17': 'MEGHALAYA', '18': 'ASSAM', '19': 'WEST BENGAL',
+        '20': 'JHARKHAND', '21': 'ODISHA', '22': 'CHHATTISGARH', '23': 'MADHYA PRADESH', '24': 'GUJARAT',
+        '25': 'DAMAN AND DIU', '26': 'DADRA AND NAGAR HAVELI', '27': 'MAHARASHTRA', '28': 'ANDHRA PRADESH',
+        '29': 'KARNATAKA', '30': 'GOA', '31': 'LAKSHADWEEP', '32': 'KERALA', '33': 'TAMIL NADU',
+        '34': 'PUDUCHERRY', '35': 'ANDAMAN AND NICOBAR', '36': 'TELANGANA', '37': 'ANDHRA PRADESH', '38': 'LADAKH'
+    };
+
+    function extractState(m) {
+        if (!m) return '';
+        const gst = String(m.GST || m.g || '').trim();
+        if (gst.length >= 2 && GST_STATE_MAP[gst.substring(0, 2)]) {
+            return GST_STATE_MAP[gst.substring(0, 2)];
+        }
+        const txt = ((m.city || m.ct || '') + ' ' + (m.ST || m.st || '') + ' ' + (m.AD1 || '') + ' ' + (m.AD2 || '') + ' ' + (m.AD3 || '') + ' ' + (m.AD4 || '')).toUpperCase();
+        if (txt.includes('(M.H') || txt.includes('(MH') || txt.includes('MAHARASHTRA') || txt.includes('MUMBAI') || txt.includes('PUNE') || txt.includes('NAGPUR') || txt.includes('BHUSAVAL')) return 'MAHARASHTRA';
+        if (txt.includes('(G.J') || txt.includes('(GJ') || txt.includes('GUJARAT') || txt.includes('SURAT') || txt.includes('AHMEDABAD') || txt.includes('RAJKOT') || txt.includes('VADODARA')) return 'GUJARAT';
+        if (txt.includes('(R.J') || txt.includes('(RJ') || txt.includes('(RAJ') || txt.includes('RAJASTHAN') || txt.includes('JAIPUR') || txt.includes('JODHPUR')) return 'RAJASTHAN';
+        if (txt.includes('(M.P') || txt.includes('(MP') || txt.includes('MADHYA PRADESH') || txt.includes('INDORE') || txt.includes('BHOPAL') || txt.includes('JABALPUR')) return 'MADHYA PRADESH';
+        if (txt.includes('(U.P') || txt.includes('(UP') || txt.includes('UTTAR PRADESH') || txt.includes('KANPUR') || txt.includes('LUCKNOW') || txt.includes('VARANASI') || txt.includes('AGRA')) return 'UTTAR PRADESH';
+        if (txt.includes('(C.G') || txt.includes('(CG') || txt.includes('CHHATTISGARH') || txt.includes('RAIPUR') || txt.includes('BILASPUR')) return 'CHHATTISGARH';
+        if (txt.includes('(A.P') || txt.includes('(AP') || txt.includes('ANDHRA PRADESH') || txt.includes('VIJAYWADA') || txt.includes('VISAKHAPATNAM') || txt.includes('GUNTUR')) return 'ANDHRA PRADESH';
+        if (txt.includes('(T.S') || txt.includes('(TS') || txt.includes('TELANGANA') || txt.includes('HYDERABAD') || txt.includes('WARANGAL')) return 'TELANGANA';
+        if (txt.includes('(O.D') || txt.includes('(OD') || txt.includes('ODISHA') || txt.includes('ORISSA') || txt.includes('CUTTACK') || txt.includes('BHUBANESWAR')) return 'ODISHA';
+        if (txt.includes('(W.B') || txt.includes('(WB') || txt.includes('WEST BENGAL') || txt.includes('KOLKATA') || txt.includes('SILIGURI')) return 'WEST BENGAL';
+        if (txt.includes('(B.R') || txt.includes('(BR') || txt.includes('BIHAR') || txt.includes('PATNA') || txt.includes('GAYA') || txt.includes('MUZAFFARPUR')) return 'BIHAR';
+        if (txt.includes('(J.K') || txt.includes('(JK') || txt.includes('JHARKHAND') || txt.includes('RANCHI') || txt.includes('JAMSHEDPUR') || txt.includes('DHANBAD')) return 'JHARKHAND';
+        if (txt.includes('(K.A') || txt.includes('(KA') || txt.includes('KARNATAKA') || txt.includes('BANGALORE') || txt.includes('BENGALURU') || txt.includes('MYSORE')) return 'KARNATAKA';
+        if (txt.includes('(T.N') || txt.includes('(TN') || txt.includes('(T.M') || txt.includes('TAMIL NADU') || txt.includes('CHENNAI') || txt.includes('MADURAI') || txt.includes('COIMBATORE')) return 'TAMIL NADU';
+        if (txt.includes('(K.L') || txt.includes('(KL') || txt.includes('KERALA') || txt.includes('KOCHI') || txt.includes('CALICUT')) return 'KERALA';
+        if (txt.includes('(H.R') || txt.includes('(HR') || txt.includes('HARYANA') || txt.includes('ROHTAK') || txt.includes('PANIPAT') || txt.includes('AMBALA')) return 'HARYANA';
+        if (txt.includes('(P.B') || txt.includes('(PB') || txt.includes('PUNJAB') || txt.includes('LUDHIANA') || txt.includes('AMRITSAR') || txt.includes('JALANDHAR')) return 'PUNJAB';
+        if (txt.includes('(A.S') || txt.includes('(AS') || txt.includes('ASSAM') || txt.includes('GUWAHATI')) return 'ASSAM';
+        if (txt.includes('DELHI')) return 'DELHI';
+        return (m.ST && m.ST.trim() !== '-') ? m.ST.trim() : '';
+    }
+
+    // Load any persisted party linkings (from Firebase/admin actions) to preserve across syncs
+    const partyLinksBackupPath = path.join(WWW_DIR, 'party_links_backup.json');
+    let localLinks = {};
+    if (fs.existsSync(partyLinksBackupPath)) {
+        try { localLinks = JSON.parse(fs.readFileSync(partyLinksBackupPath, 'utf8')); } catch(e){}
+    }
+
+    // Try fetching live PartyLinks from Firebase Firestore
+    try {
+        console.log('☁️ Checking for live Firebase PartyLinks...');
+        const fRes = await fetch('https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyLinks', { signal: AbortSignal.timeout(6000) });
+        if (fRes.ok) {
+            const fData = await fRes.json();
+            const docs = (fData && fData.documents) ? fData.documents : [];
+            docs.forEach(doc => {
+                if (!doc.fields) return;
+                const f = doc.fields;
+                const code = (f.partyCode && f.partyCode.stringValue) ? f.partyCode.stringValue.trim().toUpperCase() : doc.name.split('/').pop().toUpperCase();
+                localLinks[code] = {
+                    code: code,
+                    phone: f.phone ? f.phone.stringValue : '',
+                    station: f.station ? f.station.stringValue : '',
+                    state: f.state ? f.state.stringValue : '',
+                    agent: f.agent ? f.agent.stringValue : '',
+                    transport: f.transport ? f.transport.stringValue : '',
+                    gst: f.gst ? f.gst.stringValue : '',
+                    role: f.role ? f.role.stringValue : 'customer'
+                };
+            });
+            fs.writeFileSync(partyLinksBackupPath, JSON.stringify(localLinks, null, 2));
+            console.log(`☁️ Synced ${docs.length} PartyLinks from Firebase.`);
+        }
+    } catch(cloudErr) {
+        console.log('ℹ️ Local party links backup will be used:', cloudErr.message);
+    }
+
     console.log('👥 5. Compiling Master Customers List...');
     const customers = [];
     const seenCodes = new Set();
@@ -222,11 +298,21 @@ async function syncAccountingData() {
             if (raw.length >= 10) phone = raw.slice(-10);
         }
 
+        // Apply any permanent cloud link overrides
+        let linkData = localLinks[k] || localLinks[code] || null;
+        if (linkData) {
+            if (linkData.phone && !phone) phone = linkData.phone;
+        }
+
+        const detectedState = extractState(m);
+        const finalState = (linkData && linkData.state) ? linkData.state : detectedState;
+
         customers.push({
             c: code,
             n: m.partyname || code,
             p: phone,
             ct: m.city || m.CITY || '',
+            st: finalState,
             a: [m.AD1, m.AD2, m.AD3, m.AD4].filter(Boolean).map(s => String(s).trim()).join(', '),
             g: m.GST || '',
             b: Math.round(absBal),
@@ -238,8 +324,8 @@ async function syncAccountingData() {
             hs: rep.salesItems.length > 0,
             ht: rep.transport.length > 0,
             ho: rep.outstanding.length > 0,
-            tr: transportByParty.get(k) || '',
-            ag: agentByParty.get(k) || '',
+            tr: (linkData && linkData.transport) ? linkData.transport : (transportByParty.get(k) || ''),
+            ag: (linkData && linkData.agent) ? linkData.agent : (agentByParty.get(k) || ''),
             role: isAgent ? 'agent' : 'customer',
             isAgent: isAgent
         });
@@ -253,11 +339,13 @@ async function syncAccountingData() {
             const bal = ledgerBalances.get(k) || 0;
             const absBal = Math.abs(bal);
             const drCr = (bal < 0) ? 'Cr' : (bal > 0 ? 'Dr' : '');
+            let linkData = localLinks[k] || null;
             customers.push({
                 c: k,
                 n: k,
-                p: phoneMap.get(k) || '',
+                p: (linkData && linkData.phone) ? linkData.phone : (phoneMap.get(k) || ''),
                 ct: '',
+                st: (linkData && linkData.state) ? linkData.state : '',
                 a: '',
                 g: '',
                 b: Math.round(absBal),
@@ -269,8 +357,8 @@ async function syncAccountingData() {
                 hs: rep.salesItems.length > 0,
                 ht: rep.transport.length > 0,
                 ho: rep.outstanding.length > 0,
-                tr: transportByParty.get(k) || '',
-                ag: agentByParty.get(k) || ''
+                tr: (linkData && linkData.transport) ? linkData.transport : (transportByParty.get(k) || ''),
+                ag: (linkData && linkData.agent) ? linkData.agent : (agentByParty.get(k) || '')
             });
         }
     });

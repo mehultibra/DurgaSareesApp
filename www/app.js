@@ -6208,7 +6208,10 @@ function loadCartCustomerDetails() {
 function renderCustomerDetails(d, container) {
     if (!container || !d) return;
     var primaryName = d.name || d.firm || "Select Party";
-    var stationText = d.station ? ` (${d.station})` : "";
+    var stationParts = [];
+    if (d.station) stationParts.push(d.station);
+    if (d.state) stationParts.push(d.state);
+    var stationText = stationParts.length ? ` (${stationParts.join(', ')})` : "";
     
     var subParts = [];
     if (d.agent) subParts.push(`<span style="color:#64748b;">Ag:</span> <b>${esc(d.agent)}</b>`);
@@ -6341,6 +6344,85 @@ async function saveCustomerDetails() {
         localStorage.setItem("ds_active_on_behalf", JSON.stringify(d));
         window.activeOrderOnBehalf = d;
         window.updateOrderOnBehalfBanner();
+
+        // ☁️ Persist party linking and party data to Firebase Firestore (unaffected by 2-hour sync)
+        try {
+            var partyCodeKey = (d.firm || d.name || '').trim();
+            if (partyCodeKey) {
+                var cleanCodeKey = partyCodeKey.replace(/[\/\.]/g, '_');
+                var nowIso = new Date().toISOString();
+                var adminInfo = "Admin";
+                try {
+                    var myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}');
+                    adminInfo = myCd.name ? `${myCd.name} (${activeUser || ''})` : (activeUser || "Admin");
+                } catch(e){}
+
+                var pLinkDoc = {
+                    fields: {
+                        partyCode: { stringValue: partyCodeKey },
+                        partyName: { stringValue: d.name || partyCodeKey },
+                        firm: { stringValue: d.firm || d.name || '' },
+                        station: { stringValue: d.station || '' },
+                        state: { stringValue: d.state || '' },
+                        agent: { stringValue: d.agent || '' },
+                        transport: { stringValue: d.transport || '' },
+                        gst: { stringValue: d.gst || '' },
+                        phone: { stringValue: d.phone || '' },
+                        address: { stringValue: d.address || '' },
+                        updatedAt: { timestampValue: nowIso },
+                        updatedByAdmin: { stringValue: adminInfo }
+                    }
+                };
+                window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyLinks/" + encodeURIComponent(cleanCodeKey), {
+                    method: "PATCH",
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(pLinkDoc)
+                }).catch(function(e){ console.warn("PartyLinks save error:", e); });
+
+                // If phone is provided, also update/link in Users collection in Firestore
+                if (d.phone) {
+                    var cleanPhoneKey = d.phone.trim();
+                    var userPatchDoc = {
+                        fields: {
+                            linkedAccount: { stringValue: partyCodeKey },
+                            linkedAccountName: { stringValue: d.name || partyCodeKey },
+                            station: { stringValue: d.station || '' },
+                            state: { stringValue: d.state || '' },
+                            agent: { stringValue: d.agent || '' },
+                            transport: { stringValue: d.transport || '' },
+                            gst: { stringValue: d.gst || '' },
+                            name: { stringValue: d.name || partyCodeKey },
+                            approvalStatus: { stringValue: 'approved' },
+                            isApproved: { booleanValue: true },
+                            approvedByAdmin: { stringValue: adminInfo },
+                            approvedAt: { timestampValue: nowIso }
+                        }
+                    };
+                    window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(cleanPhoneKey) +
+                        "?updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=agent&updateMask.fieldPaths=transport&updateMask.fieldPaths=gst&updateMask.fieldPaths=name&updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt", {
+                        method: "PATCH",
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(userPatchDoc)
+                    }).catch(function(e){ console.warn("Users linking save error:", e); });
+                }
+
+                // Update local backup
+                try {
+                    var backup = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}');
+                    backup[partyCodeKey.toUpperCase()] = {
+                        phone: d.phone,
+                        state: d.state,
+                        station: d.station,
+                        agent: d.agent,
+                        transport: d.transport,
+                        gst: d.gst
+                    };
+                    localStorage.setItem('ds_party_links_backup', JSON.stringify(backup));
+                } catch(e){}
+            }
+        } catch(linkErr) {
+            console.warn("Failed to persist party link to Firebase:", linkErr);
+        }
     }
     loadCartCustomerDetails();
 
@@ -9472,6 +9554,50 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
             });
         } catch(liveErr){}
 
+        // ☁️ Persist to PartyLinks collection so it survives 2-hour accounting syncs
+        if (selectedCode) {
+            try {
+                var partyDocId = encodeURIComponent(String(selectedCode).trim().toUpperCase().replace(/[\/\.]/g, '_'));
+                var partyPatchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyLinks/" + partyDocId +
+                    "?updateMask.fieldPaths=partyCode&updateMask.fieldPaths=partyName&updateMask.fieldPaths=phone&updateMask.fieldPaths=role&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=updatedAt";
+                var partyPatchBody = {
+                    fields: {
+                        partyCode: { stringValue: String(selectedCode) },
+                        partyName: { stringValue: String(selectedName || selectedCode) },
+                        phone: { stringValue: String(docId) },
+                        role: { stringValue: String(selectedRole) },
+                        isApproved: { booleanValue: true },
+                        approvalStatus: { stringValue: "approved" },
+                        approvedByAdmin: { stringValue: adminName },
+                        approvedAt: { timestampValue: nowIso },
+                        updatedAt: { timestampValue: nowIso }
+                    }
+                };
+                await fetch(partyPatchUrl, {
+                    method: "PATCH",
+                    headers: headers,
+                    body: JSON.stringify(partyPatchBody)
+                });
+            } catch(partyErr) {
+                console.warn("PartyLinks save error:", partyErr);
+            }
+
+            try {
+                var localPartyLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}');
+                localPartyLinks[String(selectedCode).trim().toUpperCase()] = {
+                    code: selectedCode,
+                    name: selectedName,
+                    phone: docId,
+                    role: selectedRole,
+                    isApproved: true,
+                    approvalStatus: 'approved',
+                    approvedByAdmin: adminName,
+                    approvedAt: nowIso
+                };
+                localStorage.setItem('ds_party_links_backup', JSON.stringify(localPartyLinks));
+            } catch(e){}
+        }
+
         // Update cache
         if (!window.adminCustomerCache) window.adminCustomerCache = {};
         window.adminCustomerCache[docId] = {
@@ -11440,6 +11566,9 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
             var data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
                 window._compiledCustomersList = data;
+                if (typeof window.mergeFirebasePartyLinks === 'function') {
+                    window.mergeFirebasePartyLinks(window._compiledCustomersList);
+                }
                 window.renderCustomerDirectoryUI();
             }
         }
@@ -11512,6 +11641,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
     var query = (document.getElementById('custSearchInput') ? document.getElementById('custSearchInput').value : "").toLowerCase().trim();
     var filterType = window._currentCustDirFilter || 'all';
     var list = window._compiledCustomersList || [];
+    var tokens = query ? query.split(/\s+/).filter(Boolean) : [];
 
     if (!isAppend) {
         window._custDirRenderedCount = 40;
@@ -11528,16 +11658,20 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         }
 
         var filtered = list.filter(c => {
-            if (query) {
+            if (tokens.length > 0) {
                 var searchStr = [
                     c.n,
                     c.c,
                     c.p,
                     c.ct,
+                    c.st,
+                    c.ag,
+                    c.tr,
                     c.a,
                     c.g
                 ].join(' ').toLowerCase();
-                if (!searchStr.includes(query)) return false;
+                var matchesAll = tokens.every(t => searchStr.includes(t));
+                if (!matchesAll) return false;
             }
             if (filterType === 'debit') return c.d === 'Dr' && c.b > 0;
             if (filterType === 'bills') return (c.pb || 0) > 0;
@@ -11546,6 +11680,22 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
             if (filterType === 'reports') return c.hl || c.hs || c.ht || c.ho || c.b > 0;
             return true;
         });
+
+        // Contact-style smart ranking: Name prefix > Name substring > City prefix > City substring
+        if (tokens.length > 0) {
+            var firstTok = tokens[0];
+            filtered.sort((a, b) => {
+                var aN = (a.n || '').toLowerCase();
+                var bN = (b.n || '').toLowerCase();
+                var aCt = (a.ct || '').toLowerCase();
+                var bCt = (b.ct || '').toLowerCase();
+                var aScore = (aN.startsWith(firstTok) ? 100 : (aN.includes(' ' + firstTok) ? 80 : (aN.includes(firstTok) ? 50 : 0))) +
+                             (aCt.startsWith(firstTok) ? 60 : (aCt.includes(firstTok) ? 30 : 0));
+                var bScore = (bN.startsWith(firstTok) ? 100 : (bN.includes(' ' + firstTok) ? 80 : (bN.includes(firstTok) ? 50 : 0))) +
+                             (bCt.startsWith(firstTok) ? 60 : (bCt.includes(firstTok) ? 30 : 0));
+                return bScore - aScore;
+            });
+        }
 
         window._currentFilteredCustomers = filtered;
     }
@@ -11580,6 +11730,8 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         var waPhone = (c.p && c.p.length === 10) ? ('91' + c.p) : (c.p || '');
 
         var codeSafe = encodeURIComponent(c.c);
+        var nameDisplay = (tokens && tokens.length > 0 && typeof highlightContactMatch === 'function') ? highlightContactMatch(c.n, tokens) : escHtml(c.n);
+        var locDisplay = [c.ct, (c.st && c.st !== c.ct ? c.st : '')].filter(Boolean).map(x => (tokens && tokens.length > 0 && typeof highlightContactMatch === 'function') ? highlightContactMatch(x, tokens) : escHtml(x)).join(', ');
 
         html += `
         <div id="${cardId}" style="border:1px solid #e5e7eb; border-radius:10px; background:#fff; padding:12px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
@@ -11588,10 +11740,10 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; cursor:pointer;" onclick="window.openCustomerReportsModal(decodeURIComponent('${codeSafe}'))">
             <div style="flex:1;">
               <div style="font-weight:bold; font-size:14px; color:var(--text-main); line-height:1.3;">
-                ${escHtml(c.n)}
+                ${nameDisplay}
               </div>
               <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
-                ${c.ct ? `<span style="font-size:11px; color:#64748b;"><i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${escHtml(c.ct)}</span>` : ''}
+                ${locDisplay ? `<span style="font-size:11px; color:#64748b;"><i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${locDisplay}</span>` : ''}
                 ${c.g ? `<span style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 5px; border-radius:3px;">GST: ${escHtml(c.g)}</span>` : ''}
                 ${c.pb > 0 ? `<span style="font-size:10px; font-weight:700; color:#be185d; background:#fdf2f8; border:1px solid #fbcfe8; padding:1px 5px; border-radius:3px;"><i class="fas fa-file-invoice"></i> ${c.pb} Due</span>` : ''}
               </div>
@@ -12489,8 +12641,118 @@ window.setOrderTransport = function(val) {
 
 // ==========================================
 // 🛒 ADMIN ORDER & PARTY SELECT CONTROLLER
-// (Select party, auto-prefill station/agent/transport/gst, editable fields, clean banner)
+// (Select party, auto-prefill station/state/agent/transport/gst, editable fields, contact-style search)
 // ==========================================
+
+window.GST_STATE_MAP = {
+    '01': 'JAMMU AND KASHMIR', '02': 'HIMACHAL PRADESH', '03': 'PUNJAB', '04': 'CHANDIGARH',
+    '05': 'UTTARAKHAND', '06': 'HARYANA', '07': 'DELHI', '08': 'RAJASTHAN', '09': 'UTTAR PRADESH',
+    '10': 'BIHAR', '11': 'SIKKIM', '12': 'ARUNACHAL PRADESH', '13': 'NAGALAND', '14': 'MANIPUR',
+    '15': 'MIZORAM', '16': 'TRIPURA', '17': 'MEGHALAYA', '18': 'ASSAM', '19': 'WEST BENGAL',
+    '20': 'JHARKHAND', '21': 'ODISHA', '22': 'CHHATTISGARH', '23': 'MADHYA PRADESH', '24': 'GUJARAT',
+    '25': 'DAMAN AND DIU', '26': 'DADRA AND NAGAR HAVELI', '27': 'MAHARASHTRA', '28': 'ANDHRA PRADESH',
+    '29': 'KARNATAKA', '30': 'GOA', '31': 'LAKSHADWEEP', '32': 'KERALA', '33': 'TAMIL NADU',
+    '34': 'PUDUCHERRY', '35': 'ANDAMAN AND NICOBAR', '36': 'TELANGANA', '37': 'ANDHRA PRADESH', '38': 'LADAKH'
+};
+
+window.detectStateFromCustomer = function (cust) {
+    if (!cust) return '';
+    if (cust.st && typeof cust.st === 'string' && cust.st.trim() && cust.st.trim() !== '-') return cust.st.trim();
+    var gst = String(cust.g || cust.gst || '').trim();
+    if (gst.length >= 2 && window.GST_STATE_MAP[gst.substring(0, 2)]) {
+        return window.GST_STATE_MAP[gst.substring(0, 2)];
+    }
+    var txt = ((cust.ct || cust.station || '') + ' ' + (cust.a || cust.address || '')).toUpperCase();
+    if (txt.includes('(M.H') || txt.includes('(MH') || txt.includes('MAHARASHTRA') || txt.includes('MUMBAI') || txt.includes('PUNE') || txt.includes('NAGPUR') || txt.includes('BHUSAVAL')) return 'MAHARASHTRA';
+    if (txt.includes('(G.J') || txt.includes('(GJ') || txt.includes('GUJARAT') || txt.includes('SURAT') || txt.includes('AHMEDABAD') || txt.includes('RAJKOT') || txt.includes('VADODARA')) return 'GUJARAT';
+    if (txt.includes('(R.J') || txt.includes('(RJ') || txt.includes('(RAJ') || txt.includes('RAJASTHAN') || txt.includes('JAIPUR') || txt.includes('JODHPUR')) return 'RAJASTHAN';
+    if (txt.includes('(M.P') || txt.includes('(MP') || txt.includes('MADHYA PRADESH') || txt.includes('INDORE') || txt.includes('BHOPAL') || txt.includes('JABALPUR')) return 'MADHYA PRADESH';
+    if (txt.includes('(U.P') || txt.includes('(UP') || txt.includes('UTTAR PRADESH') || txt.includes('KANPUR') || txt.includes('LUCKNOW') || txt.includes('VARANASI') || txt.includes('AGRA')) return 'UTTAR PRADESH';
+    if (txt.includes('(C.G') || txt.includes('(CG') || txt.includes('CHHATTISGARH') || txt.includes('RAIPUR') || txt.includes('BILASPUR')) return 'CHHATTISGARH';
+    if (txt.includes('(A.P') || txt.includes('(AP') || txt.includes('ANDHRA PRADESH') || txt.includes('VIJAYWADA') || txt.includes('VISAKHAPATNAM') || txt.includes('GUNTUR')) return 'ANDHRA PRADESH';
+    if (txt.includes('(T.S') || txt.includes('(TS') || txt.includes('TELANGANA') || txt.includes('HYDERABAD') || txt.includes('WARANGAL')) return 'TELANGANA';
+    if (txt.includes('(O.D') || txt.includes('(OD') || txt.includes('ODISHA') || txt.includes('ORISSA') || txt.includes('CUTTACK') || txt.includes('BHUBANESWAR')) return 'ODISHA';
+    if (txt.includes('(W.B') || txt.includes('(WB') || txt.includes('WEST BENGAL') || txt.includes('KOLKATA') || txt.includes('SILIGURI')) return 'WEST BENGAL';
+    if (txt.includes('(B.R') || txt.includes('(BR') || txt.includes('BIHAR') || txt.includes('PATNA') || txt.includes('GAYA') || txt.includes('MUZAFFARPUR')) return 'BIHAR';
+    if (txt.includes('(J.K') || txt.includes('(JK') || txt.includes('JHARKHAND') || txt.includes('RANCHI') || txt.includes('JAMSHEDPUR') || txt.includes('DHANBAD')) return 'JHARKHAND';
+    if (txt.includes('(K.A') || txt.includes('(KA') || txt.includes('KARNATAKA') || txt.includes('BANGALORE') || txt.includes('BENGALURU') || txt.includes('MYSORE')) return 'KARNATAKA';
+    if (txt.includes('(T.N') || txt.includes('(TN') || txt.includes('(T.M') || txt.includes('TAMIL NADU') || txt.includes('CHENNAI') || txt.includes('MADURAI') || txt.includes('COIMBATORE')) return 'TAMIL NADU';
+    if (txt.includes('(K.L') || txt.includes('(KL') || txt.includes('KERALA') || txt.includes('KOCHI') || txt.includes('CALICUT')) return 'KERALA';
+    if (txt.includes('(H.R') || txt.includes('(HR') || txt.includes('HARYANA') || txt.includes('ROHTAK') || txt.includes('PANIPAT') || txt.includes('AMBALA')) return 'HARYANA';
+    if (txt.includes('(P.B') || txt.includes('(PB') || txt.includes('PUNJAB') || txt.includes('LUDHIANA') || txt.includes('AMRITSAR') || txt.includes('JALANDHAR')) return 'PUNJAB';
+    if (txt.includes('(A.S') || txt.includes('(AS') || txt.includes('ASSAM') || txt.includes('GUWAHATI')) return 'ASSAM';
+    if (txt.includes('DELHI')) return 'DELHI';
+    return '';
+};
+
+function highlightContactMatch(text, tokens) {
+    if (!text) return '';
+    var escaped = esc(String(text));
+    if (!tokens || tokens.length === 0) return escaped;
+    var sorted = tokens.filter(Boolean).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).sort((a,b) => b.length - a.length);
+    if (sorted.length === 0) return escaped;
+    var regex = new RegExp('(' + sorted.join('|') + ')', 'gi');
+    return escaped.replace(regex, '<mark style="background:#fef08a; color:#854d0e; font-weight:bold; padding:0 2px; border-radius:2px;">$1</mark>');
+}
+
+// ☁️ Overlay live party links from Firebase onto local accounts
+window.mergeFirebasePartyLinks = async function (list) {
+    if (!list || !Array.isArray(list)) return;
+    try {
+        var token = await getCachedAuthToken();
+        var headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyLinks?pageSize=1000", {
+            headers: headers
+        });
+        if (!res.ok) return;
+        var data = await res.json();
+        var docs = (data && data.documents) ? data.documents : [];
+        if (docs.length === 0) return;
+
+        var linksMap = new Map();
+        docs.forEach(doc => {
+            if (!doc.fields) return;
+            var f = doc.fields;
+            var code = (f.partyCode && f.partyCode.stringValue) ? f.partyCode.stringValue.trim().toUpperCase() : doc.name.split('/').pop().toUpperCase();
+            var info = {
+                code: code,
+                phone: f.phone ? f.phone.stringValue : '',
+                station: f.station ? f.station.stringValue : '',
+                state: f.state ? f.state.stringValue : '',
+                agent: f.agent ? f.agent.stringValue : '',
+                transport: f.transport ? f.transport.stringValue : '',
+                gst: f.gst ? f.gst.stringValue : '',
+                role: f.role ? f.role.stringValue : 'customer',
+                isApproved: f.isApproved ? f.isApproved.booleanValue : true
+            };
+            linksMap.set(code, info);
+        });
+
+        list.forEach(c => {
+            var k = (c.c || c.n || '').trim().toUpperCase();
+            if (linksMap.has(k)) {
+                var l = linksMap.get(k);
+                if (l.phone && !c.p) c.p = l.phone;
+                if (l.state) c.st = l.state;
+                if (l.station && (!c.ct || c.ct === 'Unknown')) c.ct = l.station;
+                if (l.agent && !c.ag) c.ag = l.agent;
+                if (l.transport && !c.tr) c.tr = l.transport;
+                if (l.gst && !c.g) c.g = l.gst;
+                c.isLinked = true;
+                c.isApproved = l.isApproved;
+            }
+        });
+
+        try {
+            var backupObj = {};
+            linksMap.forEach((v, k) => { backupObj[k] = v; });
+            localStorage.setItem('ds_party_links_backup', JSON.stringify(backupObj));
+        } catch(e){}
+    } catch(err) {
+        console.warn("mergeFirebasePartyLinks error:", err);
+    }
+};
 
 window.searchAndSelectParty = function (query) {
     var resEl = document.getElementById('cdPartySearchResults');
@@ -12514,20 +12776,51 @@ window.searchAndSelectParty = function (query) {
         return;
     }
 
-    var matched = [];
+    var tokens = q.split(/\s+/).filter(Boolean);
+
+    // Contact-style multi-token search across Name OR Station OR Code OR State
+    var scored = [];
     for (var i = 0; i < list.length; i++) {
         var c = list[i];
         var n = (c.n || '').toLowerCase();
-        var code = (c.c || '').toLowerCase();
         var ct = (c.ct || '').toLowerCase();
-        if (n.includes(q) || code.includes(q) || ct.includes(q)) {
-            matched.push(c);
-            if (matched.length >= 25) break;
+        var st = (c.st || '').toLowerCase();
+        var code = (c.c || '').toLowerCase();
+        var ag = (c.ag || '').toLowerCase();
+        var p = (c.p || '').toLowerCase();
+
+        var allTokensMatch = true;
+        for (var t = 0; t < tokens.length; t++) {
+            var tok = tokens[t];
+            if (!n.includes(tok) && !ct.includes(tok) && !st.includes(tok) && !code.includes(tok) && !ag.includes(tok) && !p.includes(tok)) {
+                allTokensMatch = false;
+                break;
+            }
         }
+        if (!allTokensMatch) continue;
+
+        // Contact-style ranking: name prefix > name word prefix > station prefix > substring
+        var score = 0;
+        var firstTok = tokens[0];
+        if (n.startsWith(firstTok)) score += 100;
+        else if (n.includes(' ' + firstTok)) score += 80;
+        else if (n.includes(firstTok)) score += 50;
+
+        if (ct.startsWith(firstTok)) score += 60;
+        else if (ct.includes(' ' + firstTok)) score += 50;
+        else if (ct.includes(firstTok)) score += 35;
+
+        if (st.includes(firstTok)) score += 25;
+        if (code === q || code === firstTok) score += 90;
+
+        scored.push({ c: c, score: score });
     }
 
+    scored.sort((a, b) => b.score - a.score);
+    var matched = scored.slice(0, 30).map(s => s.c);
+
     if (matched.length === 0) {
-        resEl.innerHTML = '<div style="padding:10px; font-size:12px; color:#94a3b8; text-align:center;">No matching party found</div>';
+        resEl.innerHTML = '<div style="padding:12px; font-size:12px; color:#94a3b8; text-align:center;">No party matching "<b>' + esc(query) + '</b>"</div>';
         resEl.style.display = 'block';
         return;
     }
@@ -12538,24 +12831,27 @@ window.searchAndSelectParty = function (query) {
             balText = `₹${c.b.toLocaleString('en-IN')} ${c.d || 'Dr'}`;
         }
         var infoParts = [];
-        if (c.ct) infoParts.push(c.ct);
-        if (c.ag) infoParts.push('Ag: ' + c.ag);
-        if (c.tr) infoParts.push('Tr: ' + c.tr);
-        if (c.g) infoParts.push('GST: ' + c.g);
+        var detectedSt = c.st || (typeof window.detectStateFromCustomer === 'function' ? window.detectStateFromCustomer(c) : '') || '';
+        if (c.ct) infoParts.push('📍 ' + highlightContactMatch(c.ct, tokens));
+        if (detectedSt) infoParts.push(highlightContactMatch(detectedSt, tokens));
+        if (c.ag) infoParts.push('🤝 Ag: ' + highlightContactMatch(c.ag, tokens));
+        if (c.tr) infoParts.push('🚚 ' + esc(c.tr));
 
         var safeCode = (c.c || '').replace(/'/g, "\\'");
+        var nameHl = highlightContactMatch(c.n, tokens);
+
         return `<div onclick="window.pickPartyForOrder('${safeCode}')"
-                     style="padding:8px 10px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; justify-content:space-between; align-items:center; transition:background 0.15s;"
+                     style="padding:9px 12px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; justify-content:space-between; align-items:center; transition:background 0.15s;"
                      onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
             <div style="flex:1; min-width:0; padding-right:8px;">
                 <div style="font-size:13px; font-weight:bold; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                    ${c.n}
+                    ${nameHl}
                 </div>
-                <div style="font-size:11px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                    ${infoParts.join(' • ') || 'No extra info'}
+                <div style="font-size:11px; color:#64748b; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    ${infoParts.join(' &bull; ') || 'No station info'}
                 </div>
             </div>
-            ${balText ? `<span style="font-size:11px; font-weight:bold; color:#be185d; white-space:nowrap;">${balText}</span>` : ''}
+            ${balText ? `<span style="font-size:11px; font-weight:bold; color:#be185d; white-space:nowrap; padding-left:6px;">${balText}</span>` : ''}
         </div>`;
     }).join('');
 
@@ -12592,6 +12888,9 @@ window.pickPartyForOrder = function (code) {
         }
     } catch(e){}
 
+    // Auto-detect state accurately from account or GST or station
+    var partyState = cust.st || (typeof window.detectStateFromCustomer === 'function' ? window.detectStateFromCustomer(cust) : '') || '';
+
     // Auto-fill all inputs (fully editable by admin)
     var nEl = document.getElementById('cdName');
     if (nEl) nEl.value = cust.n || '';
@@ -12608,7 +12907,7 @@ window.pickPartyForOrder = function (code) {
     var pEl = document.getElementById('cdPhone');
     if (pEl) pEl.value = cust.p || '';
     var stateEl = document.getElementById('cdState');
-    if (stateEl) stateEl.value = cust.st || '';
+    if (stateEl) stateEl.value = partyState;
     var addrEl = document.getElementById('cdAddress');
     if (addrEl) addrEl.value = cust.a || '';
 
@@ -12649,12 +12948,13 @@ window.startOrderOnBehalf = function () {
         }
     } catch(e){}
 
+    var partyState = cust.st || (typeof window.detectStateFromCustomer === 'function' ? window.detectStateFromCustomer(cust) : '') || '';
     var details = {
         name: cust.n,
         firm: cust.c || cust.n,
         phone: cust.p || '',
         station: cust.ct || '',
-        state: cust.st || '',
+        state: partyState,
         address: cust.a || '',
         agent: cust.ag || '',
         gst: cust.g || '',
@@ -12671,7 +12971,8 @@ window.startOrderOnBehalf = function () {
     window.closeCustomerReportsModal();
     if (typeof closeModals === 'function') closeModals(true);
 
-    alert(`✅ Order Mode Active for: ${cust.n}${cust.ct ? ' (' + cust.ct + ')' : ''}\n\nAgent: ${details.agent || '-'}\nTransport: ${details.transport || '-'}\nGST: ${details.gst || '-'}\n\nAll details are prefilled and editable in the order form.`);
+    var locAlert = [details.station, details.state].filter(Boolean).join(', ');
+    alert(`✅ Order Mode Active for: ${cust.n}${locAlert ? ' (' + locAlert + ')' : ''}\n\nState: ${details.state || '-'}\nAgent: ${details.agent || '-'}\nTransport: ${details.transport || '-'}\nGST: ${details.gst || '-'}\n\nAll details are prefilled and editable in the order form.`);
 };
 
 window.exitOrderOnBehalf = function () {
@@ -12694,7 +12995,11 @@ window.updateOrderOnBehalfBanner = function () {
     try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
 
     if (stored && stored.name) {
-        if (textEl) textEl.innerText = `${stored.name}${stored.station ? ' (' + stored.station + ')' : ''}`;
+        var locParts = [];
+        if (stored.station) locParts.push(stored.station);
+        if (stored.state) locParts.push(stored.state);
+        var locStr = locParts.length ? ' (' + locParts.join(', ') + ')' : '';
+        if (textEl) textEl.innerText = `${stored.name}${locStr}`;
         if (banner) banner.style.display = 'flex';
     } else {
         if (banner) banner.style.display = 'none';
