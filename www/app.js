@@ -10661,140 +10661,152 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
     var syncIcon = document.getElementById('custSyncIcon');
     if (syncIcon) syncIcon.classList.add('fa-spin');
 
+    // 1. If memory cache already exists and not forcing refresh, render immediately!
+    if (!forceRefresh && window._compiledCustomersList && window._compiledCustomersList.length > 0) {
+        if (syncIcon) syncIcon.classList.remove('fa-spin');
+        window.renderCustomerDirectoryUI();
+        return;
+    }
+
     if (container) {
         container.innerHTML = `
         <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
           <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
-          <div style="font-weight:600; color:#374151;">Compiling Accounting Database...</div>
-          <div style="font-size:11px; margin-top:4px;">Reading Contacts, Balances (BLS) &amp; Bills (BILLREC)</div>
+          <div style="font-weight:600; color:#374151;">Compiling Accounting Directory...</div>
+          <div style="font-size:11px; margin-top:4px;">Loading accounts, balances &amp; pending bills...</div>
         </div>`;
     }
 
+    var localLoaded = false;
+
+    // 2. Fast Path: Load compiled accounting_data.json locally (instant, offline-ready!)
     try {
-        var [customers, balances, allBills] = await Promise.all([
-            window.getAccountingCustomers(forceRefresh),
-            window.getAccountingBalances(forceRefresh),
-            window.getAccountingBills(null, forceRefresh)
-        ]);
-
-        var balancesByCode = window._accountingCache.balancesByCode || {};
-        var billsByParty = {};
-
-        // Group bills by party code and phone
-        (allBills || []).forEach(b => {
-            var pCode = String(b.partyCode || '').trim().toUpperCase();
-            if (pCode) {
-                if (!billsByParty[pCode]) billsByParty[pCode] = [];
-                billsByParty[pCode].push(b);
+        var localRes = await fetch('./accounting_data.json');
+        if (localRes && localRes.ok) {
+            var localData = await localRes.json();
+            if (Array.isArray(localData) && localData.length > 0) {
+                window._compiledCustomersList = localData;
+                localLoaded = true;
+                window.updateCustomerDirectoryMetrics();
+                window.renderCustomerDirectoryUI();
             }
-        });
-
-        var compiled = [];
-        var processedCodes = new Set();
-
-        // 1. Map existing customer contacts
-        (customers || []).forEach(c => {
-            var code = String(c.code || '').trim().toUpperCase();
-            if (code) processedCodes.add(code);
-
-            var balRec = balancesByCode[code] || null;
-            var cBills = billsByParty[code] || [];
-
-            var balAmount = balRec ? balRec.balance : 0;
-            var drCr = balRec ? balRec.drCr : 'Dr';
-            var signedBal = balRec ? balRec.signedBalance : 0;
-
-            var totalBillPending = 0;
-            cBills.forEach(b => { totalBillPending += (b.balanceAmount || 0); });
-
-            compiled.push({
-                code: code || c.phone || 'PARTY',
-                name: c.name || ('Customer ' + code),
-                phone: c.phone || '',
-                phoneRaw: c.phoneRaw || c.phone || '',
-                city: c.city || '',
-                address: c.address || '',
-                gst: c.gst || '',
-                group: c.group || 'Sundry Debtors',
-                balance: balAmount,
-                signedBalance: signedBal,
-                drCr: drCr,
-                bills: cBills,
-                pendingBillsCount: cBills.length,
-                totalBillPending: totalBillPending
-            });
-        });
-
-        // 2. Include any balance records that weren't in the contact list
-        (balances || []).forEach(b => {
-            var code = String(b.code || '').trim().toUpperCase();
-            if (code && !processedCodes.has(code)) {
-                processedCodes.add(code);
-                var cBills = billsByParty[code] || [];
-                var totalBillPending = 0;
-                cBills.forEach(bill => { totalBillPending += (bill.balanceAmount || 0); });
-
-                compiled.push({
-                    code: code,
-                    name: b.name || ('Party ' + code),
-                    phone: '',
-                    phoneRaw: '',
-                    city: '',
-                    address: '',
-                    gst: '',
-                    group: 'Sundry Debtors',
-                    balance: b.balance,
-                    signedBalance: b.signedBalance,
-                    drCr: b.drCr,
-                    bills: cBills,
-                    pendingBillsCount: cBills.length,
-                    totalBillPending: totalBillPending
-                });
-            }
-        });
-
-        // Sort by Outstanding Balance (highest due first), then alphabetically
-        compiled.sort((a, b) => {
-            if (b.signedBalance !== a.signedBalance) return b.signedBalance - a.signedBalance;
-            return a.name.localeCompare(b.name);
-        });
-
-        window._compiledCustomersList = compiled;
-
-        // Calculate Header Metrics
-        var totalParties = compiled.length;
-        var totalReceivables = 0;
-        var totalPendingBills = 0;
-
-        compiled.forEach(c => {
-            if (c.drCr === 'Dr' && c.balance > 0) totalReceivables += c.balance;
-            totalPendingBills += (c.pendingBillsCount || 0);
-        });
-
-        var cntEl = document.getElementById('custDirTotalCount');
-        if (cntEl) cntEl.innerText = totalParties.toLocaleString('en-IN');
-
-        var recEl = document.getElementById('custDirTotalReceivables');
-        if (recEl) recEl.innerText = '₹ ' + Math.round(totalReceivables).toLocaleString('en-IN');
-
-        var billsEl = document.getElementById('custDirPendingBillsCount');
-        if (billsEl) billsEl.innerText = totalPendingBills.toLocaleString('en-IN');
-
-        window.renderCustomerDirectoryUI();
-
-    } catch (err) {
-        console.error("Error loading accounting directory:", err);
-        if (container) {
-            container.innerHTML = `
-            <div style="text-align:center; padding:30px; color:#dc2626; font-size:13px;">
-              <i class="fas fa-exclamation-triangle" style="font-size:24px; margin-bottom:8px;"></i>
-              <div>Failed to load accounting data: ${esc(err.message)}</div>
-              <div style="font-size:11px; color:#6b7280; margin-top:6px;">Please verify your Firebase Realtime Database connection.</div>
-            </div>`;
         }
-    } finally {
-        if (syncIcon) syncIcon.classList.remove('fa-spin');
+    } catch (localErr) {
+        console.warn("Local accounting_data.json fetch skipped:", localErr.message);
     }
+
+    // 3. If forceRefresh OR local file wasn't present, try Cloud Realtime Database sync
+    if (forceRefresh || !localLoaded) {
+        try {
+            var [customers, balances, allBills] = await Promise.all([
+                window.getAccountingCustomers(true),
+                window.getAccountingBalances(true),
+                window.getAccountingBills(null, true)
+            ]);
+
+            if (balances.length > 0 || customers.length > 0) {
+                var balancesByCode = window._accountingCache.balancesByCode || {};
+                var billsByParty = {};
+
+                (allBills || []).forEach(b => {
+                    var pCode = String(b.partyCode || '').trim().toUpperCase();
+                    if (pCode) {
+                        if (!billsByParty[pCode]) billsByParty[pCode] = [];
+                        billsByParty[pCode].push(b);
+                    }
+                });
+
+                var compiled = [];
+                var processedCodes = new Set();
+
+                (customers || []).forEach(c => {
+                    var code = String(c.code || '').trim().toUpperCase();
+                    if (code) processedCodes.add(code);
+
+                    var balRec = balancesByCode[code] || null;
+                    var cBills = billsByParty[code] || [];
+                    var balAmount = balRec ? balRec.balance : 0;
+                    var drCr = balRec ? balRec.drCr : 'Dr';
+                    var signedBal = balRec ? balRec.signedBalance : 0;
+
+                    var totalBillPending = 0;
+                    cBills.forEach(b => { totalBillPending += (b.balanceAmount || 0); });
+
+                    compiled.push({
+                        code: code || c.phone || 'PARTY',
+                        name: c.name || ('Customer ' + code),
+                        phone: c.phone || '',
+                        phoneRaw: c.phoneRaw || c.phone || '',
+                        city: c.city || '',
+                        address: c.address || '',
+                        gst: c.gst || '',
+                        group: c.group || 'Sundry Debtors',
+                        balance: balAmount,
+                        signedBalance: signedBal,
+                        drCr: drCr,
+                        bills: cBills,
+                        pendingBillsCount: cBills.length,
+                        totalBillPending: totalBillPending
+                    });
+                });
+
+                compiled.sort((a, b) => {
+                    if (b.signedBalance !== a.signedBalance) return b.signedBalance - a.signedBalance;
+                    return a.name.localeCompare(b.name);
+                });
+
+                window._compiledCustomersList = compiled;
+                window.updateCustomerDirectoryMetrics();
+                window.renderCustomerDirectoryUI();
+
+            } else if (!localLoaded) {
+                if (container) {
+                    container.innerHTML = `
+                    <div style="text-align:center; padding:35px 20px; color:#b91c1c; font-size:13px;">
+                      <i class="fas fa-exclamation-circle" style="font-size:26px; color:#ef4444; margin-bottom:8px;"></i>
+                      <div style="font-weight:bold;">No Records Returned from Cloud</div>
+                      <div style="font-size:11px; color:#6b7280; margin-top:6px; line-height:1.4;">
+                        Firebase returned Permission Denied or Empty.<br>
+                        In <b>Firebase Console &gt; Realtime Database &gt; Rules</b>, ensure <code>".read": true</code> is set.
+                      </div>
+                    </div>`;
+                }
+            }
+        } catch (cloudErr) {
+            console.error("Cloud accounting sync error:", cloudErr);
+            if (!localLoaded && container) {
+                container.innerHTML = `
+                <div style="text-align:center; padding:30px; color:#dc2626; font-size:13px;">
+                  <i class="fas fa-exclamation-triangle" style="font-size:24px; margin-bottom:8px;"></i>
+                  <div>Failed to load accounting data: ${esc(cloudErr.message)}</div>
+                </div>`;
+            }
+        }
+    }
+
+    if (syncIcon) syncIcon.classList.remove('fa-spin');
+};
+
+// Helper: Calculate Header Metrics
+window.updateCustomerDirectoryMetrics = function () {
+    var list = window._compiledCustomersList || [];
+    var totalParties = list.length;
+    var totalReceivables = 0;
+    var totalPendingBills = 0;
+
+    list.forEach(c => {
+        if (c.drCr === 'Dr' && c.balance > 0) totalReceivables += c.balance;
+        totalPendingBills += (c.pendingBillsCount || (c.bills ? c.bills.length : 0));
+    });
+
+    var cntEl = document.getElementById('custDirTotalCount');
+    if (cntEl) cntEl.innerText = totalParties.toLocaleString('en-IN');
+
+    var recEl = document.getElementById('custDirTotalReceivables');
+    if (recEl) recEl.innerText = '₹ ' + Math.round(totalReceivables).toLocaleString('en-IN');
+
+    var billsEl = document.getElementById('custDirPendingBillsCount');
+    if (billsEl) billsEl.innerText = totalPendingBills.toLocaleString('en-IN');
 };
 
 // 3. Filter switching handler
@@ -10823,8 +10835,12 @@ window.setCustDirectoryFilter = function (filterType) {
     window.renderCustomerDirectoryUI();
 };
 
-// 4. Render the searchable list of customer cards
-window.renderCustomerDirectoryUI = function () {
+// 4. Render the searchable list of customer cards with virtual pagination (Never crashes)
+window._custDirPageSize = 40;
+window._custDirRenderedCount = 40;
+window._currentFilteredCustomers = [];
+
+window.renderCustomerDirectoryUI = function (isAppend = false) {
     var container = document.getElementById('customerListContainer');
     if (!container) return;
 
@@ -10832,41 +10848,45 @@ window.renderCustomerDirectoryUI = function () {
     var filterType = window._currentCustDirFilter || 'all';
     var list = window._compiledCustomersList || [];
 
-    if (list.length === 0) {
-        container.innerHTML = `
-        <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
-          <i class="fas fa-folder-open" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i>
-          <div>No customer records loaded.</div>
-          <div style="font-size:11px; margin-top:4px;">Tap "Sync from Accounting DB" below to fetch.</div>
-        </div>`;
-        return;
+    if (!isAppend) {
+        window._custDirRenderedCount = 40;
+        container.scrollTop = 0;
+
+        if (list.length === 0) {
+            container.innerHTML = `
+            <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
+              <i class="fas fa-folder-open" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i>
+              <div>No customer records loaded.</div>
+              <div style="font-size:11px; margin-top:4px;">Tap "Sync from Accounting DB" below to fetch.</div>
+            </div>`;
+            return;
+        }
+
+        var filtered = list.filter(c => {
+            if (query) {
+                var searchStr = [
+                    c.name,
+                    c.code,
+                    c.phone,
+                    c.phoneRaw,
+                    c.city,
+                    c.address,
+                    c.gst
+                ].join(' ').toLowerCase();
+                if (!searchStr.includes(query)) return false;
+            }
+            if (filterType === 'debit') return c.drCr === 'Dr' && c.balance > 0;
+            if (filterType === 'credit') return c.drCr === 'Cr' && c.balance > 0;
+            if (filterType === 'bills') return (c.pendingBillsCount || (c.bills && c.bills.length) || 0) > 0;
+            return true;
+        });
+
+        window._currentFilteredCustomers = filtered;
     }
 
-    var filtered = list.filter(c => {
-        // Text search filter
-        var matchesQuery = true;
-        if (query) {
-            var searchStr = [
-                c.name,
-                c.code,
-                c.phone,
-                c.phoneRaw,
-                c.city,
-                c.address,
-                c.gst
-            ].join(' ').toLowerCase();
-            matchesQuery = searchStr.includes(query);
-        }
-        if (!matchesQuery) return false;
+    var filteredList = window._currentFilteredCustomers || [];
 
-        // Quick chip filter
-        if (filterType === 'debit') return c.drCr === 'Dr' && c.balance > 0;
-        if (filterType === 'credit') return c.drCr === 'Cr' && c.balance > 0;
-        if (filterType === 'bills') return (c.pendingBillsCount || 0) > 0;
-        return true;
-    });
-
-    if (filtered.length === 0) {
+    if (filteredList.length === 0) {
         container.innerHTML = `
         <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
           <i class="fas fa-search" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i>
@@ -10875,33 +10895,29 @@ window.renderCustomerDirectoryUI = function () {
         return;
     }
 
+    var prevScroll = container.scrollTop;
+    var toRender = filteredList.slice(0, window._custDirRenderedCount);
     var html = '';
-    filtered.forEach((c, idx) => {
+
+    toRender.forEach((c, idx) => {
         var cardId = 'custCard_' + idx;
         var billsId = 'custBills_' + idx;
 
         var balBadgeColor = '#6b7280';
         var balBg = '#f3f4f6';
         if (c.balance > 0) {
-            if (c.drCr === 'Dr') {
-                balBadgeColor = '#dc2626'; // Red for Debt / Due
-                balBg = '#fee2e2';
-            } else {
-                balBadgeColor = '#16a34a'; // Green for Credit / Advance
-                balBg = '#dcfce7';
-            }
+            balBadgeColor = (c.drCr === 'Dr') ? '#dc2626' : '#16a34a';
+            balBg = (c.drCr === 'Dr') ? '#fee2e2' : '#dcfce7';
         }
 
         var balText = (c.balance > 0) ? `₹ ${c.balance.toLocaleString('en-IN')} ${c.drCr}` : '₹ 0.00';
+        var billsCount = c.pendingBillsCount || (c.bills ? c.bills.length : 0);
 
-        // Pre-fill WhatsApp message
         var waMsg = `Namaste ${c.name},\nGreeting from Durga Sarees!\nYour current ledger balance is ${balText}.\nKindly review and let us know if you need invoice copies. Thank you!`;
         var waPhone = (c.phone && c.phone.length === 10) ? ('91' + c.phone) : (c.phone || '');
 
         html += `
         <div id="${cardId}" style="border:1px solid #e5e7eb; border-radius:10px; background:#fff; padding:12px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-          
-          <!-- Top Row: Name, Code & Balance -->
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
             <div style="flex:1;">
               <div style="font-weight:bold; font-size:14px; color:var(--text-main); line-height:1.3;">
@@ -10915,8 +10931,6 @@ window.renderCustomerDirectoryUI = function () {
                 ${c.gst ? `<span style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 5px; border-radius:3px;">GST: ${esc(c.gst)}</span>` : ''}
               </div>
             </div>
-
-            <!-- Balance Badge -->
             <div style="text-align:right; min-width:85px;">
               <div style="font-size:9px; color:#6b7280; text-transform:uppercase; font-weight:600;">Ledger Balance</div>
               <div style="display:inline-block; font-size:13px; font-weight:bold; color:${balBadgeColor}; background:${balBg}; padding:3px 8px; border-radius:6px; margin-top:2px;">
@@ -10925,13 +10939,9 @@ window.renderCustomerDirectoryUI = function () {
             </div>
           </div>
 
-          <!-- Address Row (if available) -->
           ${c.address ? `<div style="font-size:11px; color:#64748b; line-height:1.3;">${esc(c.address)}</div>` : ''}
 
-          <!-- Action & Invoices Bar -->
           <div style="display:flex; justify-content:space-between; align-items:center; padding-top:6px; border-top:1px dashed #f1f5f9; margin-top:2px;">
-            
-            <!-- Quick WhatsApp & Call Buttons -->
             <div style="display:flex; gap:6px;">
               ${c.phone ? `
                 <a href="https://wa.me/${waPhone}?text=${encodeURIComponent(waMsg)}" target="_blank"
@@ -10945,30 +10955,31 @@ window.renderCustomerDirectoryUI = function () {
               ` : `<span style="font-size:11px; color:#9ca3af; font-style:italic;">No phone recorded</span>`}
             </div>
 
-            <!-- Pending Bills Expand Toggle -->
-            ${(c.pendingBillsCount > 0) ? `
+            ${(billsCount > 0) ? `
               <button type="button" onclick="window.toggleCustomerBillsExpand('${billsId}')"
                 style="background:#fdf2f8; border:1px solid #fbcfe8; color:#be185d; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
-                <i class="fas fa-file-invoice"></i> ${c.pendingBillsCount} Bill${c.pendingBillsCount > 1 ? 's' : ''} <i class="fas fa-chevron-down" style="font-size:9px;"></i>
+                <i class="fas fa-file-invoice"></i> ${billsCount} Bill${billsCount > 1 ? 's' : ''} <i class="fas fa-chevron-down" style="font-size:9px;"></i>
               </button>
             ` : `<span style="font-size:11px; color:#9ca3af;">0 Bills</span>`}
-
           </div>
 
-          <!-- Expandable Pending Invoices Container -->
-          ${(c.pendingBillsCount > 0) ? `
+          ${(billsCount > 0 && Array.isArray(c.bills)) ? `
             <div id="${billsId}" style="display:none; background:#fafafa; border:1px solid #eee; border-radius:6px; padding:8px; margin-top:4px;">
               <div style="font-size:11px; font-weight:bold; color:#475569; margin-bottom:6px;">Pending Invoices (${esc(c.name)}):</div>
-              <div style="display:flex; flex-direction:column; gap:4px; max-height:180px; overflow-y:auto;">
+              <div style="display:flex; flex-direction:column; gap:4px; max-height:200px; overflow-y:auto;">
                 ${c.bills.map(b => `
                   <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; padding:4px 6px; background:#fff; border-radius:4px; border:1px solid #f1f5f9;">
                     <div>
-                      <div style="font-weight:700; color:#1e293b;">${esc(b.billNo || 'INVOICE')}</div>
-                      <div style="font-size:10px; color:#64748b;">Date: ${esc(b.date || 'N/A')} ${b.dueDate ? ('• Due: ' + esc(b.dueDate)) : ''}</div>
+                      <div style="font-weight:700; color:#1e293b;">${esc(b.billNo || b.b || 'INVOICE')}</div>
+                      <div style="font-size:10px; color:#64748b;">
+                        Date: ${esc(b.date || b.d || 'N/A')}
+                        ${(b.transport || b.t) ? (' • ' + esc(b.transport || b.t)) : ''}
+                        ${(b.rrNo || b.r) ? (' (LR: ' + esc(b.rrNo || b.r) + ')') : ''}
+                      </div>
                     </div>
                     <div style="text-align:right;">
-                      <div style="font-weight:bold; color:#dc2626;">Due: ₹ ${b.balanceAmount.toLocaleString('en-IN')}</div>
-                      ${(b.billAmount && b.billAmount !== b.balanceAmount) ? `<div style="font-size:9px; color:#94a3b8;">Total: ₹ ${b.billAmount.toLocaleString('en-IN')}</div>` : ''}
+                      <div style="font-weight:bold; color:#dc2626;">Due: ₹ ${(b.pendingAmount || b.p || 0).toLocaleString('en-IN')}</div>
+                      ${((b.billAmount || b.a) && (b.billAmount || b.a) !== (b.pendingAmount || b.p)) ? `<div style="font-size:9px; color:#94a3b8;">Total: ₹ ${(b.billAmount || b.a).toLocaleString('en-IN')}</div>` : ''}
                     </div>
                   </div>
                 `).join('')}
@@ -10979,7 +10990,27 @@ window.renderCustomerDirectoryUI = function () {
         </div>`;
     });
 
+    if (window._custDirRenderedCount < filteredList.length) {
+        html += `
+        <div style="text-align:center; padding:12px; color:#64748b; font-size:12px; font-weight:600;">
+          Showing ${toRender.length} of ${filteredList.length.toLocaleString('en-IN')} accounts (scroll down for more)
+        </div>`;
+    }
+
     container.innerHTML = html;
+    if (isAppend) {
+        container.scrollTop = prevScroll;
+    }
+
+    // Attach scroll listener for infinite scrolling
+    container.onscroll = function () {
+        if (container.scrollTop + container.clientHeight >= container.scrollHeight - 100) {
+            if (window._custDirRenderedCount < (window._currentFilteredCustomers || []).length) {
+                window._custDirRenderedCount += 40;
+                window.renderCustomerDirectoryUI(true);
+            }
+        }
+    };
 };
 
 // 5. Expand / Collapse Pending Bills
