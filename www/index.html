@@ -520,7 +520,7 @@
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=3"></script>
-  <script src="./app.js?v=15"></script>
+  <script src="./app.js?v=16"></script>
   <script src="./sticker_editor.js?v=12"></script>
 
   <div id="adminCameraPreviewModal"
@@ -752,6 +752,14 @@
           style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid var(--myntra-pink); background:var(--myntra-pink); color:#fff; cursor:pointer; white-space:nowrap;">
           All
         </button>
+        <button type="button" class="cust-filter-chip" id="chipCustOs" onclick="window.setCustDirectoryFilter('os')"
+          style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
+          <i class="fas fa-clock" style="color:#dc2626; margin-right:3px;"></i> Outstanding (O/S)
+        </button>
+        <button type="button" class="cust-filter-chip" id="chipCustFs" onclick="window.setCustDirectoryFilter('finishsales')"
+          style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
+          <i class="fas fa-file-invoice-dollar" style="color:#0284c7; margin-right:3px;"></i> Finish Sales
+        </button>
         <button type="button" class="cust-filter-chip" id="chipCustDebit" onclick="window.setCustDirectoryFilter('debit')"
           style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
           Due Balance (Dr)
@@ -759,10 +767,6 @@
         <button type="button" class="cust-filter-chip" id="chipCustBills" onclick="window.setCustDirectoryFilter('bills')"
           style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
           Has Invoices
-        </button>
-        <button type="button" class="cust-filter-chip" id="chipCustReports" onclick="window.setCustDirectoryFilter('reports')"
-          style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
-          With History
         </button>
       </div>
 

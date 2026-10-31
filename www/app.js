@@ -10738,7 +10738,7 @@ window.loadAccountingReportsData = async function () {
     if (window._accountingReportsCache) return window._accountingReportsCache;
 
     try {
-        var res = await fetch('./accounting_reports.json');
+        var res = await fetch('./accounting_reports.json?v=2');
         if (res && res.ok) {
             window._accountingReportsCache = await res.json();
             return window._accountingReportsCache;
@@ -10754,6 +10754,8 @@ window.setCustDirectoryFilter = function (filterType) {
     window._currentCustDirFilter = filterType;
     var chipIds = {
         all: 'chipCustAll',
+        os: 'chipCustOs',
+        finishsales: 'chipCustFs',
         debit: 'chipCustDebit',
         bills: 'chipCustBills',
         reports: 'chipCustReports'
@@ -10818,6 +10820,8 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
             }
             if (filterType === 'debit') return c.d === 'Dr' && c.b > 0;
             if (filterType === 'bills') return (c.pb || 0) > 0;
+            if (filterType === 'os') return c.ho === true || (c.pb || 0) > 0 || (c.d === 'Dr' && c.b > 0);
+            if (filterType === 'finishsales') return c.hs === true || (c.sbills || 0) > 0;
             if (filterType === 'reports') return c.hl || c.hs || c.ht || c.ho || c.b > 0;
             return true;
         });
@@ -11076,14 +11080,15 @@ window.renderCustomerReportActiveTab = async function () {
     }
 
     var allReports = (window._accountingReportsCache && window._accountingReportsCache.reports) || {};
-    var partyRep = allReports[codeKey] || { fs: [], os: [], ld: [] };
+    var nameKey = String(cust.n || '').trim().toUpperCase();
+    var partyRep = allReports[codeKey] || allReports[nameKey] || { finishSales: [], outstanding: [], ledger: [] };
     var activeTab = window._activeCustomerReportTab || 'sales';
 
     // ==========================================
     // 📋 REPORT 1: FINISH SALES DETAILED REPORT (Image 1 & 2)
     // ==========================================
     if (activeTab === 'sales') {
-        var fsList = partyRep.fs || [];
+        var fsList = partyRep.finishSales || partyRep.fs || [];
         if (fsList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
@@ -11099,8 +11104,10 @@ window.renderCustomerReportActiveTab = async function () {
             totPcs += (r[6] || 0);
             totMtr += (r[7] || 0);
             totGross += (r[9] || 0);
-            totBill += (r[10] || 0);
-            if (r[15]) totParcels += (parseInt(r[15]) || 0);
+            if (r[17] === true || r[17] === undefined) {
+                totBill += (r[10] || 0);
+                if (r[15]) totParcels += (parseInt(r[15]) || 0);
+            }
         });
         var avgRate = (totMtr > 0) ? (totGross / totMtr) : (totPcs > 0 ? (totGross / totPcs) : 0);
 
@@ -11144,16 +11151,28 @@ window.renderCustomerReportActiveTab = async function () {
         `;
 
         fsList.forEach((r, idx) => {
+            var isFirst = (r[17] === true || r[17] === undefined);
             var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r[1])}')"`;
             var isOs = String(r[11] || '').includes('O/S');
             var daysColor = isOs ? '#dc2626' : '#16a34a';
 
+            var dateCell = isFirst ? escHtml(r[0]) : '';
+            var billCell = isFirst ? `
+              <span style="font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
+                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r[1])}
+              </span>` : '';
+            var billAmtCell = isFirst ? (r[10] ? Math.round(r[10]).toLocaleString('en-IN') : '-') : '';
+            var daysCell = isFirst ? `<span style="font-weight:bold; color:${daysColor};">${escHtml(r[11])}</span>` : '';
+            var trnCell = isFirst ? escHtml(r[12]) : '';
+            var lrCell = isFirst ? `<span style="font-weight:600; color:#0369a1;">${escHtml(r[13])}</span>` : '';
+            var destCell = isFirst ? escHtml(r[14]) : '';
+            var prclCell = isFirst ? escHtml(r[15] || '1') : '';
+            var hasteCell = isFirst ? escHtml(r[16]) : '';
+
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[0])}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
-                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r[1])}
-              </td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${dateCell}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9;">${billCell}</td>
               <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:600; color:#1e293b;">${escHtml(r[2])}</td>
               <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[3])}</td>
               <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[4])}</td>
@@ -11162,13 +11181,13 @@ window.renderCustomerReportActiveTab = async function () {
               <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9;">${r[7] ? r[7].toFixed(2) : '-'}</td>
               <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9;">${r[8] ? r[8].toFixed(2) : '-'}</td>
               <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r[9] ? Math.round(r[9]).toLocaleString('en-IN') : '-'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e293b;">${r[10] ? Math.round(r[10]).toLocaleString('en-IN') : '-'}</td>
-              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:${daysColor};">${escHtml(r[11])}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[12])}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:600; color:#0369a1;">${escHtml(r[13])}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[14])}</td>
-              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9;">${escHtml(r[15] || '1')}</td>
-              <td style="padding:5px 8px; color:#64748b;">${escHtml(r[16])}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e293b;">${billAmtCell}</td>
+              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9;">${daysCell}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${trnCell}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9;">${lrCell}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${destCell}</td>
+              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9;">${prclCell}</td>
+              <td style="padding:5px 8px; color:#64748b;">${hasteCell}</td>
             </tr>`;
         });
 
@@ -11200,7 +11219,7 @@ window.renderCustomerReportActiveTab = async function () {
     // ⏰ REPORT 2: OUTSTANDING REPORT (Image 3 & 4)
     // ==========================================
     if (activeTab === 'outstanding') {
-        var osList = partyRep.os || [];
+        var osList = partyRep.outstanding || partyRep.os || [];
         if (osList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#15803d; font-size:13px;">
@@ -11300,7 +11319,7 @@ window.renderCustomerReportActiveTab = async function () {
     // 📒 REPORT 3: LEDGER STATEMENT (Image 5)
     // ==========================================
     if (activeTab === 'ledger') {
-        var ldList = partyRep.ld || [];
+        var ldList = partyRep.ledger || partyRep.ld || [];
         if (ldList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
