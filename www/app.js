@@ -8829,8 +8829,9 @@ window.openLiveAdmin = function () {
         }
 
         let limitDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        let url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery";
-        let queryPayload = {
+        let runQueryUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery";
+
+        let liveQueryPayload = {
             structuredQuery: {
                 from: [{ collectionId: "LiveSessions" }],
                 where: {
@@ -8845,34 +8846,125 @@ window.openLiveAdmin = function () {
             }
         };
 
-        window.fetchWithRetry(url, {
+        let usersQueryPayload = {
+            structuredQuery: {
+                from: [{ collectionId: "Users" }],
+                limit: 1000
+            }
+        };
+
+        let pLive = window.fetchWithRetry(runQueryUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(queryPayload)
-        })
-            .then(res => res.json())
-            .then(snapshot => {
-                if (snapshot.error && snapshot.error.length > 0) throw new Error(snapshot.error[0].message || snapshot.error.message);
-                if (snapshot.error) throw new Error(snapshot.error.message);
+            body: JSON.stringify(liveQueryPayload)
+        }).then(res => res.json()).catch(err => {
+            console.error("LiveSessions query error:", err);
+            return [];
+        });
+
+        let pUsers = window.fetchWithRetry(runQueryUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(usersQueryPayload)
+        }).then(res => res.json()).catch(err => {
+            console.error("Users query error:", err);
+            return [];
+        });
+
+        Promise.all([pLive, pUsers])
+            .then(([liveSnapshot, usersSnapshot]) => {
+                if (liveSnapshot && liveSnapshot.error && !Array.isArray(liveSnapshot)) {
+                    console.warn("LiveSessions error:", liveSnapshot.error);
+                    liveSnapshot = [];
+                }
+                if (usersSnapshot && usersSnapshot.error && !Array.isArray(usersSnapshot)) {
+                    console.warn("Users error:", usersSnapshot.error);
+                    usersSnapshot = [];
+                }
 
                 contentEl.innerHTML = '';
                 let hasLive = false;
 
+                function getPhoneKey(p) {
+                    if (!p) return '';
+                    let s = String(p).replace(/\D/g, '');
+                    if (s.startsWith('91') && s.length > 10) s = s.substring(2);
+                    return s;
+                }
+
+                // 1. Parse Registered Users from Users collection
+                if (!window.adminCustomerCache) window.adminCustomerCache = {};
+                let parsedUsers = [];
+                let uDocs = Array.isArray(usersSnapshot) ? usersSnapshot : [];
+                uDocs.forEach(resItem => {
+                    try {
+                        let doc = resItem.document;
+                        if (!doc || !doc.fields) return;
+                        let d = parseFirestoreRest(doc.fields);
+                        let uDocId = doc.name ? doc.name.split('/').pop() : '';
+                        let uPhone = d.phone || uDocId;
+                        let matchesArr = [];
+                        if (d.matchedAccountsJson) {
+                            try {
+                                matchesArr = typeof d.matchedAccountsJson === 'string' ? JSON.parse(d.matchedAccountsJson) : d.matchedAccountsJson;
+                            } catch(e) {}
+                        } else if (d.matchedAccounts) {
+                            matchesArr = Array.isArray(d.matchedAccounts) ? d.matchedAccounts : [];
+                        }
+
+                        let uObj = {
+                            actualDocId: uDocId,
+                            docId: uDocId,
+                            phone: uPhone,
+                            name: d.name || d.firm || '',
+                            firm: d.firm || '',
+                            station: d.station || (d.state ? d.state : ''),
+                            state: d.state || '',
+                            role: d.role || (d.isAgent ? 'agent' : 'customer'),
+                            approvalStatus: d.approvalStatus || (d.linkedAccount ? 'approved' : 'pending'),
+                            isApproved: d.isApproved !== undefined ? d.isApproved : !!d.linkedAccount,
+                            linkedAccount: d.linkedAccount || '',
+                            linkedAccountName: d.linkedAccountName || '',
+                            approvedByAdmin: d.approvedByAdmin || '',
+                            approvedAt: d.approvedAt ? (d.approvedAt.toDate ? d.approvedAt.toDate().toISOString() : d.approvedAt) : '',
+                            matchedAccounts: matchesArr,
+                            createdAt: d.createdAt || null
+                        };
+                        parsedUsers.push(uObj);
+
+                        if (uDocId) window.adminCustomerCache[uDocId] = uObj;
+                        if (uPhone) {
+                            window.adminCustomerCache[uPhone] = uObj;
+                            let pKey = getPhoneKey(uPhone);
+                            if (pKey) window.adminCustomerCache[pKey] = uObj;
+                        }
+                    } catch(e) {
+                        console.error("Error parsing Users doc:", e);
+                    }
+                });
+
+                // 2. Parse Live Sessions
                 let sortedDocs = [];
-                let docs = snapshot || [];
-                docs.forEach(resItem => {
+                let seenPhoneMap = new Set();
+                let liveDocs = Array.isArray(liveSnapshot) ? liveSnapshot : [];
+
+                liveDocs.forEach(resItem => {
                     try {
                         let doc = resItem.document;
                         if (!doc || !doc.fields) return;
                         let d = parseFirestoreRest(doc.fields);
                         if (!d.lastActive || typeof d.lastActive.toDate !== 'function' || d.lastActive.toDate() < limitDate) return;
-                        sortedDocs.push({ id: doc.name.split('/').pop(), data: d, time: d.lastActive.toDate() });
+                        let docId = doc.name.split('/').pop();
+                        sortedDocs.push({ id: docId, data: d, time: d.lastActive.toDate() });
+
+                        let pKey = getPhoneKey(docId) || getPhoneKey(d.user) || getPhoneKey(d.phone);
+                        if (pKey) seenPhoneMap.add(pKey);
                     } catch (e) {
                         console.error("Error parsing live doc:", e);
                     }
                 });
-                sortedDocs.sort((a, b) => b.time - a.time);
 
+                // 3. Group duplicate guest sessions by IP
                 let groupedDocsMap = {};
                 let finalDocs = [];
 
@@ -8905,7 +8997,7 @@ window.openLiveAdmin = function () {
                                     if (!masterItem.data.cartSummary) masterItem.data.cartSummary = [];
                                     masterItem.data.cartSummary = [...new Set([...masterItem.data.cartSummary, ...d.cartSummary])];
                                 }
-                                return; // skip adding to finalDocs
+                                return;
                             }
                         } else {
                             finalDocs.push(item);
@@ -8914,8 +9006,94 @@ window.openLiveAdmin = function () {
                         finalDocs.push(item);
                     }
                 });
-
                 sortedDocs = finalDocs;
+
+                // 4. Merge Registered Users from Users collection into sortedDocs
+                parsedUsers.forEach(u => {
+                    let pKey = getPhoneKey(u.phone) || getPhoneKey(u.docId);
+                    if (pKey && seenPhoneMap.has(pKey)) {
+                        // User already exists in LiveSessions: enrich data
+                        let existingItem = sortedDocs.find(item => {
+                            let itemKey = getPhoneKey(item.id) || getPhoneKey(item.data && item.data.user);
+                            return itemKey === pKey;
+                        });
+                        if (existingItem) {
+                            if (!existingItem.data.customerName || existingItem.data.customerName === 'Guest') {
+                                existingItem.data.customerName = u.name;
+                            }
+                            if (!existingItem.data.customerStation || existingItem.data.customerStation === 'Unknown') {
+                                existingItem.data.customerStation = u.station;
+                            }
+                            if (u.approvalStatus) existingItem.data.approvalStatus = u.approvalStatus;
+                            if (u.isApproved !== undefined) existingItem.data.isApproved = u.isApproved;
+                            if (u.linkedAccount) existingItem.data.linkedAccount = u.linkedAccount;
+                            if (u.linkedAccountName) existingItem.data.linkedAccountName = u.linkedAccountName;
+                            if (u.approvedByAdmin) existingItem.data.approvedByAdmin = u.approvedByAdmin;
+                            if (u.approvedAt) existingItem.data.approvedAt = u.approvedAt;
+                            if (u.role) existingItem.data.role = u.role;
+                            if (u.matchedAccounts && u.matchedAccounts.length) existingItem.data.matchedAccounts = u.matchedAccounts;
+                        }
+                        return;
+                    }
+
+                    // User is registered in the app, but not in recent LiveSessions (Offline)
+                    if (pKey) seenPhoneMap.add(pKey);
+                    let uCreatedTime = (u.createdAt && typeof u.createdAt.toDate === 'function')
+                        ? u.createdAt.toDate()
+                        : (u.createdAt ? new Date(u.createdAt) : new Date(0));
+
+                    sortedDocs.push({
+                        id: u.phone || u.docId,
+                        data: {
+                            user: u.phone || u.docId,
+                            customerName: u.name || "Registered User",
+                            customerStation: u.station || (u.state ? u.state : ""),
+                            role: u.role || 'customer',
+                            approvalStatus: u.approvalStatus || (u.linkedAccount ? 'approved' : 'pending'),
+                            isApproved: u.isApproved !== undefined ? u.isApproved : !!u.linkedAccount,
+                            linkedAccount: u.linkedAccount || '',
+                            linkedAccountName: u.linkedAccountName || '',
+                            approvedByAdmin: u.approvedByAdmin || '',
+                            approvedAt: u.approvedAt || '',
+                            matchedAccounts: u.matchedAccounts || [],
+                            isOfflineUser: true,
+                            lastActive: null
+                        },
+                        time: uCreatedTime
+                    });
+                });
+
+                // 5. Sort: 1) Live Now, 2) Pending Approval, 3) Recent Activity / Registration
+                sortedDocs.sort((a, b) => {
+                    let aIsLive = a.data && a.data.lastActive && typeof a.data.lastActive.toDate === 'function' && (Date.now() - a.data.lastActive.toDate().getTime() < 60000);
+                    let bIsLive = b.data && b.data.lastActive && typeof b.data.lastActive.toDate === 'function' && (Date.now() - b.data.lastActive.toDate().getTime() < 60000);
+                    if (aIsLive && !bIsLive) return -1;
+                    if (!aIsLive && bIsLive) return 1;
+
+                    let aPending = a.data && (a.data.approvalStatus === 'pending' || (!a.data.isApproved && !a.id.startsWith('guest_')));
+                    let bPending = b.data && (b.data.approvalStatus === 'pending' || (!b.data.isApproved && !b.id.startsWith('guest_')));
+                    if (aPending && !bPending) return -1;
+                    if (!aPending && bPending) return 1;
+
+                    let aTime = a.time ? (a.time.getTime ? a.time.getTime() : new Date(a.time).getTime()) : 0;
+                    let bTime = b.time ? (b.time.getTime ? b.time.getTime() : new Date(b.time).getTime()) : 0;
+                    return bTime - aTime;
+                });
+
+                // Update summary counts
+                let liveCount = 0;
+                let pendingCount = 0;
+                sortedDocs.forEach(item => {
+                    let d = item.data;
+                    let isLive = d.lastActive && typeof d.lastActive.toDate === 'function' && (Date.now() - d.lastActive.toDate().getTime() < 60000);
+                    if (isLive) liveCount++;
+                    if (!item.id.startsWith('guest_') && (d.approvalStatus === 'pending' || !d.isApproved)) pendingCount++;
+                });
+
+                let countsEl = document.getElementById('adminLiveCounts');
+                if (countsEl) {
+                    countsEl.innerHTML = `<span style="color:#10b981; font-weight:bold;">🟢 ${liveCount} Live</span> &bull; <span style="color:#d97706; font-weight:bold;">⏳ ${pendingCount} Pending</span> &bull; <span style="color:#475569;">📱 ${sortedDocs.length} Total</span>`;
+                }
 
                 sortedDocs.forEach(item => {
                     hasLive = true;
@@ -8923,23 +9101,34 @@ window.openLiveAdmin = function () {
                     let docId = item.id;
                     let isGuest = docId.startsWith('guest_');
 
-                    let isLiveNow = d.lastActive && (Date.now() - d.lastActive.toDate().getTime() < 60000); // 1 minute strict
-                    let lastSeenStr = d.lastActive ? d.lastActive.toDate().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : "Unknown";
+                    let isLiveNow = d.lastActive && typeof d.lastActive.toDate === 'function' && (Date.now() - d.lastActive.toDate().getTime() < 60000);
+                    let lastSeenStr = (d.lastActive && typeof d.lastActive.toDate === 'function')
+                        ? d.lastActive.toDate().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })
+                        : null;
+
                     let statusBadge = isLiveNow
-                        ? `<span style="background:#4caf50; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🟢 Live Now</span>`
-                        : `<span style="background:#9e9e9e; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🕒 Last seen: ${lastSeenStr}</span>`;
+                        ? `<span style="background:#10b981; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🟢 Live Now</span>`
+                        : (lastSeenStr
+                            ? `<span style="background:#94a3b8; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;"><i class="fas fa-history"></i> Last seen: ${lastSeenStr}</span>`
+                            : `<span style="background:#64748b; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;"><i class="fas fa-mobile-alt"></i> Registered (Offline)</span>`);
+
+                    let borderColor = isLiveNow ? '#10b981' : (lastSeenStr ? '#94a3b8' : '#64748b');
 
                     let actionsHtml = isGuest
                         ? `<span style="background:#e0e0e0; color:#555; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold;">Guest Visitor</span>`
                         : `<div style="display:flex; gap:8px;">
-                             <a href="tel:${docId}" style="background:#1976d2; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fas fa-phone"></i> Call</a>
-                             <a href="https://wa.me/${docId.replace(/\D/g, '')}" target="_blank" style="background:#25D366; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:14px;"><i class="fab fa-whatsapp"></i> WA</a>
+                             <a href="tel:${docId}" style="background:#2563eb; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:5px;"><i class="fas fa-phone"></i> Call</a>
+                             <a href="https://wa.me/${docId.replace(/\D/g, '')}" target="_blank" style="background:#16a34a; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:5px;"><i class="fab fa-whatsapp"></i> WA</a>
                            </div>`;
 
-                    let viewingProduct = 'None';
-                    if (d.currentProduct) {
-                        let p = allProducts.find(x => x.id === d.currentProduct || x.docId === d.currentProduct);
-                        viewingProduct = p ? p.name : d.currentProduct;
+                    let viewingHtml = '';
+                    if (!d.isOfflineUser) {
+                        let viewingProduct = 'None';
+                        if (d.currentProduct) {
+                            let p = allProducts.find(x => x.id === d.currentProduct || x.docId === d.currentProduct);
+                            viewingProduct = p ? p.name : d.currentProduct;
+                        }
+                        viewingHtml = `<div style="font-size:13px; margin-bottom:4px; color:#475569;"><b>Viewing:</b> ${esc(viewingProduct)}</div>`;
                     }
 
                     let historyHtml = '';
@@ -8951,7 +9140,6 @@ window.openLiveAdmin = function () {
                         let dateIndex = 0;
 
                         sortedDates.forEach(date => {
-                            // Convert YYYY-MM-DD to DD/MM
                             let dateParts = date.split('-');
                             let shortDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}` : date;
 
@@ -8959,7 +9147,7 @@ window.openLiveAdmin = function () {
                                 let mins = parseFloat(d.historyMap[date][prodName]);
                                 let timeStr = mins < 1 ? Math.round(mins * 60) + "s" : Math.floor(mins) + "m " + Math.round((mins % 1) * 60) + "s";
 
-                                let entryHtml = `<div style="font-size:12px; color:#333; margin-left:4px; margin-top:2px;">&bull; <span style="color:#777; font-size:11px;">[${shortDate}]</span> ${prodName} (${timeStr})</div>`;
+                                let entryHtml = `<div style="font-size:12px; color:#333; margin-left:4px; margin-top:2px;">&bull; <span style="color:#777; font-size:11px;">[${shortDate}]</span> ${esc(prodName)} (${timeStr})</div>`;
 
                                 if (dateIndex < 2) {
                                     visibleHtml += entryHtml;
@@ -8978,23 +9166,32 @@ window.openLiveAdmin = function () {
                             historyHtml += `</details>`;
                         }
                     } else if (d.recentHistory && d.recentHistory.length) {
-                        historyHtml = `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${d.recentHistory.join(', ')}</div>`;
+                        historyHtml = `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${esc(d.recentHistory.join(', '))}</div>`;
+                    }
+
+                    let roleBadge = '';
+                    if (!isGuest) {
+                        if (d.role === 'agent') {
+                            roleBadge = `<span style="background:#ede9fe; color:#6b21a8; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:4px; border:1px solid #ddd6fe;">AGENT</span>`;
+                        } else {
+                            roleBadge = `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:4px; border:1px solid #bae6fd;">CUSTOMER</span>`;
+                        }
                     }
 
                     let namePortion = (d.customerName && d.customerName !== "Guest") ? d.customerName : (isGuest ? "Guest #" + docId.replace('guest_', '').substring(0, 6).toUpperCase() : docId);
                     let stationPortion = (d.customerStation && d.customerStation !== "Unknown") ? ' - ' + d.customerStation : '';
                     let dispName = namePortion + stationPortion;
 
-                    if (!window.adminCustomerCache) window.adminCustomerCache = {};
-                    let safeDocId = docId.replace(/\+/g, '');
+                    let safeDocId = docId.replace(/\+/g, '').replace(/[^a-zA-Z0-9_]/g, '_');
+                    let pKey = getPhoneKey(docId);
 
-                    let uData = null;
-                    if (window.adminCustomerCache[docId] && typeof window.adminCustomerCache[docId] === 'object') {
-                        uData = window.adminCustomerCache[docId];
-                        if (uData.name) dispName = uData.name + (uData.station ? ' - ' + uData.station : '');
-                    } else if (d.approvalStatus || d.linkedAccount || (d.matchedAccounts && d.matchedAccounts.length)) {
+                    let uData = window.adminCustomerCache[docId] || (pKey ? window.adminCustomerCache[pKey] : null);
+                    if (!uData && (d.approvalStatus || d.linkedAccount || (d.matchedAccounts && d.matchedAccounts.length))) {
                         uData = {
-                            approvalStatus: d.approvalStatus || 'approved',
+                            actualDocId: d.actualDocId || docId,
+                            name: d.customerName || '',
+                            station: d.customerStation || '',
+                            approvalStatus: d.approvalStatus || (d.linkedAccount ? 'approved' : 'pending'),
                             isApproved: d.isApproved !== undefined ? d.isApproved : !!d.linkedAccount,
                             linkedAccount: d.linkedAccount || '',
                             linkedAccountName: d.linkedAccountName || '',
@@ -9005,61 +9202,24 @@ window.openLiveAdmin = function () {
                         };
                     }
 
-                    if (!isGuest && !window.adminCustomerCache[docId]) {
-                        window.adminCustomerCache[docId] = "fetching";
-                        fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(docId))
-                            .then(res => res.json())
-                            .then(uDoc => {
-                                if (uDoc && uDoc.fields) {
-                                    let f = uDoc.fields;
-                                    let uName = f.name ? f.name.stringValue : "";
-                                    let uStation = f.station ? f.station.stringValue : "";
-                                    let matchesArr = [];
-                                    if (f.matchedAccountsJson && f.matchedAccountsJson.stringValue) {
-                                        try { matchesArr = JSON.parse(f.matchedAccountsJson.stringValue); } catch(e){}
-                                    }
-                                    let parsedData = {
-                                        name: uName,
-                                        station: uStation,
-                                        approvalStatus: f.approvalStatus ? f.approvalStatus.stringValue : 'approved',
-                                        isApproved: f.isApproved ? f.isApproved.booleanValue : true,
-                                        approvedByAdmin: f.approvedByAdmin ? f.approvedByAdmin.stringValue : '',
-                                        approvedAt: f.approvedAt ? f.approvedAt.timestampValue : '',
-                                        linkedAccount: f.linkedAccount ? f.linkedAccount.stringValue : '',
-                                        linkedAccountName: f.linkedAccountName ? f.linkedAccountName.stringValue : '',
-                                        role: f.role ? f.role.stringValue : 'customer',
-                                        matchedAccounts: matchesArr
-                                    };
-                                    window.adminCustomerCache[docId] = parsedData;
-
-                                    let el = document.getElementById('admin_name_' + safeDocId);
-                                    if (el && uName) el.innerText = uName + (uStation ? ' - ' + uStation : '');
-                                    let subEl = document.getElementById('admin_sub_' + safeDocId);
-                                    if (subEl) subEl.innerHTML = `<span style="font-size:12px; color:#888;">${docId}</span>`;
-
-                                    let boxEl = document.getElementById('approval_box_' + safeDocId);
-                                    if (boxEl && typeof window.renderApprovalBoxHtml === 'function') {
-                                        boxEl.innerHTML = window.renderApprovalBoxHtml(docId, safeDocId, parsedData);
-                                    }
-                                } else {
-                                    // User not yet in Firestore: dynamically check ERP database for auto-matches!
-                                    window.findAccountsByPhone(docId).then(matches => {
-                                        if (matches && matches.length > 0) {
-                                            let fallbackData = {
-                                                approvalStatus: 'pending',
-                                                isApproved: false,
-                                                role: matches[0].role || 'customer',
-                                                matchedAccounts: matches
-                                            };
-                                            window.adminCustomerCache[docId] = fallbackData;
-                                            let boxEl = document.getElementById('approval_box_' + safeDocId);
-                                            if (boxEl && typeof window.renderApprovalBoxHtml === 'function') {
-                                                boxEl.innerHTML = window.renderApprovalBoxHtml(docId, safeDocId, fallbackData);
-                                            }
-                                        }
-                                    });
+                    // Dynamically search accounts if needed
+                    if (!isGuest && (!uData || (!uData.isApproved && (!uData.matchedAccounts || !uData.matchedAccounts.length)))) {
+                        window.findAccountsByPhone(docId).then(matches => {
+                            if (matches && matches.length > 0) {
+                                let fallbackData = {
+                                    approvalStatus: 'pending',
+                                    isApproved: false,
+                                    role: matches[0].role || 'customer',
+                                    matchedAccounts: matches
+                                };
+                                window.adminCustomerCache[docId] = fallbackData;
+                                if (pKey) window.adminCustomerCache[pKey] = fallbackData;
+                                let boxEl = document.getElementById('approval_box_' + safeDocId);
+                                if (boxEl && typeof window.renderApprovalBoxHtml === 'function') {
+                                    boxEl.innerHTML = window.renderApprovalBoxHtml(docId, safeDocId, fallbackData);
                                 }
-                            }).catch(() => { });
+                            }
+                        });
                     }
 
                     let approvalHtml = '';
@@ -9067,31 +9227,60 @@ window.openLiveAdmin = function () {
                         approvalHtml = window.renderApprovalBoxHtml(docId, safeDocId, uData);
                     }
 
-                    let html = `<div style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${isLiveNow ? '#4caf50' : '#9e9e9e'};">
+                    let searchHaystack = esc((dispName + ' ' + docId + ' ' + (d.customerStation || '') + ' ' + (d.role || '') + ' ' + (d.linkedAccountName || '') + ' ' + (d.linkedAccount || '')).toLowerCase());
+
+                    let html = `<div class="admin-live-card" data-search="${searchHaystack}" style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${borderColor};">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                             <div style="display:flex; flex-direction:column; gap:4px;">
-                                <span id="admin_name_${safeDocId}" style="font-weight:bold; font-size:16px;">${dispName}</span>
-                                ${statusBadge}
-                                <span id="admin_sub_${safeDocId}"></span>
+                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                    <span id="admin_name_${safeDocId}" style="font-weight:bold; font-size:16px; color:#1e293b;">${esc(dispName)}</span>
+                                    ${roleBadge}
+                                </div>
+                                <div>${statusBadge}</div>
+                                <span id="admin_sub_${safeDocId}" style="font-size:12px; color:#64748b;">${esc(docId)}</span>
                             </div>
                             ${actionsHtml}
                         </div>
-                        <div style="font-size:14px; margin-bottom:4px; color:#333;"><b>Viewing:</b> ${viewingProduct}</div>
+                        ${viewingHtml}
                         ${historyHtml}
                         ${(d.cartSummary && d.cartSummary.length) ? `<div style="font-size:12px; color:#333; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;"><b>Cart:</b><br>${d.cartSummary.join('<br>')}</div>` : ''}
                         <div id="approval_box_${safeDocId}">${approvalHtml}</div>
                     </div>`;
                     contentEl.insertAdjacentHTML('beforeend', html);
                 });
+
                 if (!hasLive) {
-                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live customers in the last 30 days.</div>';
+                    contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">No live or registered users found.</div>';
+                }
+
+                // Preserve search filter on poll refresh
+                if (window.filterLiveUsers) {
+                    let searchInput = document.getElementById('adminLiveSearchInput');
+                    if (searchInput && searchInput.value) {
+                        window.filterLiveUsers(searchInput.value);
+                    }
                 }
             })
             .catch(err => {
-                console.error("LiveSessions Fetch Error:", err);
-                contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching live data: ' + err.message + '</div>';
+                console.error("fetchLiveData Error:", err);
+                contentEl.innerHTML = '<div style="color:red; padding:20px;">Error fetching user data: ' + err.message + '</div>';
             });
     }
+
+    window.filterLiveUsers = function (q) {
+        let query = (q || '').toLowerCase().trim();
+        let cards = document.querySelectorAll('.admin-live-card');
+        let visible = 0;
+        cards.forEach(function (card) {
+            let str = card.getAttribute('data-search') || card.innerText.toLowerCase();
+            if (!query || str.includes(query)) {
+                card.style.display = 'block';
+                visible++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    };
 
     fetchLiveData();
     window.liveAdminInterval = setInterval(fetchLiveData, 15000);
@@ -9250,7 +9439,8 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
         if (token) headers['Authorization'] = 'Bearer ' + token;
 
         var nowIso = new Date().toISOString();
-        var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(docId) +
+        var targetDocId = (window.adminCustomerCache && window.adminCustomerCache[docId] && window.adminCustomerCache[docId].actualDocId) ? window.adminCustomerCache[docId].actualDocId : docId;
+        var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(targetDocId) +
             "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role";
 
         var patchBody = {
