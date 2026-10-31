@@ -143,12 +143,15 @@
           <i class="fas fa-ellipsis-v" onclick="toggleHdrMenu(event)"
             style="cursor:pointer; color:#555; padding: 0 5px;" title="Menu"></i>
           <div id="hdrMenu"
-            style="display:none; position:absolute; right:0; top:25px; background:#fff; border:1px solid var(--border); border-radius:4px; box-shadow:0 4px 10px rgba(0,0,0,0.1); z-index:1000; width:160px;">
+            style="display:none; position:absolute; right:0; top:25px; background:#fff; border:1px solid var(--border); border-radius:4px; box-shadow:0 4px 10px rgba(0,0,0,0.1); z-index:1000; width:185px;">
             <div onclick="openSyncReportModal()"
               style="padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text-main); font-size:14px; display:flex; align-items:center; gap:8px;">
               <i class="fas fa-file-contract" style="color:var(--myntra-pink);"></i> Sync Report</div>
             <div id="menuManageSections" onclick="window.openManageSectionsModal()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text-main); font-size:14px; font-weight:bold; align-items:center; gap:8px;">
               <i class="fas fa-layer-group" style="color:var(--myntra-pink);"></i> Manage Sections
+            </div>
+            <div id="menuCustomerDirectory" onclick="window.openCustomerDirectoryModal()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:#be185d; font-size:14px; font-weight:bold; align-items:center; gap:8px;">
+              <i class="fas fa-address-book" style="color:var(--myntra-pink);"></i> Customers (ERP)
             </div>
             <div id="menuLiveAdmin" onclick="window.openLiveAdmin()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:#2e7d32; font-size:14px; font-weight:bold; align-items:center; gap:8px;">
               <i class="fas fa-users" style="color:#4caf50;"></i> Live Customers 🟢
@@ -705,6 +708,86 @@
     </div>
     <div id="adminLiveContent" style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:15px;">
       <div style="text-align:center; color:#666; padding:20px;">Waiting for live activity...</div>
+    </div>
+  </div>
+
+  <!-- 👥 Admin Customer Directory & Accounting Ledger Modal -->
+  <div id="customerDirectoryModal" class="action-modal" onclick="if(event.target===this) closeModals()"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; flex-direction:column; justify-content:flex-end;">
+    <div class="modal-content"
+      style="background:#fff; border-radius:16px 16px 0 0; padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom)); text-align:left; height:90vh; display:flex; flex-direction:column; max-width:600px; margin:0 auto; width:100%; box-sizing:border-box;">
+      
+      <!-- Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:1px solid #eee;">
+        <div>
+          <div style="font-weight:bold; font-size:16px; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+            <i class="fas fa-address-book" style="color:var(--myntra-pink);"></i> Customers &amp; Ledger (ERP)
+          </div>
+          <div id="custDirSubtitle" style="font-size:11px; color:#6b7280; margin-top:2px;">Live Accounting Sync: Realtime Database</div>
+        </div>
+        <i class="fas fa-times" style="font-size:22px; color:#9ca3af; cursor:pointer; padding:4px;" onclick="closeModals()"></i>
+      </div>
+
+      <!-- Financial Metrics Pill Banner -->
+      <div style="display:flex; gap:8px; margin:10px 0; overflow-x:auto; padding-bottom:2px;">
+        <div style="flex:1; min-width:90px; background:#fdf2f8; border:1px solid #fbcfe8; border-radius:8px; padding:6px 10px; text-align:center;">
+          <div style="font-size:10px; color:#be185d; font-weight:600; text-transform:uppercase;">Parties</div>
+          <div id="custDirTotalCount" style="font-size:15px; font-weight:bold; color:#831843;">--</div>
+        </div>
+        <div style="flex:1.4; min-width:120px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:6px 10px; text-align:center;">
+          <div style="font-size:10px; color:#b91c1c; font-weight:600; text-transform:uppercase;">Total Receivables</div>
+          <div id="custDirTotalReceivables" style="font-size:15px; font-weight:bold; color:#991b1b;">--</div>
+        </div>
+        <div style="flex:1; min-width:90px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:6px 10px; text-align:center;">
+          <div style="font-size:10px; color:#15803d; font-weight:600; text-transform:uppercase;">Pending Bills</div>
+          <div id="custDirPendingBillsCount" style="font-size:15px; font-weight:bold; color:#14532d;">--</div>
+        </div>
+      </div>
+
+      <!-- Search Input -->
+      <div style="position:relative; margin-bottom:8px;">
+        <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#9ca3af; font-size:13px;"></i>
+        <input type="text" id="custSearchInput" placeholder="Search by name, phone, city, GST, or code..."
+          oninput="window.renderCustomerDirectoryUI()"
+          style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; outline:none;">
+      </div>
+
+      <!-- Quick Filter Chips -->
+      <div style="display:flex; gap:6px; margin-bottom:10px; overflow-x:auto;">
+        <button type="button" class="cust-filter-chip active" id="chipCustAll" onclick="window.setCustDirectoryFilter('all')"
+          style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid var(--myntra-pink); background:var(--myntra-pink); color:#fff; cursor:pointer; white-space:nowrap;">
+          All
+        </button>
+        <button type="button" class="cust-filter-chip" id="chipCustDebit" onclick="window.setCustDirectoryFilter('debit')"
+          style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
+          Due Balance (Dr)
+        </button>
+        <button type="button" class="cust-filter-chip" id="chipCustCredit" onclick="window.setCustDirectoryFilter('credit')"
+          style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
+          Advance (Cr)
+        </button>
+        <button type="button" class="cust-filter-chip" id="chipCustBills" onclick="window.setCustDirectoryFilter('bills')"
+          style="padding:4px 10px; border-radius:14px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151; cursor:pointer; white-space:nowrap;">
+          Has Invoices
+        </button>
+      </div>
+
+      <!-- Customer Directory List Container -->
+      <div id="customerListContainer" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px; padding-right:2px;">
+        <div style="text-align:center; padding:30px; color:#6b7280; font-size:13px;">
+          <i class="fas fa-spinner fa-spin" style="font-size:20px; color:var(--myntra-pink); margin-bottom:8px;"></i>
+          <div>Loading accounting customer directory...</div>
+        </div>
+      </div>
+
+      <!-- Footer Action Bar -->
+      <div style="display:flex; gap:8px; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+        <button type="button" onclick="window.loadAccountingDirectoryData(true)"
+          style="flex:1; background:var(--myntra-pink); color:#fff; border:none; padding:10px 14px; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+          <i class="fas fa-sync-alt" id="custSyncIcon"></i> Sync from Accounting DB
+        </button>
+      </div>
+
     </div>
   </div>
 
