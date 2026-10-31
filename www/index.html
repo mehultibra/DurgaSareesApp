@@ -177,13 +177,18 @@
 
     <div id="gridWrapper" onpointerdown="if(document.activeElement) document.activeElement.blur();">
       <!-- Admin Order on Behalf Notification Banner -->
-      <div id="orderOnBehalfBanner" style="display:none; background:#be185d; color:#fff; padding:6px 12px; font-size:12px; font-weight:bold; align-items:center; justify-content:space-between; box-shadow:0 2px 4px rgba(0,0,0,0.1); z-index:90;">
-        <div style="display:flex; align-items:center; gap:6px;">
-          <i class="fas fa-user-tag"></i> <span id="orderOnBehalfText">Ordering on Behalf of: ...</span>
+      <!-- Admin Active Party Banner (Shows Party Name and Station) -->
+      <div id="orderOnBehalfBanner" style="display:none; background:#be185d; color:#fff; padding:7px 14px; font-size:12px; font-weight:bold; align-items:center; justify-content:space-between; box-shadow:0 2px 5px rgba(0,0,0,0.15); z-index:90; cursor:pointer;" onclick="openCustomerDetailsModal()">
+        <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+          <i class="fas fa-store" style="font-size:13px; color:#fbcfe8;"></i>
+          <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Party Name</span>
         </div>
-        <button type="button" onclick="window.exitOrderOnBehalf()" style="background:#fff; color:#be185d; border:none; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;">
-          Exit
-        </button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-weight:normal;">Change</span>
+          <button type="button" onclick="event.stopPropagation(); window.exitOrderOnBehalf()" style="background:#fff; color:#be185d; border:none; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;" title="Clear Party">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
       </div>
 
       <!-- 🚀 Myntra-Style Top Section Tab Bar -->
@@ -257,36 +262,99 @@
 
   <!-- Customer Details Edit Modal -->
   <div id="customerDetailsModal" class="action-modal" onclick="closeModals()"
-    style="display:none; justify-content: center; align-items: center; padding: 20px;">
+    style="display:none; justify-content: center; align-items: center; padding: 20px; z-index:10000;">
     <div class="modal-content"
-      style="border-radius: 12px; padding: 24px; width: 100%; max-width: 320px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: none;"
+      style="border-radius: 12px; padding: 20px; width: 100%; max-width: 440px; max-height:90vh; overflow-y:auto; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: none;"
       onclick="event.stopPropagation()">
       <div class="modal-title"
-        style="font-size:18px; color:var(--myntra-pink); font-weight:bold; border-bottom:none; padding-bottom:0; margin-bottom:10px;">
-        Customer Details <i class="fas fa-times"
-          style="cursor:pointer; color:var(--text-light); float:right; font-size:16px; margin-top:2px;"
-          onclick="closeModals()"></i>
+        style="font-size:18px; color:var(--myntra-pink); font-weight:bold; border-bottom:none; padding-bottom:0; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+        <span><i class="fas fa-file-invoice"></i> Order &amp; Party Details</span>
+        <i class="fas fa-times" style="cursor:pointer; color:var(--text-light); font-size:18px;" onclick="closeModals()"></i>
       </div>
-      <div style="font-size:12px; color:var(--text-light); margin-bottom:16px;">Please update your billing and shipping
-        details.</div>
-      <div style="display:flex; flex-direction:column; gap:12px;">
-        <input type="text" id="cdName" placeholder="Name *"
-          style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
-        <input type="text" id="cdFirm" placeholder="Firm Name (Optional)"
-          style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
-        <input type="text" id="cdPhone" placeholder="Phone Number *" readonly
-          style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#eaeaec; color:#888; outline:none; cursor:not-allowed;">
-        <input type="text" id="cdStation" placeholder="Station *"
-          style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
-        <input type="text" id="cdState" list="stateList" placeholder="State *"
-          style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
-        <input type="text" id="cdTransport" placeholder="Preferred Transport (e.g. Pawan, Batco)"
-          style="padding:12px; border:1px solid #eaeaec; border-radius:4px; font-size:14px; background:#f5f5f6; outline:none;">
+      <div style="font-size:12px; color:var(--text-light); margin-bottom:12px;">
+        Select a party to auto-fill details, or edit any field below.
       </div>
-      <p id="cdErr" style="color:red; font-size:12px; margin-top:8px; height:14px;"></p>
+
+      <!-- Admin Party Search & Auto-Select Box -->
+      <div id="cdAdminPartySearchSection" style="display:none; margin-bottom:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px;">
+        <label style="display:block; font-size:11px; font-weight:bold; color:#1e40af; margin-bottom:4px;">
+          <i class="fas fa-search" style="color:#2563eb;"></i> Search &amp; Select Party (Auto-Fills All Info):
+        </label>
+        <div style="position:relative;">
+          <input type="text" id="cdPartySearch" placeholder="Type party name, station or code..."
+            oninput="window.searchAndSelectParty(this.value)" autocomplete="off"
+            style="width:100%; box-sizing:border-box; padding:8px 10px; border:1.5px solid #3b82f6; border-radius:6px; font-size:13px; outline:none; background:#fff;">
+          <div id="cdPartySearchResults"
+            style="display:none; position:absolute; left:0; right:0; top:40px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 8px 20px rgba(0,0,0,0.15);">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Party Name *</label>
+            <input type="text" id="cdName" placeholder="Party Name"
+              style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Firm Name</label>
+            <input type="text" id="cdFirm" placeholder="Firm Name"
+              style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Station / City *</label>
+            <input type="text" id="cdStation" placeholder="Station"
+              style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Agent / Broker</label>
+            <input type="text" id="cdAgent" placeholder="Agent or Broker"
+              style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Transport</label>
+            <input type="text" id="cdTransport" placeholder="Preferred Transport"
+              style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">GST No.</label>
+            <input type="text" id="cdGst" placeholder="GSTIN"
+              style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none; text-transform:uppercase;">
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Phone Number</label>
+            <input type="text" id="cdPhone" placeholder="Phone"
+              style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">State</label>
+            <input type="text" id="cdState" list="stateList" placeholder="State"
+              style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Address</label>
+          <input type="text" id="cdAddress" placeholder="Address (Street, Market, Shop No.)"
+            style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
+        </div>
+      </div>
+
+      <p id="cdErr" style="font-size:12px; margin-top:6px; min-height:16px;"></p>
       <button onclick="saveCustomerDetails()" id="btnSaveCustomerDetails"
-        style="margin-top:10px; width:100%; background:var(--myntra-pink); color:#fff; border:none; padding:14px; border-radius:4px; font-size:14px; font-weight:bold; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; box-shadow: 0 4px 6px rgba(255, 63, 108, 0.2);">SAVE
-        DETAILS</button>
+        style="margin-top:4px; width:100%; background:var(--myntra-pink); color:#fff; border:none; padding:12px; border-radius:6px; font-size:14px; font-weight:bold; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; box-shadow: 0 4px 6px rgba(255, 63, 108, 0.2);">
+        SAVE DETAILS
+      </button>
     </div>
   </div>
 
@@ -522,7 +590,7 @@
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=3"></script>
-  <script src="./app.js?v=18"></script>
+  <script src="./app.js?v=19"></script>
   <script src="./sticker_editor.js?v=12"></script>
 
   <div id="adminCameraPreviewModal"
@@ -707,7 +775,7 @@
   </div>
 
 
-  <script src="./pdf_engine.js?v=5"></script>
+  <script src="./pdf_engine.js?v=6"></script>
   <!-- Barcode & HTML-to-Image Libraries for NAS Printing -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 

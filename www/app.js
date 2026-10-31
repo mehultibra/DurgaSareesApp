@@ -4251,10 +4251,10 @@ function sendWhatsappText() {
             msg += "👤 *Customer:* " + cd.name + (cd.firm && cd.firm !== cd.name ? " (" + cd.firm + ")" : "") + "\n";
             if (cd.phone) msg += "📞 *Phone:* " + cd.phone + "\n";
             if (cd.station) msg += "📍 *Station:* " + cd.station + (cd.state ? ", " + cd.state : "") + "\n";
+            if (cd.agent) msg += "🤝 *Agent:* " + cd.agent + "\n";
             if (cd.gst) msg += "🏛️ *GST:* " + cd.gst + "\n";
             var tVal = cd.transport || localStorage.getItem('ds_preferred_transport') || '';
             if (tVal) msg += "🚚 *Transport:* " + tVal + "\n";
-            if (cd.onBehalf) msg += "🏷️ *Order Placed: Admin (On Behalf)*\n";
         }
     } catch (e) { }
     msg += "\n";
@@ -6051,12 +6051,22 @@ function loadCartCustomerDetails() {
 }
 
 function renderCustomerDetails(d, container) {
-    if (!container) return;
-    var primaryName = d.firm ? d.firm : d.name;
-    var html = esc(primaryName) + (d.station ? ", " + esc(d.station) : "");
-    if (d.onBehalf) {
-        html = '<span style="background:#fbcfe8; color:#9d174d; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold; margin-right:6px;"><i class="fas fa-user-tag"></i> On Behalf</span> ' + html;
-    }
+    if (!container || !d) return;
+    var primaryName = d.name || d.firm || "Select Party";
+    var stationText = d.station ? ` (${d.station})` : "";
+    
+    var subParts = [];
+    if (d.agent) subParts.push(`<span style="color:#64748b;">Ag:</span> <b>${esc(d.agent)}</b>`);
+    if (d.transport) subParts.push(`<span style="color:#64748b;">Tr:</span> <b>${esc(d.transport)}</b>`);
+    if (d.gst) subParts.push(`<span style="color:#64748b;">GST:</span> <b>${esc(d.gst)}</b>`);
+    if (d.phone) subParts.push(`<span style="color:#64748b;">Ph:</span> <b>${esc(d.phone)}</b>`);
+
+    var html = `
+        <div style="font-size:14px; color:var(--text-main); font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${esc(primaryName)}${esc(stationText)}
+        </div>
+        ${subParts.length > 0 ? `<div style="font-size:11px; color:#64748b; margin-top:2px; font-weight:normal; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${subParts.join(' &bull; ')}</div>` : ''}
+    `;
     container.innerHTML = html;
 }
 
@@ -6066,18 +6076,59 @@ async function openCustomerDetailsModal() {
     if (stored) {
         try { d = JSON.parse(stored); } catch (e) { }
     }
-    if (!d) {
+    var isAdmin = !!((window.isSuperAdmin && window.isAdminMode) || window.isAdminMode || window.isSuperAdmin);
+
+    if (!d && !isAdmin) {
         d = await fetchCustomerDetailsFromDB();
     }
 
-    document.getElementById('cdName').value = d ? d.name : "";
-    document.getElementById('cdFirm').value = d ? d.firm : "";
-    document.getElementById('cdPhone').value = (d && d.phone) ? d.phone : (activeUser || "");
-    document.getElementById('cdStation').value = d ? d.station : "";
-    document.getElementById('cdState').value = d ? d.state : "";
-    var tInp = document.getElementById('cdTransport');
-    if (tInp) tInp.value = (d && d.transport) ? d.transport : (localStorage.getItem('ds_preferred_transport') || "");
-    document.getElementById('cdErr').innerText = "";
+    // Admin party search section
+    var adminSearchSection = document.getElementById('cdAdminPartySearchSection');
+    if (adminSearchSection) {
+        adminSearchSection.style.display = isAdmin ? 'block' : 'none';
+    }
+    var sInp = document.getElementById('cdPartySearch');
+    if (sInp) sInp.value = '';
+    var sRes = document.getElementById('cdPartySearchResults');
+    if (sRes) { sRes.innerHTML = ''; sRes.style.display = 'none'; }
+
+    // Pre-load customer directory if admin and list empty
+    if (isAdmin && (!window._compiledCustomersList || window._compiledCustomersList.length === 0)) {
+        if (typeof window.loadAccountingDirectoryData === 'function') {
+            window.loadAccountingDirectoryData(false);
+        }
+    }
+
+    var nameInp = document.getElementById('cdName');
+    if (nameInp) nameInp.value = d ? (d.name || "") : "";
+    var firmInp = document.getElementById('cdFirm');
+    if (firmInp) firmInp.value = d ? (d.firm || "") : "";
+
+    var phoneInp = document.getElementById('cdPhone');
+    if (phoneInp) {
+        phoneInp.value = (d && d.phone) ? d.phone : (isAdmin ? "" : (activeUser || ""));
+        if (isAdmin) {
+            phoneInp.removeAttribute('readonly');
+            phoneInp.style.cursor = 'text';
+            phoneInp.style.background = '#fff';
+        }
+    }
+
+    var stInp = document.getElementById('cdStation');
+    if (stInp) stInp.value = d ? (d.station || "") : "";
+    var agInp = document.getElementById('cdAgent');
+    if (agInp) agInp.value = d ? (d.agent || "") : "";
+    var trInp = document.getElementById('cdTransport');
+    if (trInp) trInp.value = (d && d.transport) ? d.transport : (localStorage.getItem('ds_preferred_transport') || "");
+    var gstInp = document.getElementById('cdGst');
+    if (gstInp) gstInp.value = d ? (d.gst || "") : "";
+    var stateInp = document.getElementById('cdState');
+    if (stateInp) stateInp.value = d ? (d.state || "") : "";
+    var addrInp = document.getElementById('cdAddress');
+    if (addrInp) addrInp.value = d ? (d.address || "") : "";
+
+    var errEl = document.getElementById('cdErr');
+    if (errEl) errEl.innerText = "";
 
     openModal('customerDetailsModal');
 }
@@ -6087,23 +6138,41 @@ async function saveCustomerDetails() {
     var err = document.getElementById('cdErr');
     var name = document.getElementById('cdName').value.trim();
     var firm = document.getElementById('cdFirm').value.trim();
-    var phone = document.getElementById('cdPhone').value.trim() || activeUser;
+    var phone = document.getElementById('cdPhone').value.trim();
     var station = document.getElementById('cdStation').value.trim();
     var state = document.getElementById('cdState').value.trim();
+    var agent = document.getElementById('cdAgent') ? document.getElementById('cdAgent').value.trim() : "";
+    var gst = document.getElementById('cdGst') ? document.getElementById('cdGst').value.trim() : "";
+    var address = document.getElementById('cdAddress') ? document.getElementById('cdAddress').value.trim() : "";
     var transport = document.getElementById('cdTransport') ? document.getElementById('cdTransport').value.trim() : "";
 
-    if (!name || !station || !state) {
-        err.innerText = "Please fill all required fields.";
+    if (!name || !station) {
+        if (err) err.innerText = "Please enter Party Name and Station.";
         return;
     }
 
-    btn.innerText = "Saving...";
-    var d = { name: name, firm: firm, phone: phone, station: station, state: state, transport: transport };
+    if (btn) btn.innerText = "Saving...";
+    var isAdmin = !!((window.isSuperAdmin && window.isAdminMode) || window.isAdminMode || window.isSuperAdmin);
+
+    var d = {
+        name: name,
+        firm: firm || name,
+        phone: phone || (isAdmin ? '' : (activeUser || '')),
+        station: station,
+        state: state,
+        agent: agent,
+        gst: gst,
+        address: address,
+        transport: transport,
+        onBehalf: isAdmin ? true : false
+    };
+
     if (transport) {
         localStorage.setItem('ds_preferred_transport', transport);
         var tInp = document.getElementById('orderTransportInput');
         if (tInp) tInp.value = transport;
     }
+
     var stored = localStorage.getItem("dsCustomerDetails");
     var docId = null;
     if (stored) {
@@ -6113,44 +6182,53 @@ async function saveCustomerDetails() {
 
     // Save locally immediately for fast UI
     localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
+    if (isAdmin) {
+        localStorage.setItem("ds_active_on_behalf", JSON.stringify(d));
+        window.activeOrderOnBehalf = d;
+        window.updateOrderOnBehalfBanner();
+    }
     loadCartCustomerDetails();
 
-    // Save to Firestore
-    try {
-        var doc = {
-            fields: {
-                name: { stringValue: name },
-                firm: { stringValue: firm },
-                station: { stringValue: station },
-                state: { stringValue: state },
-                phone: { stringValue: phone }
-            }
-        };
+    // If regular user (non-admin), sync profile to Firestore
+    if (!isAdmin) {
+        try {
+            var doc = {
+                fields: {
+                    name: { stringValue: name },
+                    firm: { stringValue: firm },
+                    station: { stringValue: station },
+                    state: { stringValue: state },
+                    phone: { stringValue: phone || activeUser || '' }
+                }
+            };
+            if (agent) doc.fields.agent = { stringValue: agent };
+            if (gst) doc.fields.gst = { stringValue: gst };
+            if (transport) doc.fields.transport = { stringValue: transport };
+            if (address) doc.fields.address = { stringValue: address };
 
-        if (docId) {
-            // Update existing
-            await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + docId + "?updateMask.fieldPaths=name&updateMask.fieldPaths=firm&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=phone", {
-                method: "PATCH",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(doc)
-            });
-        } else {
-            // Create new
-            doc.fields.createdAt = { timestampValue: new Date().toISOString() };
-            var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
-                method: "POST",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(doc)
-            });
-            var data = await res.json();
-            if (data.name) {
-                d.docId = data.name.split('/').pop();
-                localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
+            if (docId) {
+                await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + docId + "?updateMask.fieldPaths=name&updateMask.fieldPaths=firm&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=phone", {
+                    method: "PATCH",
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(doc)
+                });
+            } else {
+                doc.fields.createdAt = { timestampValue: new Date().toISOString() };
+                var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
+                    method: "POST",
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(doc)
+                });
+                var data = await res.json();
+                if (data.name) {
+                    d.docId = data.name.split('/').pop();
+                    localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
+                }
             }
-        }
-    } catch (e) { console.error("Firestore save err", e); }
+        } catch (e) { console.error("Firestore save err", e); }
+    }
 
-    btn.innerText = "SAVE DETAILS";
+    if (btn) btn.innerText = "SAVE DETAILS";
     closeModals();
 }
 
@@ -11808,27 +11886,166 @@ window.setOrderTransport = function(val) {
 };
 
 // ==========================================
-// 🛒 ADMIN ORDER ON BEHALF CONTROLLER
-// (Take order on behalf of customer & print details on order PDF)
+// 🛒 ADMIN ORDER & PARTY SELECT CONTROLLER
+// (Select party, auto-prefill station/agent/transport/gst, editable fields, clean banner)
 // ==========================================
+
+window.searchAndSelectParty = function (query) {
+    var resEl = document.getElementById('cdPartySearchResults');
+    if (!resEl) return;
+    var q = (query || '').trim().toLowerCase();
+    if (q.length < 1) {
+        resEl.innerHTML = '';
+        resEl.style.display = 'none';
+        return;
+    }
+
+    var list = window._compiledCustomersList || [];
+    if (list.length === 0) {
+        resEl.innerHTML = '<div style="padding:10px; font-size:12px; color:#64748b; text-align:center;"><i class="fas fa-spinner fa-spin"></i> Loading customer accounts...</div>';
+        resEl.style.display = 'block';
+        if (typeof window.loadAccountingDirectoryData === 'function') {
+            window.loadAccountingDirectoryData(false).then(() => {
+                window.searchAndSelectParty(query);
+            });
+        }
+        return;
+    }
+
+    var matched = [];
+    for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        var n = (c.n || '').toLowerCase();
+        var code = (c.c || '').toLowerCase();
+        var ct = (c.ct || '').toLowerCase();
+        if (n.includes(q) || code.includes(q) || ct.includes(q)) {
+            matched.push(c);
+            if (matched.length >= 25) break;
+        }
+    }
+
+    if (matched.length === 0) {
+        resEl.innerHTML = '<div style="padding:10px; font-size:12px; color:#94a3b8; text-align:center;">No matching party found</div>';
+        resEl.style.display = 'block';
+        return;
+    }
+
+    var html = matched.map(function (c) {
+        var balText = '';
+        if (typeof c.b === 'number' && c.b > 0) {
+            balText = `₹${c.b.toLocaleString('en-IN')} ${c.d || 'Dr'}`;
+        }
+        var infoParts = [];
+        if (c.ct) infoParts.push(c.ct);
+        if (c.ag) infoParts.push('Ag: ' + c.ag);
+        if (c.tr) infoParts.push('Tr: ' + c.tr);
+        if (c.g) infoParts.push('GST: ' + c.g);
+
+        var safeCode = (c.c || '').replace(/'/g, "\\'");
+        return `<div onclick="window.pickPartyForOrder('${safeCode}')"
+                     style="padding:8px 10px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; justify-content:space-between; align-items:center; transition:background 0.15s;"
+                     onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
+            <div style="flex:1; min-width:0; padding-right:8px;">
+                <div style="font-size:13px; font-weight:bold; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    ${c.n}
+                </div>
+                <div style="font-size:11px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    ${infoParts.join(' • ') || 'No extra info'}
+                </div>
+            </div>
+            ${balText ? `<span style="font-size:11px; font-weight:bold; color:#be185d; white-space:nowrap;">${balText}</span>` : ''}
+        </div>`;
+    }).join('');
+
+    resEl.innerHTML = html;
+    resEl.style.display = 'block';
+};
+
+window.pickPartyForOrder = function (code) {
+    var list = window._compiledCustomersList || [];
+    var cust = null;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i].c === code || list[i].n === code) {
+            cust = list[i];
+            break;
+        }
+    }
+    if (!cust) return;
+
+    var sInp = document.getElementById('cdPartySearch');
+    if (sInp) sInp.value = cust.n;
+    var resEl = document.getElementById('cdPartySearchResults');
+    if (resEl) {
+        resEl.innerHTML = '';
+        resEl.style.display = 'none';
+    }
+
+    // Auto-detect transport from customer's latest Finish Sales bill if available
+    var partyTransport = cust.tr || '';
+    try {
+        var rep = (window._accountingReportsCache && window._accountingReportsCache.reports) || {};
+        var pRep = rep[cust.c] || rep[cust.n];
+        if (pRep && pRep.finishSales && pRep.finishSales.length > 0) {
+            partyTransport = pRep.finishSales[0][12] || partyTransport;
+        }
+    } catch(e){}
+
+    // Auto-fill all inputs (fully editable by admin)
+    var nEl = document.getElementById('cdName');
+    if (nEl) nEl.value = cust.n || '';
+    var fEl = document.getElementById('cdFirm');
+    if (fEl) fEl.value = cust.c || cust.n || '';
+    var stEl = document.getElementById('cdStation');
+    if (stEl) stEl.value = cust.ct || '';
+    var agEl = document.getElementById('cdAgent');
+    if (agEl) agEl.value = cust.ag || '';
+    var trEl = document.getElementById('cdTransport');
+    if (trEl) trEl.value = partyTransport || localStorage.getItem('ds_preferred_transport') || '';
+    var gstEl = document.getElementById('cdGst');
+    if (gstEl) gstEl.value = cust.g || '';
+    var pEl = document.getElementById('cdPhone');
+    if (pEl) pEl.value = cust.p || '';
+    var stateEl = document.getElementById('cdState');
+    if (stateEl) stateEl.value = cust.st || '';
+    var addrEl = document.getElementById('cdAddress');
+    if (addrEl) addrEl.value = cust.a || '';
+
+    // Subtle highlight animation on inputs to confirm pre-fill
+    var inputs = [nEl, fEl, stEl, agEl, trEl, gstEl, pEl, stateEl, addrEl];
+    inputs.forEach(function (inp) {
+        if (!inp) return;
+        inp.style.transition = 'background 0.3s';
+        var origBg = inp.style.background || '#fff';
+        inp.style.background = '#dcfce7';
+        setTimeout(function () {
+            inp.style.background = origBg;
+        }, 500);
+    });
+};
+
+// Close search dropdown on click outside
+document.addEventListener('click', function (e) {
+    var sRes = document.getElementById('cdPartySearchResults');
+    var sInp = document.getElementById('cdPartySearch');
+    if (sRes && sRes.style.display !== 'none') {
+        if (e.target !== sInp && !sRes.contains(e.target)) {
+            sRes.style.display = 'none';
+        }
+    }
+});
 
 window.startOrderOnBehalf = function () {
     var cust = window._currentReportingCustomer;
     if (!cust) return;
 
-    // Auto-detect transport from customer's latest Finish Sales bill
-    var partyTransport = '';
+    var partyTransport = cust.tr || '';
     try {
         var rep = (window._accountingReportsCache && window._accountingReportsCache.reports) || {};
         var pRep = rep[cust.c] || rep[cust.n];
         if (pRep && pRep.finishSales && pRep.finishSales.length > 0) {
-            partyTransport = pRep.finishSales[0][12] || ''; // TRANSPO column
+            partyTransport = pRep.finishSales[0][12] || partyTransport;
         }
     } catch(e){}
-
-    if (!confirm(`Take order on behalf of:\n\n${cust.n} (${cust.ct || 'Customer'})\n\nPreferred Transport: ${partyTransport || 'Direct'}\n\nAll designs you add to cart will be ordered under this customer, and their Name, Firm, Phone, Station, Address, Transport, and GST will print on the Order PDF.`)) {
-        return;
-    }
 
     var details = {
         name: cust.n,
@@ -11837,6 +12054,7 @@ window.startOrderOnBehalf = function () {
         station: cust.ct || '',
         state: cust.st || '',
         address: cust.a || '',
+        agent: cust.ag || '',
         gst: cust.g || '',
         transport: partyTransport || localStorage.getItem('ds_preferred_transport') || '',
         onBehalf: true
@@ -11851,14 +12069,19 @@ window.startOrderOnBehalf = function () {
     window.closeCustomerReportsModal();
     if (typeof closeModals === 'function') closeModals(true);
 
-    alert(`✅ Order Mode Active for: ${cust.n}\n\nBrowse sarees, add quantities to cart, and checkout. Customer details will print directly on the invoice.`);
+    alert(`✅ Order Mode Active for: ${cust.n}${cust.ct ? ' (' + cust.ct + ')' : ''}\n\nAgent: ${details.agent || '-'}\nTransport: ${details.transport || '-'}\nGST: ${details.gst || '-'}\n\nAll details are prefilled and editable in the order form.`);
 };
 
 window.exitOrderOnBehalf = function () {
-    if (confirm("Exit ordering on behalf of customer?")) {
+    var stored = null;
+    try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+    var pName = stored ? (stored.name || "party") : "party";
+    if (confirm(`Clear selected party (${pName})?`)) {
         localStorage.removeItem("ds_active_on_behalf");
+        localStorage.removeItem("dsCustomerDetails");
         window.activeOrderOnBehalf = null;
         window.updateOrderOnBehalfBanner();
+        loadCartCustomerDetails();
     }
 };
 
@@ -11869,7 +12092,7 @@ window.updateOrderOnBehalfBanner = function () {
     try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
 
     if (stored && stored.name) {
-        if (textEl) textEl.innerText = `Ordering on Behalf of: ${stored.name} (${stored.station || 'Customer'})`;
+        if (textEl) textEl.innerText = `${stored.name}${stored.station ? ' (' + stored.station + ')' : ''}`;
         if (banner) banner.style.display = 'flex';
     } else {
         if (banner) banner.style.display = 'none';

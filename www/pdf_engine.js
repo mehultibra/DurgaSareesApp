@@ -790,10 +790,10 @@ async function generateCartOrderPDF(actionType) {
                     var rightCol = [];
                     if (dsCustomer.station) rightCol.push("Station: " + dsCustomer.station);
                     if (dsCustomer.state) rightCol.push("State: " + dsCustomer.state);
-                    if (dsCustomer.gst) rightCol.push("GST: " + dsCustomer.gst);
+                    if (dsCustomer.agent) rightCol.push("Agent: " + dsCustomer.agent);
                     var tVal = dsCustomer.transport || localStorage.getItem('ds_preferred_transport') || '';
                     if (tVal) rightCol.push("Transport: " + tVal);
-                    if (dsCustomer.onBehalf) rightCol.push("Order Placed: Admin (On Behalf)");
+                    if (dsCustomer.gst) rightCol.push("GST: " + dsCustomer.gst);
                     
                     var lineY = y;
                     for(var i=0; i<Math.max(leftCol.length, rightCol.length); i++) {
