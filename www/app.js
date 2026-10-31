@@ -206,6 +206,7 @@ window.logAppError = function (context, message) {
 const firebaseConfig = {
     apiKey: "AIzaSyA3Za-dZ8OWWF7ZJdneKGd7A2t8xm_7IZQ",
     authDomain: window.location.hostname.includes("durga-sarees") ? window.location.hostname : "durga-sarees.firebaseapp.com",
+    databaseURL: "https://durga-sarees-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "durga-sarees"
 };
 var webConfirmationResult = null;
@@ -10337,4 +10338,292 @@ window.scanStorageCategoryForProducts = async function () {
         if (statusEl) statusEl.innerText = `Scan failed: ${err.message}`;
         alert("Cloud storage scan failed: " + err.message);
     }
+};
+
+// ==========================================
+// 📊 REALTIME DATABASE - ACCOUNTING INTEGRATION (ERP / LEDGER)
+// ==========================================
+window.DS_RTDB_URL = "https://durga-sarees-default-rtdb.asia-southeast1.firebasedatabase.app";
+window._accountingCache = {
+    customers: null,
+    balances: null,
+    bills: null,
+    balancesByCode: {},
+    timestamp: 0
+};
+
+// Safe generic fetch from Firebase Realtime Database (SDK with REST Fallback)
+window.fetchRTDB = async function (path) {
+    var cleanPath = String(path || '').replace(/^\/+/, '').replace(/\/+$/, '');
+    if (!cleanPath) return null;
+
+    try {
+        // 1. Try Firebase Web SDK if database is initialized
+        if (typeof firebase !== 'undefined' && firebase.database && firebase.apps && firebase.apps.length > 0) {
+            try {
+                var snap = await firebase.database().ref(cleanPath).once('value');
+                if (snap.exists()) return snap.val();
+            } catch (sdkErr) {
+                // Ignore and fall through to REST API
+            }
+        }
+
+        // 2. Fallback: Direct REST API with auth token if available
+        var token = null;
+        if (typeof getCachedAuthToken === 'function') {
+            try { token = await getCachedAuthToken(); } catch (e) { }
+        }
+        var url = `${window.DS_RTDB_URL}/${cleanPath}.json` + (token ? `?auth=${encodeURIComponent(token)}` : '');
+        var res = await fetch(url);
+        if (!res.ok) {
+            console.warn(`[RTDB] Fetch failed for ${cleanPath} (Status ${res.status})`);
+            return null;
+        }
+        return await res.json();
+    } catch (e) {
+        console.warn(`[RTDB] Error fetching ${cleanPath}:`, e.message);
+        return null;
+    }
+};
+
+// Helper: Convert RTDB response (Array or Object) to a clean array
+window._rtdbToArray = function (val) {
+    if (!val) return [];
+    if (Array.isArray(val)) return val.filter(Boolean);
+    if (typeof val === 'object') return Object.values(val).filter(Boolean);
+    return [];
+};
+
+// Helper: Clean phone number to last 10 digits for matching
+window._normalizePhone = function (p) {
+    if (!p) return '';
+    var digits = String(p).replace(/\D/g, '');
+    return (digits.length >= 10) ? digits.slice(-10) : digits;
+};
+
+// 1. Read Customer Contacts (from MST, ACGROUP, or ATYPE)
+window.getAccountingCustomers = async function (forceRefresh = false) {
+    var now = Date.now();
+    if (!forceRefresh && window._accountingCache.customers && (now - window._accountingCache.timestamp < 300000)) {
+        return window._accountingCache.customers;
+    }
+
+    try {
+        // Try MST first, then ACGROUP, then ATYPE
+        var raw = await window.fetchRTDB('MST');
+        if (!raw) raw = await window.fetchRTDB('ACGROUP');
+        if (!raw) raw = await window.fetchRTDB('ATYPE');
+
+        var list = window._rtdbToArray(raw);
+        var customers = [];
+        var seenCodes = new Set();
+
+        list.forEach(item => {
+            if (!item || typeof item !== 'object') return;
+            var code = String(item.ACCODE || item.CODE || item.PARTY_CODE || item.ID || '').trim().toUpperCase();
+            var name = String(item.ACNAME || item.NAME || item.PARTY_NAME || item.PARTY || '').trim();
+            if (!code && !name) return;
+
+            var phoneRaw = item.MOBILE || item.PHONE || item.TEL || item.CONTACT || item.WHATSAPP || '';
+            var phone = window._normalizePhone(phoneRaw);
+            var city = String(item.CITY || item.STATION || '').trim();
+            var address = String(item.ADDRESS || item.ADDR || '').trim();
+            var gst = String(item.GST || item.GSTIN || '').trim();
+            var group = String(item.GROUP || item.ACGROUP || item.TYPE || '').trim();
+
+            if (code && seenCodes.has(code)) return;
+            if (code) seenCodes.add(code);
+
+            customers.push({
+                code: code || phone || name,
+                name: name || ('Party ' + code),
+                phone: phone,
+                phoneRaw: String(phoneRaw).trim(),
+                city: city,
+                address: address,
+                gst: gst,
+                group: group,
+                raw: item
+            });
+        });
+
+        window._accountingCache.customers = customers;
+        window._accountingCache.timestamp = now;
+        return customers;
+    } catch (e) {
+        console.error("[RTDB] getAccountingCustomers error:", e);
+        return [];
+    }
+};
+
+// 2. Read Customer Balances (from BLS)
+window.getAccountingBalances = async function (forceRefresh = false) {
+    var now = Date.now();
+    if (!forceRefresh && window._accountingCache.balances && (now - window._accountingCache.timestamp < 300000)) {
+        return window._accountingCache.balances;
+    }
+
+    try {
+        var raw = await window.fetchRTDB('BLS');
+        var list = window._rtdbToArray(raw);
+        var balances = [];
+        var byCode = {};
+
+        list.forEach(item => {
+            if (!item || typeof item !== 'object') return;
+            var code = String(item.ACCODE || item.CODE || item.PARTY_CODE || item.ID || '').trim().toUpperCase();
+            var name = String(item.ACNAME || item.NAME || '').trim();
+            var balNum = parseFloat(item.BALANCE || item.CLBAL || item.BAL || item.AMOUNT || 0);
+            var drCr = String(item.DRCR || item.TYPE || (balNum >= 0 ? 'Dr' : 'Cr')).trim().toUpperCase();
+
+            var record = {
+                code: code,
+                name: name,
+                balance: isNaN(balNum) ? 0 : Math.abs(balNum),
+                signedBalance: isNaN(balNum) ? 0 : (drCr === 'CR' ? -Math.abs(balNum) : Math.abs(balNum)),
+                drCr: drCr.includes('CR') ? 'Cr' : 'Dr',
+                raw: item
+            };
+
+            balances.push(record);
+            if (code) byCode[code] = record;
+        });
+
+        window._accountingCache.balances = balances;
+        window._accountingCache.balancesByCode = byCode;
+        return balances;
+    } catch (e) {
+        console.error("[RTDB] getAccountingBalances error:", e);
+        return [];
+    }
+};
+
+// 3. Read Bills / Receivables (from BILLREC)
+window.getAccountingBills = async function (partyCodeOrPhone, forceRefresh = false) {
+    var now = Date.now();
+    var allBills = window._accountingCache.bills;
+
+    if (forceRefresh || !allBills || (now - window._accountingCache.timestamp > 300000)) {
+        try {
+            var raw = await window.fetchRTDB('BILLREC');
+            var list = window._rtdbToArray(raw);
+            allBills = [];
+
+            list.forEach(item => {
+                if (!item || typeof item !== 'object') return;
+                var billNo = String(item.BILLNO || item.BILL_NO || item.INV_NO || item.INVOICE || item.DOCNO || '').trim();
+                var code = String(item.ACCODE || item.CODE || item.PARTY_CODE || '').trim().toUpperCase();
+                var date = String(item.DATE || item.BILLDATE || item.DOCDATE || '').trim();
+                var dueDate = String(item.DUEDATE || item.DUE_DATE || '').trim();
+                var billAmt = parseFloat(item.BILLAMT || item.NETAMT || item.AMOUNT || item.TOTAL || 0);
+                var balAmt = parseFloat(item.BALANCE || item.BALAMT || item.BAL || item.PENDING || billAmt || 0);
+
+                allBills.push({
+                    billNo: billNo,
+                    partyCode: code,
+                    partyName: String(item.ACNAME || item.NAME || '').trim(),
+                    date: date,
+                    dueDate: dueDate,
+                    billAmount: isNaN(billAmt) ? 0 : billAmt,
+                    balanceAmount: isNaN(balAmt) ? 0 : balAmt,
+                    raw: item
+                });
+            });
+
+            window._accountingCache.bills = allBills;
+        } catch (e) {
+            console.error("[RTDB] getAccountingBills error:", e);
+            allBills = [];
+        }
+    }
+
+    if (!partyCodeOrPhone) return allBills;
+
+    var target = String(partyCodeOrPhone).trim().toUpperCase();
+    var targetPhone = window._normalizePhone(partyCodeOrPhone);
+
+    // If searching by phone, first find party code
+    if (targetPhone && window._accountingCache.customers) {
+        var cust = window._accountingCache.customers.find(c => c.phone === targetPhone);
+        if (cust && cust.code) target = cust.code;
+    }
+
+    return allBills.filter(b => b.partyCode === target || (b.raw && window._normalizePhone(b.raw.MOBILE || b.raw.PHONE) === targetPhone));
+};
+
+// 4. Combined Helper: Get complete summary for a specific customer (Balance + Pending Bills)
+window.getCustomerAccountingSummary = async function (phoneOrCode) {
+    if (!phoneOrCode) return null;
+
+    try {
+        var normTargetPhone = window._normalizePhone(phoneOrCode);
+        var normTargetCode = String(phoneOrCode).trim().toUpperCase();
+
+        // 1. Load customers, balances, and bills in parallel
+        var [customers, balances, allBills] = await Promise.all([
+            window.getAccountingCustomers(),
+            window.getAccountingBalances(),
+            window.getAccountingBills()
+        ]);
+
+        // 2. Find customer record
+        var customer = customers.find(c =>
+            (normTargetPhone && c.phone === normTargetPhone) ||
+            (normTargetCode && c.code === normTargetCode)
+        );
+
+        var partyCode = customer ? customer.code : normTargetCode;
+
+        // 3. Find balance
+        var balanceRec = null;
+        if (window._accountingCache.balancesByCode && window._accountingCache.balancesByCode[partyCode]) {
+            balanceRec = window._accountingCache.balancesByCode[partyCode];
+        } else if (balances && balances.length > 0) {
+            balanceRec = balances.find(b => b.code === partyCode);
+        }
+
+        // 4. Find pending bills
+        var customerBills = (allBills || []).filter(b =>
+            (partyCode && b.partyCode === partyCode) ||
+            (normTargetPhone && customer && customer.phone === normTargetPhone)
+        );
+
+        return {
+            customer: customer || { code: partyCode, name: "Customer", phone: normTargetPhone },
+            totalBalance: balanceRec ? balanceRec.balance : 0,
+            signedBalance: balanceRec ? balanceRec.signedBalance : 0,
+            drCr: balanceRec ? balanceRec.drCr : 'Dr',
+            pendingBillsCount: customerBills.length,
+            pendingBills: customerBills,
+            lastSynced: new Date().toISOString()
+        };
+    } catch (e) {
+        console.error("[RTDB] getCustomerAccountingSummary error:", e);
+        return null;
+    }
+};
+
+// 5. Diagnostics test tool: easily test RTDB connection from DevTools or button
+window.testAccountingConnection = async function () {
+    console.log("🔍 Testing Realtime Database Connection...");
+    var res = { rtdbUrl: window.DS_RTDB_URL };
+
+    var [custs, bals, bills] = await Promise.all([
+        window.getAccountingCustomers(true),
+        window.getAccountingBalances(true),
+        window.getAccountingBills(null, true)
+    ]);
+
+    res.customersCount = custs.length;
+    res.balancesCount = bals.length;
+    res.billsCount = bills.length;
+
+    if (custs.length === 0 && bals.length === 0 && bills.length === 0) {
+        console.warn("⚠️ RTDB returned 0 records. Check if Firebase Rules allow read (rules: { '.read': true } or auth is active)!");
+        res.status = "No records or Permission Denied";
+    } else {
+        console.log(`✅ RTDB Connected Successfully! Found ${custs.length} customers, ${bals.length} balances, ${bills.length} bills.`);
+        res.status = "Connected 🟢";
+    }
+    return res;
 };
