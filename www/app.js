@@ -4213,7 +4213,18 @@ function sendWhatsappText() {
     var keys = Object.keys(cart);
     if (keys.length === 0) return alert("Your cart is empty!");
 
-    var msg = "🛍️ *New Order from Durga Sarees App*\n\n";
+    var msg = "🛍️ *New Order from Durga Sarees App*\n";
+    try {
+        var cd = JSON.parse(localStorage.getItem("dsCustomerDetails") || "null");
+        if (cd && cd.name) {
+            msg += "👤 *Customer:* " + cd.name + (cd.firm && cd.firm !== cd.name ? " (" + cd.firm + ")" : "") + "\n";
+            if (cd.phone) msg += "📞 *Phone:* " + cd.phone + "\n";
+            if (cd.station) msg += "📍 *Station:* " + cd.station + (cd.state ? ", " + cd.state : "") + "\n";
+            if (cd.gst) msg += "🏛️ *GST:* " + cd.gst + "\n";
+            if (cd.onBehalf) msg += "🏷️ *Order Placed: Admin (On Behalf)*\n";
+        }
+    } catch (e) { }
+    msg += "\n";
     var totalQty = 0;
     var groups = {};
 
@@ -6010,6 +6021,9 @@ function renderCustomerDetails(d, container) {
     if (!container) return;
     var primaryName = d.firm ? d.firm : d.name;
     var html = esc(primaryName) + (d.station ? ", " + esc(d.station) : "");
+    if (d.onBehalf) {
+        html = '<span style="background:#fbcfe8; color:#9d174d; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold; margin-right:6px;"><i class="fas fa-user-tag"></i> On Behalf</span> ' + html;
+    }
     container.innerHTML = html;
 }
 
@@ -11002,8 +11016,8 @@ window.openCustomerReportsModal = async function (partyCode) {
     var modal = document.getElementById('customerDetailReportsModal');
     if (modal) modal.style.display = 'flex';
 
-    // Set Default Tab
-    window.switchCustomerReportTab('ledger');
+    // Set Default Tab to Finish Sales & Transport
+    window.switchCustomerReportTab('sales');
 };
 
 // 7. Close Customer Detail Reports Modal
@@ -11015,12 +11029,11 @@ window.closeCustomerReportsModal = function () {
 // 8. Tab Switcher
 window.switchCustomerReportTab = function (tabName) {
     window._activeCustomerReportTab = tabName;
-    var tabs = ['ledger', 'sales', 'transport', 'outstanding'];
+    var tabs = ['sales', 'outstanding', 'ledger'];
     var tabNamesMap = {
-        ledger: 'tabBtnLedger',
         sales: 'tabBtnSales',
-        transport: 'tabBtnTransport',
-        outstanding: 'tabBtnOutstanding'
+        outstanding: 'tabBtnOutstanding',
+        ledger: 'tabBtnLedger'
     };
 
     tabs.forEach(t => {
@@ -11039,7 +11052,7 @@ window.switchCustomerReportTab = function (tabName) {
     window.renderCustomerReportActiveTab();
 };
 
-// 9. Render Content of the Active Tab
+// 9. Render Active Report Tab (Exact layouts matching user ERP software)
 window.renderCustomerReportActiveTab = async function () {
     if (!window.isAdminMode && !window.isSuperAdmin) return;
 
@@ -11057,311 +11070,588 @@ window.renderCustomerReportActiveTab = async function () {
         <div style="text-align:center; padding:40px 20px; color:#6b7280; font-size:13px;">
           <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
           <div style="font-weight:600; color:#374151;">Loading ERP Reports...</div>
-          <div style="font-size:11px; margin-top:4px;">Extracting ledger, sales &amp; dispatch records...</div>
+          <div style="font-size:11px; margin-top:4px;">Retrieving sales, transport, outstanding &amp; ledger...</div>
         </div>`;
         await window.loadAccountingReportsData();
     }
 
-    var partyReports = (window._accountingReportsCache && window._accountingReportsCache[codeKey]) || {
-        ledger: [],
-        salesItems: [],
-        transport: [],
-        outstanding: []
-    };
+    var allReports = (window._accountingReportsCache && window._accountingReportsCache.reports) || {};
+    var partyRep = allReports[codeKey] || { fs: [], os: [], ld: [] };
+    var activeTab = window._activeCustomerReportTab || 'sales';
 
-    var activeTab = window._activeCustomerReportTab || 'ledger';
-
-    // TAB 1: LEDGER
-    if (activeTab === 'ledger') {
-        var ledgerList = partyReports.ledger || [];
-        if (ledgerList.length === 0) {
-            area.innerHTML = `
-            <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
-              <i class="fas fa-book-open" style="font-size:26px; color:#cbd5e1; margin-bottom:8px;"></i>
-              <div style="font-weight:600;">No Ledger Transactions Recorded</div>
-              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No financial debit/credit vouchers for this account.</div>
-            </div>`;
-            return;
-        }
-
-        var totalDr = 0, totalCr = 0;
-        ledgerList.forEach(l => {
-            totalDr += (l.dr || 0);
-            totalCr += (l.cr || 0);
-        });
-        var netBal = totalDr - totalCr;
-        var netBalText = (netBal !== 0) ? `₹ ${Math.abs(Math.round(netBal)).toLocaleString('en-IN')} ${netBal > 0 ? 'Dr' : 'Cr'}` : '₹ 0.00';
-
-        var html = `
-        <!-- Ledger Summary Card -->
-        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:10px; text-transform:uppercase; color:#64748b; font-weight:600;">Total Debit (Dr)</div>
-            <div style="font-size:13px; font-weight:bold; color:#dc2626;">₹ ${Math.round(totalDr).toLocaleString('en-IN')}</div>
-          </div>
-          <div>
-            <div style="font-size:10px; text-transform:uppercase; color:#64748b; font-weight:600;">Total Credit (Cr)</div>
-            <div style="font-size:13px; font-weight:bold; color:#16a34a;">₹ ${Math.round(totalCr).toLocaleString('en-IN')}</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:10px; text-transform:uppercase; color:#64748b; font-weight:600;">Closing Balance</div>
-            <div style="font-size:14px; font-weight:bold; color:${netBal > 0 ? '#dc2626' : (netBal < 0 ? '#16a34a' : '#475569')};">${netBalText}</div>
-          </div>
-        </div>
-
-        <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:6px; display:flex; justify-content:space-between;">
-          <span>Transactions (${ledgerList.length}):</span>
-          <span style="font-size:10px; color:#94a3b8;">Sorted Chronologically</span>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:6px;">
-        `;
-
-        ledgerList.forEach((l, idx) => {
-            var isDr = (l.dr > 0);
-            var isCr = (l.cr > 0);
-            var amtText = isDr ? `₹ ${l.dr.toLocaleString('en-IN')} Dr` : (isCr ? `₹ ${l.cr.toLocaleString('en-IN')} Cr` : '₹ 0.00');
-            var amtColor = isDr ? '#dc2626' : (isCr ? '#16a34a' : '#64748b');
-
-            var runningBal = (l.bal !== undefined) ? ((l.bal !== 0) ? `₹ ${Math.abs(l.bal).toLocaleString('en-IN')} ${l.bal > 0 ? 'Dr' : 'Cr'}` : '₹ 0.00') : '';
-
-            html += `
-            <div style="background:#fff; border:1px solid #f1f5f9; border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:3px;">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div style="font-weight:700; font-size:12px; color:#1e293b;">
-                  ${escHtml(l.d || 'N/A')}
-                  ${l.v ? `<span style="font-weight:600; color:#64748b; margin-left:6px; font-size:11px;">#${escHtml(l.v)}</span>` : ''}
-                </div>
-                <div style="font-weight:bold; font-size:13px; color:${amtColor};">
-                  ${amtText}
-                </div>
-              </div>
-              <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#64748b;">
-                <div>
-                  <span style="background:#f1f5f9; color:#475569; padding:1px 5px; border-radius:3px; font-size:10px; font-weight:600;">${escHtml(l.t || 'TRN')}</span>
-                  <span style="margin-left:4px;">${escHtml(l.r || 'Transaction')}</span>
-                </div>
-                ${runningBal ? `<div style="font-size:10px; color:#94a3b8;">Bal: <b style="color:#475569;">${runningBal}</b></div>` : ''}
-              </div>
-            </div>`;
-        });
-
-        html += `</div>`;
-        area.innerHTML = html;
-        return;
-    }
-
-    // TAB 2: SALES REPORT (ITEM WISE)
+    // ==========================================
+    // 📋 REPORT 1: FINISH SALES DETAILED REPORT (Image 1 & 2)
+    // ==========================================
     if (activeTab === 'sales') {
-        var salesList = partyReports.salesItems || [];
-        if (salesList.length === 0) {
+        var fsList = partyRep.fs || [];
+        if (fsList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
-              <i class="fas fa-box-open" style="font-size:26px; color:#cbd5e1; margin-bottom:8px;"></i>
-              <div style="font-weight:600;">No Item-Wise Sales Records</div>
-              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No saree design purchases recorded in the sales system.</div>
+              <i class="fas fa-box-open" style="font-size:28px; color:#cbd5e1; margin-bottom:8px;"></i>
+              <div style="font-weight:bold;">No Finish Sales Records Found</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No saree sales or transport receipts recorded for ${escHtml(cust.n)}.</div>
             </div>`;
             return;
         }
 
-        var totalPcs = 0, totalMts = 0, totalVal = 0;
-        salesList.forEach(s => {
-            totalPcs += (s.pcs || 0);
-            totalMts += (s.mts || 0);
-            totalVal += (s.a || 0);
+        var totPcs = 0, totMtr = 0, totGross = 0, totBill = 0, totParcels = 0;
+        fsList.forEach(r => {
+            totPcs += (r[6] || 0);
+            totMtr += (r[7] || 0);
+            totGross += (r[9] || 0);
+            totBill += (r[10] || 0);
+            if (r[15]) totParcels += (parseInt(r[15]) || 0);
         });
+        var avgRate = (totMtr > 0) ? (totGross / totMtr) : (totPcs > 0 ? (totGross / totPcs) : 0);
 
         var html = `
-        <!-- Sales Summary -->
-        <div style="background:#fdf2f8; border:1px solid #fbcfe8; border-radius:8px; padding:10px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:10px; text-transform:uppercase; color:#9d174d; font-weight:600;">Total Pcs</div>
-            <div style="font-size:13px; font-weight:bold; color:#831843;">${totalPcs.toLocaleString('en-IN')} Pcs</div>
+        <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b;">
+          
+          <!-- Banner Header matching Image 1 -->
+          <div style="background:#1d4ed8; color:#fff; font-weight:bold; font-size:12px; padding:6px 10px; border-radius:6px 6px 0 0; text-align:center; letter-spacing:0.5px;">
+            FINISH SALES DETAILED REPORT -- COMPANY: DURGA SAREES
           </div>
-          <div>
-            <div style="font-size:10px; text-transform:uppercase; color:#9d174d; font-weight:600;">Total Meters</div>
-            <div style="font-size:13px; font-weight:bold; color:#831843;">${Math.round(totalMts).toLocaleString('en-IN')} Mts</div>
+          <div style="background:#eff6ff; border:1px solid #bfdbfe; border-top:none; padding:8px 10px; font-size:11px; color:#1e3a8a; line-height:1.4; margin-bottom:8px;">
+            <div><b>PARTY:</b> ${escHtml(cust.n)} - ${escHtml(cust.c)}${cust.a ? (', ' + escHtml(cust.a)) : ''} ${cust.p ? (' - <b>Mob:</b> ' + escHtml(cust.p)) : ''}</div>
+            <div style="font-size:10px; color:#64748b; margin-top:2px;">--- FINANCIAL YEAR 2026-2027 • Tap any Bill No to open full Tax Invoice</div>
           </div>
-          <div style="text-align:right;">
-            <div style="font-size:10px; text-transform:uppercase; color:#9d174d; font-weight:600;">Total Sales Value</div>
-            <div style="font-size:14px; font-weight:bold; color:#be185d;">₹ ${Math.round(totalVal).toLocaleString('en-IN')}</div>
-          </div>
-        </div>
 
-        <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:6px;">
-          Purchased Saree Items (${salesList.length}):
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:6px;">
+          <!-- Table Container with Horizontal Scroll -->
+          <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <table style="width:100%; border-collapse:collapse; font-size:10.5px; text-align:left; white-space:nowrap;">
+              <thead>
+                <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:10px;">
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">DATE</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">BILL</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">SCREEN NAME</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">COLOUR</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">PACI</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">UN</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">PC</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">MTR</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">RATE</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">GROS</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">BILL AMT</th>
+                  <th style="padding:6px 8px; text-align:center; border-right:1px solid #e2e8f0;">DAYS</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">TRANSPO</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">L/R NO.</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">DESTINATION</th>
+                  <th style="padding:6px 8px; text-align:center; border-right:1px solid #e2e8f0;">P/</th>
+                  <th style="padding:6px 8px;">HASTE</th>
+                </tr>
+              </thead>
+              <tbody>
         `;
 
-        salesList.forEach((item, idx) => {
+        fsList.forEach((r, idx) => {
+            var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r[1])}')"`;
+            var isOs = String(r[11] || '').includes('O/S');
+            var daysColor = isOs ? '#dc2626' : '#16a34a';
+
             html += `
-            <div style="background:#fff; border:1px solid #f1f5f9; border-radius:6px; padding:8px 10px; display:flex; flex-direction:column; gap:4px;">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                <div style="flex:1;">
-                  <div style="font-weight:700; font-size:12px; color:#1e293b;">
-                    ${escHtml(item.q || 'SAREE ITEM')}
-                  </div>
-                  <div style="font-size:10px; color:#64748b; margin-top:2px;">
-                    Bill: <b style="color:#0369a1;">${escHtml(item.b || 'BILL')}</b> • Date: ${escHtml(item.d || 'N/A')}
-                    ${item.c ? ` • <span style="background:#f1f5f9; padding:1px 4px; border-radius:3px;">${escHtml(item.c)}</span>` : ''}
-                  </div>
-                </div>
-                <div style="text-align:right;">
-                  <div style="font-weight:bold; font-size:13px; color:#0f172a;">
-                    ₹ ${(item.a || 0).toLocaleString('en-IN')}
-                  </div>
-                  <div style="font-size:10px; color:#64748b;">
-                    ${item.pcs ? `${item.pcs} Pcs` : ''} ${item.r ? `@ ₹${item.r}` : ''}
-                  </div>
-                </div>
-              </div>
-            </div>`;
+            <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[0])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
+                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r[1])}
+              </td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:600; color:#1e293b;">${escHtml(r[2])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[3])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[4])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[5])}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r[6] ? r[6].toLocaleString('en-IN') : '-'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9;">${r[7] ? r[7].toFixed(2) : '-'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9;">${r[8] ? r[8].toFixed(2) : '-'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r[9] ? Math.round(r[9]).toLocaleString('en-IN') : '-'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e293b;">${r[10] ? Math.round(r[10]).toLocaleString('en-IN') : '-'}</td>
+              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:${daysColor};">${escHtml(r[11])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[12])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:600; color:#0369a1;">${escHtml(r[13])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[14])}</td>
+              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9;">${escHtml(r[15] || '1')}</td>
+              <td style="padding:5px 8px; color:#64748b;">${escHtml(r[16])}</td>
+            </tr>`;
         });
 
-        html += `</div>`;
+        // Grand Total row matching Image 1
+        html += `
+              </tbody>
+              <tfoot>
+                <tr style="background:#dbeafe; font-weight:bold; border-top:2px solid #93c5fd; color:#1e3a8a;">
+                  <td colspan="6" style="padding:8px; border-right:1px solid #bfdbfe; font-weight:bold; text-align:center;">GRAND TOTAL</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">${totPcs.toLocaleString('en-IN')}</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">${totMtr.toFixed(2)}</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">${avgRate.toFixed(2)}</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totGross).toLocaleString('en-IN')}</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totBill).toLocaleString('en-IN')}</td>
+                  <td colspan="4" style="padding:8px; border-right:1px solid #bfdbfe;"></td>
+                  <td style="padding:8px; text-align:center; border-right:1px solid #bfdbfe;">${totParcels}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>`;
+
         area.innerHTML = html;
         return;
     }
 
-    // TAB 3: TRANSPORT RECEIPT
-    if (activeTab === 'transport') {
-        var trnspList = partyReports.transport || [];
-        if (trnspList.length === 0) {
-            area.innerHTML = `
-            <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
-              <i class="fas fa-shipping-fast" style="font-size:26px; color:#cbd5e1; margin-bottom:8px;"></i>
-              <div style="font-weight:600;">No Transport Receipts Found</div>
-              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No dispatch or LR receipts recorded for this party.</div>
-            </div>`;
-            return;
-        }
-
-        var html = `
-        <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:8px;">
-          Dispatch &amp; Transport Receipts (${trnspList.length}):
-        </div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-        `;
-
-        trnspList.forEach(t => {
-            html += `
-            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:6px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px dashed #f1f5f9; padding-bottom:6px;">
-                <div style="font-weight:bold; font-size:12px; color:#1e293b;">
-                  Bill: <span style="color:#0284c7;">#${escHtml(t.b || 'N/A')}</span>
-                  <span style="font-size:10px; font-weight:normal; color:#64748b; margin-left:6px;">Date: ${escHtml(t.d || 'N/A')}</span>
-                </div>
-                ${t.amt ? `<div style="font-weight:bold; font-size:12px; color:#334155;">₹ ${t.amt.toLocaleString('en-IN')}</div>` : ''}
-              </div>
-
-              <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:#334155;">
-                <i class="fas fa-truck" style="color:var(--myntra-pink);"></i>
-                <span>${escHtml(t.t || 'Local Delivery / Direct')}</span>
-              </div>
-
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; background:#f8fafc; padding:6px 8px; border-radius:6px;">
-                <div>
-                  <span style="color:#64748b;">LR / RR No:</span>
-                  <b style="color:#1e293b;">${escHtml(t.lr || 'N/A')}</b>
-                </div>
-                <div>
-                  <span style="color:#64748b;">LR Date:</span>
-                  <b style="color:#1e293b;">${escHtml(t.lrd || t.d || 'N/A')}</b>
-                </div>
-                <div>
-                  <span style="color:#64748b;">Station / City:</span>
-                  <b style="color:#1e293b;">${escHtml(t.st || 'N/A')}</b>
-                </div>
-                <div>
-                  <span style="color:#64748b;">Cases / Bundles:</span>
-                  <b style="color:#1e293b;">${escHtml(t.cs || '1')}</b>
-                </div>
-                ${t.wt ? `<div><span style="color:#64748b;">Weight:</span> <b>${escHtml(t.wt)} KG</b></div>` : ''}
-                ${t.fr ? `<div><span style="color:#64748b;">Freight:</span> <b>₹ ${escHtml(t.fr)}</b></div>` : ''}
-                ${t.ewb ? `<div style="grid-column:span 2;"><span style="color:#64748b;">e-Way Bill:</span> <b style="color:#0369a1;">${escHtml(t.ewb)}</b></div>` : ''}
-              </div>
-            </div>`;
-        });
-
-        html += `</div>`;
-        area.innerHTML = html;
-        return;
-    }
-
-    // TAB 4: OUTSTANDING
+    // ==========================================
+    // ⏰ REPORT 2: OUTSTANDING REPORT (Image 3 & 4)
+    // ==========================================
     if (activeTab === 'outstanding') {
-        var ostList = partyReports.outstanding || [];
-        if (ostList.length === 0) {
+        var osList = partyRep.os || [];
+        if (osList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#15803d; font-size:13px;">
               <i class="fas fa-check-circle" style="font-size:32px; color:#22c55e; margin-bottom:10px;"></i>
               <div style="font-weight:bold; font-size:15px;">Account Clear!</div>
-              <div style="font-size:11px; color:#64748b; margin-top:4px;">No outstanding or overdue bills pending for this party.</div>
+              <div style="font-size:11px; color:#64748b; margin-top:4px;">No outstanding or pending bills recorded for ${escHtml(cust.n)}.</div>
             </div>`;
             return;
         }
 
-        var totalDue = 0;
-        ostList.forEach(o => { totalDue += (o.pamt || 0); });
-
-        var waPhone = (cust.p && cust.p.length === 10) ? ('91' + cust.p) : (cust.p || '');
-        var billListTxt = ostList.slice(0, 5).map(o => `• Bill #${o.b} (${o.d}): ₹ ${o.pamt.toLocaleString('en-IN')}`).join('\n');
-        var waOstMsg = `Namaste ${cust.n},\nGreeting from Durga Sarees!\nThis is a gentle reminder regarding pending invoices totaling ₹ ${Math.round(totalDue).toLocaleString('en-IN')}:\n${billListTxt}\n\nKindly review and process payment at your earliest convenience. Thank you!`;
+        var totNet = 0, totRet = 0, totPaid = 0, totPend = 0, totalDays = 0;
+        osList.forEach(r => {
+            totNet += (r[2] || 0);
+            totRet += (r[3] || 0);
+            totPaid += (r[5] || 0);
+            totPend += (r[6] || 0);
+            totalDays += (r[7] || 0);
+        });
+        var avgDays = osList.length > 0 ? Math.round(totalDays / osList.length) : 0;
 
         var html = `
-        <!-- Outstanding Summary -->
-        <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:10px; text-transform:uppercase; color:#b91c1c; font-weight:600;">Total Pending Due</div>
-            <div style="font-size:16px; font-weight:bold; color:#dc2626;">₹ ${Math.round(totalDue).toLocaleString('en-IN')}</div>
+        <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b;">
+          
+          <!-- Banner Header matching Image 4 -->
+          <div style="background:#b91c1c; color:#fff; font-weight:bold; font-size:12px; padding:6px 10px; border-radius:6px 6px 0 0; text-align:center; letter-spacing:0.5px;">
+            OUTSTANDING REPORT -- COMPANY: DURGA SAREES
           </div>
-          <div>
-            <div style="font-size:10px; text-transform:uppercase; color:#b91c1c; font-weight:600;">Unpaid Invoices</div>
-            <div style="font-size:15px; font-weight:bold; color:#991b1b; text-align:right;">${ostList.length}</div>
+          <div style="background:#fef2f2; border:1px solid #fecaca; border-top:none; padding:8px 10px; font-size:11px; color:#991b1b; line-height:1.4; margin-bottom:8px;">
+            <div><b>PARTY:</b> ${escHtml(cust.n)} &nbsp;&nbsp; <b>PH:</b> ${escHtml(cust.p || 'N/A')}</div>
+            <div><b>ADDR:</b> ${escHtml(cust.a || 'N/A')}</div>
+            <div style="font-size:10px; color:#64748b; margin-top:2px;">--- Tap any Bill No to open full Tax Invoice</div>
           </div>
-        </div>
 
-        ${cust.p ? `
-          <div style="margin-bottom:10px;">
-            <a href="https://wa.me/${waPhone}?text=${encodeURIComponent(waOstMsg)}" target="_blank"
-               style="display:flex; align-items:center; justify-content:center; gap:8px; background:#25d366; color:#fff; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:bold; text-decoration:none;">
-              <i class="fab fa-whatsapp" style="font-size:16px;"></i> Send Pending Invoices WhatsApp Reminder
-            </a>
-          </div>
-        ` : ''}
-
-        <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:6px;">
-          Pending Bills Breakdown (${ostList.length}):
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:6px;">
+          <!-- Table Container with Horizontal Scroll -->
+          <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <table style="width:100%; border-collapse:collapse; font-size:11px; text-align:left; white-space:nowrap;">
+              <thead>
+                <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:10px;">
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">BILL DATE</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">BILL NO.</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">NET BILL AMT</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">GOODS RET.</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">GR PEND</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">PAID AMT.</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0; background:#fee2e2; color:#991b1b;">PEND. AMT.</th>
+                  <th style="padding:6px 8px; text-align:center; border-right:1px solid #e2e8f0;">DA</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">DESTINATION</th>
+                  <th style="padding:6px 8px;">BROKER</th>
+                </tr>
+              </thead>
+              <tbody>
         `;
 
-        ostList.forEach(b => {
+        osList.forEach((r, idx) => {
+            var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r[1])}')"`;
             html += `
-            <div style="background:#fff; border:1px solid #fee2e2; border-radius:6px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <div style="font-weight:700; font-size:12px; color:#1e293b;">
-                  Bill #${escHtml(b.b || 'N/A')}
-                </div>
-                <div style="font-size:10px; color:#64748b; margin-top:2px;">
-                  Date: ${escHtml(b.d || 'N/A')}
-                  ${b.pcs ? ` • ${b.pcs} Pcs` : ''}
-                  ${b.amt && b.amt !== b.pamt ? ` • Bill Total: ₹ ${b.amt.toLocaleString('en-IN')}` : ''}
-                </div>
-              </div>
-              <div style="text-align:right;">
-                <div style="font-weight:bold; font-size:13px; color:#dc2626;">
-                  Due: ₹ ${(b.pamt || 0).toLocaleString('en-IN')}
-                </div>
-              </div>
-            </div>`;
+            <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[0])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
+                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r[1])}
+              </td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r[2] ? r[2].toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r[3] ? r[3].toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r[4] ? r[4].toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#16a34a;">${r[5] ? r[5].toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#dc2626; background:#fff1f2;">${r[6] ? r[6].toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:#475569;">${r[7] || 0}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[8])}</td>
+              <td style="padding:5px 8px; color:#64748b;">${escHtml(r[9])}</td>
+            </tr>`;
         });
 
-        html += `</div>`;
+        // Grand Total row matching Image 4
+        html += `
+              </tbody>
+              <tfoot>
+                <tr style="background:#fee2e2; font-weight:bold; border-top:2px solid #fca5a5; color:#991b1b;">
+                  <td colspan="2" style="padding:8px; border-right:1px solid #fecaca; text-align:center;">GRAND TOTAL</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca;">₹ ${totNet.toFixed(2)}</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca;">${totRet ? ('-₹ ' + Math.abs(totRet).toFixed(2)) : '0.00'}</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca;">0.00</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca;">${totPaid ? ('-₹ ' + Math.abs(totPaid).toFixed(2)) : '0.00'}</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca; font-size:12px; color:#dc2626; font-weight:bold;">₹ ${totPend.toFixed(2)}</td>
+                  <td style="padding:8px; text-align:center; border-right:1px solid #fecaca;">${avgDays}</td>
+                  <td colspan="2"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>`;
+
+        area.innerHTML = html;
+        return;
+    }
+
+    // ==========================================
+    // 📒 REPORT 3: LEDGER STATEMENT (Image 5)
+    // ==========================================
+    if (activeTab === 'ledger') {
+        var ldList = partyRep.ld || [];
+        if (ldList.length === 0) {
+            area.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
+              <i class="fas fa-book-open" style="font-size:28px; color:#cbd5e1; margin-bottom:8px;"></i>
+              <div style="font-weight:bold;">No Ledger Transactions Recorded</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:4px;">No debit/credit entries for ${escHtml(cust.n)}.</div>
+            </div>`;
+            return;
+        }
+
+        var totDr = 0, totCr = 0;
+        ldList.forEach(r => {
+            totDr += (r[4] || 0);
+            totCr += (r[5] || 0);
+        });
+        var closingBal = totDr - totCr;
+        var closingBalText = (closingBal !== 0) ? `₹ ${Math.abs(closingBal).toFixed(2)} ${closingBal > 0 ? 'Dr' : 'Cr'}` : '₹ 0.00';
+
+        var html = `
+        <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b;">
+          
+          <!-- Banner Header matching Image 5 -->
+          <div style="background:#334155; color:#fff; font-weight:bold; font-size:12px; padding:6px 10px; border-radius:6px 6px 0 0; text-align:center; letter-spacing:0.5px;">
+            DURGA SAREES &nbsp;&nbsp; A/C: ${escHtml(cust.n).toUpperCase()} &nbsp;&nbsp; PHONE: ${escHtml(cust.p || 'N/A')}
+          </div>
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-top:none; padding:6px 10px; font-size:10px; color:#64748b; margin-bottom:8px;">
+            FINANCIAL YEAR STATEMENT • Tap any Bill No to open full Tax Invoice
+          </div>
+
+          <!-- Table Container with Horizontal Scroll -->
+          <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <table style="width:100%; border-collapse:collapse; font-size:11px; text-align:left; white-space:nowrap;">
+              <thead>
+                <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:10px;">
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">DATE</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">CHQ/BILL</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">A/C</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0; color:#dc2626;">DEBIT</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0; color:#16a34a;">CREDIT</th>
+                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">BALANCE</th>
+                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">V NO.</th>
+                  <th style="padding:6px 8px;">REMARK</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        ldList.forEach((r, idx) => {
+            var chqStr = String(r[1] || '');
+            var isBill = chqStr.includes('/GST') || chqStr.includes('/');
+            var chqDisplay = isBill ? `<span onclick="window.openBillInvoiceModal('${escHtml(chqStr)}')" style="color:#0284c7; font-weight:bold; cursor:pointer;" title="Click to view Tax Invoice"><i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(chqStr)}</span>` : escHtml(chqStr);
+
+            var balStr = (r[6] !== undefined) ? ((r[6] !== 0) ? `${Math.abs(r[6]).toFixed(2)} ${r[6] > 0 ? 'Dr' : 'Cr'}` : '0.00') : '';
+
+            html += `
+            <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[0])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9;">${chqDisplay}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:600; color:#334155;">${escHtml(r[3])}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r[4] > 0 ? '#dc2626' : '#94a3b8'};">${r[4] ? r[4].toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r[5] > 0 ? '#16a34a' : '#94a3b8'};">${r[5] ? r[5].toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e293b;">${balStr}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[7])}</td>
+              <td style="padding:5px 8px; color:#64748b;">${escHtml(r[8])}</td>
+            </tr>`;
+        });
+
+        // Totals & Closing Balance matching Image 5
+        html += `
+              </tbody>
+              <tfoot>
+                <tr style="background:#f1f5f9; font-weight:bold; border-top:2px solid #cbd5e1; color:#1e293b;">
+                  <td colspan="3" style="padding:8px; border-right:1px solid #cbd5e1; text-align:center;">TRANSACTION TOTAL</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #cbd5e1; color:#dc2626;">₹ ${totDr.toFixed(2)}</td>
+                  <td style="padding:8px; text-align:right; border-right:1px solid #cbd5e1; color:#16a34a;">₹ ${totCr.toFixed(2)}</td>
+                  <td colspan="3"></td>
+                </tr>
+                <tr style="background:#e2e8f0; font-weight:bold; color:#0f172a; font-size:12px;">
+                  <td colspan="3" style="padding:8px; border-right:1px solid #cbd5e1; text-align:center;">CLOSING BALANCE</td>
+                  <td colspan="2" style="padding:8px; text-align:right; border-right:1px solid #cbd5e1; color:${closingBal > 0 ? '#dc2626' : '#16a34a'};">${closingBalText}</td>
+                  <td colspan="3"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>`;
+
         area.innerHTML = html;
         return;
     }
 };
+
+// ==========================================
+// 📄 1-CLICK BILL / TAX INVOICE MODAL VIEWER
+// (Click any Bill No to open full Tax Invoice)
+// ==========================================
+window._currentActiveBillData = null;
+
+window.openBillInvoiceModal = function (billNo) {
+    if (!billNo) return;
+    var normBill = String(billNo).trim();
+
+    var billsDict = (window._accountingReportsCache && window._accountingReportsCache.bills) || {};
+    var b = billsDict[normBill];
+
+    if (!b) {
+        // Fallback search across keys
+        for (var k in billsDict) {
+            if (k.toUpperCase().includes(normBill.toUpperCase()) || normBill.toUpperCase().includes(k.toUpperCase())) {
+                b = billsDict[k];
+                break;
+            }
+        }
+    }
+
+    if (!b) {
+        alert("Invoice details not found for Bill #" + normBill);
+        return;
+    }
+
+    window._currentActiveBillData = b;
+
+    var container = document.getElementById('billInvoicePrintableContainer');
+    if (!container) return;
+
+    var billItems = b[23] || [];
+    var totPcs = 0, totMts = 0;
+    billItems.forEach(it => {
+        totPcs += (it[4] || 0);
+        totMts += (it[5] || 0);
+    });
+
+    var paidBadge = (b[21] === 'Y')
+        ? `<span style="background:#dcfce7; color:#15803d; border:1px solid #86efac; padding:2px 8px; border-radius:4px; font-weight:bold;">PAID</span>`
+        : `<span style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; padding:2px 8px; border-radius:4px; font-weight:bold;">UNPAID (${escHtml(b[22] || 'Due')})</span>`;
+
+    var html = `
+    <div id="taxInvoicePrintDoc" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b; background:#fff; padding:12px; border:1px solid #cbd5e1; border-radius:8px;">
+      
+      <!-- Company Header -->
+      <div style="text-align:center; border-bottom:2px solid #be185d; padding-bottom:8px; margin-bottom:10px;">
+        <div style="font-size:18px; font-weight:bold; color:#be185d; letter-spacing:1px;">DURGA SAREES</div>
+        <div style="font-size:10px; color:#64748b;">Wholesale Manufacturer of Exclusive Fancy Sarees</div>
+        <div style="font-size:10px; color:#64748b;">Surat, Gujarat, India • Phone: 9998232380 • Web: www.durgasarees.com</div>
+        <div style="display:inline-block; margin-top:4px; font-size:11px; font-weight:bold; background:#fdf2f8; color:#be185d; padding:2px 10px; border-radius:4px; border:1px solid #fbcfe8;">
+          TAX INVOICE
+        </div>
+      </div>
+
+      <!-- Bill & Party Info Grid -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; background:#f8fafc; padding:8px 10px; border-radius:6px; border:1px solid #e2e8f0; font-size:11px;">
+        <div>
+          <div><b style="color:#64748b;">Bill No:</b> <span style="font-weight:bold; font-size:13px; color:#0284c7;">#${escHtml(b[0])}</span></div>
+          <div><b style="color:#64748b;">Bill Date:</b> <b>${escHtml(b[1])}</b></div>
+          <div><b style="color:#64748b;">Status:</b> ${paidBadge}</div>
+          <div style="margin-top:4px;"><b style="color:#64748b;">Broker / Haste:</b> ${escHtml(b[13] || 'DIRECT')}</div>
+        </div>
+        <div>
+          <div><b style="color:#64748b;">Party:</b> <b style="font-size:12px; color:#0f172a;">${escHtml(b[2])}</b></div>
+          ${b[3] ? `<div><b style="color:#64748b;">Phone:</b> ${escHtml(b[3])}</div>` : ''}
+          ${b[5] ? `<div><b style="color:#64748b;">Destination:</b> ${escHtml(b[5])}</div>` : ''}
+          ${b[4] ? `<div style="font-size:10px; color:#64748b; line-height:1.2; margin-top:2px;">${escHtml(b[4])}</div>` : ''}
+        </div>
+      </div>
+
+      <!-- Dispatch & Transport Info -->
+      <div style="background:#f1f5f9; padding:6px 10px; border-radius:6px; margin-bottom:10px; font-size:10.5px; display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+        <div><i class="fas fa-truck" style="color:var(--myntra-pink);"></i> <b>Transport:</b> ${escHtml(b[6] || 'Local Dispatch')}</div>
+        <div><b>LR No:</b> ${escHtml(b[7] || 'N/A')} ${b[8] ? ('(Date: ' + escHtml(b[8]) + ')') : ''}</div>
+        <div><b>Parcels / Cases:</b> ${escHtml(b[9] || '1')} ${b[10] ? ('• Wgt: ' + escHtml(b[10]) + ' KG') : ''}</div>
+        <div>${b[11] ? ('<b>Freight:</b> ₹ ' + escHtml(b[11])) : ''} ${b[12] ? ('• <b>e-Way:</b> ' + escHtml(b[12])) : ''}</div>
+      </div>
+
+      <!-- Itemized Table -->
+      <div style="overflow-x:auto; margin-bottom:10px;">
+        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+          <thead>
+            <tr style="background:#e2e8f0; color:#334155; font-size:10px;">
+              <th style="padding:6px; text-align:center; border:1px solid #cbd5e1; width:30px;">#</th>
+              <th style="padding:6px; border:1px solid #cbd5e1;">SCREEN / QUALITY NAME</th>
+              <th style="padding:6px; border:1px solid #cbd5e1;">HSN</th>
+              <th style="padding:6px; border:1px solid #cbd5e1;">PACK</th>
+              <th style="padding:6px; text-align:right; border:1px solid #cbd5e1;">PCS</th>
+              <th style="padding:6px; text-align:right; border:1px solid #cbd5e1;">MTR</th>
+              <th style="padding:6px; text-align:right; border:1px solid #cbd5e1;">RATE</th>
+              <th style="padding:6px; text-align:right; border:1px solid #cbd5e1;">AMOUNT</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${billItems.map((it, idx) => `
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:5px; text-align:center; border:1px solid #e2e8f0; color:#64748b;">${idx + 1}</td>
+                <td style="padding:5px 8px; border:1px solid #e2e8f0; font-weight:600; color:#0f172a;">${escHtml(it[0])}</td>
+                <td style="padding:5px; border:1px solid #e2e8f0; color:#64748b; font-size:10px;">${escHtml(it[8] || '540754')}</td>
+                <td style="padding:5px; border:1px solid #e2e8f0; color:#475569;">${escHtml(it[2])}</td>
+                <td style="padding:5px 8px; text-align:right; border:1px solid #e2e8f0; font-weight:bold;">${it[4]}</td>
+                <td style="padding:5px 8px; text-align:right; border:1px solid #e2e8f0;">${it[5] ? it[5].toFixed(2) : '-'}</td>
+                <td style="padding:5px 8px; text-align:right; border:1px solid #e2e8f0;">₹ ${it[6] ? it[6].toFixed(2) : '0.00'}</td>
+                <td style="padding:5px 8px; text-align:right; border:1px solid #e2e8f0; font-weight:bold;">₹ ${Math.round(it[7] || 0).toLocaleString('en-IN')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Financial Totals Calculation Box -->
+      <div style="display:flex; justify-content:flex-end; margin-top:6px;">
+        <div style="min-width:240px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 12px; font-size:11px; display:flex; flex-direction:column; gap:4px;">
+          <div style="display:flex; justify-content:space-between;">
+            <span style="color:#64748b;">Total Pcs:</span>
+            <b>${totPcs} Pcs</b>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="color:#64748b;">Gross Amount:</span>
+            <b>₹ ${Math.round(b[14] || 0).toLocaleString('en-IN')}</b>
+          </div>
+          ${b[17] ? `
+            <div style="display:flex; justify-content:space-between; color:#b91c1c;">
+              <span>${escHtml(b[15] || 'Discount')} (${escHtml(b[16])}%):</span>
+              <b>-₹ ${Math.abs(Math.round(b[17])).toLocaleString('en-IN')}</b>
+            </div>
+          ` : ''}
+          ${b[19] ? `
+            <div style="display:flex; justify-content:space-between; color:#0369a1;">
+              <span>GST (${escHtml(b[18])}%):</span>
+              <b>+₹ ${Math.round(b[19]).toLocaleString('en-IN')}</b>
+            </div>
+          ` : ''}
+          <div style="display:flex; justify-content:space-between; padding-top:6px; border-top:1.5px solid #cbd5e1; font-size:13px; font-weight:bold; color:#0f172a;">
+            <span>Net Bill Amount:</span>
+            <span style="color:#be185d;">₹ ${Math.round(b[20] || 0).toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+      </div>
+
+    </div>`;
+
+    container.innerHTML = html;
+
+    var modal = document.getElementById('billDetailModal');
+    if (modal) modal.style.display = 'flex';
+};
+
+window.closeBillModal = function () {
+    var modal = document.getElementById('billDetailModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// Print Bill Invoice
+window.printBillInvoice = function () {
+    var printContent = document.getElementById('taxInvoicePrintDoc');
+    if (!printContent) return;
+    var printWindow = window.open('', '', 'width=800,height=900');
+    printWindow.document.write('<html><head><title>Tax Invoice</title>');
+    printWindow.document.write('<style>body { font-family: Segoe UI, sans-serif; padding: 20px; } table { width:100%; border-collapse:collapse; } th, td { border:1px solid #cbd5e1; padding:6px; } @media print { body { -webkit-print-color-adjust: exact; } }</style>');
+    printWindow.document.write('</head><body>');
+    printWindow.document.write(printContent.outerHTML);
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 300);
+};
+
+// Share Bill via WhatsApp
+window.shareBillWhatsApp = function () {
+    var b = window._currentActiveBillData;
+    if (!b) return;
+
+    var phone = (b[3] && b[3].length === 10) ? ('91' + b[3]) : (b[3] || '');
+    var msg = `Namaste ${b[2]},\nGreeting from Durga Sarees!\nHere are details of Invoice #${b[0]} dated ${b[1]}:\n• Net Amount: ₹ ${Math.round(b[20] || 0).toLocaleString('en-IN')}\n• Transport: ${b[6] || 'Direct'}\n• LR No: ${b[7] || 'N/A'}\n• Status: ${b[21] === 'Y' ? 'Paid' : 'Unpaid'}\nThank you!`;
+
+    var url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+};
+
+// Print Active Customer Report (Finish Sales, Outstanding, or Ledger)
+window.printActiveCustomerReport = function () {
+    var printContent = document.getElementById('erpReportPrintWrapper');
+    if (!printContent) return;
+    var printWindow = window.open('', '', 'width=900,height=900');
+    printWindow.document.write('<html><head><title>ERP Report - Durga Sarees</title>');
+    printWindow.document.write('<style>body { font-family: Segoe UI, sans-serif; padding: 15px; } table { width:100%; border-collapse:collapse; font-size:10px; } th, td { border:1px solid #cbd5e1; padding:4px 6px; } @media print { body { -webkit-print-color-adjust: exact; } }</style>');
+    printWindow.document.write('</head><body>');
+    printWindow.document.write(printContent.outerHTML);
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 300);
+};
+
+// ==========================================
+// 🛒 ADMIN ORDER ON BEHALF CONTROLLER
+// (Take order on behalf of customer & print details on order PDF)
+// ==========================================
+
+window.startOrderOnBehalf = function () {
+    var cust = window._currentReportingCustomer;
+    if (!cust) return;
+
+    if (!confirm(`Take order on behalf of:\n\n${cust.n} (${cust.ct || 'Customer'})\n\nAll designs you add to cart will be ordered under this customer, and their Name, Firm, Phone, Station, Address, and GST will print on the Order PDF.`)) {
+        return;
+    }
+
+    var details = {
+        name: cust.n,
+        firm: cust.c || cust.n,
+        phone: cust.p || '',
+        station: cust.ct || '',
+        state: cust.st || '',
+        address: cust.a || '',
+        gst: cust.g || '',
+        onBehalf: true
+    };
+
+    localStorage.setItem("dsCustomerDetails", JSON.stringify(details));
+    localStorage.setItem("ds_active_on_behalf", JSON.stringify(details));
+    window.activeOrderOnBehalf = details;
+
+    window.updateOrderOnBehalfBanner();
+    window.closeCustomerReportsModal();
+    if (typeof closeModals === 'function') closeModals(true);
+
+    alert(`✅ Order Mode Active for: ${cust.n}\n\nBrowse sarees, add quantities to cart, and checkout. Customer details will print directly on the invoice.`);
+};
+
+window.exitOrderOnBehalf = function () {
+    if (confirm("Exit ordering on behalf of customer?")) {
+        localStorage.removeItem("ds_active_on_behalf");
+        window.activeOrderOnBehalf = null;
+        window.updateOrderOnBehalfBanner();
+    }
+};
+
+window.updateOrderOnBehalfBanner = function () {
+    var banner = document.getElementById('orderOnBehalfBanner');
+    var textEl = document.getElementById('orderOnBehalfText');
+    var stored = null;
+    try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+
+    if (stored && stored.name) {
+        if (textEl) textEl.innerText = `Ordering on Behalf of: ${stored.name} (${stored.station || 'Customer'})`;
+        if (banner) banner.style.display = 'flex';
+    } else {
+        if (banner) banner.style.display = 'none';
+    }
+};
+
+// Auto-initialize Order on Behalf banner
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', window.updateOrderOnBehalfBanner);
+} else {
+    setTimeout(window.updateOrderOnBehalfBanner, 100);
+}
+

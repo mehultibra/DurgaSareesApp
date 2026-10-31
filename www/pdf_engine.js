@@ -783,12 +783,15 @@ async function generateCartOrderPDF(actionType) {
                     
                     var leftCol = [];
                     leftCol.push("Name: " + dsCustomer.name);
-                    if (dsCustomer.firm) leftCol.push("Firm: " + dsCustomer.firm);
+                    if (dsCustomer.firm && dsCustomer.firm !== dsCustomer.name) leftCol.push("Firm: " + dsCustomer.firm);
                     leftCol.push("Phone: " + (dsCustomer.phone || ""));
+                    if (dsCustomer.address) leftCol.push("Address: " + dsCustomer.address);
                     
                     var rightCol = [];
-                    rightCol.push("Station: " + dsCustomer.station);
-                    rightCol.push("State: " + dsCustomer.state);
+                    if (dsCustomer.station) rightCol.push("Station: " + dsCustomer.station);
+                    if (dsCustomer.state) rightCol.push("State: " + dsCustomer.state);
+                    if (dsCustomer.gst) rightCol.push("GST: " + dsCustomer.gst);
+                    if (dsCustomer.onBehalf) rightCol.push("Order Placed: Admin (On Behalf)");
                     
                     var lineY = y;
                     for(var i=0; i<Math.max(leftCol.length, rightCol.length); i++) {
