@@ -11579,7 +11579,7 @@ window.parseFirestoreCustomerDoc = function (d) {
     var aRole = (f.role && f.role.stringValue) ? f.role.stringValue : 'customer';
     var isAgent = aRole === 'agent' || (f.atype && f.atype.stringValue === '12');
     return {
-        c: f.code ? f.code.stringValue : (d.name ? d.name.split('/').pop() : ''),
+        c: decodeURIComponent(f.code ? f.code.stringValue : (d.name ? d.name.split('/').pop() : '')),
         n: f.name ? f.name.stringValue : '',
         p: f.phone ? f.phone.stringValue : '',
         ct: f.station ? f.station.stringValue : '',
@@ -11731,8 +11731,13 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
         if (res && res.ok) {
             var data = await res.json();
             var docs = (data && data.documents) ? data.documents : [];
-            window._accountingCustomersNextPageToken = data.nextPageToken || null;
-            window._compiledCustomersList = docs.map(d => window.parseFirestoreCustomerDoc(d)).filter(Boolean);
+            var seen = new Set();
+            window._compiledCustomersList = docs.map(d => window.parseFirestoreCustomerDoc(d)).filter(Boolean).filter(c => {
+                var k = (c.n || c.c || '').trim().toUpperCase();
+                if (!k || seen.has(k)) return false;
+                seen.add(k);
+                return true;
+            });
             if (typeof window.mergeFirebasePartyLinks === 'function') {
                 window.mergeFirebasePartyLinks(window._compiledCustomersList);
             }
@@ -11981,8 +11986,8 @@ window.openCustomerReportsModal = async function (partyCode) {
     }
 
     var list = window._compiledCustomersList || [];
-    var pCodeNorm = String(partyCode || '').trim().toUpperCase();
-    var cust = list.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm) || {
+    var pCodeNorm = decodeURIComponent(String(partyCode || '')).trim().toUpperCase();
+    var cust = list.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm || String(x.n || '').trim().toUpperCase() === pCodeNorm) || {
         c: partyCode,
         n: partyCode,
         p: '',
@@ -12135,8 +12140,9 @@ window.renderCustomerReportActiveTab = async function () {
     var cust = window._currentReportingCustomer;
     if (!cust) return;
 
-    var codeKey = String(cust.c || '').trim().toUpperCase();
-    var codeClean = window.sanitizeDocId ? window.sanitizeDocId(cust.c || cust.n || codeKey) : String(cust.c || cust.n || codeKey || '').trim().toUpperCase().replace(/[\/\.\s]/g, '_');
+    var rawCode = cust.c || cust.n || '';
+    try { rawCode = decodeURIComponent(rawCode); } catch(e){}
+    var codeClean = window.sanitizeDocId ? window.sanitizeDocId(rawCode) : String(rawCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
 
     window._accountingReportsCache = window._accountingReportsCache || {};
 
@@ -13006,7 +13012,16 @@ window.searchAndSelectParty = function (query) {
     }
 
     scored.sort((a, b) => b.score - a.score);
-    var matched = scored.slice(0, 30).map(s => s.c);
+    var seenMatched = new Set();
+    var matched = [];
+    for (var i = 0; i < scored.length && matched.length < 30; i++) {
+        var cObj = scored[i].c;
+        var normK = (cObj.n || cObj.c || '').trim().toUpperCase();
+        if (!seenMatched.has(normK)) {
+            seenMatched.add(normK);
+            matched.push(cObj);
+        }
+    }
 
     if (matched.length === 0) {
         if (!window._partySearchDebounce) window._partySearchDebounce = null;
@@ -13040,8 +13055,14 @@ window.searchAndSelectParty = function (query) {
                     var cData = await cRes.json();
                     var newDocs = (cData || []).map(r => r.document ? window.parseFirestoreCustomerDoc(r.document) : null).filter(Boolean);
                     if (newDocs.length > 0) {
-                        var existingCodes = new Set((window._compiledCustomersList || []).map(x => x.c));
-                        newDocs.forEach(nd => { if (!existingCodes.has(nd.c)) window._compiledCustomersList.push(nd); });
+                        var existingCodes = new Set((window._compiledCustomersList || []).map(x => (x.n || x.c || '').trim().toUpperCase()));
+                        newDocs.forEach(nd => {
+                            var k = (nd.n || nd.c || '').trim().toUpperCase();
+                            if (!existingCodes.has(k)) {
+                                existingCodes.add(k);
+                                window._compiledCustomersList.push(nd);
+                            }
+                        });
                         window.searchAndSelectParty(query);
                         return;
                     }

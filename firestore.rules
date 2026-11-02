@@ -92,10 +92,12 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     match /AccountingCustomers/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if true;
+      allow write: if isAdmin();
     }
     match /AccountingReports/{docId} {
-      allow read, write: if isAdmin();
+      allow get: if true;
+      allow list, write: if isAdmin();
     }
     match /PhoneDirectory/{phoneId} {
       allow get: if request.auth != null;
