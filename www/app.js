@@ -4151,47 +4151,13 @@ function openCart(preserveScroll) {
         var cHtml = [];
 
         var customerHTML = `
-            <div style="margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; overflow:hidden; background:#fff; display:flex; justify-content:space-between; align-items:center; padding:10px;">
-                <div style="display:flex; flex-direction:column; gap:4px; max-width:85%;">
-                    <div id="cartCustomerDetailsBody" style="font-size:14px; color:var(--text-main); font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                        Loading...
-                    </div>
+            <div style="margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background:#fff; padding:10px 12px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                <div id="cartCustomerDetailsBody">
+                    <div style="font-size:12px; color:#64748b; font-weight:600;"><i class="fas fa-spinner fa-spin"></i> Loading customer details...</div>
                 </div>
-                <i class="fas fa-edit" onclick="openCustomerDetailsModal()" style="cursor:pointer; color:var(--myntra-pink); font-size:16px; padding:10px;"></i>
             </div>
         `;
         cHtml.push(customerHTML);
-
-        // 🚚 Transport Selection Block
-        var curTransport = '';
-        try {
-            var cdObj = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}');
-            curTransport = cdObj.transport || localStorage.getItem('ds_preferred_transport') || '';
-        } catch(e){}
-
-        var transportHTML = `
-            <div style="margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background:#f8fafc; padding:10px 12px; display:flex; flex-direction:column; gap:6px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div style="font-size:12px; font-weight:bold; color:#334155; display:flex; align-items:center; gap:6px;">
-                        <i class="fas fa-truck" style="color:var(--myntra-pink);"></i> Preferred Transport
-                    </div>
-                    <span style="font-size:10px; color:#64748b;">For Dispatch</span>
-                </div>
-                <div style="display:flex; gap:6px; align-items:center;">
-                    <input type="text" id="orderTransportInput" value="${safeText(curTransport)}" placeholder="e.g. PAWAN TRANSPORT, BATCO, V-TRANS..." 
-                           oninput="window.setOrderTransport(this.value)"
-                           style="flex:1; padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; color:#1e293b; background:#fff;">
-                </div>
-                <div style="display:flex; gap:4px; overflow-x:auto; padding-top:2px;">
-                    ${['PAWAN TRANSPORT', 'BATCO', 'V-TRANS', 'NEW GUJARAT', 'DIRECT'].map(t => `
-                        <button type="button" onclick="window.setOrderTransport('${t}')" style="background:#fff; border:1px solid #cbd5e1; color:#475569; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer; white-space:nowrap;">
-                            ${t}
-                        </button>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-        cHtml.push(transportHTML);
 
         window.cartEditingMap = window.cartEditingMap || {};
         for (var r in grouped) {
@@ -6243,24 +6209,41 @@ function loadCartCustomerDetails() {
 }
 
 function renderCustomerDetails(d, container) {
-    if (!container || !d) return;
-    var primaryName = d.name || d.firm || "Select Party";
-    var stationParts = [];
-    if (d.station) stationParts.push(d.station);
-    if (d.state) stationParts.push(d.state);
-    var stationText = stationParts.length ? ` (${stationParts.join(', ')})` : "";
-    
-    var subParts = [];
-    if (d.agent) subParts.push(`<span style="color:#64748b;">Ag:</span> <b>${esc(d.agent)}</b>`);
-    if (d.transport) subParts.push(`<span style="color:#64748b;">Tr:</span> <b>${esc(d.transport)}</b>`);
-    if (d.gst) subParts.push(`<span style="color:#64748b;">GST:</span> <b>${esc(d.gst)}</b>`);
-    if (d.phone) subParts.push(`<span style="color:#64748b;">Ph:</span> <b>${esc(d.phone)}</b>`);
+    if (!container) return;
+    var cd = d || {};
+    try {
+        var onBehalf = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null');
+        if (onBehalf && onBehalf.name) {
+            cd = Object.assign({}, cd, onBehalf);
+        }
+    } catch(e){}
+
+    var primaryName = cd.name || cd.firm || "Select Customer / Party";
+    var station = cd.station || "";
+    var state = cd.state || "";
+    var stationText = [station, (state && state !== station ? state : '')].filter(Boolean).join(', ') || 'N/A';
+    var agentText = cd.agent || 'Direct';
+    var gstText = cd.gst || 'None';
+    var transportText = cd.transport || localStorage.getItem('ds_preferred_transport') || 'Direct';
 
     var html = `
-        <div style="font-size:14px; color:var(--text-main); font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            ${esc(primaryName)}${esc(stationText)}
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div style="flex:1; overflow:hidden;">
+                <div style="font-size:14px; color:var(--text-main); font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    <i class="fas fa-store" style="color:var(--myntra-pink); margin-right:4px;"></i> ${esc(primaryName)}
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px 8px; margin-top:6px; font-size:11px; color:#334155;">
+                    <div><span style="color:#64748b;">📍 Station:</span> <b>${esc(stationText)}</b></div>
+                    <div><span style="color:#64748b;">🚚 Transport:</span> <b>${esc(transportText)}</b></div>
+                    <div><span style="color:#64748b;">🤝 Agent:</span> <b>${esc(agentText)}</b></div>
+                    <div><span style="color:#64748b;">📋 GST:</span> <b>${esc(gstText)}</b></div>
+                </div>
+            </div>
+            <button type="button" onclick="openCustomerDetailsModal()" 
+                style="background:#fdf2f8; color:var(--myntra-pink); border:1px solid #fbcfe8; padding:5px 9px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                <i class="fas fa-edit"></i> Edit
+            </button>
         </div>
-        ${subParts.length > 0 ? `<div style="font-size:11px; color:#64748b; margin-top:2px; font-weight:normal; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${subParts.join(' &bull; ')}</div>` : ''}
     `;
     container.innerHTML = html;
 }
@@ -11753,13 +11736,26 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
     try {
         var token = await getCachedAuthToken(true);
         var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-        var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingCustomers?pageSize=80";
-        var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
-        if (res && res.ok) {
-            var data = await res.json();
-            var docs = (data && data.documents) ? data.documents : [];
+        var allDocs = [];
+        var pageToken = '';
+        var maxPages = 4;
+        for (var p = 0; p < maxPages; p++) {
+            var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingCustomers?pageSize=300" + (pageToken ? `&pageToken=${pageToken}` : '');
+            var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
+            if (res && res.ok) {
+                var data = await res.json();
+                var docs = (data && data.documents) ? data.documents : [];
+                allDocs.push(...docs);
+                pageToken = data.nextPageToken || '';
+                if (!pageToken) break;
+            } else {
+                break;
+            }
+        }
+
+        if (allDocs.length > 0) {
             var seen = new Set();
-            window._compiledCustomersList = docs.map(d => window.parseFirestoreCustomerDoc(d)).filter(Boolean).filter(c => {
+            window._compiledCustomersList = allDocs.map(d => window.parseFirestoreCustomerDoc(d)).filter(Boolean).filter(c => {
                 var k = (c.n || c.c || '').trim().toUpperCase();
                 if (!k || seen.has(k)) return false;
                 seen.add(k);
@@ -11893,15 +11889,88 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         }
 
         window._currentFilteredCustomers = filtered;
+
+        // On-demand Cloud Search across all 13,500+ parties when searching
+        if (query.length >= 2) {
+            if (!window._erpDirSearchDebounce) window._erpDirSearchDebounce = null;
+            clearTimeout(window._erpDirSearchDebounce);
+            window._erpDirSearchDebounce = setTimeout(async function () {
+                try {
+                    var token = await getCachedAuthToken(true);
+                    var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                    var uQ = (tokens[0] || query).toUpperCase();
+
+                    var runQueryBody = {
+                        structuredQuery: {
+                            from: [{ collectionId: "AccountingCustomers" }],
+                            where: {
+                                compositeFilter: {
+                                    op: "AND",
+                                    filters: [
+                                        { fieldFilter: { field: { fieldPath: "nameUpper" }, op: "GREATER_THAN_OR_EQUAL", value: { stringValue: uQ } } },
+                                        { fieldFilter: { field: { fieldPath: "nameUpper" }, op: "LESS_THAN_OR_EQUAL", value: { stringValue: uQ + "\uf8ff" } } }
+                                    ]
+                                }
+                            },
+                            limit: 50
+                        }
+                    };
+
+                    if (/^\d{3,10}$/.test(query)) {
+                        runQueryBody = {
+                            structuredQuery: {
+                                from: [{ collectionId: "AccountingCustomers" }],
+                                where: {
+                                    fieldFilter: {
+                                        field: { fieldPath: "cleanPhones" },
+                                        op: "ARRAY_CONTAINS",
+                                        value: { stringValue: query }
+                                    }
+                                },
+                                limit: 30
+                            }
+                        };
+                    }
+
+                    var cRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+                        method: 'POST',
+                        headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+                        body: JSON.stringify(runQueryBody)
+                    });
+
+                    if (cRes.ok) {
+                        var cData = await cRes.json();
+                        var newDocs = (cData || []).map(r => r.document ? window.parseFirestoreCustomerDoc(r.document) : null).filter(Boolean);
+                        if (newDocs.length > 0) {
+                            var existingCodes = new Set((window._compiledCustomersList || []).map(x => (x.c || x.n || '').trim().toUpperCase()));
+                            var added = false;
+                            newDocs.forEach(nd => {
+                                var k = (nd.c || nd.n || '').trim().toUpperCase();
+                                if (!existingCodes.has(k)) {
+                                    existingCodes.add(k);
+                                    window._compiledCustomersList.push(nd);
+                                    added = true;
+                                }
+                            });
+                            if (added) {
+                                window.renderCustomerDirectoryUI();
+                            }
+                        }
+                    }
+                } catch(e) {
+                    console.warn("ERP customer cloud search error:", e);
+                }
+            }, 200);
+        }
     }
 
     var filteredList = window._currentFilteredCustomers || [];
 
     if (filteredList.length === 0) {
+        var isSearchingCloud = query.length >= 2;
         container.innerHTML = `
         <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
-          <i class="fas fa-search" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i>
-          <div>No customers match "${escHtml(query)}".</div>
+          ${isSearchingCloud ? '<i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:8px;"></i><div>Searching cloud database for "' + escHtml(query) + '"...</div>' : '<i class="fas fa-search" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i><div>No customers match "' + escHtml(query) + '".</div>'}
         </div>`;
         return;
     }
@@ -13392,20 +13461,80 @@ window.exitOrderOnBehalf = function () {
 
 window.updateOrderOnBehalfBanner = function () {
     var banner = document.getElementById('orderOnBehalfBanner');
-    var textEl = document.getElementById('orderOnBehalfText');
+    if (!banner) return;
+
     var stored = null;
     try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
 
     var isAllowed = Boolean(window.isSuperAdmin || window.isAdminMode);
-    if (isAllowed && stored && stored.name) {
-        var locParts = [];
-        if (stored.station) locParts.push(stored.station);
-        if (stored.state) locParts.push(stored.state);
-        var locStr = locParts.length ? ' (' + locParts.join(', ') + ')' : '';
-        if (textEl) textEl.innerText = `${stored.name}${locStr}`;
-        if (banner) banner.style.display = 'flex';
+
+    if (isAllowed) {
+        if (stored && stored.name) {
+            var locParts = [];
+            if (stored.station) locParts.push(stored.station);
+            if (stored.state && stored.state !== stored.station) locParts.push(stored.state);
+            var locStr = locParts.length ? ' (' + locParts.join(', ') + ')' : '';
+            banner.style.background = '#be185d';
+            banner.style.color = '#fff';
+            banner.onclick = openCustomerDetailsModal;
+            banner.innerHTML = `
+                <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+                  <i class="fas fa-store" style="font-size:13px; color:#fbcfe8;"></i>
+                  <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(stored.name)}${escHtml(locStr)}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                  <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-weight:normal;">Change</span>
+                  <button type="button" onclick="event.stopPropagation(); window.exitOrderOnBehalf()" style="background:#fff; color:#be185d; border:none; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;" title="Clear Party">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+            `;
+            banner.style.display = 'flex';
+        } else {
+            var own = null;
+            try { own = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+            if (!own || (!own.name && !own.firm)) {
+                try { own = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+            }
+            var adminName = (own && (own.name || own.firm)) || 'Durga Sarees Admin';
+            var adminStation = (own && own.station) || '';
+            var adminLoc = adminStation ? ` (${adminStation})` : '';
+            banner.style.background = '#334155';
+            banner.style.color = '#fff';
+            banner.onclick = openCustomerDetailsModal;
+            banner.innerHTML = `
+                <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+                  <i class="fas fa-user-shield" style="font-size:13px; color:#93c5fd;"></i>
+                  <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(adminName)}${escHtml(adminLoc)}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                  <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-weight:600;"><i class="fas fa-user-plus" style="font-size:9px; margin-right:3px;"></i> Select Party</span>
+                </div>
+            `;
+            banner.style.display = 'flex';
+        }
     } else {
-        if (banner) banner.style.display = 'none';
+        var cd = null;
+        try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+        if (!cd || (!cd.name && !cd.firm)) {
+            try { cd = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+        }
+        var custName = (cd && (cd.name || cd.firm)) || 'Durga Sarees Customer';
+        var custStation = (cd && cd.station) || localStorage.getItem('ds_guest_location') || '';
+        var custLoc = custStation ? ` • ${custStation}` : '';
+        banner.style.background = '#be185d';
+        banner.style.color = '#fff';
+        banner.onclick = openCustomerDetailsModal;
+        banner.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+              <i class="fas fa-user-circle" style="font-size:13px; color:#fbcfe8;"></i>
+              <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(custName)}${escHtml(custLoc)}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+              <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-weight:normal;">Edit</span>
+            </div>
+        `;
+        banner.style.display = 'flex';
     }
 };
 
