@@ -410,18 +410,28 @@ async function syncAccountingData() {
         const code = String(party.code || '').trim().toUpperCase();
         if (!code || !allowedPartyCodes.has(code)) return;
         const p = getPartyReport(code);
-        if (Array.isArray(party.bills)) {
-            party.bills.forEach(b => {
+        const bList = party.billDetails || party.bills || [];
+        if (Array.isArray(bList)) {
+            bList.forEach(b => {
+                const billDt = b.DATE || '';
+                let osDays = 0;
+                if (billDt) {
+                    const diffTime = Date.now() - new Date(billDt).getTime();
+                    osDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+                }
+                const bBroker = b.BCODE || b.BROKER || '';
                 p.outstanding.push({
-                    bno: b.BILLNO || '',
-                    dt: b.DATE || '',
-                    bamt: parseFloat(b.BILLAMT) || 0,
-                    pamt: parseFloat(b.PENDINGAMT) || 0,
-                    ag: b.BROKER || '',
-                    du: parseInt(b.DUE_DAYS) || 0
+                    bno: b.BILL || b.VNO || b.BILLNO || '',
+                    dt: billDt,
+                    bamt: parseFloat(b.FAMT || b.GRSAMT || b.BILLAMT) || 0,
+                    pamt: parseFloat(b.PAMT || b.PENDINGAMT) || 0,
+                    ag: bBroker,
+                    ct: b.CITY || '',
+                    tr: b.TR || '',
+                    du: parseInt(b.DUE_DAYS || osDays) || 0
                 });
-                if (b.BROKER && !agentByParty.has(code)) {
-                    agentByParty.set(code, String(b.BROKER).trim());
+                if (bBroker && !agentByParty.has(code)) {
+                    agentByParty.set(code, String(bBroker).trim());
                 }
             });
         }

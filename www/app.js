@@ -537,8 +537,10 @@ window.updateLivePresence = function (productId, force = false) {
         }
         let cd = {};
         try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || "{}"); } catch (e) { }
-        let customerName = cd.name || cd.firm || "Guest";
-        let customerStation = cd.station || "Unknown";
+        let own = {};
+        try { own = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || "{}"); } catch (e) { }
+        let customerName = own.name || own.firm || (localStorage.getItem('ds_active_on_behalf') ? (own.name || activeUser) : (cd.name || cd.firm)) || activeUser || "Guest";
+        let customerStation = own.station || cd.station || "Unknown";
 
         let guestLoc = localStorage.getItem('ds_guest_location');
         if (guestLoc && customerStation === "Unknown") {
@@ -680,7 +682,7 @@ window.addEventListener('DOMContentLoaded', function () {
                     var menuManageSec = document.getElementById('menuManageSections');
                     if (menuManageSec) menuManageSec.style.display = window.isAdminMode ? 'flex' : 'none';
                     var menuCustDir = document.getElementById('menuCustomerDirectory');
-                    if (menuCustDir) menuCustDir.style.display = window.isAdminMode ? 'flex' : 'none';
+                    if (menuCustDir) menuCustDir.style.display = (window.isSuperAdmin || window.isAdminMode) ? 'flex' : 'none';
                     var menuLiveAdmin = document.getElementById('menuLiveAdmin');
                     if (menuLiveAdmin) menuLiveAdmin.style.display = window.isAdminMode ? 'flex' : 'none';
                     var btnTopLive = document.getElementById('btnTopLiveAdmin');
@@ -1378,7 +1380,7 @@ async function checkAdminStatus(phone) {
                 window.isSuperAdmin = true;
                 var showAdminUI = window.isAdminMode === true;
                 if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = showAdminUI ? 'flex' : 'none';
-                if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = showAdminUI ? 'flex' : 'none';
+                if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = (window.isSuperAdmin || window.isAdminMode) ? 'flex' : 'none';
                 if (document.getElementById('menuManageSections')) document.getElementById('menuManageSections').style.display = showAdminUI ? 'flex' : 'none';
                 if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = showAdminUI ? 'block' : 'none';
                 var fabAdd = document.getElementById('fabAddProduct');
@@ -6117,6 +6119,9 @@ function toggleHdrMenu(event) {
     if (event) event.stopPropagation();
     var menu = document.getElementById('hdrMenu');
     if (menu) {
+        var isAllowed = Boolean(window.isSuperAdmin || window.isAdminMode);
+        var menuCustDir = document.getElementById('menuCustomerDirectory');
+        if (menuCustDir) menuCustDir.style.display = isAllowed ? 'flex' : 'none';
         menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
     }
 }
@@ -9135,7 +9140,7 @@ window.openLiveAdmin = function () {
                             return itemKey === pKey;
                         });
                         if (existingItem) {
-                            if (!existingItem.data.customerName || existingItem.data.customerName === 'Guest') {
+                            if (u.name) {
                                 existingItem.data.customerName = u.name;
                             }
                             if (!existingItem.data.customerStation || existingItem.data.customerStation === 'Unknown') {
@@ -9350,7 +9355,10 @@ window.openLiveAdmin = function () {
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                             <div style="display:flex; flex-direction:column; gap:4px;">
                                 <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                                    <span id="admin_name_${safeDocId}" style="font-weight:bold; font-size:16px; color:#1e293b;">${esc(dispName)}</span>
+                                    <span id="admin_name_${safeDocId}" onclick="window.openCustomerReportsModal('${esc(d.linkedAccount || d.customerName || docId)}')" style="font-weight:bold; font-size:16px; color:#1e293b; cursor:pointer; text-decoration:underline; text-decoration-color:#cbd5e1;" title="Tap to open in Customer ERP">${esc(dispName)}</span>
+                                    <span onclick="window.openCustomerReportsModal('${esc(d.linkedAccount || d.customerName || docId)}')" style="background:#fdf2f8; border:1px solid #fbcfe8; color:#be185d; border-radius:4px; font-size:10px; font-weight:bold; padding:2px 6px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;" title="View in Customer ERP">
+                                        <i class="fas fa-chart-line"></i> ERP
+                                    </span>
                                     ${roleBadge}
                                 </div>
                                 <div>${statusBadge}</div>
@@ -9446,6 +9454,9 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
         var mRole = (m.role === 'agent' || m.isAgent) ? 'agent' : 'customer';
         var cleanCode = (m.code || '').replace(/'/g, "\\'");
         var cleanName = (m.name || '').replace(/'/g, "\\'");
+        var sCust = (window._compiledCustomersList || []).find(x => x.c === m.code || x.n === m.name);
+        var sGst = m.gst || (sCust ? sCust.g : '');
+        var sSales = (sCust && sCust.totDr) ? ('₹ ' + sCust.totDr.toLocaleString('en-IN')) : '';
         return `
             <div style="background:#fffbeb; border:1px solid #fde68a; padding:8px 10px; border-radius:6px; margin-top:8px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -9456,9 +9467,14 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
                         ${mRole === 'agent' ? 'AGENT' : 'CUSTOMER'}
                     </span>
                 </div>
-                <div style="font-size:12px; color:#1e293b; margin-bottom:6px;">
+                <div style="font-size:12px; color:#1e293b; margin-bottom:4px;">
                     <b>Auto-Matched:</b> ${esc(m.name)} ${m.station ? '(' + esc(m.station) + ')' : ''} [${esc(m.code)}]
                 </div>
+                ${(sGst || sSales) ? `
+                <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:10px; flex-wrap:wrap;">
+                    ${sGst ? `<span style="background:#e0f2fe; color:#0369a1; padding:1px 5px; border-radius:3px; font-weight:600;">GST: ${esc(sGst)}</span>` : ''}
+                    ${sSales ? `<span style="background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:3px; font-weight:bold;">Sales: ${sSales}</span>` : ''}
+                </div>` : ''}
                 <button type="button" onclick="window.approveUserAccount('${docId}', '${cleanCode}', '${cleanName}', '${mRole}')"
                         style="background:#059669; color:#fff; border:none; padding:5px 12px; border-radius:5px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
                     <i class="fas fa-check-circle"></i> Approve &amp; Link Permanently
@@ -9484,14 +9500,24 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
             <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;">
                 ${matches.map((acc, idx) => {
                     var aRole = (acc.role === 'agent' || acc.isAgent) ? 'agent' : 'customer';
+                    var custInfo = (window._compiledCustomersList || []).find(x => x.c === acc.code || x.n === acc.name);
+                    var gstNum = acc.gst || (custInfo ? custInfo.g : '');
+                    var totalSalesVal = (custInfo && custInfo.totDr) ? ('₹ ' + custInfo.totDr.toLocaleString('en-IN')) : '';
                     return `
-                        <label style="display:flex; align-items:center; gap:6px; background:#fff; border:1px solid #cbd5e1; padding:5px 8px; border-radius:5px; cursor:pointer;">
-                            <input type="radio" name="link_acc_${safeDocId}" value="${esc(acc.code)}" ${idx === 0 ? 'checked' : ''} data-name="${esc(acc.name)}" data-role="${aRole}">
+                        <label style="display:flex; align-items:flex-start; gap:8px; background:#fff; border:1px solid #cbd5e1; padding:6px 8px; border-radius:5px; cursor:pointer;">
+                            <input type="radio" name="link_acc_${safeDocId}" value="${esc(acc.code)}" ${idx === 0 ? 'checked' : ''} data-name="${esc(acc.name)}" data-role="${aRole}" style="margin-top:2px;">
                             <div style="font-size:11px; flex:1; min-width:0;">
-                                <span style="background:${aRole === 'agent' ? '#ede9fe; color:#6b21a8' : '#e0e7ff; color:#3730a3'}; font-size:9px; font-weight:bold; padding:1px 5px; border-radius:2px; margin-right:4px;">
-                                    ${aRole === 'agent' ? 'AGENT' : 'PARTY'}
-                                </span>
-                                <b>${esc(acc.name)}</b> ${acc.station ? '(' + esc(acc.station) + ')' : ''} [${esc(acc.code)}]
+                                <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
+                                    <span style="background:${aRole === 'agent' ? '#ede9fe; color:#6b21a8' : '#e0e7ff; color:#3730a3'}; font-size:9px; font-weight:bold; padding:1px 5px; border-radius:2px;">
+                                        ${aRole === 'agent' ? 'AGENT' : 'PARTY'}
+                                    </span>
+                                    <b>${esc(acc.name)}</b> ${acc.station ? '(' + esc(acc.station) + ')' : ''} [${esc(acc.code)}]
+                                </div>
+                                ${(gstNum || totalSalesVal) ? `
+                                <div style="display:flex; gap:6px; align-items:center; margin-top:3px; font-size:10px; flex-wrap:wrap;">
+                                    ${gstNum ? `<span style="background:#e0f2fe; color:#0369a1; padding:1px 5px; border-radius:3px; font-weight:600;">GST: ${esc(gstNum)}</span>` : ''}
+                                    ${totalSalesVal ? `<span style="background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:3px; font-weight:bold;">Total Sales: ${totalSalesVal}</span>` : ''}
+                                </div>` : ''}
                             </div>
                         </label>
                     `;
@@ -11589,6 +11615,7 @@ window.parseFirestoreCustomerDoc = function (d) {
         tr: f.transport ? f.transport.stringValue : '',
         b: f.netBalance ? parseInt(f.netBalance.integerValue || f.netBalance.doubleValue || 0) : 0,
         d: f.drCr ? f.drCr.stringValue : 'Dr',
+        totDr: f.totalDebit ? parseInt(f.totalDebit.integerValue || f.totalDebit.doubleValue || 0) : 0,
         pb: f.outstandingCount ? parseInt(f.outstandingCount.integerValue || 0) : 0,
         sbills: f.salesBillsCount ? parseInt(f.salesBillsCount.integerValue || 0) : 0,
         ho: (f.outstandingCount && parseInt(f.outstandingCount.integerValue || 0) > 0),
@@ -12061,11 +12088,15 @@ window.openCustomerReportsModal = async function (partyCode) {
     var modal = document.getElementById('customerDetailReportsModal');
     if (modal) modal.style.display = 'flex';
 
-    // Set Default Date Range (Financial Year 2026-2027)
+    // Set Default Date Range (Default to Last 3 Months)
     var fromEl = document.getElementById('repFromDate');
     var toEl = document.getElementById('repToDate');
-    if (fromEl && !fromEl.value) fromEl.value = '2026-04-01';
-    if (toEl && !toEl.value) toEl.value = '2027-03-31';
+    var now = new Date();
+    var toStr = now.toISOString().slice(0, 10);
+    var dPast = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
+    var fromStr = dPast.toISOString().slice(0, 10);
+    if (fromEl) fromEl.value = fromStr;
+    if (toEl) toEl.value = toStr;
 
     // Set Default Tab to Finish Sales & Transport
     window.switchCustomerReportTab('sales');
@@ -12114,7 +12145,11 @@ window.setReportDatePreset = function (preset) {
     if (!fromEl || !toEl) return;
 
     var today = new Date().toISOString().slice(0, 10);
-    if (preset === 'fy') {
+    if (preset === '3m') {
+        var dPast = new Date(Date.now() - (90 * 24 * 60 * 60 * 1000));
+        fromEl.value = dPast.toISOString().slice(0, 10);
+        toEl.value = today;
+    } else if (preset === 'fy') {
         fromEl.value = '2026-04-01';
         toEl.value = '2027-03-31';
     } else if (preset === 'month') {
@@ -12204,6 +12239,22 @@ window.renderCustomerReportActiveTab = async function () {
             if (b.includes('/CS') || b.includes('/GR') || b.includes('/CN') || b.includes('/CR') || b.endsWith('CS') || b.endsWith('GR')) return false;
             return dateInRange(r[0]);
         });
+
+        // Group rows by bill and sort bills descending by date (latest sales first)
+        var billGroups = new Map();
+        fsList.forEach(r => {
+            var bno = r[1] || '';
+            if (!billGroups.has(bno)) billGroups.set(bno, []);
+            billGroups.get(bno).push(r);
+        });
+        var sortedBills = Array.from(billGroups.entries()).sort((a, b) => {
+            var rowA = a[1][0] || [];
+            var rowB = b[1][0] || [];
+            var dateCmp = (rowB[0] || '').localeCompare(rowA[0] || '');
+            if (dateCmp !== 0) return dateCmp;
+            return String(b[0] || '').localeCompare(String(a[0] || ''));
+        });
+        fsList = sortedBills.flatMap(entry => entry[1]);
         if (fsList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
@@ -12339,7 +12390,50 @@ window.renderCustomerReportActiveTab = async function () {
     // ==========================================
     if (activeTab === 'outstanding') {
         var rawOsList = partyRep.outstanding || partyRep.os || [];
-        var osList = rawOsList.filter(r => dateInRange(r[0]));
+        var osList = rawOsList.map(r => {
+            if (Array.isArray(r)) {
+                var dt = r[0] || '';
+                var du = parseInt(r[7] || 0);
+                if (!du && dt) {
+                    var diff = Date.now() - new Date(dt).getTime();
+                    if (!isNaN(diff) && diff > 0) du = Math.floor(diff / (1000 * 60 * 60 * 24));
+                }
+                return {
+                    dt: dt,
+                    bno: r[1] || '',
+                    bamt: parseFloat(r[2]) || 0,
+                    ret: parseFloat(r[3]) || 0,
+                    grpend: parseFloat(r[4]) || 0,
+                    paid: parseFloat(r[5]) || 0,
+                    pamt: parseFloat(r[6]) || 0,
+                    du: du,
+                    ct: r[8] || '',
+                    ag: r[9] || ''
+                };
+            }
+            var dt = r.dt || r.d || r.date || '';
+            var du = parseInt(r.du !== undefined ? r.du : (r.days || r.dueDays || 0));
+            if (!du && dt) {
+                var diff = Date.now() - new Date(dt).getTime();
+                if (!isNaN(diff) && diff > 0) du = Math.floor(diff / (1000 * 60 * 60 * 24));
+            }
+            return {
+                dt: dt,
+                bno: r.bno || r.bill || r.b || '',
+                bamt: parseFloat(r.bamt || r.net || r.famt || 0),
+                ret: parseFloat(r.ret || 0),
+                grpend: parseFloat(r.grpend || 0),
+                paid: parseFloat(r.paid || 0),
+                pamt: parseFloat(r.pamt !== undefined ? r.pamt : (r.pending || r.bamt || 0)),
+                du: du,
+                ct: r.ct || r.city || r.dest || '',
+                ag: r.ag || r.agent || r.broker || ''
+            };
+        }).filter(r => dateInRange(r.dt));
+
+        // Sort descending by bill date (latest bills first)
+        osList.sort((a, b) => (b.dt || '').localeCompare(a.dt || ''));
+
         if (osList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#15803d; font-size:13px;">
@@ -12352,11 +12446,11 @@ window.renderCustomerReportActiveTab = async function () {
 
         var totNet = 0, totRet = 0, totPaid = 0, totPend = 0, totalDays = 0;
         osList.forEach(r => {
-            totNet += (r[2] || 0);
-            totRet += (r[3] || 0);
-            totPaid += (r[5] || 0);
-            totPend += (r[6] || 0);
-            totalDays += (r[7] || 0);
+            totNet += (r.bamt || 0);
+            totRet += (r.ret || 0);
+            totPaid += (r.paid || 0);
+            totPend += (r.pamt || 0);
+            totalDays += (r.du || 0);
         });
         var avgDays = osList.length > 0 ? Math.round(totalDays / osList.length) : 0;
 
@@ -12398,21 +12492,21 @@ window.renderCustomerReportActiveTab = async function () {
         `;
 
         osList.forEach((r, idx) => {
-            var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r[1])}')"`;
+            var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r.bno)}')"` ;
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[0])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.dt)}</td>
               <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
-                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r[1])}
+                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r.bno)}
               </td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r[2] ? r[2].toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r[3] ? r[3].toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r[4] ? r[4].toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#16a34a;">${r[5] ? r[5].toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#dc2626; background:#fff1f2;">${r[6] ? r[6].toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:#475569;">${r[7] || 0}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[8])}</td>
-              <td style="padding:5px 8px; color:#64748b;">${escHtml(r[9])}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r.bamt ? r.bamt.toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.ret ? r.ret.toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.grpend ? r.grpend.toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#16a34a;">${r.paid ? r.paid.toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#dc2626; background:#fff1f2;">${r.pamt ? r.pamt.toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:#b91c1c;">${r.du || 0}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.ct)}</td>
+              <td style="padding:5px 8px; color:#64748b;">${escHtml(r.ag)}</td>
             </tr>`;
         });
 
@@ -12444,7 +12538,36 @@ window.renderCustomerReportActiveTab = async function () {
     // ==========================================
     if (activeTab === 'ledger') {
         var rawLdList = partyRep.ledger || partyRep.ld || [];
-        var ldList = rawLdList.filter(r => dateInRange(r[0]));
+        var ldList = rawLdList.map(r => {
+            if (Array.isArray(r)) {
+                return {
+                    d: r[0] || '',
+                    v: r[1] || '',
+                    t: r[2] || '',
+                    r: r[3] || '',
+                    dr: parseFloat(r[4]) || 0,
+                    cr: parseFloat(r[5]) || 0,
+                    bal: r[6] !== undefined ? parseFloat(r[6]) : undefined,
+                    vno: r[7] || '',
+                    rmk: r[8] || ''
+                };
+            }
+            return {
+                d: r.d || r.dt || r.date || '',
+                v: r.v || r.docno || r.vno || r.bill || '',
+                t: r.t || r.type || '',
+                r: r.r || r.rfcode || r.rmk || r.account || '',
+                dr: parseFloat(r.dr || r.dramt || 0),
+                cr: parseFloat(r.cr || r.cramt || 0),
+                bal: r.bal !== undefined ? parseFloat(r.bal) : undefined,
+                vno: r.vno || r.v || '',
+                rmk: r.rmk || r.r || ''
+            };
+        }).filter(r => dateInRange(r.d));
+
+        // Sort descending by transaction date (latest entries first)
+        ldList.sort((a, b) => (b.d || '').localeCompare(a.d || ''));
+
         if (ldList.length === 0) {
             area.innerHTML = `
             <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px;">
@@ -12457,8 +12580,8 @@ window.renderCustomerReportActiveTab = async function () {
 
         var totDr = 0, totCr = 0;
         ldList.forEach(r => {
-            totDr += (r[4] || 0);
-            totCr += (r[5] || 0);
+            totDr += (r.dr || 0);
+            totCr += (r.cr || 0);
         });
         var closingBal = totDr - totCr;
         var closingBalText = (closingBal !== 0) ? `₹ ${Math.abs(closingBal).toFixed(2)} ${closingBal > 0 ? 'Dr' : 'Cr'}` : '₹ 0.00';
@@ -12496,22 +12619,22 @@ window.renderCustomerReportActiveTab = async function () {
         `;
 
         ldList.forEach((r, idx) => {
-            var chqStr = String(r[1] || '');
+            var chqStr = String(r.v || '');
             var isBill = chqStr.includes('/GST') || chqStr.includes('/');
             var chqDisplay = isBill ? `<span onclick="window.openBillInvoiceModal('${escHtml(chqStr)}')" style="color:#0284c7; font-weight:bold; cursor:pointer;" title="Click to view Tax Invoice"><i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(chqStr)}</span>` : escHtml(chqStr);
 
-            var balStr = (r[6] !== undefined) ? ((r[6] !== 0) ? `${Math.abs(r[6]).toFixed(2)} ${r[6] > 0 ? 'Dr' : 'Cr'}` : '0.00') : '';
+            var balStr = (r.bal !== undefined) ? ((r.bal !== 0) ? `${Math.abs(r.bal).toFixed(2)} ${r.bal > 0 ? 'Dr' : 'Cr'}` : '0.00') : '';
 
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[0])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.d)}</td>
               <td style="padding:5px 8px; border-right:1px solid #f1f5f9;">${chqDisplay}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:600; color:#334155;">${escHtml(r[3])}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r[4] > 0 ? '#dc2626' : '#94a3b8'};">${r[4] ? r[4].toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r[5] > 0 ? '#16a34a' : '#94a3b8'};">${r[5] ? r[5].toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:600; color:#334155;">${escHtml(r.r)}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r.dr > 0 ? '#dc2626' : '#94a3b8'};">${r.dr ? r.dr.toFixed(2) : '0.00'}</td>
+              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r.cr > 0 ? '#16a34a' : '#94a3b8'};">${r.cr ? r.cr.toFixed(2) : '0.00'}</td>
               <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e293b;">${balStr}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[7])}</td>
-              <td style="padding:5px 8px; color:#64748b;">${escHtml(r[8])}</td>
+              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r.vno)}</td>
+              <td style="padding:5px 8px; color:#64748b;">${escHtml(r.rmk)}</td>
             </tr>`;
         });
 
@@ -12733,8 +12856,8 @@ window.shareBillWhatsApp = function () {
     window.open(url, '_blank');
 };
 
-// Download Active Customer Report as PDF (Landscape Format)
-window.downloadReportPDF = async function () {
+// Share Active Customer Report as PDF (Landscape Format)
+window.shareReportPDF = async function () {
     var printContent = document.getElementById('erpReportPrintWrapper');
     if (!printContent) return;
 
@@ -12745,7 +12868,7 @@ window.downloadReportPDF = async function () {
 
     var btn = event ? (event.currentTarget || event.target) : null;
     var oldText = btn ? btn.innerHTML : '';
-    if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PDF...';
+    if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sharing...';
 
     try {
         if (window.jspdf && window.jspdf.jsPDF && typeof html2canvas === 'function') {
@@ -12791,6 +12914,28 @@ window.downloadReportPDF = async function () {
                 }
             }
 
+            var pdfBlob = pdf.output('blob');
+            var pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+            if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+                try {
+                    await navigator.share({
+                        title: `Durga Sarees - ${activeTab.toUpperCase()} (${cust ? cust.n : ''})`,
+                        text: `Attached ERP Report (${activeTab}) for ${cust ? cust.n : ''}`,
+                        files: [pdfFile]
+                    });
+                    if (btn) btn.innerHTML = oldText;
+                    return;
+                } catch (shareErr) {
+                    if (shareErr.name === 'AbortError') {
+                        if (btn) btn.innerHTML = oldText;
+                        return;
+                    }
+                    console.warn("navigator.share error:", shareErr);
+                }
+            }
+
+            // Fallback to direct download
             pdf.save(fileName);
             if (btn) btn.innerHTML = oldText;
             return;
@@ -12802,6 +12947,7 @@ window.downloadReportPDF = async function () {
     if (btn) btn.innerHTML = oldText;
     window.printActiveCustomerReport();
 };
+window.downloadReportPDF = window.shareReportPDF;
 
 // Print Active Customer Report (Finish Sales, Outstanding, or Ledger)
 window.printActiveCustomerReport = function () {
