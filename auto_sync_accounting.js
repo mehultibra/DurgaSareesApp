@@ -85,7 +85,7 @@ async function getFirebaseAccessToken() {
 }
 
 // ── Firestore Value Encoder ───────────────────────────────────────
-function toFirestoreValue(val) {
+function toFirestoreValue(val, inArray = false) {
     if (val === null || val === undefined) return { nullValue: null };
     if (typeof val === 'boolean') return { booleanValue: val };
     if (typeof val === 'number') {
@@ -94,12 +94,15 @@ function toFirestoreValue(val) {
     }
     if (typeof val === 'string') return { stringValue: val };
     if (Array.isArray(val)) {
-        return { arrayValue: { values: val.map(toFirestoreValue) } };
+        if (inArray) {
+            return { mapValue: { fields: { _a: toFirestoreValue(val, false) } } };
+        }
+        return { arrayValue: { values: val.map(v => toFirestoreValue(v, true)) } };
     }
     if (typeof val === 'object') {
         const fields = {};
         for (const k of Object.keys(val)) {
-            if (val[k] !== undefined) fields[k] = toFirestoreValue(val[k]);
+            if (val[k] !== undefined) fields[k] = toFirestoreValue(val[k], false);
         }
         return { mapValue: { fields } };
     }
@@ -107,7 +110,14 @@ function toFirestoreValue(val) {
 }
 
 function sanitizeDocId(str) {
-    return String(str || '').trim().toUpperCase().replace(/[\/\.\s]/g, '_');
+    if (!str) return 'UNKNOWN';
+    return String(str).trim().toUpperCase()
+        .replace(/\//g, '__SLASH__')
+        .replace(/\.+$/g, match => '__DOT'.repeat(match.length))
+        .replace(/^\.+/g, match => '__DOT'.repeat(match.length))
+        .replace(/\./g, '_DOT_')
+        .replace(/\s{2,}/g, match => '__SP'.repeat(match.length))
+        .replace(/\s/g, '_');
 }
 
 // ── Main Sync Function ────────────────────────────────────────────
@@ -200,7 +210,8 @@ async function syncAccountingData() {
                 salesItems: [],
                 finishSales: [],
                 transport: [],
-                outstanding: []
+                outstanding: [],
+                bills: {}
             };
         }
         return reportsByParty[k];
@@ -250,15 +261,132 @@ async function syncAccountingData() {
         const code = String(party.code || '').trim().toUpperCase();
         if (!code || !allowedPartyCodes.has(code)) return;
         const p = getPartyReport(code);
+        const m = mstPartyMap.get(code) || {};
 
         if (Array.isArray(party.billDetails)) {
             party.billDetails.forEach(b => {
-                p.finishSales.push(b);
-                if (b[12] && !transportByParty.has(code)) {
-                    transportByParty.set(code, String(b[12]).trim());
+                const billNo = String(b.BILL || b.VNO || '').trim();
+                const items = (b.IDE && detMap.get(b.IDE)) ? detMap.get(b.IDE) : [];
+                const itemRows = [];
+
+                if (items.length > 0) {
+                    items.forEach((it, itemIdx) => {
+                        const qualName = it.qual || it.altql || '';
+                        const ctgry = it.CTGRY || '';
+                        const pck = it.PCK || '';
+                        const unit = it.UNIT || 'PCS';
+                        const pcs = parseInt(it.PCS) || 0;
+                        const mts = parseFloat(it.MTS) || 0;
+                        const rate = parseFloat(it.RATE) || 0;
+                        const amt = parseFloat(it.AMT) || 0;
+                        const sr = it.hsn || it.SR || '540754';
+
+                        itemRows.push([
+                            qualName,
+                            ctgry,
+                            pck,
+                            unit,
+                            pcs,
+                            mts,
+                            rate,
+                            amt,
+                            sr
+                        ]);
+
+                        p.salesItems.push({
+                            b: billNo,
+                            d: b.DATE || '',
+                            q: qualName,
+                            c: ctgry,
+                            pck: pck,
+                            unit: unit,
+                            pcs: pcs,
+                            mts: mts,
+                            r: rate,
+                            a: amt
+                        });
+
+                        p.finishSales.push([
+                            b.DATE || '',
+                            billNo,
+                            qualName,
+                            ctgry,
+                            pck,
+                            unit,
+                            pcs,
+                            mts,
+                            rate,
+                            amt,
+                            parseFloat(b.BAMT || b.fnlamt || 0),
+                            b.DT || '',
+                            b.TRNSP || '',
+                            b.RRNO || '',
+                            b.PLC || '',
+                            b.PRCL || b.CSNO || '1',
+                            b.haste || b.BCODE || '',
+                            itemIdx === 0
+                        ]);
+                    });
+                } else {
+                    p.finishSales.push([
+                        b.DATE || '',
+                        billNo,
+                        b.QUAL || '',
+                        '',
+                        b.PCK || '',
+                        'PCS',
+                        parseInt(b.TPCS) || 0,
+                        parseFloat(b.TMTS) || 0,
+                        0,
+                        parseFloat(b.grsamt || b.BAMT) || 0,
+                        parseFloat(b.BAMT || b.fnlamt || 0),
+                        b.DT || '',
+                        b.TRNSP || '',
+                        b.RRNO || '',
+                        b.PLC || '',
+                        b.PRCL || b.CSNO || '1',
+                        b.haste || b.BCODE || '',
+                        true
+                    ]);
                 }
-                if (b[11] && !agentByParty.has(code)) {
-                    agentByParty.set(code, String(b[11]).trim());
+
+                // Full Bill Record for 1-Click Tax Invoice Viewer
+                if (billNo) {
+                    p.bills[billNo] = [
+                        billNo,                                    // 0: Bill No
+                        b.DATE || '',                              // 1: Bill Date
+                        m.partyname || code,                       // 2: Party Name
+                        phoneMap.get(code) || '',                  // 3: Phone
+                        m.AD1 ? `${m.AD1 || ''} ${m.AD2 || ''}`.trim() : (b.PLC || ''), // 4: Address
+                        b.PLC || '',                               // 5: Destination
+                        b.TRNSP || '',                             // 6: Transport Name
+                        b.RRNO || '',                              // 7: LR No
+                        b.RRDET || '',                             // 8: LR Date
+                        b.PRCL || b.CSNO || '1',                   // 9: Parcels / Cases
+                        b.WGT || '',                               // 10: Weight
+                        b.FRT || '',                               // 11: Freight
+                        b.EWB || '',                               // 12: e-Way
+                        b.haste || b.BCODE || '',                  // 13: Broker / Haste
+                        parseFloat(b.grsamt || b.BAMT) || 0,       // 14: Gross Amount
+                        'Discount',                                // 15: Discount Label
+                        parseFloat(b.DISC || b.billdis || 0),      // 16: Discount %
+                        parseFloat(b.discamt || 0),                // 17: Discount Amount
+                        parseFloat(b.VTRET || 5),                  // 18: GST %
+                        parseFloat(b.VTAMT || 0),                  // 19: GST Amount
+                        parseFloat(b.BAMT || b.fnlamt || 0),       // 20: Net Bill Amount
+                        b.paid || 'N',                             // 21: Paid Status
+                        b.DT || 'Due',                             // 22: Due Info
+                        itemRows                                   // 23: Item Lines
+                    ];
+                }
+
+                const trnName = b.TRNSP || b[12];
+                if (trnName && !transportByParty.has(code)) {
+                    transportByParty.set(code, String(trnName).trim());
+                }
+                const agName = b.BCODE || b[11];
+                if (agName && !agentByParty.has(code)) {
+                    agentByParty.set(code, String(agName).trim());
                 }
             });
         }
@@ -299,13 +427,52 @@ async function syncAccountingData() {
         }
     });
 
-    // Step 6: Load party links overrides (from Firebase or local cache)
+    // Step 6: Load party links overrides (Fetch live from Firestore & merge into local cache)
+    console.log('🔄 6. Fetching live PartyLinks from Firestore...');
     let localLinks = {};
     const fallbackBackup = path.join(__dirname, 'www', 'party_links_backup.json');
     if (fs.existsSync(PARTY_LINKS_BACKUP)) {
         try { localLinks = JSON.parse(fs.readFileSync(PARTY_LINKS_BACKUP, 'utf8')); } catch(e){}
     } else if (fs.existsSync(fallbackBackup)) {
         try { localLinks = JSON.parse(fs.readFileSync(fallbackBackup, 'utf8')); } catch(e){}
+    }
+
+    try {
+        const liveToken = await getFirebaseAccessToken();
+        if (liveToken) {
+            let pageToken = '';
+            let fetchedCount = 0;
+            const PROJECT_ID = 'durga-sarees';
+            do {
+                const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/PartyLinks?pageSize=1000` + (pageToken ? `&pageToken=${pageToken}` : '');
+                const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + liveToken } });
+                if (res.ok) {
+                    const json = await res.json();
+                    (json.documents || []).forEach(doc => {
+                        const f = doc.fields || {};
+                        const code = (f.partyCode && f.partyCode.stringValue) || decodeURIComponent(doc.name.split('/').pop());
+                        if (code) {
+                            localLinks[code] = Object.assign(localLinks[code] || {}, {
+                                phone: f.phone ? f.phone.stringValue : (localLinks[code] && localLinks[code].phone),
+                                transport: f.transport ? f.transport.stringValue : (localLinks[code] && localLinks[code].transport),
+                                agent: f.agent ? f.agent.stringValue : (localLinks[code] && localLinks[code].agent),
+                                state: f.state ? f.state.stringValue : (localLinks[code] && localLinks[code].state),
+                                role: f.role ? f.role.stringValue : (localLinks[code] && localLinks[code].role)
+                            });
+                            fetchedCount++;
+                        }
+                    });
+                    pageToken = json.nextPageToken || '';
+                } else {
+                    console.warn(`⚠️ PartyLinks fetch returned HTTP ${res.status}`);
+                    break;
+                }
+            } while (pageToken);
+            fs.writeFileSync(PARTY_LINKS_BACKUP, JSON.stringify(localLinks, null, 2));
+            console.log(`✅ Live PartyLinks synced: ${fetchedCount} links merged into backup cache.`);
+        }
+    } catch (e) {
+        console.warn('⚠️ Could not fetch live PartyLinks from Firestore:', e.message);
     }
 
     // Step 7: Compile Customer Summaries and Phone Directory
@@ -458,7 +625,7 @@ async function syncAccountingData() {
     // B. Check AccountingReports
     allowedPartyCodes.forEach(code => {
         const docId = sanitizeDocId(code);
-        const rep = reportsByParty[code] || { ledger: [], salesItems: [], finishSales: [], transport: [], outstanding: [] };
+        const rep = reportsByParty[code] || { ledger: [], salesItems: [], finishSales: [], transport: [], outstanding: [], bills: {} };
         const repData = {
             code: code,
             ledger: rep.ledger,
@@ -466,6 +633,7 @@ async function syncAccountingData() {
             salesItems: rep.salesItems,
             transport: rep.transport,
             outstanding: rep.outstanding,
+            bills: rep.bills || {},
             updatedAt: nowIso
         };
         const hKey = 'rep_' + docId;

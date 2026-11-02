@@ -326,6 +326,8 @@ window.loadSectionsFromFirestore = async function () {
                     try { localStorage.setItem('ds_sections', JSON.stringify(parsed)); } catch (e) { }
                     if (window.renderSectionTabBar) window.renderSectionTabBar();
                     if (window.applySectionTheme) window.applySectionTheme(window.activeSection);
+                    if (window.renderHorizontalCategories) window.renderHorizontalCategories();
+                    if (window.populateCategories) window.populateCategories();
                 }
             }
         }
@@ -2482,27 +2484,52 @@ function renderProductGrid(products) {
         var bHtml = totalQty > 0 ? `<div class="item-qty-badge" id="badge-${p.id}">${totalQty} in cart</div>` : `<div class="item-qty-badge" id="badge-${p.id}" style="display:none;"></div>`;
 
         var initialImgSrc = window.resolveImageUrlSync(p);
-        var base64Fallback = window.dsMissingImage || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        var coverFileName = p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : '';
 
         htmlBuffer.push(`
         <div class="card" id="card-${p.id}">
             <div class="thumb" onclick="openDetail('${p.id}')">
                 ${bHtml}
-                <img id="${imgElementId}" crossorigin="anonymous" onload="if(window.autoCropImage) window.autoCropImage(this)" onerror="this.onerror=null; this.src='${base64Fallback}';" src="${initialImgSrc}" alt="${esc(p.name)}">
+                <img id="${imgElementId}" class="lazy-grid-img" data-grid-url="${esc(p.gridUrl || '')}" data-cover-file="${esc(coverFileName)}" crossorigin="anonymous" onload="if(window.autoCropImage) window.autoCropImage(this)" onerror="this.onerror=null; this.src='${base64Fallback}';" src="${initialImgSrc}" alt="${esc(p.name)}">
             </div>
             <div class="ci" id="detail-wrap-${p.id}">
                 ${buildCardDetails(p)}
             </div>
         </div>
         `);
-
-        setTimeout(() => {
-            let imgEl = document.getElementById(imgElementId);
-            if (imgEl) window.renderWebpFromFolder(imgEl, p.gridUrl, null, p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : null);
-        }, 0);
     });
 
     gridEl.innerHTML = htmlBuffer.join('');
+
+    if (!window._gridImageObserver && typeof IntersectionObserver !== 'undefined') {
+        window._gridImageObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    var img = entry.target;
+                    observer.unobserve(img);
+                    var gUrl = img.getAttribute('data-grid-url');
+                    var cFile = img.getAttribute('data-cover-file') || null;
+                    if (window.renderWebpFromFolder && gUrl) {
+                        window.renderWebpFromFolder(img, gUrl, null, cFile || null);
+                    }
+                }
+            });
+        }, { rootMargin: '400px 0px' });
+    }
+
+    if (window._gridImageObserver) {
+        gridEl.querySelectorAll('.lazy-grid-img').forEach(img => {
+            window._gridImageObserver.observe(img);
+        });
+    } else {
+        gridEl.querySelectorAll('.lazy-grid-img').forEach(img => {
+            var gUrl = img.getAttribute('data-grid-url');
+            var cFile = img.getAttribute('data-cover-file') || null;
+            if (window.renderWebpFromFolder && gUrl) {
+                window.renderWebpFromFolder(img, gUrl, null, cFile || null);
+            }
+        });
+    }
 }
 
 // ====================================
@@ -11566,8 +11593,19 @@ window.parseFirestoreCustomerDoc = function (d) {
     };
 };
 
+window.sanitizeDocId = function (str) {
+    if (!str) return 'UNKNOWN';
+    return String(str).trim().toUpperCase()
+        .replace(/\//g, '__SLASH__')
+        .replace(/\.+$/g, match => '__DOT'.repeat(match.length))
+        .replace(/^\.+/g, match => '__DOT'.repeat(match.length))
+        .replace(/\./g, '_DOT_')
+        .replace(/\s{2,}/g, match => '__SP'.repeat(match.length))
+        .replace(/\s/g, '_');
+};
+
 window.parseFirestoreReportDoc = function (d) {
-    if (!d || !d.fields) return { finishSales: [], outstanding: [], ledger: [], salesItems: [], transport: [] };
+    if (!d || !d.fields) return { finishSales: [], outstanding: [], ledger: [], salesItems: [], transport: [], bills: {} };
 
     function unpackValue(v) {
         if (!v) return null;
@@ -11577,6 +11615,9 @@ window.parseFirestoreReportDoc = function (d) {
         if (v.booleanValue !== undefined) return v.booleanValue;
         if (v.arrayValue !== undefined) return (v.arrayValue.values || []).map(unpackValue);
         if (v.mapValue !== undefined) {
+            if (v.mapValue.fields && v.mapValue.fields._a !== undefined) {
+                return unpackValue(v.mapValue.fields._a);
+            }
             var obj = {};
             var fields = v.mapValue.fields || {};
             for (var k in fields) obj[k] = unpackValue(fields[k]);
@@ -11591,7 +11632,8 @@ window.parseFirestoreReportDoc = function (d) {
         outstanding: unpackValue(d.fields.outstanding) || [],
         ledger: unpackValue(d.fields.ledger) || [],
         salesItems: unpackValue(d.fields.salesItems) || [],
-        transport: unpackValue(d.fields.transport) || []
+        transport: unpackValue(d.fields.transport) || [],
+        bills: unpackValue(d.fields.bills) || {}
     };
 };
 
@@ -12051,7 +12093,7 @@ window.renderCustomerReportActiveTab = async function () {
     if (!cust) return;
 
     var codeKey = String(cust.c || '').trim().toUpperCase();
-    var codeClean = String(cust.c || cust.n || codeKey || '').trim().toUpperCase().replace(/[\/\.\s]/g, '_');
+    var codeClean = window.sanitizeDocId ? window.sanitizeDocId(cust.c || cust.n || codeKey) : String(cust.c || cust.n || codeKey || '').trim().toUpperCase().replace(/[\/\.\s]/g, '_');
 
     window._accountingReportsCache = window._accountingReportsCache || {};
 
@@ -12071,15 +12113,16 @@ window.renderCustomerReportActiveTab = async function () {
                 var doc = await res.json();
                 window._accountingReportsCache[codeClean] = window.parseFirestoreReportDoc(doc);
             } else {
-                window._accountingReportsCache[codeClean] = { finishSales: [], outstanding: [], ledger: [] };
+                window._accountingReportsCache[codeClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
             }
         } catch(e) {
             console.warn("Could not fetch AccountingReports on-demand:", e);
-            window._accountingReportsCache[codeClean] = { finishSales: [], outstanding: [], ledger: [] };
+            window._accountingReportsCache[codeClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
         }
     }
 
-    var partyRep = window._accountingReportsCache[codeClean] || { finishSales: [], outstanding: [], ledger: [] };
+    var partyRep = window._accountingReportsCache[codeClean] || { finishSales: [], outstanding: [], ledger: [], bills: {} };
+    window._currentActiveReport = partyRep;
     var activeTab = window._activeCustomerReportTab || 'sales';
 
     var fromDate = document.getElementById('repFromDate') ? document.getElementById('repFromDate').value : '';
@@ -12458,8 +12501,18 @@ window.openBillInvoiceModal = function (billNo) {
     if (!billNo) return;
     var normBill = String(billNo).trim();
 
-    var billsDict = (window._accountingReportsCache && window._accountingReportsCache.bills) || {};
+    var billsDict = (window._currentActiveReport && window._currentActiveReport.bills) || (window._accountingReportsCache && window._accountingReportsCache.bills) || {};
     var b = billsDict[normBill];
+
+    if (!b && window._accountingReportsCache) {
+        for (var cacheKey in window._accountingReportsCache) {
+            var cached = window._accountingReportsCache[cacheKey];
+            if (cached && cached.bills && cached.bills[normBill]) {
+                b = cached.bills[normBill];
+                break;
+            }
+        }
+    }
 
     if (!b) {
         // Fallback search across keys
