@@ -18,13 +18,15 @@ service cloud.firestore {
     function isPacking() { return request.auth != null && getRole() == 'packing'; }
 
     // ==========================================
-    // SETTINGS COLLECTION
+    // SETTINGS & CONFIG COLLECTIONS
     // ==========================================
     match /Settings/StickerTemplate {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
     match /settings/stickerLayout {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
     match /settings/{document=**} {
       allow read: if request.auth != null;
@@ -34,8 +36,8 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
-    match /Settings/{document=**} {
-      allow read: if request.auth != null;
+    match /AppConfig/{docId} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -80,8 +82,27 @@ service cloud.firestore {
     // PARTY LINKS (Permanent Cloud Linking & Party Data)
     // ==========================================
     match /PartyLinks/{linkId} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if isAdmin();
+    }
+
+    // ==========================================
+    // ERP CLOUD COLLECTIONS (Accounting Brain)
+    // ==========================================
+    match /AccountingMeta/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /AccountingCustomers/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    match /AccountingReports/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    match /PhoneDirectory/{phoneId} {
+      allow get: if request.auth != null;
+      allow list, write: if isAdmin();
     }
 
     // ==========================================

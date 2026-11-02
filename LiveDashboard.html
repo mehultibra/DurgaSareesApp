@@ -35,8 +35,13 @@
       document.getElementById('status').style.color = "#d97706";
       document.getElementById('data-output').innerText = "Loading data...";
 
+      if (typeof currentListener === 'function') {
+        try { currentListener(); } catch(e){}
+        currentListener = null;
+      }
+
       const tableRef = ref(db, tableName);
-      onValue(tableRef, (snapshot) => {
+      currentListener = onValue(tableRef, (snapshot) => {
         const data = snapshot.val();
         if (data) {
           const count = Array.isArray(data) ? data.filter(Boolean).length : Object.keys(data).length;

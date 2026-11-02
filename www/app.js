@@ -679,6 +679,10 @@ window.addEventListener('DOMContentLoaded', function () {
                     if (menuManageSec) menuManageSec.style.display = window.isAdminMode ? 'flex' : 'none';
                     var menuCustDir = document.getElementById('menuCustomerDirectory');
                     if (menuCustDir) menuCustDir.style.display = window.isAdminMode ? 'flex' : 'none';
+                    var menuLiveAdmin = document.getElementById('menuLiveAdmin');
+                    if (menuLiveAdmin) menuLiveAdmin.style.display = window.isAdminMode ? 'flex' : 'none';
+                    var btnTopLive = document.getElementById('btnTopLiveAdmin');
+                    if (btnTopLive) btnTopLive.style.display = window.isAdminMode ? 'block' : 'none';
                     if (typeof window.renderSectionTabBar === 'function') window.renderSectionTabBar();
                     alert("Admin Mode: " + (window.isAdminMode ? "ON" : "OFF"));
                     if (typeof applyFilter === 'function') applyFilter();
@@ -1040,57 +1044,47 @@ async function checkUserInFirestore(phone) {
     }
 }
 
-// 🔍 Find matching customer or agent accounts by phone from accounting database
+// 🔍 Find matching customer or agent accounts by phone from Cloud PhoneDirectory
 window.findAccountsByPhone = async function (phoneStr) {
     if (!phoneStr) return [];
     var clean10 = String(phoneStr).replace(/\D/g, '');
     if (clean10.length >= 10) clean10 = clean10.slice(-10);
     if (!clean10) return [];
 
-    var list = window._compiledCustomersList || [];
-    if (!list || list.length === 0) {
-        try {
-            var res = await fetch('./accounting_customers.json?v=4');
-            if (res && res.ok) {
-                list = await res.json();
-                window._compiledCustomersList = list;
-            }
-        } catch(e){}
-    }
-    if (!Array.isArray(list) || list.length === 0) return [];
+    try {
+        var token = await getCachedAuthToken(false);
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
 
-    var matches = [];
-    var seenCodes = new Set();
-
-    list.forEach(item => {
-        if (!item || !item.p) return;
-        var p10 = String(item.p).replace(/\D/g, '');
-        if (p10.length >= 10) p10 = p10.slice(-10);
-
-        if (p10 === clean10) {
-            var code = (item.c || item.n || '').trim().toUpperCase();
-            if (code && !seenCodes.has(code)) {
-                seenCodes.add(code);
-                var isAgent = !!item.isAgent || item.role === 'agent';
-                matches.push({
-                    code: item.c || item.n,
-                    name: item.n || item.c,
-                    station: item.ct || '',
-                    state: item.st || '',
-                    agent: item.ag || '',
-                    transport: item.tr || '',
-                    gst: item.g || '',
-                    address: item.a || '',
-                    role: isAgent ? 'agent' : 'customer',
-                    isAgent: isAgent,
-                    balance: item.b || 0,
-                    drCr: item.d || 'Dr'
+        var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PhoneDirectory/" + clean10;
+        var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
+        if (res && res.ok) {
+            var doc = await res.json();
+            if (doc && doc.fields && doc.fields.matchedAccounts && doc.fields.matchedAccounts.arrayValue && doc.fields.matchedAccounts.arrayValue.values) {
+                var rawMatches = doc.fields.matchedAccounts.arrayValue.values;
+                var matches = rawMatches.map(m => {
+                    var f = (m.mapValue && m.mapValue.fields) ? m.mapValue.fields : {};
+                    var aRole = (f.role && f.role.stringValue) ? f.role.stringValue : 'customer';
+                    return {
+                        code: f.code ? f.code.stringValue : '',
+                        name: f.name ? f.name.stringValue : '',
+                        station: f.station ? f.station.stringValue : '',
+                        state: f.state ? f.state.stringValue : '',
+                        agent: f.agent ? f.agent.stringValue : '',
+                        transport: f.transport ? f.transport.stringValue : '',
+                        gst: f.gst ? f.gst.stringValue : '',
+                        role: aRole,
+                        isAgent: aRole === 'agent'
+                    };
                 });
+                return matches;
             }
         }
-    });
+    } catch(err) {
+        console.warn("Cloud PhoneDirectory lookup error:", err);
+    }
 
-    return matches;
+    return [];
 };
 
 // 🔗 Auto-link user to matched ERP account & create Firestore record with pending approval
@@ -1376,12 +1370,13 @@ async function checkAdminStatus(phone) {
             if (f.isAdmin && f.isAdmin.booleanValue === true) {
                 localStorage.setItem('dsIsAdmin', 'true');
                 window.isSuperAdmin = true;
-                if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
-                if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
-                if (document.getElementById('menuManageSections')) document.getElementById('menuManageSections').style.display = 'flex';
-                if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
+                var showAdminUI = window.isAdminMode === true;
+                if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = showAdminUI ? 'flex' : 'none';
+                if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = showAdminUI ? 'flex' : 'none';
+                if (document.getElementById('menuManageSections')) document.getElementById('menuManageSections').style.display = showAdminUI ? 'flex' : 'none';
+                if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = showAdminUI ? 'block' : 'none';
                 var fabAdd = document.getElementById('fabAddProduct');
-                if (fabAdd) fabAdd.style.display = window.isAdminMode ? 'flex' : 'none';
+                if (fabAdd) fabAdd.style.display = showAdminUI ? 'flex' : 'none';
             } else {
                 localStorage.setItem('dsIsAdmin', 'false');
                 window.isSuperAdmin = false;
@@ -1389,6 +1384,8 @@ async function checkAdminStatus(phone) {
                 if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'none';
                 if (document.getElementById('menuManageSections')) document.getElementById('menuManageSections').style.display = 'none';
                 if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'none';
+                var fabAdd = document.getElementById('fabAddProduct');
+                if (fabAdd) fabAdd.style.display = 'none';
             }
         }
     } catch (e) {
@@ -2423,66 +2420,66 @@ function renderProductGrid(products) {
         }
     });
 
+    // Advanced Auto-Cropper: Scans image pixels to dynamically remove white borders and text overlay
+    window.autoCropImage = function (img) {
+        if (!img || img.dataset.cropped === "true") return;
+        if (!img.complete || img.naturalWidth === 0) return;
+        if (img.src && img.src.includes('data:image')) return;
+
+        var canvas = document.createElement('canvas');
+        var ctx = canvas.getContext('2d');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+
+        try {
+            ctx.drawImage(img, 0, 0);
+            var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        } catch (e) { return; } // Silently fail on CORS
+
+        var w = canvas.width, h = canvas.height;
+        var top = 0, bottom = h;
+
+        // Scan for top content (ignore rows that are >60% white)
+        for (var y = 0; y < h; y += 2) {
+            var bg = 0, chk = 0;
+            for (var x = 0; x < w; x += 5) {
+                var i = (y * w + x) * 4;
+                if (imgData[i] > 230 && imgData[i + 1] > 230 && imgData[i + 2] > 230) bg++;
+                chk++;
+            }
+            if (bg / chk < 0.6) { top = y; break; }
+        }
+        // Scan for bottom content
+        for (var y = h - 1; y >= 0; y -= 2) {
+            var bg = 0, chk = 0;
+            for (var x = 0; x < w; x += 5) {
+                var i = (y * w + x) * 4;
+                if (imgData[i] > 230 && imgData[i + 1] > 230 && imgData[i + 2] > 230) bg++;
+                chk++;
+            }
+            if (bg / chk < 0.6) { bottom = y; break; }
+        }
+
+        var contentH = bottom - top;
+        if (contentH > 0 && contentH < h) {
+            var scale = Math.min(h / contentH, 1.35); // Max 35% zoom
+            if (scale > 1.02) {
+                var contentCenterY = top + (contentH / 2);
+                var imgCenterY = h / 2;
+                var yOffset = ((imgCenterY - contentCenterY) / h) * 100;
+                img.style.transform = 'scale(' + scale + ') translateY(' + yOffset + '%)';
+                img.style.transformOrigin = 'center center';
+            }
+        }
+        img.dataset.cropped = "true";
+    };
+
     let htmlBuffer = [];
     sorted.forEach((p) => {
         let imgElementId = "img_" + p.id;
         var totalQty = 0;
         for (var k in cart) { if (cart[k].p.id === p.id) totalQty += parseInt(cart[k].qty) || 0; }
         var bHtml = totalQty > 0 ? `<div class="item-qty-badge" id="badge-${p.id}">${totalQty} in cart</div>` : `<div class="item-qty-badge" id="badge-${p.id}" style="display:none;"></div>`;
-
-        // Advanced Auto-Cropper: Scans image pixels to dynamically remove white borders and text overlay
-        window.autoCropImage = function (img) {
-            if (img.dataset.cropped === "true") return;
-            if (!img.complete || img.naturalWidth === 0) return;
-            if (img.src.includes('data:image')) return;
-
-            var canvas = document.createElement('canvas');
-            var ctx = canvas.getContext('2d');
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-
-            try {
-                ctx.drawImage(img, 0, 0);
-                var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            } catch (e) { return; } // Silently fail on CORS
-
-            var w = canvas.width, h = canvas.height;
-            var top = 0, bottom = h;
-
-            // Scan for top content (ignore rows that are >60% white)
-            for (var y = 0; y < h; y += 2) {
-                var bg = 0, chk = 0;
-                for (var x = 0; x < w; x += 5) {
-                    var i = (y * w + x) * 4;
-                    if (imgData[i] > 230 && imgData[i + 1] > 230 && imgData[i + 2] > 230) bg++;
-                    chk++;
-                }
-                if (bg / chk < 0.6) { top = y; break; }
-            }
-            // Scan for bottom content
-            for (var y = h - 1; y >= 0; y -= 2) {
-                var bg = 0, chk = 0;
-                for (var x = 0; x < w; x += 5) {
-                    var i = (y * w + x) * 4;
-                    if (imgData[i] > 230 && imgData[i + 1] > 230 && imgData[i + 2] > 230) bg++;
-                    chk++;
-                }
-                if (bg / chk < 0.6) { bottom = y; break; }
-            }
-
-            var contentH = bottom - top;
-            if (contentH > 0 && contentH < h) {
-                var scale = Math.min(h / contentH, 1.35); // Max 35% zoom
-                if (scale > 1.02) {
-                    var contentCenterY = top + (contentH / 2);
-                    var imgCenterY = h / 2;
-                    var yOffset = ((imgCenterY - contentCenterY) / h) * 100;
-                    img.style.transform = 'scale(' + scale + ') translateY(' + yOffset + '%)';
-                    img.style.transformOrigin = 'center center';
-                }
-            }
-            img.dataset.cropped = "true";
-        };
 
         var initialImgSrc = window.resolveImageUrlSync(p);
         var base64Fallback = window.dsMissingImage || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
@@ -2553,7 +2550,7 @@ function updateCartHeader() {
             count += parseInt(cart[k].qty) || 0;
         }
     }
-    var els = document.querySelectorAll('.cart-badge-top, #cartCountHeader, #floatCartCount');
+    var els = document.querySelectorAll('.cart-badge-top, #cartCountHeader, #cartPanelCountHeader, #floatCartCount');
     els.forEach(e => e.innerText = count);
     var floatBtn = document.getElementById('placeOrderFloat');
     if (floatBtn) {
@@ -4338,6 +4335,8 @@ function openCart(preserveScroll) {
 
         var headerCount = document.getElementById('cartCountHeader');
         if (headerCount) headerCount.innerText = count;
+        var panelHeaderCount = document.getElementById('cartPanelCountHeader');
+        if (panelHeaderCount) panelHeaderCount.innerText = count;
         var footerQty = document.getElementById('cartTotalQty');
         if (footerQty) footerQty.innerText = count + " pcs";
 
@@ -5420,7 +5419,8 @@ function saveProductEdit(p) {
                         action: 'updateProductDetails',
                         productName: p.name,
                         price: p.price,
-                        packing: p.packing
+                        packing: p.packing,
+                        section: p.section || 'sarees'
                     })
                 }).then(r => r.json())
                     .then(data => {
@@ -6536,51 +6536,54 @@ function saveCartInlineEdit(productId, closeEdit = true) {
     openCart(); // Re-render to show updated static text
 
     // 🚀 NEW: 2-WAY SYNC - FIREBASE & EXCEL WEBHOOK
-    if (window.isSuperAdmin && window.isAdminMode && matchP && matchP.docId) {
-        showDevLog("Syncing: " + matchP.name + " -> Rate: " + newRate + " Pack: " + newPacking, false);
-        // Firebase Live DB Update - Decoupled to support Granular RBAC
-        var fbUpdateUrlPrice = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price";
-        window.fetchWithRetry(fbUpdateUrlPrice, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { price: { doubleValue: Number(newRate) } } })
-        }, 1).then(res => {
-            if (res.ok) showDevLog("✅ Firebase Price Updated", false);
-            else showDevLog("❌ FB Err " + res.status, true);
-        }).catch(err => showDevLog("FB Net Err: " + err.message, true));
+    if (window.isSuperAdmin && window.isAdminMode) {
+        if (matchP && matchP.docId) {
+            showDevLog("Syncing: " + matchP.name + " -> Rate: " + newRate + " Pack: " + newPacking, false);
+            // Firebase Live DB Update - Decoupled to support Granular RBAC
+            var fbUpdateUrlPrice = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=price";
+            window.fetchWithRetry(fbUpdateUrlPrice, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fields: { price: { doubleValue: Number(newRate) } } })
+            }, 1).then(res => {
+                if (res.ok) showDevLog("✅ Firebase Price Updated", false);
+                else showDevLog("❌ FB Err " + res.status, true);
+            }).catch(err => showDevLog("FB Net Err: " + err.message, true));
 
-        var fbUpdateUrlPacking = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=packing";
-        window.fetchWithRetry(fbUpdateUrlPacking, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { packing: { stringValue: newPacking } } })
-        }, 1).then(res => {
-            if (res.ok) showDevLog("✅ Firebase Packing Updated", false);
-            else showDevLog("❌ FB Err " + res.status, true);
-        }).catch(err => showDevLog("FB Net Err: " + err.message, true));
+            var fbUpdateUrlPacking = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=packing";
+            window.fetchWithRetry(fbUpdateUrlPacking, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fields: { packing: { stringValue: newPacking } } })
+            }, 1).then(res => {
+                if (res.ok) showDevLog("✅ Firebase Packing Updated", false);
+                else showDevLog("❌ FB Err " + res.status, true);
+            }).catch(err => showDevLog("FB Net Err: " + err.message, true));
 
-        // Excel Webhook Sync via Apps Script
-        if (window.DS_APP_SCRIPT_URL) {
-            fetch(window.DS_APP_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({
-                    action: 'updateProductDetails',
-                    productName: matchP.name,
-                    price: newRate,
-                    packing: newPacking
-                })
-            }).then(r => r.json())
-                .then(data => {
-                    if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
-                    else showDevLog("✅ Excel Updated: " + matchP.name, false);
-                })
-                .catch(e => showDevLog("Excel Net Err: " + e.message, true));
+            // Excel Webhook Sync via Apps Script
+            if (window.DS_APP_SCRIPT_URL) {
+                fetch(window.DS_APP_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        action: 'updateProductDetails',
+                        productName: matchP.name,
+                        price: newRate,
+                        packing: newPacking,
+                        section: matchP.section || 'sarees'
+                    })
+                }).then(r => r.json())
+                    .then(data => {
+                        if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
+                        else showDevLog("✅ Excel Updated: " + matchP.name, false);
+                    })
+                    .catch(e => showDevLog("Excel Net Err: " + e.message, true));
+            } else {
+                showDevLog("❌ DS_APP_SCRIPT_URL is missing!", true);
+            }
         } else {
-            showDevLog("❌ DS_APP_SCRIPT_URL is missing!", true);
+            showDevLog("❌ matchP or docId missing for " + productId, true);
         }
-    } else {
-        showDevLog("❌ matchP or docId missing for " + productId, true);
     }
 }
 
@@ -11537,7 +11540,91 @@ window.openCustomerDirectoryModal = function () {
     }
 };
 
-// 2. Load Customers Master List (Local Fast Path)
+// 2. Load Customers Master List from Cloud Firestore (Zero monolithic JSON load)
+window.parseFirestoreCustomerDoc = function (d) {
+    if (!d || !d.fields) return null;
+    var f = d.fields;
+    var aRole = (f.role && f.role.stringValue) ? f.role.stringValue : 'customer';
+    var isAgent = aRole === 'agent' || (f.atype && f.atype.stringValue === '12');
+    return {
+        c: f.code ? f.code.stringValue : (d.name ? d.name.split('/').pop() : ''),
+        n: f.name ? f.name.stringValue : '',
+        p: f.phone ? f.phone.stringValue : '',
+        ct: f.station ? f.station.stringValue : '',
+        st: f.state ? f.state.stringValue : '',
+        g: f.gst ? f.gst.stringValue : '',
+        ag: f.agent ? f.agent.stringValue : '',
+        tr: f.transport ? f.transport.stringValue : '',
+        b: f.netBalance ? parseInt(f.netBalance.integerValue || f.netBalance.doubleValue || 0) : 0,
+        d: f.drCr ? f.drCr.stringValue : 'Dr',
+        pb: f.outstandingCount ? parseInt(f.outstandingCount.integerValue || 0) : 0,
+        sbills: f.salesBillsCount ? parseInt(f.salesBillsCount.integerValue || 0) : 0,
+        ho: (f.outstandingCount && parseInt(f.outstandingCount.integerValue || 0) > 0),
+        hs: (f.salesBillsCount && parseInt(f.salesBillsCount.integerValue || 0) > 0),
+        role: aRole,
+        isAgent: isAgent
+    };
+};
+
+window.parseFirestoreReportDoc = function (d) {
+    if (!d || !d.fields) return { finishSales: [], outstanding: [], ledger: [], salesItems: [], transport: [] };
+
+    function unpackValue(v) {
+        if (!v) return null;
+        if (v.stringValue !== undefined) return v.stringValue;
+        if (v.integerValue !== undefined) return parseInt(v.integerValue);
+        if (v.doubleValue !== undefined) return v.doubleValue;
+        if (v.booleanValue !== undefined) return v.booleanValue;
+        if (v.arrayValue !== undefined) return (v.arrayValue.values || []).map(unpackValue);
+        if (v.mapValue !== undefined) {
+            var obj = {};
+            var fields = v.mapValue.fields || {};
+            for (var k in fields) obj[k] = unpackValue(fields[k]);
+            return obj;
+        }
+        return null;
+    }
+
+    return {
+        code: d.fields.code ? d.fields.code.stringValue : '',
+        finishSales: unpackValue(d.fields.finishSales) || [],
+        outstanding: unpackValue(d.fields.outstanding) || [],
+        ledger: unpackValue(d.fields.ledger) || [],
+        salesItems: unpackValue(d.fields.salesItems) || [],
+        transport: unpackValue(d.fields.transport) || []
+    };
+};
+
+window.loadAccountingDashboardMeta = async function () {
+    if (window._accountingMetaDashboard) return window._accountingMetaDashboard;
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingMeta/dashboard";
+        var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
+        if (res && res.ok) {
+            var doc = await res.json();
+            var d = {};
+            if (doc.fields) {
+                if (doc.fields.totalCustomers) d.totalCustomers = parseInt(doc.fields.totalCustomers.integerValue || 0);
+                if (doc.fields.totalAgents) d.totalAgents = parseInt(doc.fields.totalAgents.integerValue || 0);
+                if (doc.fields.lastSyncedAt) d.lastSyncedAt = doc.fields.lastSyncedAt.stringValue;
+                if (doc.fields.states && doc.fields.states.arrayValue && doc.fields.states.arrayValue.values) {
+                    d.states = doc.fields.states.arrayValue.values.map(v => v.stringValue).filter(Boolean);
+                }
+                if (doc.fields.agents && doc.fields.agents.arrayValue && doc.fields.agents.arrayValue.values) {
+                    d.agents = doc.fields.agents.arrayValue.values.map(v => v.stringValue).filter(Boolean);
+                }
+            }
+            window._accountingMetaDashboard = d;
+            return d;
+        }
+    } catch(e) {
+        console.warn("Could not load AccountingMeta/dashboard:", e);
+    }
+    return null;
+};
+
 window.loadAccountingDirectoryData = async function (forceRefresh = false) {
     if (!window.isAdminMode && !window.isSuperAdmin) return;
 
@@ -11555,48 +11642,39 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
         container.innerHTML = `
         <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
           <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
-          <div style="font-weight:600; color:#374151;">Loading Customer Directory...</div>
-          <div style="font-size:11px; margin-top:4px;">Retrieving accounts and balances...</div>
+          <div style="font-weight:600; color:#374151;">Connecting to Cloud ERP...</div>
+          <div style="font-size:11px; margin-top:4px;">Retrieving accounts and balances from Firestore...</div>
         </div>`;
     }
 
+    // Trigger metadata in background
+    window.loadAccountingDashboardMeta();
+
     try {
-        var res = await fetch('./accounting_customers.json?v=3');
+        var token = await getCachedAuthToken(true);
+        var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingCustomers?pageSize=80";
+        var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
         if (res && res.ok) {
             var data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-                window._compiledCustomersList = data;
-                if (typeof window.mergeFirebasePartyLinks === 'function') {
-                    window.mergeFirebasePartyLinks(window._compiledCustomersList);
-                }
-                window.renderCustomerDirectoryUI();
+            var docs = (data && data.documents) ? data.documents : [];
+            window._accountingCustomersNextPageToken = data.nextPageToken || null;
+            window._compiledCustomersList = docs.map(d => window.parseFirestoreCustomerDoc(d)).filter(Boolean);
+            if (typeof window.mergeFirebasePartyLinks === 'function') {
+                window.mergeFirebasePartyLinks(window._compiledCustomersList);
             }
+            window.renderCustomerDirectoryUI();
         }
     } catch (e) {
-        console.warn("Could not load accounting_customers.json:", e);
+        console.warn("Could not load AccountingCustomers from Firestore:", e);
     }
-
-    // Trigger pre-loading of reports in background for instant opening
-    window.loadAccountingReportsData();
 
     if (syncIcon) syncIcon.classList.remove('fa-spin');
 };
 
 // 3. Background / On-Demand Loader for Detailed Customer Reports
 window.loadAccountingReportsData = async function () {
-    if (!window.isAdminMode && !window.isSuperAdmin) return null;
-    if (window._accountingReportsCache) return window._accountingReportsCache;
-
-    try {
-        var res = await fetch('./accounting_reports.json?v=3');
-        if (res && res.ok) {
-            window._accountingReportsCache = await res.json();
-            return window._accountingReportsCache;
-        }
-    } catch (e) {
-        console.warn("Could not load accounting_reports.json:", e);
-    }
-    return null;
+    return window._accountingReportsCache || {};
 };
 
 // 4. Quick Filter Selector
@@ -11973,21 +12051,35 @@ window.renderCustomerReportActiveTab = async function () {
     if (!cust) return;
 
     var codeKey = String(cust.c || '').trim().toUpperCase();
+    var codeClean = String(cust.c || cust.n || codeKey || '').trim().toUpperCase().replace(/[\/\.\s]/g, '_');
 
-    // If cache not ready, show spinner and wait
-    if (!window._accountingReportsCache) {
+    window._accountingReportsCache = window._accountingReportsCache || {};
+
+    if (!window._accountingReportsCache[codeClean]) {
         area.innerHTML = `
         <div style="text-align:center; padding:40px 20px; color:#6b7280; font-size:13px;">
           <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
-          <div style="font-weight:600; color:#374151;">Loading ERP Reports...</div>
-          <div style="font-size:11px; margin-top:4px;">Retrieving sales, transport, outstanding &amp; ledger...</div>
+          <div style="font-weight:600; color:#374151;">Loading Cloud ERP Report...</div>
+          <div style="font-size:11px; margin-top:4px;">Retrieving on-demand ledger, sales bills, and transport...</div>
         </div>`;
-        await window.loadAccountingReportsData();
+        try {
+            var token = await getCachedAuthToken(true);
+            var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+            var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + codeClean;
+            var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
+            if (res && res.ok) {
+                var doc = await res.json();
+                window._accountingReportsCache[codeClean] = window.parseFirestoreReportDoc(doc);
+            } else {
+                window._accountingReportsCache[codeClean] = { finishSales: [], outstanding: [], ledger: [] };
+            }
+        } catch(e) {
+            console.warn("Could not fetch AccountingReports on-demand:", e);
+            window._accountingReportsCache[codeClean] = { finishSales: [], outstanding: [], ledger: [] };
+        }
     }
 
-    var allReports = (window._accountingReportsCache && window._accountingReportsCache.reports) || {};
-    var nameKey = String(cust.n || '').trim().toUpperCase();
-    var partyRep = allReports[codeKey] || allReports[nameKey] || { finishSales: [], outstanding: [], ledger: [] };
+    var partyRep = window._accountingReportsCache[codeClean] || { finishSales: [], outstanding: [], ledger: [] };
     var activeTab = window._activeCustomerReportTab || 'sales';
 
     var fromDate = document.getElementById('repFromDate') ? document.getElementById('repFromDate').value : '';
@@ -12820,7 +12912,49 @@ window.searchAndSelectParty = function (query) {
     var matched = scored.slice(0, 30).map(s => s.c);
 
     if (matched.length === 0) {
-        resEl.innerHTML = '<div style="padding:12px; font-size:12px; color:#94a3b8; text-align:center;">No party matching "<b>' + esc(query) + '</b>"</div>';
+        if (!window._partySearchDebounce) window._partySearchDebounce = null;
+        clearTimeout(window._partySearchDebounce);
+        window._partySearchDebounce = setTimeout(async function () {
+            try {
+                var token = await getCachedAuthToken(true);
+                var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                var uQ = (tokens[0] || q).toUpperCase();
+                var runQueryBody = {
+                    structuredQuery: {
+                        from: [{ collectionId: "AccountingCustomers" }],
+                        where: {
+                            compositeFilter: {
+                                op: "AND",
+                                filters: [
+                                    { fieldFilter: { field: { fieldPath: "nameUpper" }, op: "GREATER_THAN_OR_EQUAL", value: { stringValue: uQ } } },
+                                    { fieldFilter: { field: { fieldPath: "nameUpper" }, op: "LESS_THAN_OR_EQUAL", value: { stringValue: uQ + "\uf8ff" } } }
+                                ]
+                            }
+                        },
+                        limit: 30
+                    }
+                };
+                var cRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+                    method: 'POST',
+                    headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+                    body: JSON.stringify(runQueryBody)
+                });
+                if (cRes.ok) {
+                    var cData = await cRes.json();
+                    var newDocs = (cData || []).map(r => r.document ? window.parseFirestoreCustomerDoc(r.document) : null).filter(Boolean);
+                    if (newDocs.length > 0) {
+                        var existingCodes = new Set((window._compiledCustomersList || []).map(x => x.c));
+                        newDocs.forEach(nd => { if (!existingCodes.has(nd.c)) window._compiledCustomersList.push(nd); });
+                        window.searchAndSelectParty(query);
+                        return;
+                    }
+                }
+            } catch(e){}
+            var curRes = document.getElementById('cdPartySearchResults');
+            if (curRes) curRes.innerHTML = '<div style="padding:12px; font-size:12px; color:#94a3b8; text-align:center;">No party matching "<b>' + esc(query) + '</b>"</div>';
+        }, 220);
+
+        resEl.innerHTML = '<div style="padding:12px; font-size:12px; color:#64748b; text-align:center;"><i class="fas fa-spinner fa-spin"></i> Searching cloud accounts...</div>';
         resEl.style.display = 'block';
         return;
     }
