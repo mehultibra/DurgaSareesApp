@@ -457,7 +457,11 @@ async function syncAccountingData() {
                                 transport: f.transport ? f.transport.stringValue : (localLinks[code] && localLinks[code].transport),
                                 agent: f.agent ? f.agent.stringValue : (localLinks[code] && localLinks[code].agent),
                                 state: f.state ? f.state.stringValue : (localLinks[code] && localLinks[code].state),
-                                role: f.role ? f.role.stringValue : (localLinks[code] && localLinks[code].role)
+                                role: f.role ? f.role.stringValue : (localLinks[code] && localLinks[code].role),
+                                station: f.station ? f.station.stringValue : (localLinks[code] && localLinks[code].station),
+                                gst: f.gst ? f.gst.stringValue : (localLinks[code] && localLinks[code].gst),
+                                address: f.address ? f.address.stringValue : (localLinks[code] && localLinks[code].address),
+                                firm: f.firm ? f.firm.stringValue : (localLinks[code] && localLinks[code].firm)
                             });
                             fetchedCount++;
                         }
@@ -511,10 +515,10 @@ async function syncAccountingData() {
 
         const detectedState = extractState(m);
         const finalState = (linkData && linkData.state) ? linkData.state : detectedState;
-        const finalStation = m.city || m.CITY || '';
+        const finalStation = (linkData && linkData.station) ? linkData.station : (m.city || m.CITY || '');
         const finalTransport = (linkData && linkData.transport) ? linkData.transport : (transportByParty.get(code) || '');
         const finalAgent = (linkData && linkData.agent) ? linkData.agent : (agentByParty.get(code) || '');
-        const finalGst = m.GST || '';
+        const finalGst = (linkData && linkData.gst) ? linkData.gst : (m.GST || '');
         const role = isAgent ? 'agent' : 'customer';
 
         if (finalState) uniqueStates.add(finalState);

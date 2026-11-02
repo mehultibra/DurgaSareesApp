@@ -339,7 +339,7 @@ window.loadSectionsFromFirestore = async function () {
 window.saveSectionsToFirestore = async function () {
     try {
         if (!firebaseConfig || !firebaseConfig.projectId) return false;
-        var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/AppConfig/sections";
+        var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/AppConfig/sections?updateMask.fieldPaths=data";
         var payload = {
             fields: {
                 data: { stringValue: JSON.stringify(window.appSections) }
@@ -687,6 +687,7 @@ window.addEventListener('DOMContentLoaded', function () {
                     if (btnTopLive) btnTopLive.style.display = window.isAdminMode ? 'block' : 'none';
                     if (typeof window.renderSectionTabBar === 'function') window.renderSectionTabBar();
                     alert("Admin Mode: " + (window.isAdminMode ? "ON" : "OFF"));
+                    if (typeof window.updateOrderOnBehalfBanner === 'function') window.updateOrderOnBehalfBanner();
                     if (typeof applyFilter === 'function') applyFilter();
                 } else {
                     alert("Access Denied: Not an Administrator.");
@@ -1367,7 +1368,10 @@ async function checkAdminStatus(phone) {
                 state: f.state ? f.state.stringValue : "",
                 phone: phone
             };
-            localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile));
+            localStorage.setItem("dsAdminOwnProfile", JSON.stringify(userProfile));
+            if (!localStorage.getItem("ds_active_on_behalf")) {
+                localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile));
+            }
 
             if (f.isAdmin && f.isAdmin.booleanValue === true) {
                 localStorage.setItem('dsIsAdmin', 'true');
@@ -6261,7 +6265,7 @@ async function openCustomerDetailsModal() {
     if (stored) {
         try { d = JSON.parse(stored); } catch (e) { }
     }
-    var isAdmin = !!((window.isSuperAdmin && window.isAdminMode) || window.isAdminMode || window.isSuperAdmin);
+    var isAdmin = Boolean(window.isSuperAdmin || window.isAdminMode);
 
     if (!d && !isAdmin) {
         d = await fetchCustomerDetailsFromDB();
@@ -6337,7 +6341,7 @@ async function saveCustomerDetails() {
     }
 
     if (btn) btn.innerText = "Saving...";
-    var isAdmin = !!((window.isSuperAdmin && window.isAdminMode) || window.isAdminMode || window.isSuperAdmin);
+    var isAdmin = Boolean(window.isSuperAdmin || window.isAdminMode);
 
     var d = {
         name: name,
@@ -11668,19 +11672,45 @@ window.loadAccountingDashboardMeta = async function () {
 };
 
 window.loadAccountingDirectoryData = async function (forceRefresh = false) {
-    if (!window.isAdminMode && !window.isSuperAdmin) return;
+    if (!Boolean(window.isSuperAdmin || window.isAdminMode)) return;
 
     var container = document.getElementById('customerListContainer');
     var syncIcon = document.getElementById('custSyncIcon');
     if (syncIcon) syncIcon.classList.add('fa-spin');
 
+    // 1. In-memory cache check
     if (!forceRefresh && window._compiledCustomersList && window._compiledCustomersList.length > 0) {
         if (syncIcon) syncIcon.classList.remove('fa-spin');
         window.renderCustomerDirectoryUI();
         return;
     }
 
-    if (container) {
+    // 2. Persistent IndexedDB cache check (instant offline / persistent cache across reloads)
+    if (!forceRefresh && (!window._compiledCustomersList || window._compiledCustomersList.length === 0)) {
+        try {
+            var db = await getDB();
+            var idbData = await new Promise(resolve => {
+                var tx = db.transaction(storeName, "readonly");
+                var req = tx.objectStore(storeName).get("accounting_customers_cache");
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => resolve(null);
+            });
+            if (idbData && Array.isArray(idbData.list) && idbData.list.length > 0) {
+                window._compiledCustomersList = idbData.list;
+                window._accountingLastSyncedAt = idbData.syncedAt || null;
+                if (syncIcon) syncIcon.classList.remove('fa-spin');
+                window.renderCustomerDirectoryUI();
+
+                // Check AccountingMeta/dashboard in background to see if cloud data changed
+                var meta = await window.loadAccountingDashboardMeta();
+                if (meta && meta.lastSyncedAt && meta.lastSyncedAt === window._accountingLastSyncedAt) {
+                    return; // Cache is completely fresh! Zero cloud re-download required.
+                }
+            }
+        } catch(e) {}
+    }
+
+    if (container && (!window._compiledCustomersList || window._compiledCustomersList.length === 0)) {
         container.innerHTML = `
         <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
           <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
@@ -11689,8 +11719,8 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
         </div>`;
     }
 
-    // Trigger metadata in background
-    window.loadAccountingDashboardMeta();
+    // Fetch dashboard metadata
+    var meta = await window.loadAccountingDashboardMeta();
 
     try {
         var token = await getCachedAuthToken(true);
@@ -11705,6 +11735,18 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
             if (typeof window.mergeFirebasePartyLinks === 'function') {
                 window.mergeFirebasePartyLinks(window._compiledCustomersList);
             }
+            window._accountingLastSyncedAt = (meta && meta.lastSyncedAt) || new Date().toISOString();
+
+            // Cache in IndexedDB for fast subsequent opens
+            try {
+                var db = await getDB();
+                var tx = db.transaction(storeName, "readwrite");
+                tx.objectStore(storeName).put({
+                    list: window._compiledCustomersList,
+                    syncedAt: window._accountingLastSyncedAt
+                }, "accounting_customers_cache");
+            } catch(e){}
+
             window.renderCustomerDirectoryUI();
         }
     } catch (e) {
@@ -12900,6 +12942,7 @@ window.mergeFirebasePartyLinks = async function (list) {
 };
 
 window.searchAndSelectParty = function (query) {
+    if (!Boolean(window.isSuperAdmin || window.isAdminMode)) return;
     var resEl = document.getElementById('cdPartySearchResults');
     if (!resEl) return;
     var q = (query || '').trim().toLowerCase();
@@ -13169,6 +13212,10 @@ window.exitOrderOnBehalf = function () {
     if (confirm(`Clear selected party (${pName})?`)) {
         localStorage.removeItem("ds_active_on_behalf");
         localStorage.removeItem("dsCustomerDetails");
+        var adminOwn = localStorage.getItem("dsAdminOwnProfile");
+        if (adminOwn) {
+            localStorage.setItem("dsCustomerDetails", adminOwn);
+        }
         window.activeOrderOnBehalf = null;
         window.updateOrderOnBehalfBanner();
         loadCartCustomerDetails();
@@ -13181,7 +13228,8 @@ window.updateOrderOnBehalfBanner = function () {
     var stored = null;
     try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
 
-    if (stored && stored.name) {
+    var isAllowed = Boolean(window.isSuperAdmin || window.isAdminMode);
+    if (isAllowed && stored && stored.name) {
         var locParts = [];
         if (stored.station) locParts.push(stored.station);
         if (stored.state) locParts.push(stored.state);
