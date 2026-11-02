@@ -11820,6 +11820,33 @@ window._custDirPageSize = 40;
 window._custDirRenderedCount = 40;
 window._currentFilteredCustomers = [];
 
+window.populateCustomerFilterDropdowns = function (list) {
+    var stationSel = document.getElementById('custStationFilter');
+    var agentSel = document.getElementById('custAgentFilter');
+    if (!stationSel || !agentSel) return;
+    if (window._hasPopulatedCustDropdowns && stationSel.options.length > 1) return;
+
+    var curSt = stationSel.value;
+    var curAg = agentSel.value;
+
+    var stations = new Set();
+    var agents = new Set();
+    (list || []).forEach(c => {
+        if (c.ct) stations.add(String(c.ct).trim());
+        if (c.ag) agents.add(String(c.ag).trim());
+    });
+
+    var sortedStations = Array.from(stations).sort((a, b) => a.localeCompare(b));
+    var sortedAgents = Array.from(agents).sort((a, b) => a.localeCompare(b));
+
+    stationSel.innerHTML = '<option value="">All Stations / Cities</option>' + sortedStations.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+    agentSel.innerHTML = '<option value="">All Agents / Brokers</option>' + sortedAgents.map(a => `<option value="${escHtml(a)}">${escHtml(a)}</option>`).join('');
+
+    if (curSt) stationSel.value = curSt;
+    if (curAg) agentSel.value = curAg;
+    window._hasPopulatedCustDropdowns = true;
+};
+
 window.renderCustomerDirectoryUI = function (isAppend = false) {
     if (!window.isAdminMode && !window.isSuperAdmin) return;
 
@@ -11830,6 +11857,10 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
     var filterType = window._currentCustDirFilter || 'all';
     var list = window._compiledCustomersList || [];
     var tokens = query ? query.split(/\s+/).filter(Boolean) : [];
+
+    window.populateCustomerFilterDropdowns(list);
+    var selStation = document.getElementById('custStationFilter') ? document.getElementById('custStationFilter').value.trim() : "";
+    var selAgent = document.getElementById('custAgentFilter') ? document.getElementById('custAgentFilter').value.trim() : "";
 
     if (!isAppend) {
         window._custDirRenderedCount = 40;
@@ -11846,6 +11877,9 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         }
 
         var filtered = list.filter(c => {
+            if (selStation && (c.ct || '').trim() !== selStation) return false;
+            if (selAgent && (c.ag || '').trim() !== selAgent) return false;
+
             if (tokens.length > 0) {
                 var searchStr = [
                     c.n,
@@ -11950,6 +11984,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                                 }
                             });
                             if (added) {
+                                window.populateCustomerFilterDropdowns(window._compiledCustomersList);
                                 window.renderCustomerDirectoryUI();
                             }
                         }
@@ -11967,7 +12002,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         var isSearchingCloud = query.length >= 2;
         container.innerHTML = `
         <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
-          ${isSearchingCloud ? '<i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:8px;"></i><div>Searching cloud database for "' + escHtml(query) + '"...</div>' : '<i class="fas fa-search" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i><div>No customers match "' + escHtml(query) + '".</div>'}
+          ${isSearchingCloud ? '<i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:8px;"></i><div>Searching cloud database for "' + escHtml(query) + '"...</div>' : '<i class="fas fa-search" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i><div>No customers match your search criteria.</div>'}
         </div>`;
         return;
     }
@@ -11979,15 +12014,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
     toRender.forEach((c, idx) => {
         var cardId = 'custCard_' + idx;
 
-        var balBadgeColor = '#6b7280';
-        var balBg = '#f3f4f6';
-        if (c.b > 0) {
-            balBadgeColor = (c.d === 'Dr') ? '#dc2626' : '#16a34a';
-            balBg = (c.d === 'Dr') ? '#fee2e2' : '#dcfce7';
-        }
-
-        var balText = (c.b > 0) ? `₹ ${c.b.toLocaleString('en-IN')} ${c.d}` : 'Clear';
-        var waMsg = `Namaste ${c.n},\nGreeting from Durga Sarees!\nYour current ledger balance is ${balText}.\nKindly let us know if you require any invoices or statements. Thank you!`;
+        var waMsg = `Namaste ${c.n},\nGreeting from Durga Sarees!\nKindly let us know if you require any invoices or statements. Thank you!`;
         var waPhone = (c.p && c.p.length === 10) ? ('91' + c.p) : (c.p || '');
 
         var codeSafe = encodeURIComponent(c.c);
@@ -11997,7 +12024,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         html += `
         <div id="${cardId}" style="border:1px solid #e5e7eb; border-radius:10px; background:#fff; padding:12px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
           
-          <!-- Top Row: Name, Balance & Click to View Reports -->
+          <!-- Top Row: Name, Station, Agent & View Action (NO BALANCE SHOWN) -->
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; cursor:pointer;" onclick="window.openCustomerReportsModal(decodeURIComponent('${codeSafe}'))">
             <div style="flex:1;">
               <div style="font-weight:bold; font-size:14px; color:var(--text-main); line-height:1.3;">
@@ -12005,14 +12032,14 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
               </div>
               <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
                 ${locDisplay ? `<span style="font-size:11px; color:#64748b;"><i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${locDisplay}</span>` : ''}
+                ${c.ag ? `<span style="font-size:10px; font-weight:600; color:#475569; background:#f1f5f9; padding:1px 5px; border-radius:3px;"><i class="fas fa-user-tie"></i> ${escHtml(c.ag)}</span>` : ''}
                 ${c.g ? `<span style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 5px; border-radius:3px;">GST: ${escHtml(c.g)}</span>` : ''}
                 ${c.pb > 0 ? `<span style="font-size:10px; font-weight:700; color:#be185d; background:#fdf2f8; border:1px solid #fbcfe8; padding:1px 5px; border-radius:3px;"><i class="fas fa-file-invoice"></i> ${c.pb} Due</span>` : ''}
               </div>
             </div>
-            <div style="text-align:right; min-width:85px;">
-              <div style="font-size:9px; color:#6b7280; text-transform:uppercase; font-weight:600;">Balance</div>
-              <div style="display:inline-block; font-size:12px; font-weight:bold; color:${balBadgeColor}; background:${balBg}; padding:2px 7px; border-radius:5px; margin-top:2px;">
-                ${balText}
+            <div style="text-align:right;">
+              <div style="display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:bold; color:var(--myntra-pink); background:#fdf2f8; border:1px solid #fbcfe8; padding:3px 8px; border-radius:6px;">
+                <i class="fas fa-chart-line"></i> View
               </div>
             </div>
           </div>
@@ -12164,6 +12191,10 @@ window.openCustomerReportsModal = async function (partyCode) {
     if (fromEl) fromEl.value = fromStr;
     if (toEl) toEl.value = toStr;
 
+    // Default firm to Durga Sarees (DS)
+    var firmSel = document.getElementById('custRepFirmSelect');
+    if (firmSel) firmSel.value = 'DS';
+
     // Set Default Tab to Finish Sales & Transport
     window.switchCustomerReportTab('sales');
 };
@@ -12196,6 +12227,12 @@ window.switchCustomerReportTab = function (tabName) {
             }
         }
     });
+
+    // Firm selector: show on Ledger (default Durga Sarees), hide on Outstanding (OS shows all firms together)
+    var firmWrapper = document.getElementById('custRepFirmWrapper');
+    if (firmWrapper) {
+        firmWrapper.style.display = (tabName === 'ledger') ? 'flex' : 'none';
+    }
 
     var fromEl = document.getElementById('repFromDate');
     var toEl = document.getElementById('repToDate');
@@ -12600,11 +12637,13 @@ window.renderCustomerReportActiveTab = async function () {
 
         osList.forEach((r, idx) => {
             var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r.bno)}')"` ;
+            var frmBadge = (r.f && r.f !== 'DS') ? `<span style="font-size:9px; background:#e2e8f0; color:#334155; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.f)}</span>` : '';
+            var crBadge = (r.pamt < 0 || String(r.bno || '').includes('GR-')) ? `<span style="background:#fef08a; color:#854d0e; font-size:9px; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">CR NOTE</span>` : '';
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
               <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.dt)}</td>
               <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
-                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r.bno)}
+                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r.bno)}${frmBadge}${crBadge}
               </td>
               <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r.bamt ? r.bamt.toFixed(2) : '0.00'}</td>
               <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.ret ? r.ret.toFixed(2) : '0.00'}</td>
@@ -12644,6 +12683,8 @@ window.renderCustomerReportActiveTab = async function () {
     // 📒 REPORT 3: LEDGER STATEMENT (Image 5)
     // ==========================================
     if (activeTab === 'ledger') {
+        var firmFilter = document.getElementById('custRepFirmSelect') ? document.getElementById('custRepFirmSelect').value : 'DS';
+
         var rawLdList = partyRep.ledger || partyRep.ld || [];
         var allLd = rawLdList.map(r => {
             if (Array.isArray(r)) {
@@ -12656,9 +12697,13 @@ window.renderCustomerReportActiveTab = async function () {
                     cr: parseFloat(r[5]) || 0,
                     bal: r[6] !== undefined ? parseFloat(r[6]) : undefined,
                     vno: r[7] || '',
-                    rmk: r[8] || ''
+                    rmk: r[8] || '',
+                    f: r[9] || 'DS'
                 };
             }
+            var frm = r.f || r.frm || (r.cno === '2' ? 'R.F' : (r.cno === '1' ? 'DSPL' : 'DS'));
+            if (!r.f && r.vno === '26' && (r.d === '2026-04-01' || r.date === '2026-04-01')) frm = 'R.F';
+            if (!r.f && r.vno === '27' && (r.d === '2026-04-01' || r.date === '2026-04-01')) frm = 'DS';
             return {
                 d: r.d || r.dt || r.date || '',
                 v: r.v || r.docno || r.vno || r.bill || '',
@@ -12668,9 +12713,15 @@ window.renderCustomerReportActiveTab = async function () {
                 cr: parseFloat(r.cr || r.cramt || 0),
                 bal: r.bal !== undefined ? parseFloat(r.bal) : undefined,
                 vno: r.vno || r.v || '',
-                rmk: r.rmk || r.r || ''
+                rmk: r.rmk || r.r || '',
+                f: frm || 'DS'
             };
         });
+
+        // Filter by firm if not ALL (Default is Durga Sarees 'DS')
+        if (firmFilter && firmFilter !== 'ALL') {
+            allLd = allLd.filter(r => (r.f === firmFilter) || (!r.f && firmFilter === 'DS'));
+        }
 
         // Sort chronologically ascending so running balance and ledger flow are accurate
         allLd.sort((a, b) => (a.d || '').localeCompare(b.d || ''));
@@ -13059,47 +13110,89 @@ window.shareReportPDF = async function () {
     }
 
     try {
-        if (window.jspdf && window.jspdf.jsPDF && typeof html2canvas === 'function') {
-            var canvas = await html2canvas(printContent, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff'
-            });
-
-            var imgData = canvas.toDataURL('image/jpeg', 0.95);
+        if (window.jspdf && window.jspdf.jsPDF) {
             var { jsPDF } = window.jspdf;
+            if (typeof jsPDF.API.autoTable !== 'function' && window.jspdfAutoTable && window.jspdfAutoTable.applyPlugin) {
+                window.jspdfAutoTable.applyPlugin(jsPDF);
+            }
+
             var pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-            var pdfW = pdf.internal.pageSize.getWidth();
-            var pdfH = pdf.internal.pageSize.getHeight();
-            var margin = 20;
-            var maxW = pdfW - (margin * 2);
-            var maxH = pdfH - (margin * 2);
+            var pageW = pdf.internal.pageSize.getWidth();
+            var pageH = pdf.internal.pageSize.getHeight();
 
-            var imgW = maxW;
-            var imgH = (canvas.height * imgW) / canvas.width;
+            // 1. Red Header Banner
+            var bannerTitle = (activeTab === 'outstanding')
+                ? 'OUTSTANDING REPORT -- COMPANY: DURGA SAREES'
+                : (activeTab === 'ledger' ? 'LEDGER STATEMENT -- COMPANY: DURGA SAREES' : 'FINISH SALES DETAILS REPORT -- COMPANY: DURGA SAREES');
 
-            if (imgH <= maxH) {
-                pdf.addImage(imgData, 'JPEG', margin, margin, imgW, imgH);
-            } else {
-                var pageH = Math.floor((canvas.width * maxH) / maxW);
-                var srcY = 0;
-                var pageIndex = 0;
-                while (srcY < canvas.height) {
-                    if (pageIndex > 0) pdf.addPage();
-                    var sliceH = Math.min(pageH, canvas.height - srcY);
-                    var pageCanvas = document.createElement('canvas');
-                    pageCanvas.width = canvas.width;
-                    pageCanvas.height = sliceH;
-                    var pageCtx = pageCanvas.getContext('2d');
-                    pageCtx.fillStyle = '#ffffff';
-                    pageCtx.fillRect(0, 0, pageCanvas.width, sliceH);
-                    pageCtx.drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-                    var pageImg = pageCanvas.toDataURL('image/jpeg', 0.95);
-                    var renderH = (sliceH * maxW) / canvas.width;
-                    pdf.addImage(pageImg, 'JPEG', margin, margin, maxW, renderH);
-                    srcY += pageH;
-                    pageIndex++;
-                }
+            pdf.setFillColor(185, 28, 28);
+            pdf.rect(15, 12, pageW - 30, 20, 'F');
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFontSize(10.5);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(bannerTitle, pageW / 2, 25.5, { align: 'center' });
+
+            // 2. Party & Date Sub-header
+            pdf.setFillColor(254, 242, 242);
+            pdf.rect(15, 32, pageW - 30, 26, 'F');
+            pdf.setDrawColor(254, 202, 202);
+            pdf.rect(15, 32, pageW - 30, 26, 'S');
+
+            pdf.setTextColor(153, 27, 27);
+            pdf.setFontSize(8.5);
+            pdf.setFont('helvetica', 'bold');
+            var pLine1 = `PARTY: ${cust ? (cust.n || cust.c) : 'Customer'}    PH: ${cust ? (cust.p || 'N/A') : 'N/A'}    CITY: ${cust ? (cust.ct || 'N/A') : 'N/A'}    GST: ${cust ? (cust.g || 'N/A') : 'N/A'}`;
+            pdf.text(pLine1, 22, 44);
+
+            pdf.setFont('helvetica', 'normal');
+            pdf.setTextColor(71, 85, 105);
+            var fromDate = document.getElementById('repFromDate') ? document.getElementById('repFromDate').value : '';
+            var toDate = document.getElementById('repToDate') ? document.getElementById('repToDate').value : '';
+            var dtRange = (fromDate || toDate) ? `Dates: ${fromDate || '2026-04-01'} to ${toDate || 'Current'}` : 'All Dates';
+            var pLine2 = `ADDR: ${cust ? (cust.a || cust.ct || 'N/A') : 'N/A'}    |    ${dtRange}    |    Generated on: ${new Date().toLocaleDateString('en-IN')}`;
+            pdf.text(pLine2, 22, 53.5);
+
+            // 3. Fast Vector Table (Instant <100ms, under 100KB, all columns fit perfectly)
+            var tableEl = document.querySelector('#erpReportPrintWrapper table');
+            if (tableEl && typeof pdf.autoTable === 'function') {
+                pdf.autoTable({
+                    html: tableEl,
+                    startY: 62,
+                    margin: { left: 15, right: 15, top: 15, bottom: 22 },
+                    theme: 'grid',
+                    styles: {
+                        fontSize: 6.5,
+                        cellPadding: 2,
+                        font: 'helvetica',
+                        textColor: [30, 41, 59],
+                        lineColor: [203, 213, 225],
+                        lineWidth: 0.5,
+                        overflow: 'linebreak'
+                    },
+                    headStyles: {
+                        fillColor: [241, 245, 249],
+                        textColor: [51, 65, 85],
+                        fontStyle: 'bold',
+                        fontSize: 6.8
+                    },
+                    footStyles: {
+                        fillColor: (activeTab === 'outstanding') ? [254, 226, 226] : [241, 245, 249],
+                        textColor: (activeTab === 'outstanding') ? [153, 27, 27] : [30, 41, 59],
+                        fontStyle: 'bold',
+                        fontSize: 7
+                    },
+                    didDrawPage: function(data) {
+                        pdf.setFontSize(7);
+                        pdf.setTextColor(148, 163, 184);
+                        pdf.text(`Page ${pdf.internal.getNumberOfPages()} - Durga Sarees`, pageW / 2, pageH - 8, { align: 'center' });
+                    }
+                });
+            } else if (typeof html2canvas === 'function') {
+                var canvas = await html2canvas(printContent, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' });
+                var imgData = canvas.toDataURL('image/jpeg', 0.85);
+                var imgW = pageW - 30;
+                var imgH = (canvas.height * imgW) / canvas.width;
+                pdf.addImage(imgData, 'JPEG', 15, 15, imgW, imgH);
             }
 
             // 1. Native Capacitor Sharing (App on Android & iPhone)

@@ -230,7 +230,8 @@ async function syncAccountingData() {
             t: l.TYPE || '',
             r: l.RFCODE || l.RMK || '',
             dr: dr,
-            cr: cr
+            cr: cr,
+            f: l.FRM || (l.CNO === '2' ? 'R.F' : (l.CNO === '1' ? 'DSPL' : 'DS'))
         });
     });
 
@@ -428,7 +429,8 @@ async function syncAccountingData() {
                     ag: bBroker,
                     ct: b.CITY || '',
                     tr: b.TR || '',
-                    du: parseInt(b.DUE_DAYS || osDays) || 0
+                    du: parseInt(b.DUE_DAYS || osDays) || 0,
+                    f: b.FRM || (b.CNO === '2' ? 'R.F' : (b.CNO === '1' ? 'DSPL' : 'DS'))
                 });
                 if (bBroker && !agentByParty.has(code)) {
                     agentByParty.set(code, String(bBroker).trim());

@@ -588,10 +588,11 @@
     </div>
   </div>
 
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="./jspdf.umd.min.js"></script>
+  <script src="./jspdf.plugin.autotable.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=3"></script>
-  <script src="./app.js?v=31"></script>
+  <script src="./app.js?v=32"></script>
   <script src="./sticker_editor.js?v=12"></script>
 
   <div id="adminCameraPreviewModal"
@@ -826,6 +827,18 @@
           style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; outline:none;">
       </div>
 
+      <!-- Station & Agent Filters -->
+      <div style="display:flex; gap:6px; margin-bottom:8px;">
+        <select id="custStationFilter" onchange="window.renderCustomerDirectoryUI()"
+          style="flex:1; padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px; font-size:11px; background:#fff; color:#334155; outline:none;">
+          <option value="">All Stations</option>
+        </select>
+        <select id="custAgentFilter" onchange="window.renderCustomerDirectoryUI()"
+          style="flex:1; padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px; font-size:11px; background:#fff; color:#334155; outline:none;">
+          <option value="">All Agents</option>
+        </select>
+      </div>
+
       <!-- Quick Filter Chips -->
       <div style="display:flex; gap:6px; margin-bottom:10px; overflow-x:auto;">
         <button type="button" class="cust-filter-chip active" id="chipCustAll" onclick="window.setCustDirectoryFilter('all')"
@@ -947,6 +960,17 @@
             style="background:#fff; border:1px solid #cbd5e1; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">
             All
           </button>
+        </div>
+        <!-- Firm Selector for Ledger & Reports -->
+        <div id="custRepFirmWrapper" style="display:flex; align-items:center; gap:4px; margin-left:auto;">
+          <span style="font-size:10px; font-weight:bold; color:#475569;">Firm:</span>
+          <select id="custRepFirmSelect" onchange="window.renderCustomerReportActiveTab()"
+            style="padding:2px 6px; border:1px solid #cbd5e1; border-radius:4px; font-size:10px; background:#fff; color:#1e293b; font-weight:600; outline:none;">
+            <option value="DS" selected>Durga Sarees (DS)</option>
+            <option value="ALL">All Firms</option>
+            <option value="R.F">Radha Fabric (R.F)</option>
+            <option value="DSPL">DSPL</option>
+          </select>
         </div>
       </div>
 
