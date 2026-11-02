@@ -12229,10 +12229,8 @@ window.setReportDatePreset = function (preset) {
         fromEl.value = '2026-04-01';
         toEl.value = '2027-03-31';
     } else if (preset === 'month') {
-        var now = new Date();
-        var y = now.getFullYear();
-        var m = String(now.getMonth() + 1).padStart(2, '0');
-        fromEl.value = `${y}-${m}-01`;
+        var dPast = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
+        fromEl.value = dPast.toISOString().slice(0, 10);
         toEl.value = today;
     } else if (preset === 'all') {
         fromEl.value = '';
@@ -12396,11 +12394,39 @@ window.renderCustomerReportActiveTab = async function () {
               <tbody>
         `;
 
+        var pendingBillsMap = new Map();
+        (partyRep.outstanding || partyRep.os || []).forEach(o => {
+            var bno = String(o.bno || o.bill || (Array.isArray(o) ? o[1] : '') || '').trim();
+            if (bno) {
+                var days = parseInt(o.du !== undefined ? o.du : (o.days || (Array.isArray(o) ? o[7] : 0))) || 0;
+                pendingBillsMap.set(bno, days);
+            }
+        });
+
         fsList.forEach((r, idx) => {
             var isFirst = (r[17] === true || r[17] === undefined);
             var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r[1])}')"`;
-            var isOs = String(r[11] || '').includes('O/S');
-            var daysColor = isOs ? '#dc2626' : '#16a34a';
+            var billNo = String(r[1] || '').trim();
+            var billDt = r[0] || '';
+            var isUnpaid = pendingBillsMap.has(billNo);
+            if (!isUnpaid && r[11]) {
+                var rawDt = String(r[11]).toLowerCase();
+                if (rawDt === 'os' || rawDt.includes('due') || rawDt.includes('o/s')) {
+                    isUnpaid = true;
+                }
+            }
+
+            var daysBadge = '';
+            if (isUnpaid) {
+                var unpDays = pendingBillsMap.get(billNo);
+                if (!unpDays && billDt) {
+                    var diff = Date.now() - new Date(billDt).getTime();
+                    if (!isNaN(diff) && diff > 0) unpDays = Math.floor(diff / (1000 * 60 * 60 * 24));
+                }
+                daysBadge = `<span style="font-weight:bold; color:#dc2626; background:#fee2e2; padding:2px 6px; border-radius:4px; font-size:10px;">${unpDays || 0} Days</span>`;
+            } else {
+                daysBadge = `<span style="font-weight:bold; color:#16a34a; background:#dcfce7; padding:2px 6px; border-radius:4px; font-size:10px;">Paid</span>`;
+            }
 
             var dateCell = isFirst ? escHtml(r[0]) : '';
             var billCell = isFirst ? `
@@ -12408,7 +12434,7 @@ window.renderCustomerReportActiveTab = async function () {
                 <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r[1])}
               </span>` : '';
             var billAmtCell = isFirst ? (r[10] ? Math.round(r[10]).toLocaleString('en-IN') : '-') : '';
-            var daysCell = isFirst ? `<span style="font-weight:bold; color:${daysColor};">${escHtml(r[11])}</span>` : '';
+            var daysCell = isFirst ? daysBadge : '';
             var trnCell = isFirst ? escHtml(r[12]) : '';
             var lrCell = isFirst ? `<span style="font-weight:600; color:#0369a1;">${escHtml(r[13])}</span>` : '';
             var destCell = isFirst ? escHtml(r[14]) : '';
@@ -12649,20 +12675,32 @@ window.renderCustomerReportActiveTab = async function () {
         // Sort chronologically ascending so running balance and ledger flow are accurate
         allLd.sort((a, b) => (a.d || '').localeCompare(b.d || ''));
 
-        // If fromDate is set, compute opening balance from entries prior to fromDate
-        var priorDr = 0, priorCr = 0;
-        var ldList = [];
+        // Consolidate opening balance entries if multiple exist on the start date (e.g. from DS and R.F)
+        var openingEntries = [];
+        var transactionEntries = [];
         allLd.forEach(r => {
-            if (fromDate && r.d && r.d < fromDate) {
-                priorDr += (r.dr || 0);
-                priorCr += (r.cr || 0);
-            } else if (!toDate || !r.d || r.d <= toDate) {
-                ldList.push(r);
+            var isOpening = (r.r && r.r.toUpperCase().includes('OPENING')) || (r.d === '2026-04-01' && (r.t === '00' || !r.v));
+            if (isOpening) {
+                openingEntries.push(r);
+            } else {
+                transactionEntries.push(r);
             }
         });
 
-        var opBal = priorDr - priorCr;
-        if (fromDate && (priorDr > 0 || priorCr > 0 || opBal !== 0)) {
+        var ldList = [];
+        if (fromDate && fromDate > '2026-04-01') {
+            // User picked a custom date range later in the year: sum all prior transactions into Opening Balance B/F
+            var priorDr = 0, priorCr = 0;
+            openingEntries.forEach(r => { priorDr += (r.dr || 0); priorCr += (r.cr || 0); });
+            transactionEntries.forEach(r => {
+                if (r.d && r.d < fromDate) {
+                    priorDr += (r.dr || 0);
+                    priorCr += (r.cr || 0);
+                } else if (!toDate || !r.d || r.d <= toDate) {
+                    ldList.push(r);
+                }
+            });
+            var opBal = priorDr - priorCr;
             ldList.unshift({
                 d: fromDate,
                 v: 'OP-BAL',
@@ -12673,6 +12711,29 @@ window.renderCustomerReportActiveTab = async function () {
                 bal: opBal,
                 vno: '',
                 rmk: 'Balance brought forward'
+            });
+        } else {
+            // Standard financial year view: merge multiple opening balance rows into ONE consolidated opening balance
+            var opDr = 0, opCr = 0;
+            openingEntries.forEach(r => { opDr += (r.dr || 0); opCr += (r.cr || 0); });
+            var netOpBal = opDr - opCr;
+            if (openingEntries.length > 0) {
+                ldList.push({
+                    d: '2026-04-01',
+                    v: '',
+                    t: 'OB',
+                    r: 'OPENING BALANCE',
+                    dr: netOpBal > 0 ? netOpBal : 0,
+                    cr: netOpBal < 0 ? Math.abs(netOpBal) : 0,
+                    bal: netOpBal,
+                    vno: '',
+                    rmk: openingEntries.length > 1 ? 'Consolidated' : (openingEntries[0].rmk || '')
+                });
+            }
+            transactionEntries.forEach(r => {
+                if (!toDate || !r.d || r.d <= toDate) {
+                    ldList.push(r);
+                }
             });
         }
 
@@ -12970,16 +13031,32 @@ window.shareBillWhatsApp = function () {
 // Share Active Customer Report as PDF (Landscape Format)
 window.shareReportPDF = async function () {
     var printContent = document.getElementById('erpReportPrintWrapper');
-    if (!printContent) return;
+    if (!printContent) {
+        alert("Report content is still loading. Please wait a moment and try again.");
+        return;
+    }
 
     var cust = window._currentReportingCustomer;
     var custName = (cust && cust.n) ? cust.n.replace(/[^a-zA-Z0-9]/g, '_') : 'Customer';
     var activeTab = window._activeCustomerReportTab || 'report';
     var fileName = `DurgaSarees_${activeTab}_${custName}.pdf`;
 
-    var btn = event ? (event.currentTarget || event.target) : null;
+    var btn = window.event ? (window.event.currentTarget || window.event.target) : null;
     var oldText = btn ? btn.innerHTML : '';
-    if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sharing...';
+    if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+
+    // Synchronously open window for iOS Safari in browser before async await
+    var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    var isIOSBrowser = !isNative && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+    var preOpenedWindow = null;
+    if (isIOSBrowser) {
+        try {
+            preOpenedWindow = window.open('', '_blank');
+            if (preOpenedWindow) {
+                preOpenedWindow.document.write('<!DOCTYPE html><html><body style="font-family:sans-serif; text-align:center; padding:50px; background:#f8fafc;"><div style="color:#be185d; font-size:18px; font-weight:bold; margin-bottom:8px;">Generating Report PDF...</div><div style="color:#64748b; font-size:13px;">Please wait, opening in a moment.</div></body></html>');
+            }
+        } catch(e){}
+    }
 
     try {
         if (window.jspdf && window.jspdf.jsPDF && typeof html2canvas === 'function') {
@@ -13025,16 +13102,46 @@ window.shareReportPDF = async function () {
                 }
             }
 
+            // 1. Native Capacitor Sharing (App on Android & iPhone)
+            var fsPlugin = isNative ? (window.CapacitorFilesystem || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem)) : null;
+            var sharePlugin = isNative ? (window.CapacitorShare || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share)) : null;
+            if (isNative && fsPlugin && sharePlugin) {
+                try {
+                    var pureBase64 = pdf.output('datauristring').split(',')[1];
+                    var writeResult = await fsPlugin.writeFile({
+                        path: fileName,
+                        data: pureBase64,
+                        directory: "CACHE"
+                    });
+                    await sharePlugin.share({
+                        title: `Durga Sarees - ${activeTab.toUpperCase()}`,
+                        text: `Attached ERP Report (${activeTab.toUpperCase()}) for ${cust ? cust.n : ''}`,
+                        files: [writeResult.uri]
+                    });
+                    if (btn) btn.innerHTML = oldText;
+                    return;
+                } catch(natErr) {
+                    console.warn("Capacitor native share error:", natErr);
+                }
+            }
+
             var pdfBlob = pdf.output('blob');
-            var pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
             var blobUrl = URL.createObjectURL(pdfBlob);
 
-            // 1. Try Web Share API with File
+            // 2. iOS Safari in browser: load into pre-opened window
+            if (preOpenedWindow && !preOpenedWindow.closed) {
+                preOpenedWindow.location.href = blobUrl;
+                if (btn) btn.innerHTML = oldText;
+                return;
+            }
+
+            // 3. Web Share API with File
+            var pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
             if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
                 try {
                     await navigator.share({
                         title: `Durga Sarees - ${activeTab.toUpperCase()} (${cust ? cust.n : ''})`,
-                        text: `Attached ERP Report (${activeTab}) for ${cust ? cust.n : ''}`,
+                        text: `Attached ERP Report (${activeTab.toUpperCase()}) for ${cust ? cust.n : ''}`,
                         files: [pdfFile]
                     });
                     if (btn) btn.innerHTML = oldText;
@@ -13048,18 +13155,7 @@ window.shareReportPDF = async function () {
                 }
             }
 
-            // 2. iOS Safari / WebKit fallback: Open PDF in new tab (displays native iOS share sheet)
-            var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-            if (isIOS) {
-                var newWin = window.open(blobUrl, '_blank');
-                if (!newWin) {
-                    window.location.href = blobUrl;
-                }
-                if (btn) btn.innerHTML = oldText;
-                return;
-            }
-
-            // 3. Android / Desktop fallback: Trigger download
+            // 4. Desktop / Web browser download fallback
             var dlLink = document.createElement('a');
             dlLink.href = blobUrl;
             dlLink.download = fileName;
@@ -13076,6 +13172,7 @@ window.shareReportPDF = async function () {
         console.warn("jsPDF html2canvas error, using print fallback:", e);
     }
 
+    if (preOpenedWindow && !preOpenedWindow.closed) preOpenedWindow.close();
     if (btn) btn.innerHTML = oldText;
     window.printActiveCustomerReport();
 };
