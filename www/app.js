@@ -6232,17 +6232,14 @@ function renderCustomerDetails(d, container) {
                 <div style="font-size:14px; color:var(--text-main); font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                     <i class="fas fa-store" style="color:var(--myntra-pink); margin-right:4px;"></i> ${esc(primaryName)}
                 </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px 8px; margin-top:6px; font-size:11px; color:#334155;">
+                <div style="display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:5px; font-size:11px; color:#334155; line-height:1.4;">
                     <div><span style="color:#64748b;">📍 Station:</span> <b>${esc(stationText)}</b></div>
                     <div><span style="color:#64748b;">🚚 Transport:</span> <b>${esc(transportText)}</b></div>
                     <div><span style="color:#64748b;">🤝 Agent:</span> <b>${esc(agentText)}</b></div>
                     <div><span style="color:#64748b;">📋 GST:</span> <b>${esc(gstText)}</b></div>
                 </div>
             </div>
-            <button type="button" onclick="openCustomerDetailsModal()" 
-                style="background:#fdf2f8; color:var(--myntra-pink); border:1px solid #fbcfe8; padding:5px 9px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:4px; flex-shrink:0;">
-                <i class="fas fa-edit"></i> Edit
-            </button>
+            <i class="fas fa-edit" onclick="openCustomerDetailsModal()" style="cursor:pointer; color:var(--myntra-pink); font-size:18px; padding:4px;" title="Edit Customer Details"></i>
         </div>
     `;
     container.innerHTML = html;
@@ -12200,6 +12197,16 @@ window.switchCustomerReportTab = function (tabName) {
         }
     });
 
+    var fromEl = document.getElementById('repFromDate');
+    var toEl = document.getElementById('repToDate');
+    var today = new Date().toISOString().slice(0, 10);
+
+    // When switching to Ledger, ensure full financial year is displayed
+    if (tabName === 'ledger' && fromEl && fromEl.value && fromEl.value > '2026-04-01') {
+        fromEl.value = '2026-04-01';
+        if (toEl) toEl.value = today;
+    }
+
     window.renderCustomerReportActiveTab();
 };
 
@@ -12498,7 +12505,12 @@ window.renderCustomerReportActiveTab = async function () {
                 ct: r.ct || r.city || r.dest || '',
                 ag: r.ag || r.agent || r.broker || ''
             };
-        }).filter(r => dateInRange(r.dt));
+        });
+
+        // Outstanding bills represent all active pending amounts. Only filter by 'To' date if set:
+        if (toDate) {
+            osList = osList.filter(r => !r.dt || r.dt <= toDate);
+        }
 
         // Sort descending by bill date (latest bills first)
         osList.sort((a, b) => (b.dt || '').localeCompare(a.dt || ''));
@@ -12607,7 +12619,7 @@ window.renderCustomerReportActiveTab = async function () {
     // ==========================================
     if (activeTab === 'ledger') {
         var rawLdList = partyRep.ledger || partyRep.ld || [];
-        var ldList = rawLdList.map(r => {
+        var allLd = rawLdList.map(r => {
             if (Array.isArray(r)) {
                 return {
                     d: r[0] || '',
@@ -12632,10 +12644,37 @@ window.renderCustomerReportActiveTab = async function () {
                 vno: r.vno || r.v || '',
                 rmk: r.rmk || r.r || ''
             };
-        }).filter(r => dateInRange(r.d));
+        });
 
-        // Sort descending by transaction date (latest entries first)
-        ldList.sort((a, b) => (b.d || '').localeCompare(a.d || ''));
+        // Sort chronologically ascending so running balance and ledger flow are accurate
+        allLd.sort((a, b) => (a.d || '').localeCompare(b.d || ''));
+
+        // If fromDate is set, compute opening balance from entries prior to fromDate
+        var priorDr = 0, priorCr = 0;
+        var ldList = [];
+        allLd.forEach(r => {
+            if (fromDate && r.d && r.d < fromDate) {
+                priorDr += (r.dr || 0);
+                priorCr += (r.cr || 0);
+            } else if (!toDate || !r.d || r.d <= toDate) {
+                ldList.push(r);
+            }
+        });
+
+        var opBal = priorDr - priorCr;
+        if (fromDate && (priorDr > 0 || priorCr > 0 || opBal !== 0)) {
+            ldList.unshift({
+                d: fromDate,
+                v: 'OP-BAL',
+                t: 'OB',
+                r: 'OPENING BALANCE B/F',
+                dr: opBal > 0 ? opBal : 0,
+                cr: opBal < 0 ? Math.abs(opBal) : 0,
+                bal: opBal,
+                vno: '',
+                rmk: 'Balance brought forward'
+            });
+        }
 
         if (ldList.length === 0) {
             area.innerHTML = `
@@ -12648,11 +12687,14 @@ window.renderCustomerReportActiveTab = async function () {
         }
 
         var totDr = 0, totCr = 0;
+        var running = 0;
         ldList.forEach(r => {
             totDr += (r.dr || 0);
             totCr += (r.cr || 0);
+            running += ((r.dr || 0) - (r.cr || 0));
+            r.bal = running;
         });
-        var closingBal = totDr - totCr;
+        var closingBal = running;
         var closingBalText = (closingBal !== 0) ? `₹ ${Math.abs(closingBal).toFixed(2)} ${closingBal > 0 ? 'Dr' : 'Cr'}` : '₹ 0.00';
 
         var ldFrom = fmtDate(fromDate || '2026-04-01');
@@ -12985,7 +13027,9 @@ window.shareReportPDF = async function () {
 
             var pdfBlob = pdf.output('blob');
             var pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+            var blobUrl = URL.createObjectURL(pdfBlob);
 
+            // 1. Try Web Share API with File
             if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
                 try {
                     await navigator.share({
@@ -13004,8 +13048,27 @@ window.shareReportPDF = async function () {
                 }
             }
 
-            // Fallback to direct download
-            pdf.save(fileName);
+            // 2. iOS Safari / WebKit fallback: Open PDF in new tab (displays native iOS share sheet)
+            var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            if (isIOS) {
+                var newWin = window.open(blobUrl, '_blank');
+                if (!newWin) {
+                    window.location.href = blobUrl;
+                }
+                if (btn) btn.innerHTML = oldText;
+                return;
+            }
+
+            // 3. Android / Desktop fallback: Trigger download
+            var dlLink = document.createElement('a');
+            dlLink.href = blobUrl;
+            dlLink.download = fileName;
+            document.body.appendChild(dlLink);
+            dlLink.click();
+            setTimeout(function () {
+                document.body.removeChild(dlLink);
+            }, 1000);
+
             if (btn) btn.innerHTML = oldText;
             return;
         }
