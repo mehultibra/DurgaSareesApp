@@ -2488,6 +2488,7 @@ function renderProductGrid(products) {
         var bHtml = totalQty > 0 ? `<div class="item-qty-badge" id="badge-${p.id}">${totalQty} in cart</div>` : `<div class="item-qty-badge" id="badge-${p.id}" style="display:none;"></div>`;
 
         var initialImgSrc = window.resolveImageUrlSync(p);
+        var base64Fallback = window.dsMissingImage || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
         var coverFileName = p.coverDesignId ? p.coverDesignId.replace(/\.(webp|jpg|jpeg|png)$/i, '') + '.webp' : '';
 
         htmlBuffer.push(`
