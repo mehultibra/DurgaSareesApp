@@ -465,6 +465,7 @@ async function syncAccountingData() {
                         const code = (f.partyCode && f.partyCode.stringValue) || decodeURIComponent(doc.name.split('/').pop());
                         if (code) {
                             localLinks[code] = Object.assign(localLinks[code] || {}, {
+                                name: f.name ? f.name.stringValue : (localLinks[code] && localLinks[code].name),
                                 phone: f.phone ? f.phone.stringValue : (localLinks[code] && localLinks[code].phone),
                                 transport: f.transport ? f.transport.stringValue : (localLinks[code] && localLinks[code].transport),
                                 agent: f.agent ? f.agent.stringValue : (localLinks[code] && localLinks[code].agent),
@@ -582,6 +583,63 @@ async function syncAccountingData() {
                 role: role
             });
         });
+    });
+
+    // Step 7.1: Include and preserve any app-created contacts (e.g. codes starting with APP_) from localLinks
+    Object.keys(localLinks).forEach(code => {
+        if (!code.startsWith('APP_')) return;
+        const link = localLinks[code];
+        if (!link || !link.name) return;
+        const pClean = String(link.phone || '').replace(/\D/g, '').slice(-10);
+        const role = (link.role === 'agent' || link.isAgent) ? 'agent' : 'customer';
+        const finalState = link.state || '';
+        const finalAgent = link.agent || '';
+        if (finalState) uniqueStates.add(finalState);
+        if (finalAgent) uniqueAgents.add(finalAgent);
+
+        const summaryObj = {
+            code: code,
+            name: link.name,
+            nameUpper: String(link.name).trim().toUpperCase(),
+            phone: pClean,
+            phones: pClean ? [pClean] : [],
+            station: link.station || '',
+            state: finalState,
+            agent: finalAgent,
+            transport: link.transport || '',
+            gst: link.gst || '',
+            role: role,
+            balance: 0,
+            drCr: '',
+            absBalance: 0,
+            pendingBillsCount: 0,
+            hasOutstanding: false,
+            totalSalesDr: 0,
+            totalSalesCr: 0,
+            updatedAt: nowIso
+        };
+        customers.push(summaryObj);
+
+        if (pClean && pClean.length === 10) {
+            if (!phoneDirectoryMap[pClean]) {
+                phoneDirectoryMap[pClean] = {
+                    phone: pClean,
+                    primaryRole: role,
+                    matchedAccounts: [],
+                    updatedAt: nowIso
+                };
+            }
+            phoneDirectoryMap[pClean].matchedAccounts.push({
+                code: code,
+                name: link.name,
+                station: link.station || '',
+                state: finalState,
+                agent: finalAgent,
+                transport: link.transport || '',
+                gst: link.gst || '',
+                role: role
+            });
+        }
     });
 
     // Step 8: Dashboard Meta Document

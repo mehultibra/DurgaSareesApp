@@ -1426,6 +1426,11 @@ function initApp() {
         if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
         if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
         if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
+        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+            setTimeout(function () {
+                if (typeof window.startAutomaticContactSync === 'function') window.startAutomaticContactSync();
+            }, 3000);
+        }
     }
     var bootScreen = document.getElementById('boot');
     if (typeof window.processCameraOutbox === 'function') {
@@ -11811,6 +11816,11 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
         console.warn("Could not load AccountingCustomers from Firestore:", e);
     }
 
+    if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform()) {
+        setTimeout(function () {
+            if (typeof window.startAutomaticContactSync === 'function') window.startAutomaticContactSync();
+        }, 800);
+    }
     if (syncIcon) syncIcon.classList.remove('fa-spin');
 };
 
@@ -12084,6 +12094,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                   <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
                 </a>
               ` : `<span style="font-size:11px; color:#9ca3af; font-style:italic;">No phone</span>`}
+              <button type="button" onclick="event.stopPropagation(); window.openAddEditPartyContactModal(decodeURIComponent('${codeSafe}'))" style="display:inline-flex; align-items:center; gap:3px; background:#f1f5f9; color:#475569; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #cbd5e1; cursor:pointer;" title="Edit Contact"><i class="fas fa-edit" style="color:#64748b; font-size:10px;"></i> Edit</button>
             </div>
 
             <!-- Prominent View Reports Button -->
@@ -12199,6 +12210,7 @@ window.openCustomerReportsModal = async function (partyCode) {
         } else {
             actHtml += `<span style="font-size:11px; color:#94a3b8; font-style:italic;">No phone on record</span>`;
         }
+        actHtml += `<button type="button" onclick="window.openAddEditPartyContactModal(decodeURIComponent('${encodeURIComponent(cust.c)}'))" style="display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; color:#475569; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #cbd5e1; cursor:pointer;"><i class="fas fa-user-edit" style="color:#64748b; font-size:10px;"></i> Edit Contact</button>`;
         actionsEl.innerHTML = actHtml;
     }
 
@@ -13823,3 +13835,603 @@ if (document.readyState === 'loading') {
     setTimeout(window.updateOrderOnBehalfBanner, 100);
 }
 
+
+
+// ===================================================================
+// 📱 100% AUTOMATIC REAL-TIME NATIVE CONTACT SYNC ENGINE (ADMIN ONLY)
+// ===================================================================
+window.CONTACTS_DB_NAME = 'ds_contacts_db';
+window.CONTACTS_STORE_NAME = 'ds_native_contacts_store';
+window._isSyncingContacts = false;
+window._devicePhonebookIndexed = false;
+
+window.openContactsIndexedDB = function () {
+    return new Promise(function (resolve, reject) {
+        if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB not supported'));
+        var req = indexedDB.open(window.CONTACTS_DB_NAME, 1);
+        req.onupgradeneeded = function (e) {
+            var db = e.target.result;
+            if (!db.objectStoreNames.contains(window.CONTACTS_STORE_NAME)) {
+                var store = db.createObjectStore(window.CONTACTS_STORE_NAME, { keyPath: 'code' });
+                store.createIndex('phone10', 'phone10', { unique: false });
+            }
+        };
+        req.onsuccess = function (e) { resolve(e.target.result); };
+        req.onerror = function (e) { reject(e.target.error); };
+    });
+};
+
+window.getAllContactSyncRecords = async function () {
+    try {
+        var db = await window.openContactsIndexedDB();
+        return new Promise(function (resolve) {
+            var tx = db.transaction(window.CONTACTS_STORE_NAME, 'readonly');
+            var store = tx.objectStore(window.CONTACTS_STORE_NAME);
+            var req = store.getAll();
+            req.onsuccess = function () {
+                var map = new Map();
+                (req.result || []).forEach(function (r) { if (r && r.code) map.set(r.code, r); });
+                resolve(map);
+            };
+            req.onerror = function () { resolve(new Map()); };
+        });
+    } catch (e) {
+        return new Map();
+    }
+};
+
+window.saveContactSyncRecord = async function (record) {
+    try {
+        var db = await window.openContactsIndexedDB();
+        return new Promise(function (resolve) {
+            var tx = db.transaction(window.CONTACTS_STORE_NAME, 'readwrite');
+            var store = tx.objectStore(window.CONTACTS_STORE_NAME);
+            store.put(record);
+            tx.oncomplete = function () { resolve(true); };
+            tx.onerror = function () { resolve(false); };
+        });
+    } catch (e) {
+        return false;
+    }
+};
+
+window.saveContactSyncRecordsBatch = async function (records) {
+    if (!records || !records.length) return true;
+    try {
+        var db = await window.openContactsIndexedDB();
+        return new Promise(function (resolve) {
+            var tx = db.transaction(window.CONTACTS_STORE_NAME, 'readwrite');
+            var store = tx.objectStore(window.CONTACTS_STORE_NAME);
+            records.forEach(function (r) { store.put(r); });
+            tx.oncomplete = function () { resolve(true); };
+            tx.onerror = function () { resolve(false); };
+        });
+    } catch (e) {
+        return false;
+    }
+};
+
+window.getNativeContactsPlugin = function () {
+    if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) {
+        return null;
+    }
+    return window.CapacitorContacts || (window.Capacitor.Plugins && (window.Capacitor.Plugins.CapacitorContacts || window.Capacitor.Plugins.Contacts)) || null;
+};
+
+window.ensureContactPermissions = async function (plugin) {
+    try {
+        if (!plugin || typeof plugin.checkPermissions !== 'function') return false;
+        var status = await plugin.checkPermissions();
+        var isGranted = (status && (status.writeContacts === 'granted' || status.readContacts === 'granted'));
+        if (!isGranted && typeof plugin.requestPermissions === 'function') {
+            status = await plugin.requestPermissions();
+            isGranted = (status && (status.writeContacts === 'granted' || status.readContacts === 'granted'));
+        }
+        return Boolean(isGranted);
+    } catch (e) {
+        console.warn("Contact permission check failed:", e);
+        return false;
+    }
+};
+
+window.buildContactPayload = function (party) {
+    var cleanPhone = String(party.phone || party.p || '').replace(/\D/g, '').slice(-10);
+    var partyName = (party.name || party.n || party.firm || '').trim();
+    var station = (party.station || party.ct || party.city || '').trim();
+    var agent = (party.agent || party.ag || '').trim();
+    var transport = (party.transport || party.tr || '').trim();
+    var gst = (party.gst || party.g || '').trim();
+    var code = (party.code || party.c || '').trim();
+
+    var givenName = station ? `${partyName} (${station})` : partyName;
+    var familyName = "DS";
+    var orgName = `Agent: ${agent || 'DIRECT'} | Trans: ${transport || 'N/A'}`;
+    var noteStr = `ERP:${code} | GST:${gst || 'N/A'}`;
+    var fullPhone = `+91${cleanPhone}`;
+
+    return {
+        givenName: givenName,
+        familyName: familyName,
+        organizationName: orgName,
+        note: noteStr,
+        phoneNumbers: [{ type: 'MOBILE', value: fullPhone }],
+        name: { given: givenName, family: familyName },
+        organization: { company: orgName },
+        phones: [{ type: 'mobile', number: fullPhone }]
+    };
+};
+
+window.computeContactHash = function (party) {
+    var p = window.buildContactPayload(party);
+    var str = `${p.givenName}|${p.organizationName}|${p.note}|${p.phoneNumbers[0].value}`;
+    var hash = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        hash = (hash * 0x01000193) >>> 0;
+    }
+    return hash.toString(16);
+};
+
+window.syncSingleContactNative = async function (party) {
+    if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) return null;
+    var plugin = window.getNativeContactsPlugin();
+    if (!plugin) return null;
+    var hasPerm = await window.ensureContactPermissions(plugin);
+    if (!hasPerm) return null;
+
+    var cleanPhone = String(party.phone || party.p || '').replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) return null;
+
+    var payload = window.buildContactPayload(party);
+    var hash = window.computeContactHash(party);
+    var code = String(party.code || party.c || ('APP_' + cleanPhone)).trim();
+
+    var recordsMap = await window.getAllContactSyncRecords();
+    var existingRec = recordsMap.get(code);
+    var targetContactId = existingRec ? existingRec.contactId : null;
+
+    if (!targetContactId && typeof plugin.getContacts === 'function') {
+        try {
+            var devRes = await plugin.getContacts({ projection: { name: true, phones: true } });
+            var devList = (devRes && devRes.contacts) ? devRes.contacts : [];
+            for (var i = 0; i < devList.length; i++) {
+                var dc = devList[i];
+                var phones = dc.phoneNumbers || dc.phones || [];
+                var matched = phones.some(function (ph) {
+                    var v = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
+                    return v === cleanPhone;
+                });
+                if (matched) {
+                    targetContactId = dc.id || dc.contactId;
+                    break;
+                }
+            }
+        } catch (e) {
+            console.warn("Device contact lookup error:", e);
+        }
+    }
+
+    if (targetContactId && typeof plugin.updateContactById === 'function') {
+        try {
+            await plugin.updateContactById({ id: String(targetContactId), contact: payload });
+            var rec = { code: code, contactId: String(targetContactId), phone10: cleanPhone, hash: hash, updatedAt: new Date().toISOString() };
+            await window.saveContactSyncRecord(rec);
+            return rec;
+        } catch (upErr) {
+            console.warn("updateContactById failed, attempting create:", upErr);
+        }
+    }
+
+    if (typeof plugin.createContact === 'function') {
+        try {
+            var res = await plugin.createContact({ contact: payload });
+            var newId = (res && (res.id || res.contactId)) ? String(res.id || res.contactId) : (targetContactId || 'native_synced');
+            var rec2 = { code: code, contactId: newId, phone10: cleanPhone, hash: hash, updatedAt: new Date().toISOString() };
+            await window.saveContactSyncRecord(rec2);
+            return rec2;
+        } catch (crErr) {
+            console.warn("createContact error:", crErr);
+        }
+    }
+    return null;
+};
+
+window.startAutomaticContactSync = async function () {
+    if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) return;
+    if (window._isSyncingContacts) return;
+    window._isSyncingContacts = true;
+
+    var banner = document.getElementById('contactSyncBanner');
+    var bannerText = document.getElementById('contactSyncText');
+    var bannerCount = document.getElementById('contactSyncCount');
+
+    try {
+        var plugin = window.getNativeContactsPlugin();
+        if (!plugin) { window._isSyncingContacts = false; return; }
+        var hasPerm = await window.ensureContactPermissions(plugin);
+        if (!hasPerm) { window._isSyncingContacts = false; return; }
+
+        var list = window._compiledCustomersList || [];
+        if (!list || list.length === 0) {
+            window._isSyncingContacts = false;
+            return;
+        }
+
+        if (banner) {
+            banner.style.display = 'flex';
+            if (bannerText) bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Checking contacts...';
+            if (bannerCount) bannerCount.innerText = '';
+        }
+
+        var recordsMap = await window.getAllContactSyncRecords();
+        var devicePhoneMap = new Map();
+
+        if (!window._devicePhonebookIndexed && typeof plugin.getContacts === 'function') {
+            try {
+                var devRes = await plugin.getContacts({ projection: { name: true, phones: true } });
+                var devList = (devRes && devRes.contacts) ? devRes.contacts : [];
+                devList.forEach(function (dc) {
+                    var cid = dc.id || dc.contactId;
+                    if (!cid) return;
+                    var phones = dc.phoneNumbers || dc.phones || [];
+                    phones.forEach(function (ph) {
+                        var p10 = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
+                        if (p10.length === 10 && !devicePhoneMap.has(p10)) {
+                            devicePhoneMap.set(p10, { id: cid, displayName: dc.displayName || dc.name });
+                        }
+                    });
+                });
+                window._devicePhonebookIndexed = true;
+            } catch (e) {
+                console.warn("Phonebook indexing error:", e);
+            }
+        }
+
+        var deltaQueue = [];
+        list.forEach(function (c) {
+            var rawPhone = c.p || c.phone;
+            var cleanPhone = String(rawPhone || '').replace(/\D/g, '').slice(-10);
+            if (cleanPhone.length !== 10) return;
+            var code = String(c.c || c.code || ('APP_' + cleanPhone)).trim();
+            var partyHash = window.computeContactHash(c);
+
+            var existingRec = recordsMap.get(code);
+            var devMatch = devicePhoneMap.get(cleanPhone);
+            var knownContactId = existingRec ? existingRec.contactId : (devMatch ? devMatch.id : null);
+
+            if (existingRec && existingRec.hash === partyHash && existingRec.contactId) {
+                return;
+            }
+
+            deltaQueue.push({
+                party: c,
+                code: code,
+                cleanPhone: cleanPhone,
+                hash: partyHash,
+                contactId: knownContactId
+            });
+        });
+
+        if (deltaQueue.length === 0) {
+            if (banner && bannerText) {
+                bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> All contacts up to date';
+                setTimeout(function () { if (banner) banner.style.display = 'none'; }, 3000);
+            }
+            window._isSyncingContacts = false;
+            return;
+        }
+
+        var totalDelta = deltaQueue.length;
+        var processedCount = 0;
+        var BATCH_SIZE = 20;
+
+        async function processNextBatch() {
+            if (deltaQueue.length === 0) {
+                if (banner && bannerText) {
+                    bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> Synced ' + totalDelta.toLocaleString('en-IN') + ' contacts with phone';
+                    setTimeout(function () { if (banner) banner.style.display = 'none'; }, 4000);
+                }
+                window._isSyncingContacts = false;
+                return;
+            }
+
+            var chunk = deltaQueue.splice(0, BATCH_SIZE);
+            var recsToSave = [];
+
+            for (var i = 0; i < chunk.length; i++) {
+                var item = chunk[i];
+                var payload = window.buildContactPayload(item.party);
+                var assignedId = item.contactId;
+
+                try {
+                    if (assignedId && typeof plugin.updateContactById === 'function') {
+                        await plugin.updateContactById({ id: String(assignedId), contact: payload });
+                    } else if (typeof plugin.createContact === 'function') {
+                        var res = await plugin.createContact({ contact: payload });
+                        assignedId = (res && (res.id || res.contactId)) ? String(res.id || res.contactId) : (assignedId || 'synced');
+                    }
+                    recsToSave.push({
+                        code: item.code,
+                        contactId: assignedId || 'synced',
+                        phone10: item.cleanPhone,
+                        hash: item.hash,
+                        updatedAt: new Date().toISOString()
+                    });
+                } catch (err) {
+                    console.warn("Contact sync error for " + item.code, err);
+                }
+                processedCount++;
+            }
+
+            if (recsToSave.length > 0) {
+                await window.saveContactSyncRecordsBatch(recsToSave);
+            }
+
+            if (bannerText && bannerCount) {
+                bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing party contacts in background...';
+                bannerCount.innerText = processedCount + ' / ' + totalDelta;
+            }
+
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(function () { processNextBatch(); }, { timeout: 200 });
+            } else {
+                setTimeout(processNextBatch, 80);
+            }
+        }
+
+        processNextBatch();
+
+    } catch (e) {
+        console.error("Automatic contact sync failed:", e);
+        if (banner) banner.style.display = 'none';
+        window._isSyncingContacts = false;
+    }
+};
+
+window.openAddEditPartyContactModal = function (partyCode) {
+    if (!window.isSuperAdmin) return;
+
+    var modal = document.getElementById('adminPartyContactModal');
+    if (!modal) return;
+
+    var codeInput = document.getElementById('apcCode');
+    var nameInput = document.getElementById('apcName');
+    var phoneInput = document.getElementById('apcPhone');
+    var stationInput = document.getElementById('apcStation');
+    var stateInput = document.getElementById('apcState');
+    var agentInput = document.getElementById('apcAgent');
+    var transportInput = document.getElementById('apcTransport');
+    var gstInput = document.getElementById('apcGst');
+    var roleInput = document.getElementById('apcRole');
+    var titleEl = document.getElementById('apcModalTitle');
+    var errEl = document.getElementById('apcErr');
+
+    if (errEl) errEl.innerText = '';
+
+    if (partyCode) {
+        var list = window._compiledCustomersList || [];
+        var party = list.find(function (x) { return (x.c === partyCode || x.code === partyCode || x.n === partyCode); });
+        if (titleEl) titleEl.innerText = "Edit Party Contact";
+        if (codeInput) codeInput.value = party ? (party.c || party.code || partyCode) : partyCode;
+        if (nameInput) nameInput.value = party ? (party.n || party.name || '') : partyCode;
+        if (phoneInput) phoneInput.value = party ? (party.p || party.phone || '') : '';
+        if (stationInput) stationInput.value = party ? (party.ct || party.station || party.city || '') : '';
+        if (stateInput) stateInput.value = party ? (party.st || party.state || '') : '';
+        if (agentInput) agentInput.value = party ? (party.ag || party.agent || '') : '';
+        if (transportInput) transportInput.value = party ? (party.tr || party.transport || '') : '';
+        if (gstInput) gstInput.value = party ? (party.g || party.gst || '') : '';
+        if (roleInput) roleInput.value = (party && party.role === 'agent') ? 'agent' : 'customer';
+    } else {
+        if (titleEl) titleEl.innerText = "Add New Party Contact";
+        if (codeInput) codeInput.value = '';
+        if (nameInput) nameInput.value = '';
+        if (phoneInput) phoneInput.value = '';
+        if (stationInput) stationInput.value = '';
+        if (stateInput) stateInput.value = '';
+        if (agentInput) agentInput.value = '';
+        if (transportInput) transportInput.value = '';
+        if (gstInput) gstInput.value = '';
+        if (roleInput) roleInput.value = 'customer';
+    }
+
+    modal.style.display = 'flex';
+};
+
+window.closeAddEditPartyContactModal = function () {
+    var modal = document.getElementById('adminPartyContactModal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.saveAddEditPartyContact = async function () {
+    if (!window.isSuperAdmin) {
+        alert("Access denied: Administrator only.");
+        return;
+    }
+
+    var codeInput = document.getElementById('apcCode');
+    var nameInput = document.getElementById('apcName');
+    var phoneInput = document.getElementById('apcPhone');
+    var stationInput = document.getElementById('apcStation');
+    var stateInput = document.getElementById('apcState');
+    var agentInput = document.getElementById('apcAgent');
+    var transportInput = document.getElementById('apcTransport');
+    var gstInput = document.getElementById('apcGst');
+    var roleInput = document.getElementById('apcRole');
+    var errEl = document.getElementById('apcErr');
+    var saveBtn = document.getElementById('apcSaveBtn');
+
+    if (errEl) errEl.innerText = '';
+
+    var name = (nameInput ? nameInput.value : '').trim();
+    var rawPhone = (phoneInput ? phoneInput.value : '').trim();
+    var phone10 = rawPhone.replace(/\D/g, '').slice(-10);
+
+    if (!name) {
+        if (errEl) errEl.innerText = "Please enter party / business name.";
+        return;
+    }
+    if (phone10.length !== 10) {
+        if (errEl) errEl.innerText = "Please enter a valid 10-digit mobile number.";
+        return;
+    }
+
+    var station = (stationInput ? stationInput.value : '').trim();
+    var state = (stateInput ? stateInput.value : '').trim();
+    var agent = (agentInput ? agentInput.value : '').trim();
+    var transport = (transportInput ? transportInput.value : '').trim();
+    var gst = (gstInput ? gstInput.value : '').trim().toUpperCase();
+    var role = (roleInput ? roleInput.value : 'customer').trim();
+    var code = (codeInput && codeInput.value ? codeInput.value : ('APP_' + phone10)).trim();
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving & Syncing...';
+    }
+
+    var nowIso = new Date().toISOString();
+    var partyObj = {
+        code: code,
+        name: name,
+        phone: phone10,
+        station: station,
+        state: state,
+        agent: agent,
+        transport: transport,
+        gst: gst,
+        role: role,
+        updatedAt: nowIso
+    };
+
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
+
+        var safeCode = String(code || '').replace(/[\/\\#\?\[\]\s]/g, '_');
+
+        // 1. Write to PartyLinks/{code}
+        var partyLinksBody = {
+            fields: {
+                partyCode: { stringValue: code },
+                name: { stringValue: name },
+                phone: { stringValue: phone10 },
+                station: { stringValue: station },
+                state: { stringValue: state },
+                agent: { stringValue: agent },
+                transport: { stringValue: transport },
+                gst: { stringValue: gst },
+                role: { stringValue: role },
+                updatedAt: { timestampValue: nowIso }
+            }
+        };
+
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyLinks/" + safeCode, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify(partyLinksBody)
+        });
+
+        // 2. Write to AccountingCustomers/{code}
+        var custSummaryBody = {
+            fields: {
+                code: { stringValue: code },
+                name: { stringValue: name },
+                nameUpper: { stringValue: name.toUpperCase() },
+                phone: { stringValue: phone10 },
+                cleanPhones: { arrayValue: { values: [{ stringValue: phone10 }] } },
+                station: { stringValue: station },
+                state: { stringValue: state },
+                agent: { stringValue: agent },
+                transport: { stringValue: transport },
+                gst: { stringValue: gst },
+                role: { stringValue: role },
+                balance: { doubleValue: 0 },
+                drCr: { stringValue: '' },
+                absBalance: { doubleValue: 0 },
+                pendingBillsCount: { integerValue: "0" },
+                hasOutstanding: { booleanValue: false },
+                updatedAt: { timestampValue: nowIso }
+            }
+        };
+
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingCustomers/" + safeCode, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify(custSummaryBody)
+        });
+
+        // 3. Write to PhoneDirectory/{phone10}
+        var phoneDirBody = {
+            fields: {
+                phone: { stringValue: phone10 },
+                primaryRole: { stringValue: role },
+                matchedAccountsJson: {
+                    stringValue: JSON.stringify([{
+                        code: code,
+                        name: name,
+                        station: station,
+                        state: state,
+                        agent: agent,
+                        transport: transport,
+                        gst: gst,
+                        role: role
+                    }])
+                },
+                updatedAt: { timestampValue: nowIso }
+            }
+        };
+
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PhoneDirectory/" + phone10, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify(phoneDirBody)
+        });
+
+        // 4. Immediately Sync Contact Natively to Android Contacts
+        await window.syncSingleContactNative(partyObj);
+
+        // 5. Update local in-memory compiled customer list
+        if (!window._compiledCustomersList) window._compiledCustomersList = [];
+        var exIdx = window._compiledCustomersList.findIndex(function (x) { return (x.c === code || x.code === code); });
+        var localEntry = {
+            c: code,
+            n: name,
+            p: phone10,
+            ct: station,
+            st: state,
+            ag: agent,
+            tr: transport,
+            g: gst,
+            role: role,
+            b: 0,
+            d: '',
+            pb: 0,
+            ho: false,
+            totDr: 0,
+            totCr: 0
+        };
+        if (exIdx >= 0) {
+            window._compiledCustomersList[exIdx] = Object.assign(window._compiledCustomersList[exIdx], localEntry);
+        } else {
+            window._compiledCustomersList.unshift(localEntry);
+        }
+
+        if (typeof window.populateCustomerFilterDropdowns === 'function') {
+            window.populateCustomerFilterDropdowns(window._compiledCustomersList);
+        }
+        if (typeof window.renderCustomerDirectoryUI === 'function') {
+            window.renderCustomerDirectoryUI();
+        }
+
+        window.closeAddEditPartyContactModal();
+        alert('✓ Contact "' + name + '" saved and synced successfully!');
+
+    } catch (e) {
+        console.error("Save party contact failed:", e);
+        if (errEl) errEl.innerText = "Save failed: " + e.message;
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save"></i> Save &amp; Sync Contact';
+        }
+    }
+};

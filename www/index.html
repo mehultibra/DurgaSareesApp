@@ -592,7 +592,7 @@
   <script src="./jspdf.plugin.autotable.min.js"></script>
 
   <script src="./capacitor-bundle.js?v=3"></script>
-  <script src="./app.js?v=33"></script>
+  <script src="./app.js?v=34"></script>
   <script src="./sticker_editor.js?v=12"></script>
 
   <div id="adminCameraPreviewModal"
@@ -859,6 +859,12 @@
         </button>
       </div>
 
+      <!-- Contact Sync Status & Progress Banner (Admin Only) -->
+      <div id="contactSyncBanner" style="display:none; margin-bottom:8px; font-size:11px; padding:6px 10px; border-radius:6px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; align-items:center; justify-content:space-between;">
+        <span id="contactSyncText"><i class="fas fa-sync-alt fa-spin"></i> Syncing party contacts...</span>
+        <span id="contactSyncCount" style="font-weight:bold;"></span>
+      </div>
+
       <!-- Customer Directory List Container -->
       <div id="customerListContainer" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px; padding-right:2px;">
         <div style="text-align:center; padding:30px; color:#6b7280; font-size:13px;">
@@ -871,7 +877,11 @@
       <div style="display:flex; gap:8px; margin-top:8px; border-top:1px solid #eee; padding-top:8px;">
         <button type="button" onclick="window.loadAccountingDirectoryData(true)"
           style="flex:1; background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; padding:8px 12px; border-radius:8px; font-weight:600; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
-          <i class="fas fa-sync-alt" id="custSyncIcon"></i> Refresh Customer List
+          <i class="fas fa-sync-alt" id="custSyncIcon"></i> Refresh List
+        </button>
+        <button type="button" onclick="window.openAddEditPartyContactModal()"
+          style="flex:1; background:var(--myntra-pink); color:#fff; border:none; padding:8px 12px; border-radius:8px; font-weight:600; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+          <i class="fas fa-user-plus"></i> + Add Contact
         </button>
       </div>
 
@@ -1335,6 +1345,80 @@
           <i class="fas fa-plus" style="margin-right: 6px;"></i> Add Section
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- 📱 Admin Add / Edit Party Contact Modal -->
+  <div id="adminPartyContactModal" class="action-modal" onclick="if(event.target===this) window.closeAddEditPartyContactModal()"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10001; justify-content:center; align-items:center; padding:16px;">
+    <div class="modal-content" onclick="event.stopPropagation()"
+      style="background:#fff; border-radius:14px; padding:20px; width:100%; max-width:440px; max-height:92vh; overflow-y:auto; box-shadow:0 10px 25px rgba(0,0,0,0.2); box-sizing:border-box;">
+      
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #eee; padding-bottom:8px;">
+        <div style="font-weight:bold; font-size:16px; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+          <i class="fas fa-address-book" style="color:var(--myntra-pink);"></i>
+          <span id="apcModalTitle">Add / Edit Party Contact</span>
+        </div>
+        <i class="fas fa-times" style="cursor:pointer; color:#9ca3af; font-size:18px; padding:4px;" onclick="window.closeAddEditPartyContactModal()"></i>
+      </div>
+
+      <input type="hidden" id="apcCode" value="">
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div>
+          <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Party / Business Name *</label>
+          <input type="text" id="apcName" placeholder="e.g. Radhika Sarees" style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; outline:none;">
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">10-Digit Mobile *</label>
+            <input type="tel" id="apcPhone" placeholder="10-digit mobile number" maxlength="10" style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; outline:none;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Role</label>
+            <select id="apcRole" style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; outline:none; background:#fff;">
+              <option value="customer">Customer</option>
+              <option value="agent">Agent / Broker</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Station / City *</label>
+            <input type="text" id="apcStation" placeholder="e.g. Surat" style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; outline:none;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">State</label>
+            <input type="text" id="apcState" placeholder="e.g. Gujarat" style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; outline:none;">
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Agent / Broker</label>
+            <input type="text" id="apcAgent" placeholder="Agent Name" style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; outline:none;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">Transport</label>
+            <input type="text" id="apcTransport" placeholder="Preferred Transport" style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; outline:none;">
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:2px;">GST No. (Optional)</label>
+          <input type="text" id="apcGst" placeholder="GSTIN" style="width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; outline:none; text-transform:uppercase;">
+        </div>
+      </div>
+
+      <div id="apcErr" style="color:#dc2626; font-size:12px; margin-top:8px; min-height:16px;"></div>
+
+      <button type="button" onclick="window.saveAddEditPartyContact()" id="apcSaveBtn"
+        style="margin-top:6px; width:100%; background:var(--myntra-pink); color:#fff; border:none; padding:12px; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; box-shadow:0 4px 6px rgba(255, 63, 108, 0.2);">
+        <i class="fas fa-save"></i> Save &amp; Sync Contact
+      </button>
+
     </div>
   </div>
 

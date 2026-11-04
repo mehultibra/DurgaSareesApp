@@ -1916,6 +1916,110 @@
     }
   });
 
+  // node_modules/@capgo/capacitor-contacts/dist/esm/definitions.js
+  var ContactProperty;
+  var init_definitions5 = __esm({
+    "node_modules/@capgo/capacitor-contacts/dist/esm/definitions.js"() {
+      (function(ContactProperty2) {
+        ContactProperty2["PhoneNumber"] = "phoneNumber";
+        ContactProperty2["EmailAddress"] = "emailAddress";
+        ContactProperty2["PostalAddress"] = "postalAddress";
+      })(ContactProperty || (ContactProperty = {}));
+    }
+  });
+
+  // node_modules/@capgo/capacitor-contacts/dist/esm/web.js
+  var web_exports5 = {};
+  __export(web_exports5, {
+    CapacitorContactsWeb: () => CapacitorContactsWeb
+  });
+  var CapacitorContactsWeb;
+  var init_web5 = __esm({
+    "node_modules/@capgo/capacitor-contacts/dist/esm/web.js"() {
+      init_dist();
+      CapacitorContactsWeb = class extends WebPlugin {
+        async countContacts() {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async createContact(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async createGroup(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async deleteContactById(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async deleteGroupById(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async displayContactById(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async displayCreateContact(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async displayUpdateContactById(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async getAccounts() {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async getContactById(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async getContacts(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async getGroupById(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async getGroups() {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async isAvailable() {
+          return { isAvailable: false };
+        }
+        async isSupported() {
+          return { isSupported: false };
+        }
+        async openSettings() {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async pickContact(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async pickContacts(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async updateContactById(_options) {
+          throw this.unavailable("Contacts API not available on the web implementation.");
+        }
+        async checkPermissions() {
+          return { readContacts: "denied", writeContacts: "denied" };
+        }
+        async requestPermissions(_options) {
+          return { readContacts: "denied", writeContacts: "denied" };
+        }
+        async getPluginVersion() {
+          return { version: "web" };
+        }
+      };
+    }
+  });
+
+  // node_modules/@capgo/capacitor-contacts/dist/esm/index.js
+  var CapacitorContacts;
+  var init_esm5 = __esm({
+    "node_modules/@capgo/capacitor-contacts/dist/esm/index.js"() {
+      init_dist();
+      init_definitions5();
+      CapacitorContacts = registerPlugin("CapacitorContacts", {
+        web: () => Promise.resolve().then(() => (init_web5(), web_exports5)).then((m) => new m.CapacitorContactsWeb())
+      });
+    }
+  });
+
   // capacitor-init.js
   var require_capacitor_init = __commonJS({
     "capacitor-init.js"() {
@@ -1924,13 +2028,14 @@
       init_esm2();
       init_esm3();
       init_esm4();
+      init_esm5();
       window.Capacitor = Capacitor;
       window.CapacitorShare = Share;
       window.CapacitorFilesystem = Filesystem;
       window.CapacitorDirectory = Directory;
       window.CapacitorFirebaseAuthentication = FirebaseAuthentication;
       window.CapacitorPrinter = Printer;
-
+      window.CapacitorContacts = CapacitorContacts;
       if (window.Capacitor) {
         if (!window.Capacitor.Plugins) window.Capacitor.Plugins = {};
         window.Capacitor.Plugins.Share = Share;
@@ -1938,6 +2043,8 @@
         window.Capacitor.Plugins.Directory = Directory;
         window.Capacitor.Plugins.FirebaseAuthentication = FirebaseAuthentication;
         window.Capacitor.Plugins.Printer = Printer;
+        window.Capacitor.Plugins.CapacitorContacts = CapacitorContacts;
+        window.Capacitor.Plugins.Contacts = CapacitorContacts;
       }
     }
   });
