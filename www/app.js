@@ -75,6 +75,7 @@ window.matchCoverFile = function (coverDesignId, folderFiles) {
 
 window.getRobustStock = function (p, fname, isCoverFallback) {
     if (!p || !p.stock) return 999;
+    if (p.stock['FULLY_PACKED'] === 1 || p.totalStock === 0) return 0;
     if (p.stock[fname] !== undefined) return p.stock[fname];
     if (isCoverFallback && p.stock['Cover'] !== undefined) return p.stock['Cover'];
     if (isCoverFallback && p.stock['DIRECT'] !== undefined) return p.stock['DIRECT'];
@@ -91,12 +92,12 @@ window.getRobustStock = function (p, fname, isCoverFallback) {
     for (var sk in p.stock) {
         if (sk.toLowerCase() === lower) return p.stock[sk];
     }
-    if (p.stock['FULLY_PACKED'] === 1) return 0;
     return 999;
 };
 
 window.isDesignInStock = function (p, fname) {
     if (!p) return false;
+    if (p.totalStock === 0 || (p.stock && p.stock['FULLY_PACKED'] === 1)) return false;
 
     var cleanName = String(fname || '').replace(/\.[^/.]+$/, "").trim();
     var num = parseInt(cleanName.replace(/\D/g, ''), 10);
@@ -684,9 +685,9 @@ window.addEventListener('DOMContentLoaded', function () {
                     var menuCustDir = document.getElementById('menuCustomerDirectory');
                     if (menuCustDir) menuCustDir.style.display = (window.isSuperAdmin || window.isAdminMode) ? 'flex' : 'none';
                     var menuLiveAdmin = document.getElementById('menuLiveAdmin');
-                    if (menuLiveAdmin) menuLiveAdmin.style.display = window.isAdminMode ? 'flex' : 'none';
+                    if (menuLiveAdmin) menuLiveAdmin.style.display = (window.isSuperAdmin || window.isAdminMode) ? 'flex' : 'none';
                     var btnTopLive = document.getElementById('btnTopLiveAdmin');
-                    if (btnTopLive) btnTopLive.style.display = window.isAdminMode ? 'block' : 'none';
+                    if (btnTopLive) btnTopLive.style.display = (window.isSuperAdmin || window.isAdminMode) ? 'block' : 'none';
                     if (typeof window.renderSectionTabBar === 'function') window.renderSectionTabBar();
                     alert("Admin Mode: " + (window.isAdminMode ? "ON" : "OFF"));
                     if (typeof window.updateOrderOnBehalfBanner === 'function') window.updateOrderOnBehalfBanner();
@@ -1379,10 +1380,10 @@ async function checkAdminStatus(phone) {
                 localStorage.setItem('dsIsAdmin', 'true');
                 window.isSuperAdmin = true;
                 var showAdminUI = window.isAdminMode === true;
-                if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = showAdminUI ? 'flex' : 'none';
+                if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = (window.isSuperAdmin || window.isAdminMode) ? 'flex' : 'none';
                 if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = (window.isSuperAdmin || window.isAdminMode) ? 'flex' : 'none';
                 if (document.getElementById('menuManageSections')) document.getElementById('menuManageSections').style.display = showAdminUI ? 'flex' : 'none';
-                if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = showAdminUI ? 'block' : 'none';
+                if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = (window.isSuperAdmin || window.isAdminMode) ? 'block' : 'none';
                 var fabAdd = document.getElementById('fabAddProduct');
                 if (fabAdd) fabAdd.style.display = showAdminUI ? 'flex' : 'none';
             } else {
@@ -1421,6 +1422,11 @@ function backToPhone() {
 }
 
 function initApp() {
+    if (window.isSuperAdmin) {
+        if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
+        if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
+        if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
+    }
     var bootScreen = document.getElementById('boot');
     if (typeof window.processCameraOutbox === 'function') {
         window.processCameraOutbox();
@@ -1460,7 +1466,10 @@ function initApp() {
                 var readyList = window.getProductReadyDesigns(readyRaw);
                 var tStock = d.totalStock !== undefined ? d.totalStock : 999;
 
-                if (f.stock || d.stock) {
+                if (rawFullyPacked) {
+                    tStock = 0;
+                    stockMap['FULLY_PACKED'] = 1;
+                } else if (f.stock || d.stock) {
                     var specificKeys = Object.keys(stockMap).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover'));
 
                     var readySum = 0;
@@ -2327,7 +2336,8 @@ function buildCardDetails(p) {
 
     // Right side: ADD / QTY
     h.push('<div style="flex-shrink:0;">');
-    if (!window.isAdminMode && p.totalStock === 0) {
+    var isItemPacked = (p.totalStock === 0) || (p.stock && p.stock['FULLY_PACKED'] === 1);
+    if (isItemPacked) {
         h.push('<div style="background: red; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">PACKED</div>');
     } else if (coverQty === 0 || isNaN(coverQty)) {
         h.push('<div class="add-btn-clean" onclick="chgMainRow(\'' + p.id + '\', 1); event.stopPropagation();">ADD</div>');
@@ -2395,8 +2405,8 @@ function renderProductGrid(products) {
         var isBRecent = (Date.now() - timeB) < 15 * 60 * 1000;
 
         // --- ADMIN & INVENTORY: OUT OF STOCK TO BOTTOM ---
-        var aOutOfStock = !isARecent && (a.totalStock === 0);
-        var bOutOfStock = !isBRecent && (b.totalStock === 0);
+        var aOutOfStock = !isARecent && (a.totalStock === 0 || (a.stock && a.stock['FULLY_PACKED'] === 1));
+        var bOutOfStock = !isBRecent && (b.totalStock === 0 || (b.stock && b.stock['FULLY_PACKED'] === 1));
         if (aOutOfStock && !bOutOfStock) return 1;
         if (!aOutOfStock && bOutOfStock) return -1;
 
@@ -2544,7 +2554,7 @@ function renderProductGrid(products) {
 // ====================================
 function chgMainRow(pid, dir) {
     var p = allProducts.find(x => x.id === pid); if (!p) return;
-    if (!window.isAdminMode && p.totalStock === 0) return; // Cart Protection
+    if (!window.isAdminMode && (p.totalStock === 0 || (p.stock && p.stock['FULLY_PACKED'] === 1))) return; // Cart Protection
     var key = p.id + '_DIRECT';
     var curQ = cart[key] ? cart[key].qty : 0;
     var newQ = Math.max(0, curQ + (dir * (p.mult || 1)));
@@ -3109,7 +3119,8 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             } else {
                 fallbackZoomUrl = fallbackGridUrl;
             }
-            var curStock = p.stock && p.stock['DIRECT'] !== undefined ? p.stock['DIRECT'] : 999;
+            var curStock = typeof window.getRobustStock === 'function' ? window.getRobustStock(p, 'DIRECT', true) : (p.stock && p.stock['DIRECT'] !== undefined ? p.stock['DIRECT'] : 999);
+            var isItemPacked = (curStock === 0) || (p.totalStock === 0) || (p.stock && p.stock['FULLY_PACKED'] === 1);
             var adminCheckboxHtml = '';
             var qtyHtml = '';
             if (window.isAdminMode) {
@@ -3120,7 +3131,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                         <input type="number" class="admin-stock-input" value="${curStock}" onblur="window.updateAdminStock(this, '${p.docId}', '${p.id}', 'DIRECT')" onkeyup="if(event.key === 'Enter') this.blur();" style="width: 60px; text-align: center; border: 1px solid #ccc; border-radius: 4px;">
                     </div>
                 `;
-            } else if (curStock === 0) {
+            } else if (isItemPacked) {
                 qtyHtml = '<div style="color:white; background:red; padding:4px 12px; font-weight:bold; border-radius:4px; margin-top:4px;">PACKED</div>';
             } else {
                 qtyHtml = `
@@ -3332,12 +3343,14 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         var html = '';
         files.forEach((file, idx) => {
             var dKey = p.id + '_' + file.name;
-            var curStock = p.stock && p.stock[file.name] !== undefined ? p.stock[file.name] : 999;
+            var isCover = window.isSameDesign(p.coverDesignId, file.name) || /^(cover|cover1)\./i.test(file.name);
+            var curStock = typeof window.getRobustStock === 'function' ? window.getRobustStock(p, file.name, isCover) : (p.stock && p.stock[file.name] !== undefined ? p.stock[file.name] : 999);
+            var isItemPacked = (curStock === 0) || (p.totalStock === 0) || (p.stock && p.stock['FULLY_PACKED'] === 1);
 
             var qtyHtml = '';
             if (window.isAdminMode) {
                 qtyHtml = `<input type="number" class="admin-stock-input" value="${curStock}" onblur="window.updateAdminStock(this, '${p.docId}', '${p.id}', '${file.name}')" onkeyup="if(event.key === 'Enter') this.blur();" style="width: 60px; text-align: center; border: 1px solid #ccc; border-radius: 4px;">`;
-            } else if (curStock === 0) {
+            } else if (isItemPacked) {
                 qtyHtml = `<div style="background: red; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">PACKED</div>`;
             } else {
                 qtyHtml = `
@@ -3414,7 +3427,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
 window.changeQty = function (pid, designId, amount) {
     var p = allProducts.find(x => x.id === pid); if (!p) return;
-    if (!window.isAdminMode && p.stock && p.stock[designId] === 0) return; // Cart Protection
+    if (!window.isAdminMode && (p.totalStock === 0 || (p.stock && p.stock['FULLY_PACKED'] === 1) || (typeof window.getRobustStock === 'function' && window.getRobustStock(p, designId) === 0))) return; // Cart Protection
     if (typeof window.updateLivePresence === 'function') window.updateLivePresence(typeof curProduct !== 'undefined' && curProduct ? curProduct.id : null);
     var key = pid + '_' + designId;
     var curQ = cart[key] ? cart[key].qty : 0;
@@ -3463,6 +3476,7 @@ window.changeQty = function (pid, designId, amount) {
 
 window.setExactQty = function (pid, designId, value) {
     var p = allProducts.find(x => x.id === pid); if (!p) return;
+    if (!window.isAdminMode && (p.totalStock === 0 || (p.stock && p.stock['FULLY_PACKED'] === 1) || (typeof window.getRobustStock === 'function' && window.getRobustStock(p, designId) === 0))) return;
     var key = pid + '_' + designId;
     if (typeof window.updateLivePresence === 'function') window.updateLivePresence(typeof curProduct !== 'undefined' && curProduct ? curProduct.id : null);
     var newQ = parseInt(value) || 0;
@@ -4034,12 +4048,14 @@ function openFs(arg1, arg2, arg3, arg4) {
 
     var key = pId + '_' + fsDesignId;
 
-    var curStock = window.curProduct && window.curProduct.stock && window.curProduct.stock[fsDesignId] !== undefined ? window.curProduct.stock[fsDesignId] : 999;
+    var isCover = /^(cover|cover1)\./i.test(fsDesignId) || (window.curProduct && window.isSameDesign(window.curProduct.coverDesignId, fsDesignId));
+    var curStock = typeof window.getRobustStock === 'function' ? window.getRobustStock(window.curProduct, fsDesignId, isCover) : (window.curProduct && window.curProduct.stock && window.curProduct.stock[fsDesignId] !== undefined ? window.curProduct.stock[fsDesignId] : 999);
+    var isPacked = (curStock === 0) || (window.curProduct && (window.curProduct.totalStock === 0 || (window.curProduct.stock && window.curProduct.stock['FULLY_PACKED'] === 1)));
     var fsControls = document.querySelector('.fs-controls');
     if (fsControls) {
         if (window.isGuestMode) {
             fsControls.style.display = 'none';
-        } else if (!window.isAdminMode && curStock === 0) {
+        } else if (!window.isAdminMode && isPacked) {
             fsControls.innerHTML = '<span style="background: red; color: white; padding: 6px 16px; border-radius: 4px; font-weight: bold; font-size: 16px;">PACKED</span>';
         } else {
             fsControls.innerHTML = '<button onpointerdown="event.preventDefault(); fsChg(-1)">−</button><span id="fsQty" style="font-size:36px; color:#fff; min-width:50px; text-align:center;">' + (cart[key] ? cart[key].qty : 0) + '</span><button onpointerdown="event.preventDefault(); fsChg(1)">+</button>';
@@ -6088,6 +6104,8 @@ function toggleHdrMenu(event) {
         var isAllowed = Boolean(window.isSuperAdmin || window.isAdminMode);
         var menuCustDir = document.getElementById('menuCustomerDirectory');
         if (menuCustDir) menuCustDir.style.display = isAllowed ? 'flex' : 'none';
+        var menuLiveAdmin = document.getElementById('menuLiveAdmin');
+        if (menuLiveAdmin) menuLiveAdmin.style.display = isAllowed ? 'flex' : 'none';
         menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
     }
 }
@@ -9014,6 +9032,7 @@ window.openLiveAdmin = function () {
                             matchesArr = Array.isArray(d.matchedAccounts) ? d.matchedAccounts : [];
                         }
 
+                        let isUserAdmin = !!(d.isAdmin || d.role === 'admin' || (d.isAdmin && d.isAdmin.booleanValue === true));
                         let uObj = {
                             actualDocId: uDocId,
                             docId: uDocId,
@@ -9022,7 +9041,8 @@ window.openLiveAdmin = function () {
                             firm: d.firm || '',
                             station: d.station || (d.state ? d.state : ''),
                             state: d.state || '',
-                            role: d.role || (d.isAgent ? 'agent' : 'customer'),
+                            isAdmin: isUserAdmin,
+                            role: isUserAdmin ? 'admin' : (d.role || (d.isAgent ? 'agent' : 'customer')),
                             approvalStatus: d.approvalStatus || (d.linkedAccount ? 'approved' : 'pending'),
                             isApproved: d.isApproved !== undefined ? d.isApproved : !!d.linkedAccount,
                             linkedAccount: d.linkedAccount || '',
@@ -9132,6 +9152,7 @@ window.openLiveAdmin = function () {
                             if (u.linkedAccountName) existingItem.data.linkedAccountName = u.linkedAccountName;
                             if (u.approvedByAdmin) existingItem.data.approvedByAdmin = u.approvedByAdmin;
                             if (u.approvedAt) existingItem.data.approvedAt = u.approvedAt;
+                            if (u.isAdmin) existingItem.data.isAdmin = true;
                             if (u.role) existingItem.data.role = u.role;
                             if (u.matchedAccounts && u.matchedAccounts.length) existingItem.data.matchedAccounts = u.matchedAccounts;
                         }
@@ -9150,7 +9171,8 @@ window.openLiveAdmin = function () {
                             user: u.phone || u.docId,
                             customerName: u.name || "Registered User",
                             customerStation: u.station || (u.state ? u.state : ""),
-                            role: u.role || 'customer',
+                            isAdmin: !!u.isAdmin,
+                            role: u.isAdmin ? 'admin' : (u.role || 'customer'),
                             approvalStatus: u.approvalStatus || (u.linkedAccount ? 'approved' : 'pending'),
                             isApproved: u.isApproved !== undefined ? u.isApproved : !!u.linkedAccount,
                             linkedAccount: u.linkedAccount || '',
@@ -9172,8 +9194,10 @@ window.openLiveAdmin = function () {
                     if (aIsLive && !bIsLive) return -1;
                     if (!aIsLive && bIsLive) return 1;
 
-                    let aPending = a.data && (a.data.approvalStatus === 'pending' || (!a.data.isApproved && !a.id.startsWith('guest_')));
-                    let bPending = b.data && (b.data.approvalStatus === 'pending' || (!b.data.isApproved && !b.id.startsWith('guest_')));
+                    let aIsAdmin = a.data && (a.data.isAdmin || a.data.role === 'admin');
+                    let bIsAdmin = b.data && (b.data.isAdmin || b.data.role === 'admin');
+                    let aPending = !aIsAdmin && a.data && (a.data.approvalStatus === 'pending' || (!a.data.isApproved && !a.id.startsWith('guest_')));
+                    let bPending = !bIsAdmin && b.data && (b.data.approvalStatus === 'pending' || (!b.data.isApproved && !b.id.startsWith('guest_')));
                     if (aPending && !bPending) return -1;
                     if (!aPending && bPending) return 1;
 
@@ -9189,7 +9213,7 @@ window.openLiveAdmin = function () {
                     let d = item.data;
                     let isLive = d.lastActive && typeof d.lastActive.toDate === 'function' && (Date.now() - d.lastActive.toDate().getTime() < 60000);
                     if (isLive) liveCount++;
-                    if (!item.id.startsWith('guest_') && (d.approvalStatus === 'pending' || !d.isApproved)) pendingCount++;
+                    if (!item.id.startsWith('guest_') && !d.isAdmin && d.role !== 'admin' && (d.approvalStatus === 'pending' || !d.isApproved)) pendingCount++;
                 });
 
                 let countsEl = document.getElementById('adminLiveCounts');
@@ -9272,8 +9296,11 @@ window.openLiveAdmin = function () {
                     }
 
                     let roleBadge = '';
+                    var isAdminUser = Boolean((d && (d.isAdmin || d.role === 'admin')) || (uData && (uData.isAdmin || uData.role === 'admin')));
                     if (!isGuest) {
-                        if (d.role === 'agent') {
+                        if (isAdminUser) {
+                            roleBadge = `<span style="background:#fee2e2; color:#b91c1c; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:4px; border:1px solid #fca5a5;">ADMIN</span>`;
+                        } else if (d.role === 'agent') {
                             roleBadge = `<span style="background:#ede9fe; color:#6b21a8; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:4px; border:1px solid #ddd6fe;">AGENT</span>`;
                         } else {
                             roleBadge = `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:4px; border:1px solid #bae6fd;">CUSTOMER</span>`;
@@ -9299,13 +9326,18 @@ window.openLiveAdmin = function () {
                             linkedAccountName: d.linkedAccountName || '',
                             approvedByAdmin: d.approvedByAdmin || '',
                             approvedAt: d.approvedAt || '',
-                            role: d.role || 'customer',
+                            isAdmin: isAdminUser,
+                            role: isAdminUser ? 'admin' : (d.role || 'customer'),
                             matchedAccounts: d.matchedAccounts || []
                         };
                     }
+                    if (isAdminUser && uData) {
+                        uData.isAdmin = true;
+                        uData.role = 'admin';
+                    }
 
-                    // Dynamically search accounts if needed
-                    if (!isGuest && (!uData || (!uData.isApproved && (!uData.matchedAccounts || !uData.matchedAccounts.length)))) {
+                    // Dynamically search accounts if needed (skip for guests and admins)
+                    if (!isGuest && !isAdminUser && (!uData || (!uData.isApproved && (!uData.matchedAccounts || !uData.matchedAccounts.length)))) {
                         window.findAccountsByPhone(docId).then(matches => {
                             if (matches && matches.length > 0) {
                                 let fallbackData = {
@@ -9325,7 +9357,7 @@ window.openLiveAdmin = function () {
                     }
 
                     let approvalHtml = '';
-                    if (!isGuest && typeof window.renderApprovalBoxHtml === 'function') {
+                    if (!isGuest && !isAdminUser && typeof window.renderApprovalBoxHtml === 'function') {
                         approvalHtml = window.renderApprovalBoxHtml(docId, safeDocId, uData);
                     }
 
@@ -9404,7 +9436,7 @@ window.closeLiveAdmin = function () {
 
 // 📋 Render Account Approval & Linking Card
 window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
-    if (!uData) return '';
+    if (!uData || uData.isAdmin || uData.role === 'admin') return '';
     var isApproved = !!(uData.isApproved || uData.approvalStatus === 'approved');
     var isAgent = uData.role === 'agent';
 
@@ -11822,28 +11854,21 @@ window._currentFilteredCustomers = [];
 
 window.populateCustomerFilterDropdowns = function (list) {
     var stationSel = document.getElementById('custStationFilter');
-    var agentSel = document.getElementById('custAgentFilter');
-    if (!stationSel || !agentSel) return;
+    if (!stationSel) return;
     if (window._hasPopulatedCustDropdowns && stationSel.options.length > 1) return;
 
     var curSt = stationSel.value;
-    var curAg = agentSel.value;
 
     var stations = new Set();
-    var agents = new Set();
     (list || []).forEach(c => {
         if (c.ct) stations.add(String(c.ct).trim());
-        if (c.ag) agents.add(String(c.ag).trim());
     });
 
     var sortedStations = Array.from(stations).sort((a, b) => a.localeCompare(b));
-    var sortedAgents = Array.from(agents).sort((a, b) => a.localeCompare(b));
 
     stationSel.innerHTML = '<option value="">All Stations / Cities</option>' + sortedStations.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
-    agentSel.innerHTML = '<option value="">All Agents / Brokers</option>' + sortedAgents.map(a => `<option value="${escHtml(a)}">${escHtml(a)}</option>`).join('');
 
     if (curSt) stationSel.value = curSt;
-    if (curAg) agentSel.value = curAg;
     window._hasPopulatedCustDropdowns = true;
 };
 
