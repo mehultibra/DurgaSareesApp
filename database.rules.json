@@ -1,0 +1,6 @@
+{
+  "rules": {
+    ".read": "auth != null && (auth.token.phone_number === '+919425032549' || auth.token.phone_number === '+919302632549')",
+    ".write": "auth != null && (auth.token.phone_number === '+919425032549' || auth.token.phone_number === '+919302632549')"
+  }
+}
