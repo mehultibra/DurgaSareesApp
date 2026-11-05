@@ -181,6 +181,17 @@ try {
 if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
     try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
 }
+if (typeof window.escHtml !== 'function') {
+    window.escHtml = function (str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+}
 window.DS_APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx89H5yDUi-60Q2Rk12PH1TH34Nt-BncrMRhYSewu1LdLOj_GCWGKKz1Qmx2OmeGwlL/exec";
 
 window.dsMissingImage = "data:image/svg+xml;utf8," + encodeURIComponent(`
@@ -802,14 +813,7 @@ window.addEventListener('DOMContentLoaded', function () {
     // 🚀 Initialize Capgo OTA Updater
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
         try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
-        try {
-            var pending = localStorage.getItem("dsPendingOta");
-            if (pending) {
-                localStorage.removeItem("dsPendingOta");
-                var vData = JSON.parse(pending);
-                window.Capacitor.Plugins.CapacitorUpdater.set(vData).catch(function () { });
-            }
-        } catch (e) { }
+        try { localStorage.removeItem("dsPendingOta"); } catch (e) { }
     }
 
     // Check for updates on ALL platforms (Native & Web)
@@ -849,8 +853,9 @@ async function checkForOTAUpdates() {
                 });
                 localStorage.setItem("dsOtaVersion", latestVersion);
                 localStorage.removeItem("dsPendingOta");
-                if (versionData) {
-                    await window.Capacitor.Plugins.CapacitorUpdater.set(versionData);
+                if (versionData && typeof window.Capacitor.Plugins.CapacitorUpdater.next === 'function') {
+                    await window.Capacitor.Plugins.CapacitorUpdater.next(versionData);
+                    console.log("OTA update staged for next launch:", latestVersion);
                 }
             } else {
                 localStorage.setItem("dsOtaVersion", latestVersion);
@@ -4629,7 +4634,7 @@ async function getCachedAuthToken(forceRefresh = false) {
 
     var isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
 
-    // Cold-boot readiness wait (up to ~2.25s) so Admin/Staff Firestore requests always obtain and include a non-empty token
+    // Cold-boot readiness wait so Admin/Staff Firestore requests obtain and include a non-empty token
     if (!_cachedIdToken && (window.activeUser || localStorage.getItem('dsUserToken'))) {
         for (var waitIter = 0; waitIter < 15; waitIter++) {
             if (isNative && window.CapacitorFirebaseAuthentication) {
@@ -4640,7 +4645,12 @@ async function getCachedAuthToken(forceRefresh = false) {
                         _cachedIdTokenExp = now + (20 * 60 * 1000);
                         return _cachedIdToken;
                     }
-                } catch (e) { }
+                } catch (e) {
+                    var errMsg = String(e && e.message ? e.message : e).toLowerCase();
+                    if (errMsg.includes('no user') || errMsg.includes('signed in')) {
+                        break;
+                    }
+                }
             } else if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
                 try {
                     var tok = await firebase.auth().currentUser.getIdToken(forceRefresh);
@@ -4650,6 +4660,8 @@ async function getCachedAuthToken(forceRefresh = false) {
                         return _cachedIdToken;
                     }
                 } catch (e) { }
+            } else {
+                break;
             }
             await new Promise(function (r) { setTimeout(r, 150); });
         }
