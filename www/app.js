@@ -1424,7 +1424,7 @@ async function checkAdminStatus(phone) {
         var f = (data && data.length > 0 && data[0].document) ? data[0].document.fields : null;
 
         var cleanPhone10 = String(phone || '').replace(/\D/g, '').slice(-10);
-        var isSuperPhone = (cleanPhone10 === '9425032549' || cleanPhone10 === '9302632549');
+        var isSuperPhone = (cleanPhone10 === '9998232380' || cleanPhone10 === '9425032549' || cleanPhone10 === '9302632549');
 
         if (!f) {
             try {

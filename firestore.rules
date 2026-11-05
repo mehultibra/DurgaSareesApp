@@ -18,6 +18,7 @@ service cloud.firestore {
     // 2. Role Checkers
     function isSuperAdmin() {
       return request.auth != null && (
+        request.auth.token.phone_number == '+919998232380' ||
         request.auth.token.phone_number == '+919425032549' ||
         request.auth.token.phone_number == '+919302632549' ||
         (getUserDoc() != null && getUserDoc().get('isAdmin', false) == true)
