@@ -89,12 +89,12 @@ service cloud.firestore {
     // USERS COLLECTION
     // ==========================================
     match /Users/{userId} {
-      // Admins can view/edit all users
-      allow read, write: if isAdmin();
+      // Admins and Staff can view/edit users for CRM, party linking & phone lookup
+      allow read, write: if isStaffOrAdmin();
       
       // A user can create their own profile, or read/update their own profile
-      allow create: if request.auth != null && request.resource.data.phone == request.auth.token.phone_number;
-      allow read, update: if request.auth != null && resource.data.phone == request.auth.token.phone_number;
+      allow create: if request.auth != null && (request.resource.data.phone == request.auth.token.phone_number || userId == request.auth.token.phone_number);
+      allow read, update: if request.auth != null && (resource.data.phone == request.auth.token.phone_number || userId == request.auth.token.phone_number);
     }
 
     // ==========================================
@@ -138,7 +138,7 @@ service cloud.firestore {
     // ORDERS / EVERYTHING ELSE
     // ==========================================
     match /LiveSessions/{sessionId} {
-      allow read: if isAdmin();
+      allow read: if isStaffOrAdmin();
       allow write: if true;
     }
 

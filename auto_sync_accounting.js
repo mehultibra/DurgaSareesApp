@@ -620,9 +620,9 @@ async function syncAccountingData() {
         });
     });
 
-    // Step 7.1: Include and preserve any app-created contacts (e.g. codes starting with APP_) from localLinks
+    // Step 7.1: Include and preserve any app-created contacts (e.g. codes starting with APP_ or custom party names) from localLinks
     Object.keys(localLinks).forEach(code => {
-        if (!code.startsWith('APP_')) return;
+        if (allowedPartyCodes.has(code)) return;
         const link = localLinks[code];
         if (!link || !link.name) return;
         const pCleanArr = extractMasterPhones(link.phone);
@@ -886,9 +886,9 @@ async function syncAccountingData() {
                 } else {
                     const errText = await commitRes.text();
                     console.error(`❌ Batch commit failed (HTTP ${commitRes.status}):`, errText.slice(0, 300));
-                    if (commitRes.status === 400 && itemsWithOps.length > 15) {
-                        console.log(`🔄 Splitting failed batch of ${itemsWithOps.length} docs into sub-batches of 15...`);
-                        const SUB_SIZE = 15;
+                    if (commitRes.status === 400 && itemsWithOps.length > 1) {
+                        const SUB_SIZE = Math.max(1, Math.floor(itemsWithOps.length / 4));
+                        console.log(`🔄 Splitting failed batch of ${itemsWithOps.length} docs into sub-batches of ${SUB_SIZE}...`);
                         for (let s = 0; s < itemsWithOps.length; s += SUB_SIZE) {
                             const subChunk = itemsWithOps.slice(s, s + SUB_SIZE);
                             await commitWriteOps(subChunk);

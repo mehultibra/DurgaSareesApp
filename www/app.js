@@ -163,6 +163,7 @@ history.replaceState({ modal: 'main' }, '');
 window.isAdminMode = false;
 window.adminTapCount = 0;
 window.isSuperAdmin = localStorage.getItem('dsIsAdmin') === 'true';
+window.isStaff = localStorage.getItem('dsIsStaff') === 'true';
 window.DS_APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx89H5yDUi-60Q2Rk12PH1TH34Nt-BncrMRhYSewu1LdLOj_GCWGKKz1Qmx2OmeGwlL/exec";
 
 window.dsMissingImage = "data:image/svg+xml;utf8," + encodeURIComponent(`
@@ -1260,7 +1261,7 @@ async function saveProfile() {
             headers['Authorization'] = 'Bearer ' + token;
         }
 
-        var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(phone), {
+        var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(phone) + "?updateMask.fieldPaths=name&updateMask.fieldPaths=firm&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=phone&updateMask.fieldPaths=createdAt", {
             method: "PATCH",
             headers: headers,
             body: JSON.stringify(doc)
@@ -1353,8 +1354,14 @@ window.syncAdminEditableFields = function () {
     var canEdit = Boolean(window.isSuperAdmin && window.isAdminMode);
     var priceBot = document.getElementById('dtPriceBot');
     var packBot = document.getElementById('dtPackBot');
-    if (priceBot) priceBot.setAttribute('contenteditable', canEdit ? 'true' : 'false');
-    if (packBot) packBot.setAttribute('contenteditable', canEdit ? 'true' : 'false');
+    if (priceBot) {
+        priceBot.setAttribute('contenteditable', canEdit ? 'true' : 'false');
+        priceBot.style.pointerEvents = canEdit ? 'auto' : 'none';
+    }
+    if (packBot) {
+        packBot.setAttribute('contenteditable', canEdit ? 'true' : 'false');
+        packBot.style.pointerEvents = canEdit ? 'auto' : 'none';
+    }
 };
 
 window.syncAdminUI = function () {
@@ -1480,6 +1487,7 @@ async function checkAdminStatus(phone) {
         } else {
             localStorage.setItem('dsIsAdmin', 'false');
         }
+        localStorage.setItem('dsIsStaff', window.isStaff ? 'true' : 'false');
 
         window.syncAdminUI();
 
@@ -1515,6 +1523,9 @@ function backToPhone() {
 }
 
 function initApp() {
+    if (typeof window.hasCRMAccess === 'function' && window.hasCRMAccess()) {
+        if (typeof window.syncAdminUI === 'function') window.syncAdminUI();
+    }
     if (window.isSuperAdmin) {
         if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
         if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
@@ -6225,6 +6236,7 @@ updateAndroidBackState();
 
 function toggleHdrMenu(event) {
     if (event) event.stopPropagation();
+    if (typeof window.syncAdminUI === 'function') window.syncAdminUI();
     var menu = document.getElementById('hdrMenu');
     if (menu) {
         var isAllowed = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
@@ -6265,6 +6277,7 @@ async function logout() {
         window.isAdminMode = false;
         window.isSuperAdmin = false;
         window.isStaff = false;
+        localStorage.removeItem('dsIsStaff');
         localStorage.removeItem('ds_active_on_behalf');
         localStorage.removeItem('dsAdminOwnProfile');
         ['crmHubModal', 'postCallCRMModal', 'incomingCallerLookupModal'].forEach(function (id) {
@@ -6524,8 +6537,8 @@ async function saveCustomerDetails() {
                 var nowIso = new Date().toISOString();
                 var adminInfo = "Admin";
                 try {
-                    var myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}');
-                    adminInfo = myCd.name ? `${myCd.name} (${activeUser || ''})` : (activeUser || "Admin");
+                    var myOwn = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}');
+                    adminInfo = myOwn.name ? `${myOwn.name} (${activeUser || ''})` : (activeUser || "Admin");
                 } catch(e){}
 
                 var pLinkDoc = {
@@ -6552,7 +6565,8 @@ async function saveCustomerDetails() {
 
                 // If phone is provided, also update/link in Users collection in Firestore
                 if (d.phone) {
-                    var cleanPhoneKey = d.phone.trim();
+                    var rawPhone = d.phone.trim().replace(/\D/g, '').slice(-10);
+                    var cleanPhoneKey = rawPhone.length === 10 ? ('+91' + rawPhone) : d.phone.trim();
                     var userPatchDoc = {
                         fields: {
                             linkedAccount: { stringValue: partyCodeKey },
@@ -11756,22 +11770,32 @@ window.parseFirestoreCustomerDoc = function (d) {
     var f = d.fields;
     var aRole = (f.role && f.role.stringValue) ? f.role.stringValue : 'customer';
     var isAgent = aRole === 'agent' || (f.atype && f.atype.stringValue === '12');
-    var rawPhones = [];
+    var rawList = [];
     if (f.cleanPhones && f.cleanPhones.arrayValue && Array.isArray(f.cleanPhones.arrayValue.values)) {
-        rawPhones = f.cleanPhones.arrayValue.values.map(function (v) { return v.stringValue || ''; }).filter(Boolean);
-    } else if (f.phones && f.phones.arrayValue && Array.isArray(f.phones.arrayValue.values)) {
-        rawPhones = f.phones.arrayValue.values.map(function (v) { return v.stringValue || ''; }).filter(Boolean);
+        f.cleanPhones.arrayValue.values.forEach(function (v) { if (v && v.stringValue) rawList.push(v.stringValue); });
     }
-    var primaryP = f.phone ? f.phone.stringValue : (rawPhones[0] || '');
-    if (primaryP && !rawPhones.includes(primaryP)) {
-        rawPhones.unshift(primaryP);
+    if (f.phones && f.phones.arrayValue && Array.isArray(f.phones.arrayValue.values)) {
+        f.phones.arrayValue.values.forEach(function (v) { if (v && v.stringValue) rawList.push(v.stringValue); });
     }
+    if (f.phone && f.phone.stringValue) {
+        rawList.push(f.phone.stringValue);
+    }
+    var dedupeMap = new Set();
+    var clean10List = [];
+    rawList.forEach(function (p) {
+        var p10 = String(p || '').replace(/\D/g, '').slice(-10);
+        if (p10.length === 10 && !dedupeMap.has(p10)) {
+            dedupeMap.add(p10);
+            clean10List.push(p10);
+        }
+    });
+    var primaryP = clean10List[0] || (f.phone ? f.phone.stringValue : '');
     return {
         c: decodeURIComponent(f.code ? f.code.stringValue : (d.name ? d.name.split('/').pop() : '')),
         n: f.name ? f.name.stringValue : '',
         p: primaryP,
-        cleanPhones: rawPhones,
-        phones: rawPhones,
+        cleanPhones: clean10List,
+        phones: clean10List,
         ct: f.station ? f.station.stringValue : '',
         st: f.state ? f.state.stringValue : '',
         g: f.gst ? f.gst.stringValue : '',
@@ -14102,11 +14126,20 @@ window.ensureContactPermissions = async function (plugin) {
     }
 };
 
-window.buildContactPayload = function (party) {
-    var rawPhones = Array.isArray(party.cleanPhones) && party.cleanPhones.length ? party.cleanPhones : (Array.isArray(party.phones) && party.phones.length ? party.phones : []);
+window.buildContactPayload = function (party, extraExistingPhones) {
+    var rawPhones = Array.isArray(party.cleanPhones) && party.cleanPhones.length ? party.cleanPhones.slice() : (Array.isArray(party.phones) && party.phones.length ? party.phones.slice() : []);
     var cleanPhone = String(party.phone || party.p || '').replace(/\D/g, '').slice(-10);
     if (cleanPhone && !rawPhones.includes(cleanPhone)) {
         rawPhones.unshift(cleanPhone);
+    }
+    if (Array.isArray(extraExistingPhones)) {
+        extraExistingPhones.forEach(function (ph) {
+            var val = typeof ph === 'string' ? ph : (ph.value || ph.number || '');
+            var p10 = String(val).replace(/\D/g, '').slice(-10);
+            if (p10.length === 10 && !rawPhones.includes(p10)) {
+                rawPhones.push(p10);
+            }
+        });
     }
     var phoneList = [];
     var seenNums = new Set();
@@ -14137,7 +14170,8 @@ window.buildContactPayload = function (party) {
         return {
             type: idx === 0 ? 'MOBILE' : 'WORK',
             value: '+91' + p10,
-            label: idx === 0 ? 'Mobile' : ('Work ' + idx)
+            number: '+91' + p10,
+            label: idx === 0 ? 'mobile' : 'work'
         };
     });
     var phonesNested = phoneList.map(function (p10, idx) {
@@ -14189,8 +14223,9 @@ window.syncSingleContactNative = async function (party) {
     var recordsMap = await window.getAllContactSyncRecords();
     var existingRec = recordsMap.get(code);
     var targetContactId = existingRec ? existingRec.contactId : null;
+    var matchedDevPhones = [];
 
-    if (!targetContactId && typeof plugin.getContacts === 'function') {
+    if (typeof plugin.getContacts === 'function') {
         try {
             var devRes = await plugin.getContacts({ projection: { name: true, phones: true } });
             var devList = (devRes && devRes.contacts) ? devRes.contacts : [];
@@ -14201,14 +14236,19 @@ window.syncSingleContactNative = async function (party) {
                     var v = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
                     return phonesList.includes(v);
                 });
-                if (matched) {
+                if (matched || (targetContactId && String(dc.id || dc.contactId) === String(targetContactId))) {
                     targetContactId = dc.id || dc.contactId;
+                    matchedDevPhones = phones;
                     break;
                 }
             }
         } catch (e) {
             console.warn("Device contact lookup error:", e);
         }
+    }
+
+    if (matchedDevPhones && matchedDevPhones.length) {
+        payload = window.buildContactPayload(party, matchedDevPhones);
     }
 
     if (targetContactId && typeof plugin.updateContactById === 'function') {
@@ -14235,6 +14275,7 @@ window.syncSingleContactNative = async function (party) {
     }
     return null;
 };
+window.upsertSingleNativeContact = window.syncSingleContactNative;
 
 window.startAutomaticContactSync = async function () {
     if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) return;
@@ -14270,10 +14311,12 @@ window.startAutomaticContactSync = async function () {
             try {
                 var devRes = await plugin.getContacts({ projection: { name: true, phones: true } });
                 var devList = (devRes && devRes.contacts) ? devRes.contacts : [];
+                if (!window._deviceContactsMap) window._deviceContactsMap = new Map();
                 devList.forEach(function (dc) {
                     var cid = dc.id || dc.contactId;
                     if (!cid) return;
                     var phones = dc.phoneNumbers || dc.phones || [];
+                    window._deviceContactsMap.set(String(cid), phones);
                     phones.forEach(function (ph) {
                         var p10 = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
                         if (p10.length === 10 && !devicePhoneMap.has(p10)) {
@@ -14349,8 +14392,9 @@ window.startAutomaticContactSync = async function () {
 
             for (var i = 0; i < chunk.length; i++) {
                 var item = chunk[i];
-                var payload = window.buildContactPayload(item.party);
                 var assignedId = item.contactId;
+                var existingDevPhones = assignedId && window._deviceContactsMap ? window._deviceContactsMap.get(String(assignedId)) : null;
+                var payload = window.buildContactPayload(item.party, existingDevPhones);
 
                 try {
                     if (assignedId && typeof plugin.updateContactById === 'function') {
