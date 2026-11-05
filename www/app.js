@@ -178,6 +178,9 @@ try {
     window.isSuperAdmin = false;
     window.isStaff = false;
 }
+if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
+    try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
+}
 window.DS_APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx89H5yDUi-60Q2Rk12PH1TH34Nt-BncrMRhYSewu1LdLOj_GCWGKKz1Qmx2OmeGwlL/exec";
 
 window.dsMissingImage = "data:image/svg+xml;utf8," + encodeURIComponent(`
@@ -799,6 +802,14 @@ window.addEventListener('DOMContentLoaded', function () {
     // 🚀 Initialize Capgo OTA Updater
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
         try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
+        try {
+            var pending = localStorage.getItem("dsPendingOta");
+            if (pending) {
+                localStorage.removeItem("dsPendingOta");
+                var vData = JSON.parse(pending);
+                window.Capacitor.Plugins.CapacitorUpdater.set(vData).catch(function () { });
+            }
+        } catch (e) { }
     }
 
     // Check for updates on ALL platforms (Native & Web)
@@ -837,8 +848,10 @@ async function checkForOTAUpdates() {
                     version: latestVersion
                 });
                 localStorage.setItem("dsOtaVersion", latestVersion);
-                localStorage.setItem("dsPendingOta", JSON.stringify(versionData));
-                console.log("Update downloaded. Will apply silently on background or next restart.");
+                localStorage.removeItem("dsPendingOta");
+                if (versionData) {
+                    await window.Capacitor.Plugins.CapacitorUpdater.set(versionData);
+                }
             } else {
                 localStorage.setItem("dsOtaVersion", latestVersion);
                 console.log("Web update available. Will apply on next page refresh.");
@@ -1347,45 +1360,49 @@ window.syncAdminEditableFields = function () {
 };
 
 window.syncAdminUI = function () {
-    var hasCRM = window.hasCRMAccess();
-    var showAdminUI = Boolean(window.isSuperAdmin && window.isAdminMode);
+    try {
+        var hasCRM = window.hasCRMAccess();
+        var showAdminUI = Boolean(window.isSuperAdmin && window.isAdminMode);
 
-    if (document.getElementById('menuCustomerDirectory')) {
-        document.getElementById('menuCustomerDirectory').style.display = hasCRM ? 'flex' : 'none';
+        if (document.getElementById('menuCustomerDirectory')) {
+            document.getElementById('menuCustomerDirectory').style.display = hasCRM ? 'flex' : 'none';
+        }
+        if (document.getElementById('menuCRMHub')) {
+            document.getElementById('menuCRMHub').style.display = hasCRM ? 'flex' : 'none';
+        }
+        if (document.getElementById('btnTopCRMHub')) {
+            document.getElementById('btnTopCRMHub').style.display = hasCRM ? 'inline-block' : 'none';
+        }
+        if (document.getElementById('menuIncomingLookup')) {
+            document.getElementById('menuIncomingLookup').style.display = hasCRM ? 'flex' : 'none';
+        }
+        if (document.getElementById('btnTopIncomingLookup')) {
+            document.getElementById('btnTopIncomingLookup').style.display = hasCRM ? 'inline-block' : 'none';
+        }
+        if (document.getElementById('menuLiveAdmin')) {
+            document.getElementById('menuLiveAdmin').style.display = hasCRM ? 'flex' : 'none';
+        }
+        if (document.getElementById('btnTopLiveAdmin')) {
+            document.getElementById('btnTopLiveAdmin').style.display = hasCRM ? 'inline-block' : 'none';
+        }
+        if (document.getElementById('menuManageSections')) {
+            document.getElementById('menuManageSections').style.display = showAdminUI ? 'flex' : 'none';
+        }
+        var fabAdd = document.getElementById('fabAddProduct');
+        if (fabAdd) {
+            fabAdd.style.display = showAdminUI ? 'flex' : 'none';
+        }
+        var scorecardTabBtn = document.getElementById('crmTabBtnScorecard');
+        if (scorecardTabBtn) {
+            scorecardTabBtn.style.display = window.isSuperAdmin ? 'inline-block' : 'none';
+        }
+        if (typeof window.updateOrderOnBehalfBanner === 'function') {
+            window.updateOrderOnBehalfBanner();
+        }
+        window.syncAdminEditableFields();
+    } catch (e) {
+        console.warn("syncAdminUI error:", e);
     }
-    if (document.getElementById('menuCRMHub')) {
-        document.getElementById('menuCRMHub').style.display = hasCRM ? 'flex' : 'none';
-    }
-    if (document.getElementById('btnTopCRMHub')) {
-        document.getElementById('btnTopCRMHub').style.display = hasCRM ? 'inline-block' : 'none';
-    }
-    if (document.getElementById('menuIncomingLookup')) {
-        document.getElementById('menuIncomingLookup').style.display = hasCRM ? 'flex' : 'none';
-    }
-    if (document.getElementById('btnTopIncomingLookup')) {
-        document.getElementById('btnTopIncomingLookup').style.display = hasCRM ? 'inline-block' : 'none';
-    }
-    if (document.getElementById('menuLiveAdmin')) {
-        document.getElementById('menuLiveAdmin').style.display = hasCRM ? 'flex' : 'none';
-    }
-    if (document.getElementById('btnTopLiveAdmin')) {
-        document.getElementById('btnTopLiveAdmin').style.display = hasCRM ? 'inline-block' : 'none';
-    }
-    if (document.getElementById('menuManageSections')) {
-        document.getElementById('menuManageSections').style.display = showAdminUI ? 'flex' : 'none';
-    }
-    var fabAdd = document.getElementById('fabAddProduct');
-    if (fabAdd) {
-        fabAdd.style.display = showAdminUI ? 'flex' : 'none';
-    }
-    var scorecardTabBtn = document.getElementById('crmTabBtnScorecard');
-    if (scorecardTabBtn) {
-        scorecardTabBtn.style.display = window.isSuperAdmin ? 'inline-block' : 'none';
-    }
-    if (typeof window.updateOrderOnBehalfBanner === 'function') {
-        window.updateOrderOnBehalfBanner();
-    }
-    window.syncAdminEditableFields();
 };
 
 async function checkAdminStatus(phone) {
@@ -1498,13 +1515,17 @@ function backToPhone() {
 }
 
 function initApp() {
-    if (typeof window.hasCRMAccess === 'function' && window.hasCRMAccess()) {
-        if (typeof window.syncAdminUI === 'function') window.syncAdminUI();
-    }
-    if (window.isSuperAdmin) {
-        if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
-        if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
-        if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
+    try {
+        if (typeof window.hasCRMAccess === 'function' && window.hasCRMAccess()) {
+            if (typeof window.syncAdminUI === 'function') window.syncAdminUI();
+        }
+        if (window.isSuperAdmin) {
+            if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
+            if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
+            if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
+        }
+    } catch (e) {
+        console.warn("initApp admin UI sync error:", e);
     }
     var bootScreen = document.getElementById('boot');
     if (typeof window.processCameraOutbox === 'function') {
@@ -13915,81 +13936,85 @@ window.exitOrderOnBehalf = function () {
 };
 
 window.updateOrderOnBehalfBanner = function () {
-    var banner = document.getElementById('orderOnBehalfBanner');
-    if (!banner) return;
+    try {
+        var banner = document.getElementById('orderOnBehalfBanner');
+        if (!banner) return;
 
-    var stored = null;
-    try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+        var stored = null;
+        try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
 
-    var isAllowed = Boolean(window.isSuperAdmin || window.isAdminMode);
+        var isAllowed = Boolean(window.isSuperAdmin || window.isAdminMode);
 
-    if (isAllowed) {
-        if (stored && stored.name) {
-            var locParts = [];
-            if (stored.station) locParts.push(stored.station);
-            if (stored.state && stored.state !== stored.station) locParts.push(stored.state);
-            var locStr = locParts.length ? ' (' + locParts.join(', ') + ')' : '';
+        if (isAllowed) {
+            if (stored && stored.name) {
+                var locParts = [];
+                if (stored.station) locParts.push(stored.station);
+                if (stored.state && stored.state !== stored.station) locParts.push(stored.state);
+                var locStr = locParts.length ? ' (' + locParts.join(', ') + ')' : '';
+                banner.style.background = '#be185d';
+                banner.style.color = '#fff';
+                banner.onclick = openCustomerDetailsModal;
+                banner.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+                      <i class="fas fa-store" style="font-size:13px; color:#fbcfe8;"></i>
+                      <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(stored.name)}${escHtml(locStr)}</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                      <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-weight:normal;">Change</span>
+                      <button type="button" onclick="event.stopPropagation(); window.exitOrderOnBehalf()" style="background:#fff; color:#be185d; border:none; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;" title="Clear Party">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </div>
+                `;
+                banner.style.display = 'flex';
+            } else {
+                var own = null;
+                try { own = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+                if (!own || (!own.name && !own.firm)) {
+                    try { own = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+                }
+                var adminName = (own && (own.name || own.firm)) || 'Durga Sarees Admin';
+                var adminStation = (own && own.station) || '';
+                var adminLoc = adminStation ? ` (${adminStation})` : '';
+                banner.style.background = '#334155';
+                banner.style.color = '#fff';
+                banner.onclick = openCustomerDetailsModal;
+                banner.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+                      <i class="fas fa-user-shield" style="font-size:13px; color:#93c5fd;"></i>
+                      <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(adminName)}${escHtml(adminLoc)}</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                      <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-weight:600;"><i class="fas fa-user-plus" style="font-size:9px; margin-right:3px;"></i> Select Party</span>
+                    </div>
+                `;
+                banner.style.display = 'flex';
+            }
+        } else {
+            var cd = null;
+            try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+            if (!cd || (!cd.name && !cd.firm)) {
+                try { cd = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+            }
+            var custName = (cd && (cd.name || cd.firm)) || 'Durga Sarees Customer';
+            var custStation = (cd && cd.station) || localStorage.getItem('ds_guest_location') || '';
+            var custLoc = custStation ? ` • ${custStation}` : '';
             banner.style.background = '#be185d';
             banner.style.color = '#fff';
             banner.onclick = openCustomerDetailsModal;
             banner.innerHTML = `
                 <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
-                  <i class="fas fa-store" style="font-size:13px; color:#fbcfe8;"></i>
-                  <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(stored.name)}${escHtml(locStr)}</span>
-                </div>
-                <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-                  <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-weight:normal;">Change</span>
-                  <button type="button" onclick="event.stopPropagation(); window.exitOrderOnBehalf()" style="background:#fff; color:#be185d; border:none; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;" title="Clear Party">
-                    <i class="fas fa-times"></i>
-                  </button>
-                </div>
-            `;
-            banner.style.display = 'flex';
-        } else {
-            var own = null;
-            try { own = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
-            if (!own || (!own.name && !own.firm)) {
-                try { own = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
-            }
-            var adminName = (own && (own.name || own.firm)) || 'Durga Sarees Admin';
-            var adminStation = (own && own.station) || '';
-            var adminLoc = adminStation ? ` (${adminStation})` : '';
-            banner.style.background = '#334155';
-            banner.style.color = '#fff';
-            banner.onclick = openCustomerDetailsModal;
-            banner.innerHTML = `
-                <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
-                  <i class="fas fa-user-shield" style="font-size:13px; color:#93c5fd;"></i>
-                  <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(adminName)}${escHtml(adminLoc)}</span>
+                  <i class="fas fa-user-circle" style="font-size:13px; color:#fbcfe8;"></i>
+                  <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(custName)}${escHtml(custLoc)}</span>
                 </div>
                 <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
-                  <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-weight:600;"><i class="fas fa-user-plus" style="font-size:9px; margin-right:3px;"></i> Select Party</span>
+                  <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-weight:normal;">Edit</span>
                 </div>
             `;
             banner.style.display = 'flex';
         }
-    } else {
-        var cd = null;
-        try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
-        if (!cd || (!cd.name && !cd.firm)) {
-            try { cd = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
-        }
-        var custName = (cd && (cd.name || cd.firm)) || 'Durga Sarees Customer';
-        var custStation = (cd && cd.station) || localStorage.getItem('ds_guest_location') || '';
-        var custLoc = custStation ? ` • ${custStation}` : '';
-        banner.style.background = '#be185d';
-        banner.style.color = '#fff';
-        banner.onclick = openCustomerDetailsModal;
-        banner.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
-              <i class="fas fa-user-circle" style="font-size:13px; color:#fbcfe8;"></i>
-              <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(custName)}${escHtml(custLoc)}</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
-              <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-weight:normal;">Edit</span>
-            </div>
-        `;
-        banner.style.display = 'flex';
+    } catch (e) {
+        console.warn("updateOrderOnBehalfBanner error:", e);
     }
 };
 
