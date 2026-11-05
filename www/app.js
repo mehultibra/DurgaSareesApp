@@ -13624,7 +13624,16 @@ window.mergeFirebasePartyLinks = async function (list) {
             var k = (c.c || c.n || '').trim().toUpperCase();
             if (linksMap.has(k)) {
                 var l = linksMap.get(k);
-                if (l.phone && !c.p) c.p = l.phone;
+                if (l.phone) {
+                    if (!c.p) c.p = l.phone;
+                    var lp10 = String(l.phone).replace(/\D/g, '').slice(-10);
+                    if (lp10.length === 10) {
+                        if (!Array.isArray(c.cleanPhones)) c.cleanPhones = [];
+                        if (!c.cleanPhones.includes(lp10)) c.cleanPhones.push(lp10);
+                        if (!Array.isArray(c.phones)) c.phones = [];
+                        if (!c.phones.includes(lp10)) c.phones.push(lp10);
+                    }
+                }
                 if (l.state) c.st = l.state;
                 if (l.station && (!c.ct || c.ct === 'Unknown')) c.ct = l.station;
                 if (l.agent && !c.ag) c.ag = l.agent;
