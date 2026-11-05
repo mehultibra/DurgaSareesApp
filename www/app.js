@@ -162,16 +162,22 @@ history.replaceState({ modal: 'main' }, '');
 // --- ADMIN MODE GLOBALS ---
 window.isAdminMode = false;
 window.adminTapCount = 0;
-var _savedToken = '';
-try { _savedToken = (localStorage.getItem('dsUserToken') || localStorage.getItem('dsAdminPhone') || localStorage.getItem('dsUserPhone') || ''); } catch(e){}
-var _savedP10 = _savedToken.replace(/\D/g, '').slice(-10);
-if (_savedP10 === '9998232380' || _savedP10 === '9425032549' || _savedP10 === '9302632549') {
-    window.isSuperAdmin = true;
-    try { localStorage.setItem('dsIsAdmin', 'true'); } catch(e){}
-} else {
-    window.isSuperAdmin = localStorage.getItem('dsIsAdmin') === 'true';
+window.isSuperAdmin = false;
+window.isStaff = false;
+try {
+    var _savedToken = String(localStorage.getItem('dsUserToken') || localStorage.getItem('dsAdminPhone') || localStorage.getItem('dsUserPhone') || '');
+    var _savedP10 = _savedToken.replace(/\D/g, '').slice(-10);
+    if (_savedP10 === '9998232380' || _savedP10 === '9425032549' || _savedP10 === '9302632549') {
+        window.isSuperAdmin = true;
+        localStorage.setItem('dsIsAdmin', 'true');
+    } else {
+        window.isSuperAdmin = localStorage.getItem('dsIsAdmin') === 'true';
+    }
+    window.isStaff = localStorage.getItem('dsIsStaff') === 'true';
+} catch (e) {
+    window.isSuperAdmin = false;
+    window.isStaff = false;
 }
-window.isStaff = localStorage.getItem('dsIsStaff') === 'true';
 window.DS_APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx89H5yDUi-60Q2Rk12PH1TH34Nt-BncrMRhYSewu1LdLOj_GCWGKKz1Qmx2OmeGwlL/exec";
 
 window.dsMissingImage = "data:image/svg+xml;utf8," + encodeURIComponent(`
@@ -793,38 +799,6 @@ window.addEventListener('DOMContentLoaded', function () {
     // 🚀 Initialize Capgo OTA Updater
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) {
         try { window.Capacitor.Plugins.CapacitorUpdater.notifyAppReady(); } catch (e) { }
-
-        // Apply any pending update instantly on cold boot
-        (async function () {
-            try {
-                let pending = localStorage.getItem("dsPendingOta");
-                if (pending) {
-                    let vData = JSON.parse(pending);
-                    localStorage.removeItem("dsPendingOta");
-                    await window.Capacitor.Plugins.CapacitorUpdater.set(vData);
-                }
-            } catch (e) { }
-        })();
-
-        // Apply updates silently when app goes into background
-        if (window.Capacitor && window.Capacitor.Plugins.App) {
-            window.Capacitor.Plugins.App.addListener('appStateChange', async ({ isActive }) => {
-                if (!isActive) {
-                    var loginScreen = document.getElementById('loginScreen');
-                    if (loginScreen && loginScreen.style.display !== 'none') {
-                        return; // Do not interrupt login/OTP flow
-                    }
-                    var pending = localStorage.getItem("dsPendingOta");
-                    if (pending && window.Capacitor.Plugins.CapacitorUpdater) {
-                        try {
-                            let vData = JSON.parse(pending);
-                            localStorage.removeItem("dsPendingOta");
-                            window.Capacitor.Plugins.CapacitorUpdater.set(vData).catch(() => { });
-                        } catch (e) { }
-                    }
-                }
-            });
-        }
     }
 
     // Check for updates on ALL platforms (Native & Web)
@@ -1499,13 +1473,6 @@ async function checkAdminStatus(phone) {
 
         window.syncAdminUI();
 
-        if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform()) {
-            setTimeout(function () {
-                if (typeof window.startAutomaticContactSync === 'function') {
-                    window.startAutomaticContactSync();
-                }
-            }, 800);
-        }
     } catch (e) {
         if (typeof window.logAppError === 'function') window.logAppError("checkAdminStatus", e.message);
     }
@@ -1538,11 +1505,6 @@ function initApp() {
         if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
         if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
         if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
-        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            setTimeout(function () {
-                if (typeof window.startAutomaticContactSync === 'function') window.startAutomaticContactSync();
-            }, 3000);
-        }
     }
     var bootScreen = document.getElementById('boot');
     if (typeof window.processCameraOutbox === 'function') {
@@ -11994,11 +11956,6 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
         console.warn("Could not load AccountingCustomers from Firestore:", e);
     }
 
-    if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform()) {
-        setTimeout(function () {
-            if (typeof window.startAutomaticContactSync === 'function') window.startAutomaticContactSync();
-        }, 800);
-    }
     if (syncIcon) syncIcon.classList.remove('fa-spin');
 };
 
@@ -14294,12 +14251,13 @@ window.syncSingleContactNative = async function (party) {
 window.upsertSingleNativeContact = window.syncSingleContactNative;
 
 window.startAutomaticContactSync = async function (forceAll = false) {
+    if (!forceAll) return;
     if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) {
-        if (forceAll) alert("Contact sync is available on Android with Admin privileges.");
+        alert("Contact sync is available on Android with Admin privileges.");
         return;
     }
     if (window._isSyncingContacts) {
-        if (forceAll) alert("Contact sync is already running in background...");
+        alert("Contact sync is already running in background...");
         return;
     }
     window._isSyncingContacts = true;
