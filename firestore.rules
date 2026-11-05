@@ -9,11 +9,30 @@ service cloud.firestore {
              : null;
     }
     
+    function getUserDoc() {
+      return (request.auth != null && request.auth.token.phone_number != null && exists(/databases/$(database)/documents/Users/$(request.auth.token.phone_number)))
+             ? get(/databases/$(database)/documents/Users/$(request.auth.token.phone_number)).data
+             : null;
+    }
+
     // 2. Role Checkers
     function isSuperAdmin() {
-      return request.auth != null && (request.auth.token.phone_number == '+919425032549' || request.auth.token.phone_number == '+919302632549');
+      return request.auth != null && (
+        request.auth.token.phone_number == '+919425032549' ||
+        request.auth.token.phone_number == '+919302632549' ||
+        (getUserDoc() != null && getUserDoc().get('isAdmin', false) == true)
+      );
     }
-    function isAdmin() { return request.auth != null && (isSuperAdmin() || getRole() == 'admin'); }
+    function isAdmin() {
+      return request.auth != null && (isSuperAdmin() || getRole() == 'admin');
+    }
+    function isStaffOrAdmin() {
+      return request.auth != null && (
+        isAdmin() ||
+        getRole() == 'staff' ||
+        (getUserDoc() != null && getUserDoc().get('isStaff', false) == true)
+      );
+    }
     function isInventory() { return request.auth != null && getRole() == 'inventory'; }
     function isPacking() { return request.auth != null && getRole() == 'packing'; }
 
@@ -82,26 +101,37 @@ service cloud.firestore {
     // PARTY LINKS (Permanent Cloud Linking & Party Data)
     // ==========================================
     match /PartyLinks/{linkId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isStaffOrAdmin();
+    }
+
+    // ==========================================
+    // CRM COLLECTIONS (Live Multi-Staff CRM)
+    // ==========================================
+    match /PartyCRM/{partyCode} {
+      allow read, write: if isStaffOrAdmin();
+    }
+    match /CRMLogs/{logId} {
+      allow read, write: if isStaffOrAdmin();
     }
 
     // ==========================================
     // ERP CLOUD COLLECTIONS (Accounting Brain)
     // ==========================================
     match /AccountingMeta/{docId} {
-      allow read, write: if isAdmin();
-    }
-    match /AccountingCustomers/{docId} {
-      allow read: if true;
+      allow read: if isStaffOrAdmin();
       allow write: if isAdmin();
     }
+    match /AccountingCustomers/{docId} {
+      allow read: if isStaffOrAdmin();
+      allow write: if isStaffOrAdmin();
+    }
     match /AccountingReports/{docId} {
-      allow get: if true;
-      allow list, write: if isAdmin();
+      allow read: if isStaffOrAdmin();
+      allow write: if isAdmin();
     }
     match /PhoneDirectory/{phoneId} {
       allow get: if request.auth != null;
-      allow list, write: if isAdmin();
+      allow list, write: if isStaffOrAdmin();
     }
 
     // ==========================================

@@ -138,7 +138,9 @@
           <i class="fas fa-shopping-bag"></i>
           <div class="cart-badge-top" id="cartCountHeader">0</div>
         </div>
-        <i id="btnTopLiveAdmin" class="fas fa-users" onclick="window.openLiveAdmin()" style="display:none; cursor:pointer; color:#4caf50; margin-left:12px; margin-right:5px; font-size:16px;" title="Live Customers"></i>
+        <i id="btnTopCRMHub" class="fas fa-headset" onclick="window.openCRMHubModal()" style="display:none; cursor:pointer; color:#0284c7; margin-left:8px; margin-right:3px; font-size:16px;" title="Live CRM Hub"></i>
+        <i id="btnTopIncomingLookup" class="fas fa-phone-volume" onclick="window.openIncomingCallerLookupModal()" style="display:none; cursor:pointer; color:#be185d; margin-left:6px; margin-right:3px; font-size:16px;" title="Incoming Caller Lookup"></i>
+        <i id="btnTopLiveAdmin" class="fas fa-users" onclick="window.openLiveAdmin()" style="display:none; cursor:pointer; color:#4caf50; margin-left:8px; margin-right:5px; font-size:16px;" title="Live Customers"></i>
         <i class="fas fa-sync-alt" onclick="syncImages()" style="cursor:pointer; margin-left:5px;"></i>
         <div style="position:relative; margin-left:5px; display:flex; align-items:center;">
           <i class="fas fa-ellipsis-v" onclick="toggleHdrMenu(event)"
@@ -150,6 +152,12 @@
               <i class="fas fa-file-contract" style="color:var(--myntra-pink);"></i> Sync Report</div>
             <div id="menuManageSections" onclick="window.openManageSectionsModal()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text-main); font-size:14px; font-weight:bold; align-items:center; gap:8px;">
               <i class="fas fa-layer-group" style="color:var(--myntra-pink);"></i> Manage Sections
+            </div>
+            <div id="menuCRMHub" onclick="window.openCRMHubModal()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:#0284c7; font-size:14px; font-weight:bold; align-items:center; gap:8px;">
+              <i class="fas fa-headset" style="color:#0284c7;"></i> 📞 Live CRM Hub
+            </div>
+            <div id="menuIncomingLookup" onclick="window.openIncomingCallerLookupModal()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:#be185d; font-size:14px; font-weight:bold; align-items:center; gap:8px;">
+              <i class="fas fa-phone-volume" style="color:#be185d;"></i> 🔍 Caller Lookup
             </div>
             <div id="menuCustomerDirectory" onclick="window.openCustomerDirectoryModal()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:#be185d; font-size:14px; font-weight:bold; align-items:center; gap:8px;">
               <i class="fas fa-address-book" style="color:var(--myntra-pink);"></i> Customers (ERP)
@@ -435,9 +443,9 @@
       style="display: flex; align-items: center; padding: 0 16px; gap: 12px; overflow-x: auto; flex-wrap: nowrap; white-space: nowrap; scrollbar-width: none;">
       <div style="display:flex; align-items:center; flex-shrink: 0;">
         <span style="font-weight:bold; font-size:16px; color:var(--text-main); margin-right: 8px;">₹ <span
-            id="dtPriceBot" contenteditable="true" inputmode="numeric"
+            id="dtPriceBot" contenteditable="false" inputmode="numeric"
             style="outline:none; cursor:text;">0</span></span>
-        <span id="dtPackBot" contenteditable="true"
+        <span id="dtPackBot" contenteditable="false"
           style="font-size:12px; font-weight:bold; color:var(--text-light); outline:none; cursor:text;">1</span>
         <span style="user-select: none;">&nbsp;&nbsp;</span>
         <div onclick="openModal('shareModal')"
@@ -994,6 +1002,10 @@
           style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap;">
           <i class="fas fa-book"></i> Ledger Statement
         </button>
+        <button type="button" id="tabBtnCRM" onclick="window.switchCustomerReportTab('crm')"
+          style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap;">
+          <i class="fas fa-comments" style="color:#0284c7;"></i> 💬 CRM Notes &amp; History
+        </button>
       </div>
 
       <!-- Tab Content Area (Styled like authentic ERP reports) -->
@@ -1418,6 +1430,235 @@
         style="margin-top:6px; width:100%; background:var(--myntra-pink); color:#fff; border:none; padding:12px; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; box-shadow:0 4px 6px rgba(255, 63, 108, 0.2);">
         <i class="fas fa-save"></i> Save &amp; Sync Contact
       </button>
+
+    </div>
+  </div>
+
+
+  <!-- 📞 Live Staff Call CRM Log Modal -->
+  <div id="postCallCRMModal" class="action-modal" onclick="if(event.target===this) window.closePostCallCRMModal()"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10060; flex-direction:column; justify-content:center; align-items:center; padding:12px;">
+    <div class="modal-content"
+      style="background:#fff; border-radius:14px; padding:16px; width:100%; max-width:540px; max-height:92vh; overflow-y:auto; box-shadow:0 8px 30px rgba(0,0,0,0.25); box-sizing:border-box;">
+      
+      <!-- Header -->
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+        <div>
+          <div style="font-size:15px; font-weight:bold; color:#1e293b; display:flex; align-items:center; gap:6px;">
+            <i class="fas fa-headset" style="color:#0284c7;"></i> Log Call Note / Follow-Up
+          </div>
+          <div id="crmModalPartySubtitle" style="font-size:12px; font-weight:600; color:var(--myntra-pink); margin-top:2px;">Party Name</div>
+          <div id="crmModalPartyMeta" style="font-size:11px; color:#64748b; margin-top:1px;">Phone: +91... | Bal: ₹ 0</div>
+        </div>
+        <button type="button" onclick="window.closePostCallCRMModal()"
+          style="background:#f1f5f9; border:none; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#64748b;">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <!-- Hidden Context Fields -->
+      <input type="hidden" id="crmPartyCode">
+      <input type="hidden" id="crmPartyName">
+      <input type="hidden" id="crmPartyPhone">
+      <input type="hidden" id="crmPartyStation">
+      <input type="hidden" id="crmPartyAgent">
+
+      <!-- Form Body -->
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+        
+        <!-- Call Type Toggle -->
+        <div>
+          <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Call / Interaction Type</label>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="crm-call-type-btn" id="crmTypeOutgoing" onclick="window.selectCRMCallType('outgoing')"
+              style="flex:1; padding:6px; border:1px solid #0284c7; background:#e0f2fe; color:#0369a1; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+              📤 Outgoing
+            </button>
+            <button type="button" class="crm-call-type-btn" id="crmTypeIncoming" onclick="window.selectCRMCallType('incoming')"
+              style="flex:1; padding:6px; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+              📥 Incoming
+            </button>
+            <button type="button" class="crm-call-type-btn" id="crmTypeWhatsapp" onclick="window.selectCRMCallType('whatsapp')"
+              style="flex:1; padding:6px; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+              💬 WhatsApp
+            </button>
+          </div>
+          <input type="hidden" id="crmCallType" value="outgoing">
+        </div>
+
+        <!-- 1-Tap Disposition Chips -->
+        <div>
+          <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Call Outcome / Disposition</label>
+          <div style="display:flex; flex-wrap:wrap; gap:5px;" id="crmDispositionContainer">
+            <span class="crm-disp-chip" onclick="window.selectCRMDisposition('Payment Promised')" style="font-size:11px; padding:4px 8px; border-radius:15px; border:1px solid #cbd5e1; background:#fff; color:#334155; cursor:pointer; font-weight:600;">💰 Payment Promised</span>
+            <span class="crm-disp-chip" onclick="window.selectCRMDisposition('Order Confirmed')" style="font-size:11px; padding:4px 8px; border-radius:15px; border:1px solid #cbd5e1; background:#fff; color:#334155; cursor:pointer; font-weight:600;">📦 Order Confirmed</span>
+            <span class="crm-disp-chip" onclick="window.selectCRMDisposition('Catalog Sent')" style="font-size:11px; padding:4px 8px; border-radius:15px; border:1px solid #cbd5e1; background:#fff; color:#334155; cursor:pointer; font-weight:600;">📱 Catalog Sent</span>
+            <span class="crm-disp-chip" onclick="window.selectCRMDisposition('Rate / Goods Issue')" style="font-size:11px; padding:4px 8px; border-radius:15px; border:1px solid #cbd5e1; background:#fff; color:#334155; cursor:pointer; font-weight:600;">⚠️ Rate / Goods Issue</span>
+            <span class="crm-disp-chip" onclick="window.selectCRMDisposition('Call Back Later')" style="font-size:11px; padding:4px 8px; border-radius:15px; border:1px solid #cbd5e1; background:#fff; color:#334155; cursor:pointer; font-weight:600;">🔄 Call Back Later</span>
+            <span class="crm-disp-chip" onclick="window.selectCRMDisposition('No Answer')" style="font-size:11px; padding:4px 8px; border-radius:15px; border:1px solid #cbd5e1; background:#fff; color:#334155; cursor:pointer; font-weight:600;">❌ No Answer</span>
+          </div>
+          <input type="hidden" id="crmDisposition" value="">
+        </div>
+
+        <!-- Voice-to-Text Dictation & Notes -->
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label style="font-size:11px; font-weight:700; color:#475569;">Call Conversation Note</label>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <select id="crmSpeechLang" style="padding:2px 5px; font-size:10px; border:1px solid #cbd5e1; border-radius:4px; outline:none; background:#fff;">
+                <option value="hi-IN" selected>Hindi (हिन्दी)</option>
+                <option value="gu-IN">Gujarati (ગુજરાતી)</option>
+                <option value="en-IN">English (India)</option>
+              </select>
+              <button type="button" id="crmBtnVoiceDictate" onclick="window.toggleCRMSpeechDictation()"
+                style="background:#f1f5f9; border:1px solid #cbd5e1; color:#0284c7; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                <i class="fas fa-microphone"></i> <span id="crmVoiceBtnText">Speak Note</span>
+              </button>
+            </div>
+          </div>
+          <textarea id="crmNoteInput" rows="3" placeholder="Speak or type what was discussed with the customer..."
+            style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; outline:none; resize:vertical; font-family:inherit;"></textarea>
+        </div>
+
+        <!-- Follow-up Date & Promised Amount -->
+        <div style="display:flex; gap:10px;">
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:2px;">Promised Amount (₹)</label>
+            <input type="number" id="crmPromisedAmount" placeholder="₹ 0.00"
+              style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; outline:none;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:2px;">Next Follow-Up</label>
+            <input type="date" id="crmFollowUpDate"
+              style="width:100%; box-sizing:border-box; padding:7px 8px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; outline:none;">
+          </div>
+        </div>
+
+        <!-- Quick Date Pills -->
+        <div style="display:flex; gap:5px; align-items:center;">
+          <span style="font-size:10px; color:#64748b; font-weight:600;">Quick Set:</span>
+          <button type="button" onclick="window.setCRMFollowUpDatePreset('tomorrow')"
+            style="background:#fff; border:1px solid #cbd5e1; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">
+            Tomorrow
+          </button>
+          <button type="button" onclick="window.setCRMFollowUpDatePreset('3days')"
+            style="background:#fff; border:1px solid #cbd5e1; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">
+            +3 Days
+          </button>
+          <button type="button" onclick="window.setCRMFollowUpDatePreset('nextmonday')"
+            style="background:#fff; border:1px solid #cbd5e1; color:#334155; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">
+            Next Monday
+          </button>
+        </div>
+
+        <!-- Duration & Status feedback -->
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#64748b; padding-top:4px;">
+          <span id="crmCallDurationLabel"><i class="fas fa-stopwatch"></i> Duration: 0s</span>
+          <span id="crmStaffIdentifier">Staff: You</span>
+        </div>
+
+        <div id="crmErr" style="color:#dc2626; font-size:11px; min-height:16px;"></div>
+
+        <!-- Action Button -->
+        <button type="button" id="crmBtnSave" onclick="window.savePostCallCRM()"
+          style="width:100%; background:var(--myntra-pink); color:#fff; border:none; padding:11px; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 4px 6px rgba(255,63,108,0.2);">
+          <i class="fas fa-save"></i> Save &amp; Log Follow-Up
+        </button>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 📞 Live Multi-Staff CRM Hub Modal -->
+  <div id="crmHubModal" class="action-modal" onclick="if(event.target===this) window.closeCRMHubModal()"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10040; flex-direction:column; justify-content:flex-end;">
+    <div class="modal-content"
+      style="background:#fff; border-radius:16px 16px 0 0; padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom)); text-align:left; height:92vh; display:flex; flex-direction:column; max-width:680px; margin:0 auto; width:100%; box-sizing:border-box;">
+      
+      <!-- Top Bar -->
+      <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:8px; border-bottom:1px solid #f1f5f9;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" onclick="window.closeCRMHubModal()"
+            style="background:#f1f5f9; border:none; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#475569;">
+            <i class="fas fa-arrow-left"></i>
+          </button>
+          <div>
+            <div style="font-size:15px; font-weight:bold; color:#0f172a; display:flex; align-items:center; gap:6px;">
+              <i class="fas fa-headset" style="color:#0284c7;"></i> Live Staff CRM Hub
+            </div>
+            <div style="font-size:11px; color:#64748b;">Daily Call Queue, Follow-Ups &amp; Team Feed</div>
+          </div>
+        </div>
+        <button type="button" onclick="window.refreshCRMData()"
+          style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+          <i class="fas fa-sync-alt" id="crmHubRefreshIcon"></i> Refresh
+        </button>
+      </div>
+
+      <!-- Quick Search / Incoming Caller Input -->
+      <div style="margin-top:8px;">
+        <div style="position:relative;">
+          <input type="text" id="crmHubSearchInput" placeholder="🔍 Incoming caller lookup (type 4-10 digits or party name)..."
+            oninput="window.handleCRMQuickSearch(this.value)"
+            style="width:100%; box-sizing:border-box; padding:8px 32px 8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; outline:none; background:#f8fafc;">
+          <i class="fas fa-times" onclick="document.getElementById('crmHubSearchInput').value=''; window.handleCRMQuickSearch('');"
+            style="position:absolute; right:10px; top:10px; color:#94a3b8; cursor:pointer; font-size:12px;"></i>
+        </div>
+        <div id="crmHubSearchResults" style="display:none; max-height:220px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; background:#fff; margin-top:4px; box-shadow:0 4px 10px rgba(0,0,0,0.1);"></div>
+      </div>
+
+      <!-- 3 Navigation Tabs -->
+      <div style="display:flex; border-bottom:2px solid #e2e8f0; margin-top:8px; gap:4px;">
+        <button type="button" id="crmTabBtnFollowups" onclick="window.switchCRMHubTab('followups')"
+          style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:var(--myntra-pink); border-bottom:2px solid var(--myntra-pink); margin-bottom:-2px; white-space:nowrap;">
+          <i class="fas fa-calendar-check"></i> Today's Follow-Ups
+        </button>
+        <button type="button" id="crmTabBtnFeed" onclick="window.switchCRMHubTab('feed')"
+          style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap;">
+          <i class="fas fa-stream"></i> Team Feed
+        </button>
+        <button type="button" id="crmTabBtnScorecard" onclick="window.switchCRMHubTab('scorecard')"
+          style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; display:none;">
+          <i class="fas fa-trophy"></i> Management Scorecard
+        </button>
+      </div>
+
+      <!-- Content Area -->
+      <div id="crmHubContentArea" style="flex:1; overflow-y:auto; padding:10px 0;">
+        <!-- Injected dynamically -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 🔍 Incoming Caller 360° Summary Modal -->
+  <div id="incomingCallerLookupModal" class="action-modal" onclick="if(event.target===this) window.closeIncomingCallerLookupModal()"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10055; flex-direction:column; justify-content:center; align-items:center; padding:12px;">
+    <div class="modal-content"
+      style="background:#fff; border-radius:14px; padding:16px; width:100%; max-width:540px; max-height:92vh; overflow-y:auto; box-shadow:0 8px 30px rgba(0,0,0,0.25); box-sizing:border-box;">
+      
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+        <div style="font-size:15px; font-weight:bold; color:#1e293b; display:flex; align-items:center; gap:6px;">
+          <i class="fas fa-phone-volume" style="color:#be185d;"></i> Incoming Caller 360° Lookup
+        </div>
+        <button type="button" onclick="window.closeIncomingCallerLookupModal()"
+          style="background:#f1f5f9; border:none; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#64748b;">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <div style="margin-top:10px;">
+        <input type="text" id="incomingCallerInput" placeholder="Enter phone number or party name..."
+          oninput="window.handleIncomingLookupSearch(this.value)"
+          style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; background:#f8fafc;">
+      </div>
+
+      <div id="incomingCallerDetailsCard" style="margin-top:12px;">
+        <div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px;">
+          <i class="fas fa-search" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i>
+          <div>Type any 4 to 10 digits to identify incoming party</div>
+        </div>
+      </div>
 
     </div>
   </div>

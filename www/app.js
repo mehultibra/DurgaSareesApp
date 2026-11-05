@@ -1344,6 +1344,60 @@ async function saveProfile() {
     }
 }
 
+window.hasCRMAccess = function () {
+    return Boolean(window.isSuperAdmin || window.isStaff || (typeof isAdmin !== 'undefined' && isAdmin));
+};
+
+window.syncAdminEditableFields = function () {
+    var canEdit = Boolean(window.isSuperAdmin && window.isAdminMode);
+    var priceBot = document.getElementById('dtPriceBot');
+    var packBot = document.getElementById('dtPackBot');
+    if (priceBot) priceBot.setAttribute('contenteditable', canEdit ? 'true' : 'false');
+    if (packBot) packBot.setAttribute('contenteditable', canEdit ? 'true' : 'false');
+};
+
+window.syncAdminUI = function () {
+    var hasCRM = window.hasCRMAccess();
+    var showAdminUI = Boolean(window.isSuperAdmin && window.isAdminMode);
+
+    if (document.getElementById('menuCustomerDirectory')) {
+        document.getElementById('menuCustomerDirectory').style.display = hasCRM ? 'flex' : 'none';
+    }
+    if (document.getElementById('menuCRMHub')) {
+        document.getElementById('menuCRMHub').style.display = hasCRM ? 'flex' : 'none';
+    }
+    if (document.getElementById('btnTopCRMHub')) {
+        document.getElementById('btnTopCRMHub').style.display = hasCRM ? 'inline-block' : 'none';
+    }
+    if (document.getElementById('menuIncomingLookup')) {
+        document.getElementById('menuIncomingLookup').style.display = hasCRM ? 'flex' : 'none';
+    }
+    if (document.getElementById('btnTopIncomingLookup')) {
+        document.getElementById('btnTopIncomingLookup').style.display = hasCRM ? 'inline-block' : 'none';
+    }
+    if (document.getElementById('menuLiveAdmin')) {
+        document.getElementById('menuLiveAdmin').style.display = hasCRM ? 'flex' : 'none';
+    }
+    if (document.getElementById('btnTopLiveAdmin')) {
+        document.getElementById('btnTopLiveAdmin').style.display = hasCRM ? 'inline-block' : 'none';
+    }
+    if (document.getElementById('menuManageSections')) {
+        document.getElementById('menuManageSections').style.display = showAdminUI ? 'flex' : 'none';
+    }
+    var fabAdd = document.getElementById('fabAddProduct');
+    if (fabAdd) {
+        fabAdd.style.display = showAdminUI ? 'flex' : 'none';
+    }
+    var scorecardTabBtn = document.getElementById('crmTabBtnScorecard');
+    if (scorecardTabBtn) {
+        scorecardTabBtn.style.display = window.isSuperAdmin ? 'inline-block' : 'none';
+    }
+    if (typeof window.updateOrderOnBehalfBanner === 'function') {
+        window.updateOrderOnBehalfBanner();
+    }
+    window.syncAdminEditableFields();
+};
+
 async function checkAdminStatus(phone) {
     try {
         var query = {
@@ -1353,49 +1407,53 @@ async function checkAdminStatus(phone) {
                 limit: 1
             }
         };
-        // Securely route through fetchWithRetry to append authorization context
         var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
             method: "POST",
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(query)
         });
         var data = await res.json();
-        if (data && data.length > 0 && data[0].document) {
-            var f = data[0].document.fields;
+        var f = (data && data.length > 0 && data[0].document) ? data[0].document.fields : null;
 
-            // Cache identity so it is immediately available for the Live Analytics engine
+        var cleanPhone10 = String(phone || '').replace(/\D/g, '').slice(-10);
+        var isSuperPhone = (cleanPhone10 === '9425032549' || cleanPhone10 === '9302632549');
+
+        var isSuper = isSuperPhone || Boolean(f && f.isAdmin && f.isAdmin.booleanValue === true);
+        var isStaffUser = Boolean(f && f.isStaff && f.isStaff.booleanValue === true);
+
+        window.isSuperAdmin = isSuper;
+        window.isStaff = isStaffUser;
+
+        if (f) {
             let userProfile = {
                 name: f.name ? f.name.stringValue : "",
                 firm: f.firm ? f.firm.stringValue : "",
                 station: f.station ? f.station.stringValue : "",
                 state: f.state ? f.state.stringValue : "",
-                phone: phone
+                phone: phone,
+                isStaff: isStaffUser,
+                isAdmin: isSuper
             };
             localStorage.setItem("dsAdminOwnProfile", JSON.stringify(userProfile));
             if (!localStorage.getItem("ds_active_on_behalf")) {
                 localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile));
             }
+        }
 
-            if (f.isAdmin && f.isAdmin.booleanValue === true) {
-                localStorage.setItem('dsIsAdmin', 'true');
-                window.isSuperAdmin = true;
-                var showAdminUI = window.isAdminMode === true;
-                if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = (window.isSuperAdmin || window.isAdminMode) ? 'flex' : 'none';
-                if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = (window.isSuperAdmin || window.isAdminMode) ? 'flex' : 'none';
-                if (document.getElementById('menuManageSections')) document.getElementById('menuManageSections').style.display = showAdminUI ? 'flex' : 'none';
-                if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = (window.isSuperAdmin || window.isAdminMode) ? 'block' : 'none';
-                var fabAdd = document.getElementById('fabAddProduct');
-                if (fabAdd) fabAdd.style.display = showAdminUI ? 'flex' : 'none';
-            } else {
-                localStorage.setItem('dsIsAdmin', 'false');
-                window.isSuperAdmin = false;
-                if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'none';
-                if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'none';
-                if (document.getElementById('menuManageSections')) document.getElementById('menuManageSections').style.display = 'none';
-                if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'none';
-                var fabAdd = document.getElementById('fabAddProduct');
-                if (fabAdd) fabAdd.style.display = 'none';
-            }
+        if (window.isSuperAdmin) {
+            localStorage.setItem('dsIsAdmin', 'true');
+        } else {
+            localStorage.setItem('dsIsAdmin', 'false');
+        }
+
+        window.syncAdminUI();
+
+        if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform()) {
+            setTimeout(function () {
+                if (typeof window.startAutomaticContactSync === 'function') {
+                    window.startAutomaticContactSync();
+                }
+            }, 800);
         }
     } catch (e) {
         if (typeof window.logAppError === 'function') window.logAppError("checkAdminStatus", e.message);
@@ -2928,6 +2986,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     document.getElementById('dtNameTop').innerText = p.name;
     document.getElementById('dtPriceBot').innerText = p.price || '0';
     document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
+    if (typeof window.syncAdminEditableFields === 'function') window.syncAdminEditableFields();
 
     var dtIgBtn = document.getElementById('dtIgBtn');
     if (dtIgBtn) {
@@ -4198,9 +4257,11 @@ function openCart(preserveScroll) {
             cHtml.push('<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"><span style="font-size:10px; font-weight:bold; background:' + pSecColor + '18; color:' + pSecColor + '; border:1px solid ' + pSecColor + '44; padding:2px 6px; border-radius:10px; text-transform:uppercase;">' + safeText(pSecName) + '</span><span style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></span></div>');
 
             if (isEditing) {
-                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) +
-                    ' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
-                    ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;"></div>');
+                var ratePackHtml = window.isSuperAdmin ?
+                    (' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
+                     ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;">') :
+                    (' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing || 1));
+                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ratePackHtml + '</div>');
                 cHtml.push('</div>');
                 cHtml.push('<div style="display:flex; gap:8px; padding:10px; align-items:center;">');
                 cHtml.push('<i class="fas fa-trash" onclick="deleteCartProduct(\'' + g.p.id + '\')" style="cursor:pointer; color:red; font-size:18px;" title="Delete Product"></i>');
@@ -4529,6 +4590,16 @@ async function getCachedAuthToken(forceRefresh = false) {
     var now = Date.now();
     if (!forceRefresh && _cachedIdToken && now < _cachedIdTokenExp) return _cachedIdToken;
     
+    // Cold-boot readiness wait (up to 2.5 seconds) so Admin/Staff Firestore requests always include Auth
+    if (!_cachedIdToken && (window.activeUser || localStorage.getItem('dsActiveUser'))) {
+        for (var waitIter = 0; waitIter < 25; waitIter++) {
+            var hasAuthObj = (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) ||
+                             (window.CapacitorFirebaseAuthentication);
+            if (hasAuthObj) break;
+            await new Promise(function (r) { setTimeout(r, 100); });
+        }
+    }
+
     var isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
 
     // 1. If Native app, check Capacitor Firebase Auth first
@@ -5402,21 +5473,18 @@ function showDevLog(msg, isErr) {
 }
 
 function saveProductEdit(p) {
-    if (!window.isSuperAdmin) {
-        console.log("Local edit only (non-admin). Not syncing to server.");
+    if (!(window.isSuperAdmin && window.isAdminMode)) {
         return;
     }
     try {
-        // 🚀 NEW: 2-WAY SYNC FROM PRODUCT PAGE - FIREBASE & EXCEL WEBHOOK
         if (p && p.docId) {
             showDevLog("Syncing Page: " + p.name + " -> Rate: " + p.price + " Pack: " + p.packing, false);
 
-            // Firebase Live DB Update - Decoupled to support Granular RBAC
             var fbUpdateUrlPrice = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=price";
             window.fetchWithRetry(fbUpdateUrlPrice, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields: { price: { integerValue: p.price } } })
+                body: JSON.stringify({ fields: { price: { doubleValue: Number(p.price) } } })
             }, 1).then(res => {
                 if (res.ok) showDevLog("✅ Firebase Price Updated: " + p.name, false);
                 else showDevLog("❌ FB Err " + res.status + " - No Admin Perms for Price?", true);
@@ -5469,6 +5537,7 @@ function setupEditableFields() {
             }
         });
         priceBot.addEventListener('blur', function () {
+            if (!(window.isSuperAdmin && window.isAdminMode)) return;
             if (!curProduct) return;
             var val = parseFloat(priceBot.innerText.replace(/[^0-9.]/g, '').trim());
             if (!isNaN(val) && val >= 0) {
@@ -5490,6 +5559,7 @@ function setupEditableFields() {
             }
         });
         packBot.addEventListener('blur', function () {
+            if (!(window.isSuperAdmin && window.isAdminMode)) return;
             if (!curProduct) return;
             var val = packBot.innerText.trim();
             if (val !== "") {
@@ -6106,7 +6176,7 @@ function toggleHdrMenu(event) {
     if (event) event.stopPropagation();
     var menu = document.getElementById('hdrMenu');
     if (menu) {
-        var isAllowed = Boolean(window.isSuperAdmin || window.isAdminMode);
+        var isAllowed = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
         var menuCustDir = document.getElementById('menuCustomerDirectory');
         if (menuCustDir) menuCustDir.style.display = isAllowed ? 'flex' : 'none';
         var menuLiveAdmin = document.getElementById('menuLiveAdmin');
@@ -6274,16 +6344,16 @@ async function openCustomerDetailsModal() {
     if (stored) {
         try { d = JSON.parse(stored); } catch (e) { }
     }
-    var isAdmin = Boolean(window.isSuperAdmin || window.isAdminMode);
+    var hasAccess = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
 
-    if (!d && !isAdmin) {
+    if (!d && !hasAccess) {
         d = await fetchCustomerDetailsFromDB();
     }
 
-    // Admin party search section
+    // Admin & Staff party search section
     var adminSearchSection = document.getElementById('cdAdminPartySearchSection');
     if (adminSearchSection) {
-        adminSearchSection.style.display = isAdmin ? 'block' : 'none';
+        adminSearchSection.style.display = hasAccess ? 'block' : 'none';
     }
     var sInp = document.getElementById('cdPartySearch');
     if (sInp) sInp.value = '';
@@ -6350,19 +6420,19 @@ async function saveCustomerDetails() {
     }
 
     if (btn) btn.innerText = "Saving...";
-    var isAdmin = Boolean(window.isSuperAdmin || window.isAdminMode);
+    var hasAccess = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
 
     var d = {
         name: name,
         firm: firm || name,
-        phone: phone || (isAdmin ? '' : (activeUser || '')),
+        phone: phone || (hasAccess ? '' : (activeUser || '')),
         station: station,
         state: state,
         agent: agent,
         gst: gst,
         address: address,
         transport: transport,
-        onBehalf: isAdmin ? true : false
+        onBehalf: hasAccess ? true : false
     };
 
     if (transport) {
@@ -6380,7 +6450,7 @@ async function saveCustomerDetails() {
 
     // Save locally immediately for fast UI
     localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
-    if (isAdmin) {
+    if (hasAccess) {
         localStorage.setItem("ds_active_on_behalf", JSON.stringify(d));
         window.activeOrderOnBehalf = d;
         window.updateOrderOnBehalfBanner();
@@ -6519,9 +6589,6 @@ function saveCartInlineEdit(productId, closeEdit = true) {
     var rateInput = document.getElementById('ie_rate_' + productId);
     var packInput = document.getElementById('ie_pack_' + productId);
 
-    var newRate = rateInput ? parseInt(rateInput.value) || 0 : 0;
-    var newPacking = packInput ? packInput.value.trim() || "1" : "1";
-
     var items = [];
     for (var k in cart) {
         if (cart[k].p && cart[k].p.id === productId) {
@@ -6529,7 +6596,11 @@ function saveCartInlineEdit(productId, closeEdit = true) {
         }
     }
 
-    var productName = items.length > 0 ? items[0].p.name : "";
+    var origPrice = items.length > 0 ? items[0].p.price : 0;
+    var origPacking = items.length > 0 ? items[0].p.packing : "1";
+
+    var newRate = (window.isSuperAdmin && rateInput) ? (parseFloat(rateInput.value) || 0) : origPrice;
+    var newPacking = (window.isSuperAdmin && packInput) ? (packInput.value.trim() || "1") : origPacking;
 
     items.forEach(item => {
         var safeDesignLabel = item.design || 'DIRECT';
@@ -6540,12 +6611,15 @@ function saveCartInlineEdit(productId, closeEdit = true) {
                 delete cart[productId + "_" + item.design];
             } else {
                 item.qty = newQty;
-                // Clone the product object if admin mode is OFF to prevent mutating the global catalog
-                if (!(window.isSuperAdmin && window.isAdminMode)) {
-                    item.p = Object.assign({}, item.p);
+                if (!window.isSuperAdmin) {
+                    // Regular customer / staff: never modify rate or packing
+                } else if (window.isSuperAdmin && !window.isAdminMode) {
+                    // Admin in Non-Admin Mode: clone product and update for this cart order only
+                    item.p = Object.assign({}, item.p, { price: newRate, packing: newPacking });
+                } else if (window.isSuperAdmin && window.isAdminMode) {
+                    item.p.price = newRate;
+                    item.p.packing = newPacking;
                 }
-                item.p.price = newRate;
-                item.p.packing = newPacking;
                 cart[productId + "_" + item.design] = item;
             }
         }
@@ -12103,10 +12177,10 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                    style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
                   <i class="fab fa-whatsapp"></i> WhatsApp
                 </a>
-                <a href="tel:${c.p}"
-                   style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #e5e7eb;">
+                <button type="button" onclick="event.stopPropagation(); window.startCRMCall(decodeURIComponent('${codeSafe}'), '${escHtml(c.n)}', '${c.p}', '${escHtml(c.ct)}', '${escHtml(c.ag)}', ${c.b || 0}, '${c.d || ''}')"
+                   style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; cursor:pointer;">
                   <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
-                </a>
+                </button>
                 ${(Array.isArray(c.cleanPhones) && c.cleanPhones.length > 1) ? `
                 <span style="font-size:10px; color:#64748b; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:2px 5px; align-self:center;" title="${escHtml(c.cleanPhones.join(', '))}">
                   +${c.cleanPhones.length - 1} more
@@ -12221,10 +12295,10 @@ window.openCustomerReportsModal = async function (partyCode) {
                style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
               <i class="fab fa-whatsapp"></i> WhatsApp
             </a>
-            <a href="tel:${cust.p}"
-               style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #e5e7eb;">
+            <button type="button" onclick="window.startCRMCall('${encodeURIComponent(cust.c)}', '${escHtml(cust.n)}', '${cust.p}', '${escHtml(cust.ct)}', '${escHtml(cust.ag || '')}', ${cust.b || 0}, '${cust.d || ''}')"
+               style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; cursor:pointer;">
               <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
-            </a>`;
+            </button>`;
             if (Array.isArray(cust.cleanPhones) && cust.cleanPhones.length > 1) {
                 cust.cleanPhones.slice(1).forEach(function (extraP) {
                     actHtml += `
@@ -12272,11 +12346,12 @@ window.closeCustomerReportsModal = function () {
 // 8. Tab Switcher
 window.switchCustomerReportTab = function (tabName) {
     window._activeCustomerReportTab = tabName;
-    var tabs = ['sales', 'outstanding', 'ledger'];
+    var tabs = ['sales', 'outstanding', 'ledger', 'crm'];
     var tabNamesMap = {
         sales: 'tabBtnSales',
         outstanding: 'tabBtnOutstanding',
-        ledger: 'tabBtnLedger'
+        ledger: 'tabBtnLedger',
+        crm: 'tabBtnCRM'
     };
 
     tabs.forEach(t => {
@@ -12401,6 +12476,11 @@ window.renderCustomerReportActiveTab = async function () {
             return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`;
         }
         return dStr;
+    }
+
+    if (activeTab === 'crm') {
+        window.renderCustomerCRMTab(cust.c, cust.n, cust.ct, cust.p, cust.ag);
+        return;
     }
 
     // ==========================================
@@ -13987,8 +14067,8 @@ window.buildContactPayload = function (party) {
     var gst = (party.gst || party.g || '').trim();
     var code = (party.code || party.c || '').trim();
 
-    var givenName = station ? `${partyName} (${station})` : partyName;
-    var familyName = "DS";
+    var givenName = station ? `${partyName} (${station}) - DS` : `${partyName} - DS`;
+    var familyName = "";
     var orgName = `Agent: ${agent || 'DIRECT'} | Trans: ${transport || 'N/A'}`;
     var noteStr = `ERP:${code} | GST:${gst || 'N/A'}`;
 
@@ -14519,4 +14599,1082 @@ window.saveAddEditPartyContact = async function () {
             saveBtn.innerHTML = '<i class="fas fa-save"></i> Save &amp; Sync Contact';
         }
     }
+};
+
+
+// ==========================================================================
+// 📞 LIVE MULTI-STAFF CALL CRM & FOLLOW-UP HUB ENGINE
+// ==========================================================================
+
+window.activeCRMCallContext = null;
+window._activeCRMRecognition = null;
+window._isCRMRecognizing = false;
+
+// 1. Click-to-Call Trigger
+window.startCRMCall = function (code, name, phone, station, agent, balance, drCr) {
+    if (!phone) {
+        alert("No phone number on record for this party.");
+        return;
+    }
+    var clean10 = String(phone).replace(/\D/g, '').slice(-10);
+    window.activeCRMCallContext = {
+        code: decodeURIComponent(String(code || '')),
+        name: name || '',
+        phone: clean10,
+        station: station || '',
+        agent: agent || '',
+        balance: balance || 0,
+        drCr: drCr || '',
+        startTime: Date.now()
+    };
+    window.location.href = 'tel:+91' + clean10;
+};
+
+// 2. Auto-Return App Resume Listener
+function setupCRMCallReturnListener() {
+    function handleAppReturn() {
+        if (!window.activeCRMCallContext || !window.activeCRMCallContext.startTime) return;
+        var elapsedSec = Math.round((Date.now() - window.activeCRMCallContext.startTime) / 1000);
+        if (elapsedSec >= 3 && window.hasCRMAccess()) {
+            var ctx = Object.assign({}, window.activeCRMCallContext, { durationSec: elapsedSec });
+            window.activeCRMCallContext = null;
+            setTimeout(function () {
+                window.openPostCallCRMModal(ctx);
+            }, 300);
+        } else if (elapsedSec < 3) {
+            window.activeCRMCallContext = null;
+        }
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+            handleAppReturn();
+        }
+    });
+
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+        try {
+            window.Capacitor.Plugins.App.addListener('appStateChange', function (state) {
+                if (state && state.isActive) {
+                    handleAppReturn();
+                }
+            });
+        } catch (e) { }
+    }
+}
+setupCRMCallReturnListener();
+
+// 3. Post-Call CRM Modal Controller
+window.openPostCallCRMModal = function (ctx) {
+    if (!window.hasCRMAccess()) return;
+    if (!ctx) return;
+
+    var modal = document.getElementById('postCallCRMModal');
+    if (!modal) return;
+
+    document.getElementById('crmPartyCode').value = ctx.code || '';
+    document.getElementById('crmPartyName').value = ctx.name || '';
+    document.getElementById('crmPartyPhone').value = ctx.phone || '';
+    document.getElementById('crmPartyStation').value = ctx.station || '';
+    document.getElementById('crmPartyAgent').value = ctx.agent || '';
+
+    var subEl = document.getElementById('crmModalPartySubtitle');
+    if (subEl) subEl.innerText = ctx.name + (ctx.station ? ' (' + ctx.station + ')' : '');
+
+    var metaEl = document.getElementById('crmModalPartyMeta');
+    if (metaEl) {
+        var balText = ctx.balance ? ('₹ ' + Number(ctx.balance).toLocaleString('en-IN') + ' ' + (ctx.drCr || '')) : 'Clear';
+        metaEl.innerText = 'Phone: +91' + ctx.phone + ' | Bal: ' + balText + ' | Agent: ' + (ctx.agent || 'DIRECT');
+    }
+
+    var durLabel = document.getElementById('crmCallDurationLabel');
+    if (durLabel) {
+        durLabel.innerHTML = '<i class="fas fa-stopwatch"></i> Duration: ' + (ctx.durationSec || 0) + 's';
+    }
+
+    var staffLabel = document.getElementById('crmStaffIdentifier');
+    if (staffLabel) {
+        var staffProfile = null;
+        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+        staffLabel.innerText = 'Staff: ' + ((staffProfile && staffProfile.name) || activeUser || 'You');
+    }
+
+    // Reset Form
+    window.selectCRMCallType('outgoing');
+    window.selectCRMDisposition('');
+    document.getElementById('crmNoteInput').value = '';
+    document.getElementById('crmPromisedAmount').value = '';
+    document.getElementById('crmFollowUpDate').value = '';
+    var errEl = document.getElementById('crmErr');
+    if (errEl) errEl.innerText = '';
+
+    modal.style.display = 'flex';
+};
+
+window.closePostCallCRMModal = function () {
+    var modal = document.getElementById('postCallCRMModal');
+    if (modal) modal.style.display = 'none';
+    if (window._isCRMRecognizing && window._activeCRMRecognition) {
+        try { window._activeCRMRecognition.stop(); } catch(e){}
+        window._isCRMRecognizing = false;
+    }
+};
+
+window.selectCRMCallType = function (type) {
+    document.getElementById('crmCallType').value = type;
+    var btns = {
+        outgoing: document.getElementById('crmTypeOutgoing'),
+        incoming: document.getElementById('crmTypeIncoming'),
+        whatsapp: document.getElementById('crmTypeWhatsapp')
+    };
+    for (var k in btns) {
+        if (!btns[k]) continue;
+        if (k === type) {
+            btns[k].style.background = '#e0f2fe';
+            btns[k].style.borderColor = '#0284c7';
+            btns[k].style.color = '#0369a1';
+        } else {
+            btns[k].style.background = '#f8fafc';
+            btns[k].style.borderColor = '#cbd5e1';
+            btns[k].style.color = '#475569';
+        }
+    }
+};
+
+window.selectCRMDisposition = function (disp) {
+    document.getElementById('crmDisposition').value = disp;
+    var container = document.getElementById('crmDispositionContainer');
+    if (!container) return;
+    var chips = container.querySelectorAll('.crm-disp-chip');
+    chips.forEach(function (chip) {
+        if (chip.innerText.includes(disp)) {
+            chip.style.background = 'var(--myntra-pink)';
+            chip.style.color = '#fff';
+            chip.style.borderColor = 'var(--myntra-pink)';
+        } else {
+            chip.style.background = '#fff';
+            chip.style.color = '#334155';
+            chip.style.borderColor = '#cbd5e1';
+        }
+    });
+};
+
+window.setCRMFollowUpDatePreset = function (preset) {
+    var inp = document.getElementById('crmFollowUpDate');
+    if (!inp) return;
+    var d = new Date();
+    if (preset === 'tomorrow') {
+        d.setDate(d.getDate() + 1);
+    } else if (preset === '3days') {
+        d.setDate(d.getDate() + 3);
+    } else if (preset === 'nextmonday') {
+        var day = d.getDay();
+        var diff = (day === 0 ? 1 : (8 - day));
+        d.setDate(d.getDate() + diff);
+    }
+    inp.value = d.toISOString().slice(0, 10);
+};
+
+// 4. Voice-to-Text Speech Dictation
+window.toggleCRMSpeechDictation = function () {
+    var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) {
+        alert("Speech Recognition is not supported on this device/browser. Please type your note.");
+        return;
+    }
+
+    var btn = document.getElementById('crmBtnVoiceDictate');
+    var btnText = document.getElementById('crmVoiceBtnText');
+    var noteInp = document.getElementById('crmNoteInput');
+
+    if (window._isCRMRecognizing && window._activeCRMRecognition) {
+        window._activeCRMRecognition.stop();
+        window._isCRMRecognizing = false;
+        if (btn) btn.style.background = '#f1f5f9';
+        if (btnText) btnText.innerText = "Speak Note";
+        return;
+    }
+
+    try {
+        var rec = new SpeechRec();
+        var langEl = document.getElementById('crmSpeechLang');
+        rec.lang = (langEl && langEl.value) || 'hi-IN';
+        rec.continuous = true;
+        rec.interimResults = false;
+
+        rec.onstart = function () {
+            window._isCRMRecognizing = true;
+            if (btn) btn.style.background = '#fee2e2';
+            if (btnText) btnText.innerHTML = '<span style="color:#dc2626;"><i class="fas fa-circle fa-beat"></i> Listening...</span>';
+        };
+
+        rec.onresult = function (event) {
+            var transcript = '';
+            for (var i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript + ' ';
+            }
+            if (noteInp) {
+                noteInp.value = (noteInp.value ? noteInp.value.trim() + ' ' : '') + transcript.trim();
+            }
+        };
+
+        rec.onerror = function (e) {
+            console.warn("Speech recognition error:", e);
+            window._isCRMRecognizing = false;
+            if (btn) btn.style.background = '#f1f5f9';
+            if (btnText) btnText.innerText = "Speak Note";
+        };
+
+        rec.onend = function () {
+            window._isCRMRecognizing = false;
+            if (btn) btn.style.background = '#f1f5f9';
+            if (btnText) btnText.innerText = "Speak Note";
+        };
+
+        window._activeCRMRecognition = rec;
+        rec.start();
+    } catch (err) {
+        console.error("Speech dictation initialization failed:", err);
+        alert("Could not start microphone: " + err.message);
+    }
+};
+
+// 5. Save & Upsert CRM Follow-Up to Firestore
+window.savePostCallCRM = async function () {
+    var saveBtn = document.getElementById('crmBtnSave');
+    var errEl = document.getElementById('crmErr');
+    if (errEl) errEl.innerText = '';
+
+    var code = document.getElementById('crmPartyCode').value.trim();
+    var name = document.getElementById('crmPartyName').value.trim();
+    var phone = document.getElementById('crmPartyPhone').value.trim();
+    var station = document.getElementById('crmPartyStation').value.trim();
+    var agent = document.getElementById('crmPartyAgent').value.trim();
+
+    var callType = document.getElementById('crmCallType').value || 'outgoing';
+    var disposition = document.getElementById('crmDisposition').value || '';
+    var note = document.getElementById('crmNoteInput').value.trim();
+    var promisedAmount = parseFloat(document.getElementById('crmPromisedAmount').value) || 0;
+    var followUpDate = document.getElementById('crmFollowUpDate').value.trim();
+
+    if (!disposition && !note) {
+        if (errEl) errEl.innerText = "Please select a disposition or enter conversation notes.";
+        return;
+    }
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving Log...';
+    }
+
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
+
+        var staffProfile = null;
+        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+        var staffName = (staffProfile && staffProfile.name) || activeUser || 'Staff';
+        var staffPhone = (staffProfile && staffProfile.phone) || activeUser || '';
+        var nowIso = new Date().toISOString();
+
+        var logId = 'crm_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        var logEntry = {
+            id: logId,
+            partyCode: code,
+            partyName: name,
+            phone: phone,
+            station: station,
+            agent: agent,
+            staffName: staffName,
+            staffPhone: staffPhone,
+            callType: callType,
+            disposition: disposition,
+            note: note,
+            promisedAmount: promisedAmount,
+            followUpDate: followUpDate,
+            createdAt: nowIso
+        };
+
+        // 1. Write CRMLogs/{logId}
+        var logFields = {
+            fields: {
+                partyCode: { stringValue: code },
+                partyName: { stringValue: name },
+                phone: { stringValue: phone },
+                station: { stringValue: station },
+                agent: { stringValue: agent },
+                staffName: { stringValue: staffName },
+                staffPhone: { stringValue: staffPhone },
+                callType: { stringValue: callType },
+                disposition: { stringValue: disposition },
+                note: { stringValue: note },
+                promisedAmount: { doubleValue: promisedAmount },
+                followUpDate: { stringValue: followUpDate },
+                createdAt: { timestampValue: nowIso }
+            }
+        };
+
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/CRMLogs/" + logId, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify(logFields)
+        });
+
+        // 2. Upsert PartyCRM/{safeCode}
+        var safeCode = (window.sanitizeDocId ? window.sanitizeDocId(code) : code.replace(/[\/\.#\?\[\]\s]/g, '_'));
+        var getRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, {
+            headers: headers
+        });
+
+        var existingLogs = [];
+        if (getRes && getRes.ok) {
+            try {
+                var docData = await getRes.json();
+                if (docData && docData.fields && docData.fields.recentLogsJson) {
+                    existingLogs = JSON.parse(docData.fields.recentLogsJson.stringValue || '[]');
+                }
+            } catch(e){}
+        }
+
+        existingLogs.unshift(logEntry);
+        if (existingLogs.length > 25) existingLogs = existingLogs.slice(0, 25);
+
+        var partyCrmBody = {
+            fields: {
+                partyCode: { stringValue: code },
+                partyName: { stringValue: name },
+                phone: { stringValue: phone },
+                station: { stringValue: station },
+                agent: { stringValue: agent },
+                lastCallAt: { timestampValue: nowIso },
+                lastStaffName: { stringValue: staffName },
+                lastStaffPhone: { stringValue: staffPhone },
+                lastDisposition: { stringValue: disposition },
+                lastNote: { stringValue: note },
+                nextFollowUpDate: { stringValue: followUpDate },
+                promisedAmount: { doubleValue: promisedAmount },
+                status: { stringValue: 'pending' },
+                recentLogsJson: { stringValue: JSON.stringify(existingLogs) },
+                updatedAt: { timestampValue: nowIso }
+            }
+        };
+
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify(partyCrmBody)
+        });
+
+        window.closePostCallCRMModal();
+        alert('✓ Call note & follow-up saved successfully!');
+
+        // Refresh CRM tab if open
+        if (window._activeCustomerReportTab === 'crm' && typeof window.renderCustomerCRMTab === 'function') {
+            window.renderCustomerCRMTab(code, name, station, phone, agent);
+        }
+        if (document.getElementById('crmHubModal') && document.getElementById('crmHubModal').style.display === 'flex') {
+            window.refreshCRMData();
+        }
+
+    } catch (e) {
+        console.error("Save CRM error:", e);
+        if (errEl) errEl.innerText = "Save failed: " + e.message;
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save"></i> Save &amp; Log Follow-Up';
+        }
+    }
+};
+
+// 6. CRM Hub Controller (Daily Queue, Team Feed, Scorecard)
+window.openCRMHubModal = function () {
+    if (!window.hasCRMAccess()) {
+        alert("Access Denied: Staff or Administrator privileges required.");
+        return;
+    }
+    var modal = document.getElementById('crmHubModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    window.switchCRMHubTab('followups');
+};
+
+window.closeCRMHubModal = function () {
+    var modal = document.getElementById('crmHubModal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.switchCRMHubTab = function (tab) {
+    window._activeCRMHubTab = tab;
+    var btns = {
+        followups: document.getElementById('crmTabBtnFollowups'),
+        feed: document.getElementById('crmTabBtnFeed'),
+        scorecard: document.getElementById('crmTabBtnScorecard')
+    };
+
+    for (var k in btns) {
+        if (!btns[k]) continue;
+        if (k === tab) {
+            btns[k].style.color = 'var(--myntra-pink)';
+            btns[k].style.borderBottom = '2px solid var(--myntra-pink)';
+        } else {
+            btns[k].style.color = '#64748b';
+            btns[k].style.borderBottom = '2px solid transparent';
+        }
+    }
+
+    if (tab === 'followups') {
+        window.loadCRMHubFollowups();
+    } else if (tab === 'feed') {
+        window.loadCRMTeamFeed();
+    } else if (tab === 'scorecard') {
+        window.loadCRMManagementScorecard();
+    }
+};
+
+window.refreshCRMData = function () {
+    var icon = document.getElementById('crmHubRefreshIcon');
+    if (icon) icon.classList.add('fa-spin');
+    window.switchCRMHubTab(window._activeCRMHubTab || 'followups');
+    setTimeout(function () {
+        if (icon) icon.classList.remove('fa-spin');
+    }, 1000);
+};
+
+window.loadCRMHubFollowups = async function () {
+    var area = document.getElementById('crmHubContentArea');
+    if (!area) return;
+    area.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading follow-up queue...</div>';
+
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({}, token ? { 'Authorization': 'Bearer ' + token } : {});
+
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM?pageSize=100", {
+            headers: headers
+        });
+
+        if (!res.ok) {
+            area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Could not load follow-up queue (HTTP ' + res.status + ')</div>';
+            return;
+        }
+
+        var data = await res.json();
+        var docs = data.documents || [];
+        var todayStr = new Date().toISOString().slice(0, 10);
+
+        var followups = docs.map(function (d) {
+            var f = d.fields || {};
+            return {
+                code: f.partyCode ? f.partyCode.stringValue : '',
+                name: f.partyName ? f.partyName.stringValue : '',
+                phone: f.phone ? f.phone.stringValue : '',
+                station: f.station ? f.station.stringValue : '',
+                agent: f.agent ? f.agent.stringValue : '',
+                lastCallAt: f.lastCallAt ? f.lastCallAt.timestampValue : '',
+                lastStaff: f.lastStaffName ? f.lastStaffName.stringValue : '',
+                lastDisp: f.lastDisposition ? f.lastDisposition.stringValue : '',
+                lastNote: f.lastNote ? f.lastNote.stringValue : '',
+                followUpDate: f.nextFollowUpDate ? f.nextFollowUpDate.stringValue : '',
+                promisedAmt: f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0,
+                status: f.status ? f.status.stringValue : 'pending'
+            };
+        }).filter(function (x) {
+            return x.status !== 'done';
+        });
+
+        // Sort: overdue first, then promised amount desc
+        followups.sort(function (a, b) {
+            if (a.followUpDate && b.followUpDate) {
+                return a.followUpDate.localeCompare(b.followUpDate);
+            }
+            return (b.promisedAmt || 0) - (a.promisedAmt || 0);
+        });
+
+        if (followups.length === 0) {
+            area.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#64748b;">
+              <i class="fas fa-check-circle" style="font-size:32px; color:#10b981; margin-bottom:8px;"></i>
+              <div style="font-size:14px; font-weight:bold; color:#1e293b;">All caught up!</div>
+              <div style="font-size:12px; margin-top:4px;">No pending customer follow-ups scheduled for today.</div>
+            </div>`;
+            return;
+        }
+
+        var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+        followups.forEach(function (fu) {
+            var isOverdue = fu.followUpDate && fu.followUpDate < todayStr;
+            var isToday = fu.followUpDate === todayStr;
+            var dateBadge = fu.followUpDate ? (
+                isOverdue ? `<span style="background:#fee2e2; color:#dc2626; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px;"><i class="fas fa-exclamation-triangle"></i> Overdue: ${fu.followUpDate}</span>` :
+                (isToday ? `<span style="background:#fef3c7; color:#d97706; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px;"><i class="fas fa-calendar-day"></i> Today</span>` :
+                `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px;"><i class="fas fa-clock"></i> ${fu.followUpDate}</span>`)
+            ) : '';
+
+            var safeCode = encodeURIComponent(fu.code);
+            html += `
+            <div style="border:1px solid #e2e8f0; border-radius:10px; background:#fff; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                <div>
+                  <div style="font-weight:bold; font-size:14px; color:#0f172a;">${escHtml(fu.name)}</div>
+                  <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                    ${fu.station ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${escHtml(fu.station)} | ` : ''}
+                    Agent: ${escHtml(fu.agent || 'DIRECT')}
+                  </div>
+                </div>
+                <div>${dateBadge}</div>
+              </div>
+
+              ${fu.lastDisp ? `
+              <div style="margin-top:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span style="font-size:11px; font-weight:600; color:#0f172a; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${escHtml(fu.lastDisp)}</span>
+                ${fu.promisedAmt > 0 ? `<span style="font-size:11px; font-weight:bold; color:#16a34a; background:#dcfce7; padding:2px 6px; border-radius:4px;">Promise: ₹ ${fu.promisedAmt.toLocaleString('en-IN')}</span>` : ''}
+                ${fu.lastStaff ? `<span style="font-size:10px; color:#64748b;">by ${escHtml(fu.lastStaff)}</span>` : ''}
+              </div>` : ''}
+
+              ${fu.lastNote ? `
+              <div style="font-size:12px; color:#475569; background:#f8fafc; border-left:3px solid #0284c7; padding:6px 8px; margin-top:6px; border-radius:0 4px 4px 0; line-height:1.3;">
+                ${escHtml(fu.lastNote)}
+              </div>` : ''}
+
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px dashed #f1f5f9;">
+                <div style="display:flex; gap:6px;">
+                  ${fu.phone ? `
+                  <button type="button" onclick="window.startCRMCall('${safeCode}', '${escHtml(fu.name)}', '${fu.phone}', '${escHtml(fu.station)}', '${escHtml(fu.agent)}', 0, '')"
+                    style="background:#0284c7; color:#fff; border:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                    <i class="fas fa-phone-alt"></i> Call
+                  </button>
+                  <a href="https://wa.me/91${fu.phone}" target="_blank"
+                    style="background:#25d366; color:#fff; text-decoration:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; display:inline-flex; align-items:center; gap:4px;">
+                    <i class="fab fa-whatsapp"></i> Chat
+                  </a>` : ''}
+                  <button type="button" onclick="window.openCustomerReportsModal('${safeCode}')"
+                    style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
+                    <i class="fas fa-file-invoice"></i> Ledger
+                  </button>
+                </div>
+                <button type="button" onclick="window.markCRMFollowUpDone('${safeCode}')"
+                  style="background:#f0fdf4; border:1px solid #bbf7d0; color:#16a34a; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                  <i class="fas fa-check"></i> Mark Done
+                </button>
+              </div>
+            </div>`;
+        });
+        html += '</div>';
+        area.innerHTML = html;
+
+    } catch (e) {
+        area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Error loading follow-ups: ' + e.message + '</div>';
+    }
+};
+
+window.markCRMFollowUpDone = async function (partyCode) {
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
+        var safeCode = (window.sanitizeDocId ? window.sanitizeDocId(partyCode) : partyCode.replace(/[\/\.#\?\[\]\s]/g, '_'));
+
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode + "?updateMask.fieldPaths=status", {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify({ fields: { status: { stringValue: 'done' } } })
+        });
+
+        window.loadCRMHubFollowups();
+    } catch (e) {
+        alert("Could not update status: " + e.message);
+    }
+};
+
+// 7. CRM Team Feed (Latest 50 calls logged across all staff)
+window.loadCRMTeamFeed = async function () {
+    var area = document.getElementById('crmHubContentArea');
+    if (!area) return;
+    area.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading live team call feed...</div>';
+
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
+
+        var query = {
+            structuredQuery: {
+                from: [{ collectionId: "CRMLogs" }],
+                orderBy: [{ field: { fieldPath: "createdAt" }, direction: "DESCENDING" }],
+                limit: 50
+            }
+        };
+
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(query)
+        });
+
+        var results = await res.json();
+        var logs = (results || []).map(r => r.document ? r.document.fields : null).filter(Boolean);
+
+        if (logs.length === 0) {
+            area.innerHTML = '<div style="text-align:center; padding:40px; color:#64748b;">No call logs recorded yet.</div>';
+            return;
+        }
+
+        var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+        logs.forEach(function (f) {
+            var partyName = f.partyName ? f.partyName.stringValue : '';
+            var station = f.station ? f.station.stringValue : '';
+            var staffName = f.staffName ? f.staffName.stringValue : 'Staff';
+            var disp = f.disposition ? f.disposition.stringValue : '';
+            var note = f.note ? f.note.stringValue : '';
+            var callType = f.callType ? f.callType.stringValue : 'call';
+            var promisedAmt = f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0;
+            var createdDate = f.createdAt ? new Date(f.createdAt.timestampValue).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+            var iconClass = callType === 'whatsapp' ? 'fab fa-whatsapp' : (callType === 'incoming' ? 'fas fa-phone-incoming' : 'fas fa-phone-alt');
+            var iconColor = callType === 'whatsapp' ? '#25d366' : (callType === 'incoming' ? '#0284c7' : '#be185d');
+
+            html += `
+            <div style="border:1px solid #e2e8f0; border-radius:8px; background:#fff; padding:10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <i class="${iconClass}" style="color:${iconColor}; font-size:12px;"></i>
+                  <span style="font-weight:bold; font-size:13px; color:#1e293b;">${escHtml(partyName)}</span>
+                  ${station ? `<span style="font-size:11px; color:#64748b;">(${escHtml(station)})</span>` : ''}
+                </div>
+                <span style="font-size:10px; color:#94a3b8;">${createdDate}</span>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:6px; margin-top:4px; flex-wrap:wrap;">
+                <span style="font-size:10px; font-weight:600; color:#0f172a; background:#f1f5f9; padding:1px 5px; border-radius:3px;">${escHtml(disp || 'Interaction')}</span>
+                ${promisedAmt > 0 ? `<span style="font-size:10px; font-weight:bold; color:#16a34a; background:#dcfce7; padding:1px 5px; border-radius:3px;">₹ ${promisedAmt.toLocaleString('en-IN')} Promised</span>` : ''}
+                <span style="font-size:10px; color:#64748b; margin-left:auto;">Logged by <b>${escHtml(staffName)}</b></span>
+              </div>
+
+              ${note ? `<div style="font-size:11px; color:#475569; margin-top:4px; line-height:1.3; background:#f8fafc; padding:4px 6px; border-radius:4px;">${escHtml(note)}</div>` : ''}
+            </div>`;
+        });
+        html += '</div>';
+        area.innerHTML = html;
+
+    } catch (e) {
+        area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Error loading feed: ' + e.message + '</div>';
+    }
+};
+
+// 8. Management Scorecard & Staff Access (SuperAdmin only)
+window.loadCRMManagementScorecard = async function () {
+    var area = document.getElementById('crmHubContentArea');
+    if (!area) return;
+    if (!window.isSuperAdmin) {
+        area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Access restricted to Super Administrators.</div>';
+        return;
+    }
+    area.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading scorecard & staff management...</div>';
+
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
+
+        // Fetch logs for analytics
+        var query = {
+            structuredQuery: {
+                from: [{ collectionId: "CRMLogs" }],
+                limit: 300
+            }
+        };
+
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(query)
+        });
+
+        var results = await res.json();
+        var logs = (results || []).map(r => r.document ? r.document.fields : null).filter(Boolean);
+
+        var staffStats = {};
+        var totalPromised = 0;
+
+        logs.forEach(function (f) {
+            var staff = (f.staffName ? f.staffName.stringValue : 'Other') || 'Other';
+            if (!staffStats[staff]) staffStats[staff] = { calls: 0, promises: 0 };
+            staffStats[staff].calls++;
+            var pAmt = f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0;
+            staffStats[staff].promises += pAmt;
+            totalPromised += pAmt;
+        });
+
+        var html = `
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          
+          <!-- Summary Cards -->
+          <div style="display:flex; gap:8px;">
+            <div style="flex:1; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px; text-align:center;">
+              <div style="font-size:18px; font-weight:bold; color:#16a34a;">₹ ${totalPromised.toLocaleString('en-IN')}</div>
+              <div style="font-size:10px; font-weight:bold; color:#15803d; text-transform:uppercase;">Total Promises</div>
+            </div>
+            <div style="flex:1; background:#e0f2fe; border:1px solid #bae6fd; border-radius:8px; padding:10px; text-align:center;">
+              <div style="font-size:18px; font-weight:bold; color:#0284c7;">${logs.length}</div>
+              <div style="font-size:10px; font-weight:bold; color:#0369a1; text-transform:uppercase;">Total Calls Logged</div>
+            </div>
+          </div>
+
+          <!-- Staff Productivity Table -->
+          <div style="border:1px solid #e2e8f0; border-radius:8px; background:#fff; overflow:hidden;">
+            <div style="background:#f8fafc; padding:8px 12px; font-size:12px; font-weight:bold; color:#334155; border-bottom:1px solid #e2e8f0;">
+              Staff Performance Scorecard
+            </div>
+            <div style="padding:8px;">`;
+
+        for (var staff in staffStats) {
+            html += `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f1f5f9;">
+                <div>
+                  <div style="font-weight:bold; font-size:12px; color:#1e293b;">${escHtml(staff)}</div>
+                  <div style="font-size:11px; color:#64748b;">${staffStats[staff].calls} Calls / Notes</div>
+                </div>
+                <div style="font-weight:bold; font-size:12px; color:#16a34a;">
+                  ₹ ${staffStats[staff].promises.toLocaleString('en-IN')}
+                </div>
+              </div>`;
+        }
+
+        html += `
+            </div>
+          </div>
+
+          <!-- Staff Access Manager (Super Admin Only) -->
+          <div style="border:1px solid #e2e8f0; border-radius:8px; background:#fff; padding:12px;">
+            <div style="font-size:12px; font-weight:bold; color:#334155; margin-bottom:4px;">
+              <i class="fas fa-user-plus" style="color:#0284c7;"></i> Grant Staff CRM Access
+            </div>
+            <div style="font-size:11px; color:#64748b; margin-bottom:8px;">
+              Enter staff's 10-digit mobile number to grant Live CRM access.
+            </div>
+            <div style="display:flex; gap:6px;">
+              <input type="tel" id="newStaffPhoneInput" placeholder="10-digit mobile number"
+                style="flex:1; padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; outline:none;">
+              <button type="button" onclick="window.addStaffPhone()"
+                style="background:#0284c7; color:#fff; border:none; padding:8px 14px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;">
+                + Add Staff
+              </button>
+            </div>
+          </div>
+
+        </div>`;
+        area.innerHTML = html;
+
+    } catch (e) {
+        area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Error loading scorecard: ' + e.message + '</div>';
+    }
+};
+
+window.addStaffPhone = async function () {
+    var inp = document.getElementById('newStaffPhoneInput');
+    if (!inp) return;
+    var raw = inp.value.trim().replace(/\D/g, '').slice(-10);
+    if (raw.length !== 10) {
+        alert("Please enter a valid 10-digit mobile number.");
+        return;
+    }
+    var fullPhone = '+91' + raw;
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
+
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(fullPhone) + "?updateMask.fieldPaths=isStaff&updateMask.fieldPaths=phone", {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify({
+                fields: {
+                    phone: { stringValue: fullPhone },
+                    isStaff: { booleanValue: true }
+                }
+            })
+        });
+
+        alert("✓ Staff privileges granted to " + fullPhone);
+        inp.value = '';
+    } catch (e) {
+        alert("Failed to add staff: " + e.message);
+    }
+};
+
+// 9. Incoming Caller 1-Tap Lookup Engine
+window.openIncomingCallerLookupModal = function () {
+    var modal = document.getElementById('incomingCallerLookupModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    var inp = document.getElementById('incomingCallerInput');
+    if (inp) {
+        inp.value = '';
+        inp.focus();
+    }
+    var card = document.getElementById('incomingCallerDetailsCard');
+    if (card) {
+        card.innerHTML = '<div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px;"><i class="fas fa-search" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i><div>Type any 4 to 10 digits to identify incoming party</div></div>';
+    }
+};
+
+window.closeIncomingCallerLookupModal = function () {
+    var modal = document.getElementById('incomingCallerLookupModal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.handleIncomingLookupSearch = async function (val) {
+    var card = document.getElementById('incomingCallerDetailsCard');
+    if (!card) return;
+    var query = String(val || '').trim().toLowerCase();
+    if (query.length < 3) {
+        card.innerHTML = '<div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px;"><i class="fas fa-search" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i><div>Type any 4 to 10 digits to identify incoming party</div></div>';
+        return;
+    }
+
+    var list = window._compiledCustomersList || [];
+    var digitsOnly = query.replace(/\D/g, '');
+
+    var match = list.find(function (c) {
+        if (digitsOnly.length >= 3) {
+            var nums = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (c.p ? [c.p] : []);
+            if (nums.some(n => n.includes(digitsOnly))) return true;
+        }
+        return (c.n && c.n.toLowerCase().includes(query)) || (c.c && c.c.toLowerCase().includes(query));
+    });
+
+    if (!match) {
+        card.innerHTML = `
+        <div style="text-align:center; padding:25px 10px; color:#64748b;">
+          <i class="fas fa-user-slash" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i>
+          <div style="font-weight:bold; font-size:13px; color:#1e293b;">No party matched for "${escHtml(val)}"</div>
+          <button type="button" onclick="window.openAddEditPartyContactModal()"
+            style="margin-top:8px; background:var(--myntra-pink); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+            + Add New Party Contact
+          </button>
+        </div>`;
+        return;
+    }
+
+    var safeCode = encodeURIComponent(match.c || match.code || match.n);
+    var balText = (match.b > 0) ? ('₹ ' + Number(match.b).toLocaleString('en-IN') + ' ' + (match.d || '')) : 'Clear';
+    var balColor = match.d === 'Dr' ? '#dc2626' : '#16a34a';
+
+    card.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Fetching 360° summary...</div>';
+
+    // Fetch past CRM notes for this party
+    var crmNotes = [];
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({}, token ? { 'Authorization': 'Bearer ' + token } : {});
+        var cleanCodeKey = window.sanitizeDocId ? window.sanitizeDocId(match.c || match.n) : String(match.c || match.n).replace(/[/\.#\?\[\]\s]/g, '_');
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + cleanCodeKey, { headers: headers });
+        if (res.ok) {
+            var data = await res.json();
+            if (data && data.fields && data.fields.recentLogsJson) {
+                crmNotes = JSON.parse(data.fields.recentLogsJson.stringValue || '[]').slice(0, 5);
+            }
+        }
+    } catch(e){}
+
+    var html = `
+    <div style="border:1px solid #e2e8f0; border-radius:10px; background:#fff; padding:12px; box-shadow:0 4px 12px rgba(0,0,0,0.06);">
+      
+      <!-- Top info -->
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <div style="font-size:15px; font-weight:bold; color:#0f172a;">${escHtml(match.n)}</div>
+          <div style="font-size:11px; color:#64748b; margin-top:2px;">
+            ${match.ct ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${escHtml(match.ct)} | ` : ''}
+            Phone: +91${match.p || ''}
+          </div>
+          <div style="font-size:10px; color:#475569; margin-top:2px;">
+            Agent: <b>${escHtml(match.ag || 'DIRECT')}</b> | Trans: ${escHtml(match.tr || 'N/A')}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:13px; font-weight:bold; color:${balColor};">${balText}</div>
+          <div style="font-size:10px; color:#64748b;">${match.pb > 0 ? match.pb + ' Pending Bills' : 'No Overdue'}</div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display:flex; gap:6px; margin-top:10px; padding-top:8px; border-top:1px dashed #f1f5f9; flex-wrap:wrap;">
+        <button type="button" onclick="window.closeIncomingCallerLookupModal(); window.openPostCallCRMModal({ code: '${safeCode}', name: '${escHtml(match.n)}', phone: '${match.p}', station: '${escHtml(match.ct)}', agent: '${escHtml(match.ag)}', balance: ${match.b || 0}, drCr: '${match.d || ''}' })"
+          style="flex:1; background:var(--myntra-pink); color:#fff; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:4px;">
+          <i class="fas fa-plus"></i> Log Call Note
+        </button>
+        ${match.p ? `
+        <button type="button" onclick="window.startCRMCall('${safeCode}', '${escHtml(match.n)}', '${match.p}', '${escHtml(match.ct)}', '${escHtml(match.ag)}', ${match.b || 0}, '${match.d || ''}')"
+          style="background:#0284c7; color:#fff; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+          <i class="fas fa-phone-alt"></i> Call
+        </button>
+        <a href="https://wa.me/91${match.p}" target="_blank"
+          style="background:#25d366; color:#fff; text-decoration:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:bold; display:inline-flex; align-items:center;">
+          <i class="fab fa-whatsapp"></i>
+        </a>` : ''}
+        <button type="button" onclick="window.closeIncomingCallerLookupModal(); window.openCustomerReportsModal('${safeCode}')"
+          style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
+          <i class="fas fa-file-invoice"></i> Ledger
+        </button>
+      </div>
+
+      <!-- Last 5 Past CRM Notes -->
+      <div style="margin-top:10px;">
+        <div style="font-size:11px; font-weight:bold; color:#475569; margin-bottom:4px;">Last Conversations:</div>`;
+
+    if (crmNotes.length === 0) {
+        html += '<div style="font-size:11px; color:#94a3b8; font-style:italic;">No past call notes recorded for this party.</div>';
+    } else {
+        crmNotes.forEach(function (cn) {
+            html += `
+            <div style="border-left:2px solid #0284c7; padding-left:6px; margin-bottom:6px; font-size:11px;">
+              <div style="display:flex; justify-content:space-between; color:#64748b;">
+                <span><b>${escHtml(cn.staffName || 'Staff')}</b> - ${escHtml(cn.disposition || 'Call')}</span>
+                <span style="font-size:10px;">${cn.createdAt ? new Date(cn.createdAt).toLocaleDateString('en-IN') : ''}</span>
+              </div>
+              ${cn.note ? `<div style="color:#1e293b; margin-top:1px;">${escHtml(cn.note)}</div>` : ''}
+              ${cn.promisedAmount > 0 ? `<div style="color:#16a34a; font-weight:bold;">Promised: ₹ ${cn.promisedAmount.toLocaleString('en-IN')}</div>` : ''}
+            </div>`;
+        });
+    }
+
+    html += '</div></div>';
+    card.innerHTML = html;
+};
+
+// 10. CRM Tab inside Customer Reports Modal (Timeline & Single Read)
+window.renderCustomerCRMTab = async function (partyCode, partyName, station, phone, agent) {
+    var area = document.getElementById('custReportContentArea');
+    if (!area) return;
+    area.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading CRM conversation timeline...</div>';
+
+    var codeStr = partyCode || (window._currentReportingCustomer && window._currentReportingCustomer.c) || '';
+    var nameStr = partyName || (window._currentReportingCustomer && window._currentReportingCustomer.n) || codeStr;
+    var stStr = station || (window._currentReportingCustomer && window._currentReportingCustomer.ct) || '';
+    var phStr = phone || (window._currentReportingCustomer && window._currentReportingCustomer.p) || '';
+    var agStr = agent || (window._currentReportingCustomer && window._currentReportingCustomer.ag) || '';
+
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({}, token ? { 'Authorization': 'Bearer ' + token } : {});
+        var safeCode = window.sanitizeDocId ? window.sanitizeDocId(codeStr) : codeStr.replace(/[\/\.#\?\[\]\s]/g, '_');
+
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, {
+            headers: headers
+        });
+
+        var partyCrm = null;
+        if (res.ok) {
+            var data = await res.json();
+            if (data && data.fields) partyCrm = data.fields;
+        }
+
+        var recentLogs = [];
+        if (partyCrm && partyCrm.recentLogsJson) {
+            try { recentLogs = JSON.parse(partyCrm.recentLogsJson.stringValue || '[]'); } catch(e){}
+        }
+
+        var html = `
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          
+          <!-- CRM Summary Header -->
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:11px; color:#64748b;">
+                Last Interaction: ${partyCrm && partyCrm.lastCallAt ? new Date(partyCrm.lastCallAt.timestampValue).toLocaleDateString('en-IN') : 'Never'}
+              </div>
+              <div style="font-size:12px; font-weight:bold; color:#0f172a; margin-top:2px;">
+                Status: ${partyCrm && partyCrm.lastDisposition ? escHtml(partyCrm.lastDisposition.stringValue) : 'No past call'}
+              </div>
+            </div>
+            <button type="button" onclick="window.openPostCallCRMModal({ code: '${encodeURIComponent(codeStr)}', name: '${escHtml(nameStr)}', phone: '${phStr}', station: '${escHtml(stStr)}', agent: '${escHtml(agStr)}', balance: (window._currentReportingCustomer && window._currentReportingCustomer.b) || 0, drCr: (window._currentReportingCustomer && window._currentReportingCustomer.d) || '' })"
+              style="background:var(--myntra-pink); color:#fff; border:none; padding:7px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 2px 4px rgba(255,63,108,0.2);">
+              <i class="fas fa-plus"></i> Add Call Note
+            </button>
+          </div>
+
+          <!-- Timeline -->
+          <div style="font-size:12px; font-weight:bold; color:#334155; margin-top:4px;">
+            Conversation History (${recentLogs.length} interactions recorded)
+          </div>`;
+
+        if (recentLogs.length === 0) {
+            html += `
+            <div style="text-align:center; padding:35px 20px; color:#94a3b8;">
+              <i class="fas fa-comment-slash" style="font-size:28px; color:#cbd5e1; margin-bottom:6px;"></i>
+              <div>No past CRM notes recorded for this party.</div>
+              <div style="font-size:11px; margin-top:2px;">Tap "+ Add Call Note" above to record your first conversation.</div>
+            </div>`;
+        } else {
+            html += '<div style="display:flex; flex-direction:column; gap:8px;">';
+            recentLogs.forEach(function (log) {
+                var dStr = log.createdAt ? new Date(log.createdAt).toLocaleString('en-IN', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                html += `
+                <div style="border:1px solid #e2e8f0; border-radius:8px; background:#fff; padding:10px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <span style="font-size:11px; font-weight:bold; color:#0f172a; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${escHtml(log.disposition || 'Call')}</span>
+                      ${log.promisedAmount > 0 ? `<span style="font-size:11px; font-weight:bold; color:#16a34a; background:#dcfce7; padding:2px 6px; border-radius:4px;">Promise: ₹ ${log.promisedAmount.toLocaleString('en-IN')}</span>` : ''}
+                    </div>
+                    <span style="font-size:10px; color:#94a3b8;">${dStr}</span>
+                  </div>
+
+                  ${log.note ? `<div style="font-size:12px; color:#334155; margin-top:6px; line-height:1.4; background:#f8fafc; padding:6px 8px; border-radius:4px;">${escHtml(log.note)}</div>` : ''}
+
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:10px; color:#64748b;">
+                    <span>Staff: <b>${escHtml(log.staffName || 'Staff')}</b></span>
+                    ${log.followUpDate ? `<span style="color:#0284c7; font-weight:600;"><i class="fas fa-calendar-alt"></i> Follow-up: ${log.followUpDate}</span>` : ''}
+                  </div>
+                </div>`;
+            });
+            html += '</div>';
+        }
+
+        html += '</div>';
+        area.innerHTML = html;
+
+    } catch (e) {
+        area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Error loading CRM history: ' + e.message + '</div>';
+    }
+};
+
+window.handleCRMQuickSearch = function (val) {
+    var resDiv = document.getElementById('crmHubSearchResults');
+    if (!resDiv) return;
+    var q = String(val || '').trim().toLowerCase();
+    if (q.length < 2) {
+        resDiv.innerHTML = '';
+        resDiv.style.display = 'none';
+        return;
+    }
+
+    var list = window._compiledCustomersList || [];
+    var digitsOnly = q.replace(/\D/g, '');
+    var matches = list.filter(function (c) {
+        if (digitsOnly.length >= 2) {
+            var nums = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (c.p ? [c.p] : []);
+            if (nums.some(n => n.includes(digitsOnly))) return true;
+        }
+        return (c.n && c.n.toLowerCase().includes(q)) || (c.c && c.c.toLowerCase().includes(q));
+    }).slice(0, 10);
+
+    if (matches.length === 0) {
+        resDiv.innerHTML = '<div style="padding:10px; font-size:12px; color:#94a3b8; text-align:center;">No matching party found</div>';
+        resDiv.style.display = 'block';
+        return;
+    }
+
+    var html = '';
+    matches.forEach(function (m) {
+        var safeCode = encodeURIComponent(m.c || m.n);
+        html += `
+        <div style="padding:8px 10px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; justify-content:space-between; align-items:center;"
+             onclick="document.getElementById('crmHubSearchResults').style.display='none'; window.openPostCallCRMModal({ code: '${safeCode}', name: '${escHtml(m.n)}', phone: '${m.p}', station: '${escHtml(m.ct)}', agent: '${escHtml(m.ag)}', balance: ${m.b || 0}, drCr: '${m.d || ''}' });">
+          <div>
+            <div style="font-weight:bold; font-size:12px; color:#1e293b;">${escHtml(m.n)}</div>
+            <div style="font-size:10px; color:#64748b;">${m.ct ? escHtml(m.ct) + ' | ' : ''}Phone: +91${m.p || ''}</div>
+          </div>
+          <span style="font-size:10px; color:var(--myntra-pink); font-weight:bold;"><i class="fas fa-plus-circle"></i> Log Note</span>
+        </div>`;
+    });
+    resDiv.innerHTML = html;
+    resDiv.style.display = 'block';
 };

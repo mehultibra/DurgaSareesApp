@@ -120,6 +120,22 @@ function sanitizeDocId(str) {
         .replace(/\s/g, '_');
 }
 
+function readJsonSafe(filePath, retries = 5, delayMs = 1500) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            return JSON.parse(raw);
+        } catch (e) {
+            if (attempt === retries) {
+                throw new Error(`Failed to read/parse ${filePath} after ${retries} attempts: ${e.message}`);
+            }
+            console.warn(`⏳ [Attempt ${attempt}/${retries}] File ${path.basename(filePath)} is busy or mid-write (${e.message}). Waiting ${delayMs}ms...`);
+            const end = Date.now() + delayMs;
+            while (Date.now() < end) {}
+        }
+    }
+}
+
 // ── Main Sync Function ────────────────────────────────────────────
 async function syncAccountingData() {
     console.log('====================================================');
@@ -132,13 +148,13 @@ async function syncAccountingData() {
         process.exit(1);
     }
 
-    console.log('📂 1. Reading source files from XAMPP...');
-    const mst = JSON.parse(fs.readFileSync(path.join(SOURCE_DIR, 'MST.json'), 'utf8'));
-    const acgroup = JSON.parse(fs.readFileSync(path.join(SOURCE_DIR, 'ACGROUP.json'), 'utf8'));
-    const ledger = JSON.parse(fs.readFileSync(path.join(SOURCE_DIR, 'LEDGER.json'), 'utf8'));
-    const bls = JSON.parse(fs.readFileSync(path.join(SOURCE_DIR, 'BLS.json'), 'utf8'));
-    const det = JSON.parse(fs.readFileSync(path.join(SOURCE_DIR, 'DET.json'), 'utf8'));
-    const ost = JSON.parse(fs.readFileSync(path.join(SOURCE_DIR, 'OUTSTANDING.json'), 'utf8'));
+    console.log('📂 1. Reading source files from XAMPP safely...');
+    const mst = readJsonSafe(path.join(SOURCE_DIR, 'MST.json'));
+    const acgroup = readJsonSafe(path.join(SOURCE_DIR, 'ACGROUP.json'));
+    const ledger = readJsonSafe(path.join(SOURCE_DIR, 'LEDGER.json'));
+    const bls = readJsonSafe(path.join(SOURCE_DIR, 'BLS.json'));
+    const det = readJsonSafe(path.join(SOURCE_DIR, 'DET.json'));
+    const ost = readJsonSafe(path.join(SOURCE_DIR, 'OUTSTANDING.json'));
 
     // Step 2: Strictly filter for Customers (1) and Agents/Brokers (12)
     console.log('👥 2. Filtering allowed customer & agent accounts from MST...');
@@ -483,7 +499,7 @@ async function syncAccountingData() {
                         const code = (f.partyCode && f.partyCode.stringValue) || decodeURIComponent(doc.name.split('/').pop());
                         if (code) {
                             localLinks[code] = Object.assign(localLinks[code] || {}, {
-                                name: f.name ? f.name.stringValue : (localLinks[code] && localLinks[code].name),
+                                name: (f.partyName && f.partyName.stringValue) || (f.name && f.name.stringValue) || (localLinks[code] && localLinks[code].name),
                                 phone: f.phone ? f.phone.stringValue : (localLinks[code] && localLinks[code].phone),
                                 transport: f.transport ? f.transport.stringValue : (localLinks[code] && localLinks[code].transport),
                                 agent: f.agent ? f.agent.stringValue : (localLinks[code] && localLinks[code].agent),
@@ -630,14 +646,14 @@ async function syncAccountingData() {
             agent: finalAgent,
             transport: link.transport || '',
             gst: link.gst || '',
+            atype: role === 'agent' ? '12' : '1',
             role: role,
-            balance: 0,
+            totalDebit: 0,
+            totalCredit: 0,
+            netBalance: 0,
             drCr: '',
-            absBalance: 0,
-            pendingBillsCount: 0,
-            hasOutstanding: false,
-            totalSalesDr: 0,
-            totalSalesCr: 0,
+            outstandingCount: 0,
+            salesBillsCount: 0,
             updatedAt: nowIso
         };
         customers.push(summaryObj);
@@ -724,16 +740,48 @@ async function syncAccountingData() {
     allowedPartyCodes.forEach(code => {
         const docId = sanitizeDocId(code);
         const rep = reportsByParty[code] || { ledger: [], salesItems: [], finishSales: [], transport: [], outstanding: [], bills: {} };
-        const repData = {
+        let lEntries = rep.ledger || [];
+        let fSales = rep.finishSales || [];
+        let sItems = rep.salesItems || [];
+        let billsObj = rep.bills || {};
+        let repData = {
             code: code,
-            ledger: rep.ledger,
-            finishSales: rep.finishSales,
-            salesItems: rep.salesItems,
-            transport: rep.transport,
-            outstanding: rep.outstanding,
-            bills: rep.bills || {},
+            ledger: lEntries,
+            finishSales: fSales,
+            salesItems: sItems,
+            transport: rep.transport || [],
+            outstanding: rep.outstanding || [],
+            bills: billsObj,
             updatedAt: nowIso
         };
+
+        // If single document serialized writeOp exceeds 2,500,000 bytes, trim oldest entries
+        const testOp = {
+            update: {
+                name: `projects/durga-sarees/databases/(default)/documents/AccountingReports/${docId}`,
+                fields: toFirestoreValue(repData).mapValue.fields
+            }
+        };
+        const testOpBytes = Buffer.byteLength(JSON.stringify(testOp), 'utf8');
+        if (testOpBytes > 2500000) {
+            console.warn(`⚠️ AccountingReports doc for ${code} is large (${(testOpBytes / 1024 / 1024).toFixed(2)} MB). Trimming oldest entries...`);
+            lEntries = lEntries.slice(-500);
+            fSales = fSales.slice(-300);
+            sItems = sItems.slice(-300);
+            const trimmedBills = {};
+            Object.keys(billsObj).slice(-300).forEach(k => { trimmedBills[k] = billsObj[k]; });
+            repData = {
+                code: code,
+                ledger: lEntries,
+                finishSales: fSales,
+                salesItems: sItems,
+                transport: rep.transport || [],
+                outstanding: rep.outstanding || [],
+                bills: trimmedBills,
+                updatedAt: nowIso
+            };
+        }
+
         const hKey = 'rep_' + docId;
         const currentHash = computeHash(repData);
         if (existingHashes[hKey] !== currentHash) {
@@ -783,47 +831,82 @@ async function syncAccountingData() {
         if (!token) {
             console.warn('⚠️ Could not obtain Firebase token. Delta writes will retry on next run.');
         } else {
-            const BATCH_SIZE = 400;
             const PROJECT_ID = 'durga-sarees';
             let committedCount = 0;
 
-            for (let i = 0; i < pendingWrites.length; i += BATCH_SIZE) {
-                const chunk = pendingWrites.slice(i, i + BATCH_SIZE);
-                const writeOps = chunk.map(item => ({
+            // Group writeOps into batches: <= 100 docs AND <= 3,500,000 bytes (3.5 MB)
+            const batches = [];
+            let currentBatch = [];
+            let currentBatchBytes = 0;
+
+            for (let i = 0; i < pendingWrites.length; i++) {
+                const item = pendingWrites[i];
+                const writeOp = {
                     update: {
                         name: `projects/${PROJECT_ID}/databases/(default)/documents/${item.collection}/${item.docId}`,
                         fields: toFirestoreValue(item.data).mapValue.fields
                     }
-                }));
+                };
+                const opBytes = Buffer.byteLength(JSON.stringify(writeOp), 'utf8');
 
-                try {
-                    const commitRes = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:commit`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': 'Bearer ' + token,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ writes: writeOps })
+                if (currentBatch.length >= 100 || (currentBatchBytes + opBytes > 3500000 && currentBatch.length > 0)) {
+                    batches.push(currentBatch);
+                    currentBatch = [];
+                    currentBatchBytes = 0;
+                }
+                currentBatch.push({ item, writeOp, opBytes });
+                currentBatchBytes += opBytes;
+            }
+            if (currentBatch.length > 0) {
+                batches.push(currentBatch);
+            }
+
+            console.log(`📦 Grouped ${pendingWrites.length} writes into ${batches.length} dynamic byte-aware batches (max 100 docs / 3.5 MB per batch).`);
+
+            async function commitWriteOps(itemsWithOps) {
+                const ops = itemsWithOps.map(x => x.writeOp);
+                const commitRes = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:commit`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ writes: ops })
+                });
+
+                if (commitRes.ok) {
+                    itemsWithOps.forEach(x => {
+                        newHashes[x.item.hashKey] = x.item.hashValue;
                     });
-
-                    if (commitRes.ok) {
-                        chunk.forEach(item => {
-                            newHashes[item.hashKey] = item.hashValue;
-                        });
-                        committedCount += chunk.length;
-                        console.log(`✅ Batch committed: ${committedCount} / ${pendingWrites.length} documents`);
-                    } else {
-                        const errText = await commitRes.text();
-                        console.error(`❌ Batch commit failed (HTTP ${commitRes.status}):`, errText.slice(0, 300));
-                        break;
+                    fs.writeFileSync(HASHES_FILE, JSON.stringify(newHashes, null, 2));
+                    committedCount += itemsWithOps.length;
+                    console.log(`✅ Batch committed: ${committedCount} / ${pendingWrites.length} documents synced.`);
+                    return true;
+                } else {
+                    const errText = await commitRes.text();
+                    console.error(`❌ Batch commit failed (HTTP ${commitRes.status}):`, errText.slice(0, 300));
+                    if (commitRes.status === 400 && itemsWithOps.length > 15) {
+                        console.log(`🔄 Splitting failed batch of ${itemsWithOps.length} docs into sub-batches of 15...`);
+                        const SUB_SIZE = 15;
+                        for (let s = 0; s < itemsWithOps.length; s += SUB_SIZE) {
+                            const subChunk = itemsWithOps.slice(s, s + SUB_SIZE);
+                            await commitWriteOps(subChunk);
+                        }
+                        return true;
                     }
-                } catch (batchErr) {
-                    console.error('❌ Network error during batch commit:', batchErr.message);
-                    break;
+                    return false;
                 }
             }
 
-            // Save updated delta hashes
+            for (let b = 0; b < batches.length; b++) {
+                try {
+                    await commitWriteOps(batches[b]);
+                } catch (batchErr) {
+                    console.error(`❌ Network error during batch ${b + 1}:`, batchErr.message);
+                }
+            }
+
+            // Save final delta hashes
             fs.writeFileSync(HASHES_FILE, JSON.stringify(newHashes, null, 2));
             console.log(`💾 Delta hashes updated. Successfully synced ${committedCount} documents to Firestore.`);
         }
