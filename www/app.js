@@ -1369,6 +1369,12 @@ window.syncAdminUI = function () {
         var hasCRM = window.hasCRMAccess();
         var showAdminUI = Boolean(window.isSuperAdmin && window.isAdminMode);
 
+        if (document.getElementById('btnTopCustomerHub')) {
+            document.getElementById('btnTopCustomerHub').style.display = hasCRM ? 'inline-block' : 'none';
+        }
+        if (document.getElementById('menuCustomerHub')) {
+            document.getElementById('menuCustomerHub').style.display = hasCRM ? 'flex' : 'none';
+        }
         if (document.getElementById('menuCustomerDirectory')) {
             document.getElementById('menuCustomerDirectory').style.display = hasCRM ? 'flex' : 'none';
         }
@@ -2509,15 +2515,15 @@ function renderProductGrid(products) {
         var isARecent = (Date.now() - timeA) < 15 * 60 * 1000;
         var isBRecent = (Date.now() - timeB) < 15 * 60 * 1000;
 
-        // --- ADMIN & INVENTORY: OUT OF STOCK TO BOTTOM ---
-        var aOutOfStock = !isARecent && (a.totalStock === 0 || (a.stock && a.stock['FULLY_PACKED'] === 1));
-        var bOutOfStock = !isBRecent && (b.totalStock === 0 || (b.stock && b.stock['FULLY_PACKED'] === 1));
+        // --- ADMIN & INVENTORY: OUT OF STOCK & FULLY PACKED ALWAYS TO BOTTOM ---
+        var aOutOfStock = (a.totalStock === 0 || (a.stock && a.stock['FULLY_PACKED'] === 1));
+        var bOutOfStock = (b.totalStock === 0 || (b.stock && b.stock['FULLY_PACKED'] === 1));
         if (aOutOfStock && !bOutOfStock) return 1;
         if (!aOutOfStock && bOutOfStock) return -1;
 
         // --- NO DESIGNS (NO IMAGES OR ONLY COVER) TO BOTTOM (Before Out of Stock) ---
-        var aHasDesigns = isARecent || (a.stock && Object.keys(a.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0);
-        var bHasDesigns = isBRecent || (b.stock && Object.keys(b.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0);
+        var aHasDesigns = (a.stock && Object.keys(a.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0);
+        var bHasDesigns = (b.stock && Object.keys(b.stock).filter(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover')).length > 0);
 
         if (!aHasDesigns && bHasDesigns) return 1;
         if (aHasDesigns && !bHasDesigns) return -1;
@@ -11750,20 +11756,64 @@ function escHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-// 1. Open Directory Modal (Strict Admin-Only Guard)
-window.openCustomerDirectoryModal = function () {
-    if (!window.isAdminMode && !window.isSuperAdmin) {
-        alert("🔒 Access Denied: Customer Directory is restricted to Durga Sarees Administrators.");
+// 1. Unified Customer Hub Controller (ERP Directory, CRM Follow-Ups & Caller Lookup)
+window.switchCustomerHubSection = function (section) {
+    window._activeCustomerHubSection = section || 'erp';
+    var tabs = ['erp', 'crm', 'lookup'];
+    tabs.forEach(function (t) {
+        var btn = document.getElementById('hubTabBtn_' + t);
+        var sec = document.getElementById('customerHubSection_' + t);
+        if (btn) {
+            if (t === window._activeCustomerHubSection) {
+                btn.style.color = 'var(--myntra-pink)';
+                btn.style.borderBottom = '2px solid var(--myntra-pink)';
+                btn.style.fontWeight = 'bold';
+            } else {
+                btn.style.color = '#64748b';
+                btn.style.borderBottom = '2px solid transparent';
+                btn.style.fontWeight = '600';
+            }
+        }
+        if (sec) {
+            sec.style.display = (t === window._activeCustomerHubSection) ? 'flex' : 'none';
+        }
+    });
+
+    if (window._activeCustomerHubSection === 'erp') {
+        if (window._compiledCustomersList && window._compiledCustomersList.length > 0) {
+            window.renderCustomerDirectoryUI();
+        } else {
+            window.loadAccountingDirectoryData(false);
+        }
+    } else if (window._activeCustomerHubSection === 'crm') {
+        if ((!window._compiledCustomersList || !window._compiledCustomersList.length) && typeof window.loadAccountingDirectoryData === 'function') {
+            window.loadAccountingDirectoryData(false).catch(function(){});
+        }
+        if (typeof window.switchCRMHubTab === 'function') {
+            window.switchCRMHubTab(window._activeCRMHubTab || 'followups');
+        }
+    } else if (window._activeCustomerHubSection === 'lookup') {
+        if ((!window._compiledCustomersList || !window._compiledCustomersList.length) && typeof window.loadAccountingDirectoryData === 'function') {
+            window.loadAccountingDirectoryData(false).catch(function(){});
+        }
+        var inp = document.getElementById('incomingCallerInput');
+        if (inp) inp.focus();
+    }
+};
+
+window.openUnifiedCustomerHub = function (section) {
+    if (!window.hasCRMAccess()) {
+        alert("🔒 Access Denied: Customer Hub is restricted to Staff or Administrators.");
         return;
     }
     if (typeof closeModals === 'function') closeModals();
-    if (typeof openModal === 'function') openModal('customerDirectoryModal');
+    var modal = document.getElementById('customerDirectoryModal');
+    if (modal) modal.style.display = 'flex';
+    window.switchCustomerHubSection(section || 'erp');
+};
 
-    if (window._compiledCustomersList && window._compiledCustomersList.length > 0) {
-        window.renderCustomerDirectoryUI();
-    } else {
-        window.loadAccountingDirectoryData(false);
-    }
+window.openCustomerDirectoryModal = function () {
+    window.openUnifiedCustomerHub('erp');
 };
 
 // 2. Load Customers Master List from Cloud Firestore (Zero monolithic JSON load)
@@ -11945,7 +11995,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
         var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
         var allDocs = [];
         var pageToken = '';
-        var maxPages = 4;
+        var maxPages = 50;
         for (var p = 0; p < maxPages; p++) {
             var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingCustomers?pageSize=300" + (pageToken ? `&pageToken=${pageToken}` : '');
             var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
@@ -12084,21 +12134,29 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
             if (selAgent && (c.ag || '').trim() !== selAgent) return false;
 
             if (tokens.length > 0) {
-                var searchStr = [
-                    c.n,
-                    c.c,
-                    c.p,
-                    (Array.isArray(c.cleanPhones) ? c.cleanPhones.join(' ') : ''),
-                    (Array.isArray(c.phones) ? c.phones.join(' ') : ''),
-                    c.ct,
-                    c.st,
-                    c.ag,
-                    c.tr,
-                    c.a,
-                    c.g
-                ].join(' ').toLowerCase();
-                var matchesAll = tokens.every(t => searchStr.includes(t));
-                if (!matchesAll) return false;
+                var digitsQuery = query.replace(/\D/g, '');
+                var isPhoneMatch = digitsQuery.length >= 3 && (
+                    (c.p && String(c.p).includes(digitsQuery)) ||
+                    (Array.isArray(c.cleanPhones) && c.cleanPhones.some(n => n.includes(digitsQuery))) ||
+                    (Array.isArray(c.phones) && c.phones.some(n => n.includes(digitsQuery)))
+                );
+                if (!isPhoneMatch) {
+                    var searchStr = [
+                        c.n,
+                        c.c,
+                        c.p,
+                        (Array.isArray(c.cleanPhones) ? c.cleanPhones.join(' ') : ''),
+                        (Array.isArray(c.phones) ? c.phones.join(' ') : ''),
+                        c.ct,
+                        c.st,
+                        c.ag,
+                        c.tr,
+                        c.a,
+                        c.g
+                    ].join(' ').toLowerCase();
+                    var matchesAll = tokens.every(t => searchStr.includes(t));
+                    if (!matchesAll) return false;
+                }
             }
             if (filterType === 'debit') return c.d === 'Dr' && c.b > 0;
             if (filterType === 'bills') return (c.pb || 0) > 0;
@@ -13641,6 +13699,33 @@ window.mergeFirebasePartyLinks = async function (list) {
             }
         });
 
+        // Add any Firebase parties not yet in local ERP list so all contacts are searchable
+        var existingCodes = new Set(list.map(c => (c.c || c.n || '').trim().toUpperCase()));
+        linksMap.forEach(function (l, code) {
+            if (!existingCodes.has(code)) {
+                var cleanP = l.phone ? String(l.phone).replace(/\D/g, '').slice(-10) : '';
+                var newCust = {
+                    c: code,
+                    n: code,
+                    p: cleanP,
+                    ct: l.station || '',
+                    st: l.state || '',
+                    ag: l.agent || '',
+                    tr: l.transport || '',
+                    g: l.gst || '',
+                    b: 0,
+                    d: '',
+                    pb: 0,
+                    isLinked: true,
+                    isApproved: l.isApproved,
+                    cleanPhones: cleanP.length === 10 ? [cleanP] : [],
+                    phones: cleanP.length === 10 ? [cleanP] : []
+                };
+                list.push(newCust);
+                existingCodes.add(code);
+            }
+        });
+
         try {
             var backupObj = {};
             linksMap.forEach((v, k) => { backupObj[k] = v; });
@@ -15133,21 +15218,11 @@ window.savePostCallCRM = async function () {
 
 // 6. CRM Hub Controller (Daily Queue, Team Feed, Scorecard)
 window.openCRMHubModal = function () {
-    if (!window.hasCRMAccess()) {
-        alert("Access Denied: Staff or Administrator privileges required.");
-        return;
-    }
-    var modal = document.getElementById('crmHubModal');
-    if (!modal) return;
-    modal.style.display = 'flex';
-    if ((!window._compiledCustomersList || !window._compiledCustomersList.length) && typeof window.loadAccountingDirectoryData === 'function') {
-        window.loadAccountingDirectoryData(false).catch(function(){});
-    }
-    window.switchCRMHubTab('followups');
+    window.openUnifiedCustomerHub('crm');
 };
 
 window.closeCRMHubModal = function () {
-    var modal = document.getElementById('crmHubModal');
+    var modal = document.getElementById('customerDirectoryModal');
     if (modal) modal.style.display = 'none';
 };
 
@@ -15560,91 +15635,22 @@ window.addStaffPhone = async function () {
 
 // 9. Incoming Caller 1-Tap Lookup Engine
 window.openIncomingCallerLookupModal = function () {
-    var modal = document.getElementById('incomingCallerLookupModal');
-    if (!modal) return;
-    modal.style.display = 'flex';
-    var inp = document.getElementById('incomingCallerInput');
-    if (inp) {
-        inp.value = '';
-        inp.focus();
-    }
-    var card = document.getElementById('incomingCallerDetailsCard');
-    if (card) {
-        card.innerHTML = '<div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px;"><i class="fas fa-search" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i><div>Type any 4 to 10 digits to identify incoming party</div></div>';
-    }
-    if ((!window._compiledCustomersList || !window._compiledCustomersList.length) && typeof window.loadAccountingDirectoryData === 'function') {
-        window.loadAccountingDirectoryData(false).catch(function(){});
-    }
+    window.openUnifiedCustomerHub('lookup');
 };
 
 window.closeIncomingCallerLookupModal = function () {
-    var modal = document.getElementById('incomingCallerLookupModal');
+    var modal = document.getElementById('customerDirectoryModal');
     if (modal) modal.style.display = 'none';
 };
 
-window.handleIncomingLookupSearch = async function (val) {
+window.renderIncomingLookup360Card = async function (matchOrCode) {
     var card = document.getElementById('incomingCallerDetailsCard');
     if (!card) return;
-    var query = String(val || '').trim().toLowerCase();
-    if (query.length < 3) {
-        card.innerHTML = '<div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px;"><i class="fas fa-search" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i><div>Type any 4 to 10 digits to identify incoming party</div></div>';
-        return;
-    }
-
     var list = window._compiledCustomersList || [];
-    if (list.length === 0 && typeof window.loadAccountingDirectoryData === 'function') {
-        card.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading customer directory...</div>';
-        try {
-            await window.loadAccountingDirectoryData(false);
-            list = window._compiledCustomersList || [];
-        } catch(e){}
-    }
-
-    var digitsOnly = query.replace(/\D/g, '');
-
-    var match = list.find(function (c) {
-        if (digitsOnly.length >= 3) {
-            var nums = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (c.p ? [c.p] : []);
-            if (nums.some(n => n.includes(digitsOnly))) return true;
-        }
-        return (c.n && c.n.toLowerCase().includes(query)) || (c.c && c.c.toLowerCase().includes(query));
-    });
-
-    if (!match && digitsOnly.length >= 10 && typeof window.findAccountsByPhone === 'function') {
-        try {
-            var cloudAccts = await window.findAccountsByPhone(digitsOnly);
-            if (cloudAccts && cloudAccts.length > 0) {
-                var first = cloudAccts[0];
-                match = list.find(c => (c.c === first.code || c.n === first.name));
-                if (!match) {
-                    match = {
-                        c: first.code,
-                        n: first.name,
-                        ct: first.station,
-                        p: digitsOnly.slice(-10),
-                        ag: first.agent,
-                        tr: first.transport,
-                        g: first.gst,
-                        b: 0,
-                        d: ''
-                    };
-                }
-            }
-        } catch(e){}
-    }
-
-    if (!match) {
-        card.innerHTML = `
-        <div style="text-align:center; padding:25px 10px; color:#64748b;">
-          <i class="fas fa-user-slash" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i>
-          <div style="font-weight:bold; font-size:13px; color:#1e293b;">No party matched for "${escHtml(val)}"</div>
-          <button type="button" onclick="window.openAddEditPartyContactModal()"
-            style="margin-top:8px; background:var(--myntra-pink); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
-            + Add New Party Contact
-          </button>
-        </div>`;
-        return;
-    }
+    var match = (typeof matchOrCode === 'string')
+        ? list.find(c => (c.c === decodeURIComponent(matchOrCode) || c.n === decodeURIComponent(matchOrCode)))
+        : matchOrCode;
+    if (!match) return;
 
     var safeCode = encodeURIComponent(match.c || match.code || match.n);
     var balText = (match.b > 0) ? ('₹ ' + Number(match.b).toLocaleString('en-IN') + ' ' + (match.d || '')) : 'Clear';
@@ -15731,6 +15737,101 @@ window.handleIncomingLookupSearch = async function (val) {
 
     html += '</div></div>';
     card.innerHTML = html;
+};
+
+window.handleIncomingLookupSearch = async function (val) {
+    var card = document.getElementById('incomingCallerDetailsCard');
+    if (!card) return;
+    var query = String(val || '').trim().toLowerCase();
+    if (query.length < 2) {
+        card.innerHTML = '<div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px;"><i class="fas fa-search" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i><div>Type any 3 to 10 digits to identify incoming party</div></div>';
+        return;
+    }
+
+    var list = window._compiledCustomersList || [];
+    if (list.length === 0 && typeof window.loadAccountingDirectoryData === 'function') {
+        card.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading customer directory...</div>';
+        try {
+            await window.loadAccountingDirectoryData(false);
+            list = window._compiledCustomersList || [];
+        } catch(e){}
+    }
+
+    var digitsOnly = query.replace(/\D/g, '');
+
+    var matches = list.filter(function (c) {
+        if (digitsOnly.length >= 3) {
+            var nums = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (c.p ? [c.p] : []);
+            if (nums.some(n => n.includes(digitsOnly))) return true;
+        }
+        var searchStr = [c.n, c.c, c.ct, c.st, c.ag, c.g].join(' ').toLowerCase();
+        return searchStr.includes(query);
+    });
+
+    if (matches.length === 0 && digitsOnly.length >= 10 && typeof window.findAccountsByPhone === 'function') {
+        try {
+            var cloudAccts = await window.findAccountsByPhone(digitsOnly);
+            if (cloudAccts && cloudAccts.length > 0) {
+                cloudAccts.forEach(function (first) {
+                    var m = list.find(c => (c.c === first.code || c.n === first.name));
+                    if (!m) {
+                        m = {
+                            c: first.code,
+                            n: first.name,
+                            ct: first.station,
+                            p: digitsOnly.slice(-10),
+                            ag: first.agent,
+                            tr: first.transport,
+                            g: first.gst,
+                            b: 0,
+                            d: ''
+                        };
+                    }
+                    matches.push(m);
+                });
+            }
+        } catch(e){}
+    }
+
+    if (matches.length === 0) {
+        card.innerHTML = `
+        <div style="text-align:center; padding:25px 10px; color:#64748b;">
+          <i class="fas fa-user-slash" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i>
+          <div style="font-weight:bold; font-size:13px; color:#1e293b;">No party matched for "${escHtml(val)}"</div>
+          <button type="button" onclick="window.openAddEditPartyContactModal()"
+            style="margin-top:8px; background:var(--myntra-pink); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+            + Add New Party Contact
+          </button>
+        </div>`;
+        return;
+    }
+
+    if (matches.length === 1) {
+        window.renderIncomingLookup360Card(matches[0]);
+        return;
+    }
+
+    // Multiple matches: show interactive selection list
+    var listHtml = '<div style="margin-bottom:8px; font-size:12px; font-weight:bold; color:#475569;">Found ' + matches.length + ' matching parties (tap to view 360°):</div><div style="display:flex; flex-direction:column; gap:6px; max-height:400px; overflow-y:auto;">';
+    matches.slice(0, 30).forEach(function (m) {
+        var safeCode = encodeURIComponent(m.c || m.n);
+        var bText = (m.b > 0) ? ('₹ ' + Number(m.b).toLocaleString('en-IN') + ' ' + (m.d || '')) : 'Clear';
+        var bCol = m.d === 'Dr' ? '#dc2626' : '#16a34a';
+        listHtml += `
+        <div style="padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; cursor:pointer; display:flex; justify-content:space-between; align-items:center;"
+             onclick="window.renderIncomingLookup360Card('${safeCode}')">
+          <div>
+            <div style="font-weight:bold; font-size:13px; color:#0f172a;">${escHtml(m.n)}</div>
+            <div style="font-size:11px; color:#64748b;">${m.ct ? escHtml(m.ct) + ' | ' : ''}Phone: +91${m.p || ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11px; font-weight:bold; color:${bCol};">${bText}</div>
+            <span style="font-size:10px; color:var(--myntra-pink); font-weight:bold;">View 360° <i class="fas fa-chevron-right"></i></span>
+          </div>
+        </div>`;
+    });
+    listHtml += '</div>';
+    card.innerHTML = listHtml;
 };
 
 // 10. CRM Tab inside Customer Reports Modal (Timeline & Single Read)
@@ -15851,8 +15952,9 @@ window.handleCRMQuickSearch = function (val) {
             var nums = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (c.p ? [c.p] : []);
             if (nums.some(n => n.includes(digitsOnly))) return true;
         }
-        return (c.n && c.n.toLowerCase().includes(q)) || (c.c && c.c.toLowerCase().includes(q));
-    }).slice(0, 10);
+        var searchStr = [c.n, c.c, c.ct, c.st, c.ag, c.g].join(' ').toLowerCase();
+        return searchStr.includes(q);
+    }).slice(0, 25);
 
     if (matches.length === 0) {
         resDiv.innerHTML = '<div style="padding:10px; font-size:12px; color:#94a3b8; text-align:center;">No matching party found</div>';
