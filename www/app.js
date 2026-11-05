@@ -676,6 +676,7 @@ window.addEventListener('DOMContentLoaded', function () {
                 window.adminTapCount = 0;
                 if (window.isSuperAdmin) {
                     window.isAdminMode = !window.isAdminMode;
+                    if (typeof window.syncAdminUI === 'function') window.syncAdminUI();
                     document.getElementById('appLogoImg').style.border = window.isAdminMode ? '2px solid red' : 'none';
                     document.getElementById('appLogoImg').style.borderRadius = '4px';
                     var fabAdd = document.getElementById('fabAddProduct');
@@ -1259,8 +1260,8 @@ async function saveProfile() {
             headers['Authorization'] = 'Bearer ' + token;
         }
 
-        var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users", {
-            method: "POST",
+        var res = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(phone), {
+            method: "PATCH",
             headers: headers,
             body: JSON.stringify(doc)
         });
@@ -1273,7 +1274,7 @@ async function saveProfile() {
                 station: station,
                 state: state,
                 phone: phone,
-                docId: data.name ? data.name.split('/').pop() : ""
+                docId: data.name ? decodeURIComponent(data.name.split('/').pop()) : phone
             };
             try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
             completeLogin(phone);
@@ -1284,21 +1285,21 @@ async function saveProfile() {
             // Try Firebase Web SDK fallback
             if (typeof firebase !== 'undefined' && firebase.firestore && firebase.auth && firebase.auth().currentUser) {
                 try {
-                    var docRef = await firebase.firestore().collection('Users').add({
+                    await firebase.firestore().collection('Users').doc(phone).set({
                         name: name,
                         firm: firm,
                         station: station,
                         state: state,
                         phone: phone,
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
+                    }, { merge: true });
                     var userProfile = {
                         name: name,
                         firm: firm,
                         station: station,
                         state: state,
                         phone: phone,
-                        docId: docRef.id
+                        docId: phone
                     };
                     try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
                     completeLogin(phone);
@@ -1316,21 +1317,21 @@ async function saveProfile() {
         // Try Firebase Web SDK fallback on network / fetch error
         if (typeof firebase !== 'undefined' && firebase.firestore && firebase.auth && firebase.auth().currentUser) {
             try {
-                var docRef = await firebase.firestore().collection('Users').add({
+                await firebase.firestore().collection('Users').doc(phone).set({
                     name: name,
                     firm: firm,
                     station: station,
                     state: state,
                     phone: phone,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                }, { merge: true });
                 var userProfile = {
                     name: name,
                     firm: firm,
                     station: station,
                     state: state,
                     phone: phone,
-                    docId: docRef.id
+                    docId: phone
                 };
                 try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
                 completeLogin(phone);
@@ -1418,8 +1419,42 @@ async function checkAdminStatus(phone) {
         var cleanPhone10 = String(phone || '').replace(/\D/g, '').slice(-10);
         var isSuperPhone = (cleanPhone10 === '9425032549' || cleanPhone10 === '9302632549');
 
-        var isSuper = isSuperPhone || Boolean(f && f.isAdmin && f.isAdmin.booleanValue === true);
-        var isStaffUser = Boolean(f && f.isStaff && f.isStaff.booleanValue === true);
+        if (!f) {
+            try {
+                var token = await getCachedAuthToken(false);
+                var hdrs = token ? { 'Authorization': 'Bearer ' + token } : {};
+                var uRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(phone), {
+                    headers: hdrs
+                });
+                if (uRes.ok) {
+                    var uData = await uRes.json();
+                    if (uData && uData.fields) f = uData.fields;
+                }
+            } catch (uErr) { }
+        }
+
+        var isSuper = isSuperPhone || Boolean(f && ((f.isAdmin && f.isAdmin.booleanValue === true) || (f.role && f.role.stringValue === 'admin')));
+        var isStaffUser = Boolean(f && ((f.isStaff && f.isStaff.booleanValue === true) || (f.role && f.role.stringValue === 'staff')));
+
+        if (!isSuper && !isStaffUser) {
+            try {
+                var token = await getCachedAuthToken(false);
+                var hdrs = token ? { 'Authorization': 'Bearer ' + token } : {};
+                var rRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Settings/Roles", {
+                    headers: hdrs
+                });
+                if (rRes.ok) {
+                    var rData = await rRes.json();
+                    if (rData && rData.fields) {
+                        var roleVal = (rData.fields[phone] && rData.fields[phone].stringValue) ||
+                                      (rData.fields['+91' + cleanPhone10] && rData.fields['+91' + cleanPhone10].stringValue) ||
+                                      (rData.fields[cleanPhone10] && rData.fields[cleanPhone10].stringValue);
+                        if (roleVal === 'admin') isSuper = true;
+                        if (roleVal === 'staff') isStaffUser = true;
+                    }
+                }
+            } catch (rErr) { }
+        }
 
         window.isSuperAdmin = isSuper;
         window.isStaff = isStaffUser;
@@ -4589,18 +4624,34 @@ var _cachedIdTokenExp = 0;
 async function getCachedAuthToken(forceRefresh = false) {
     var now = Date.now();
     if (!forceRefresh && _cachedIdToken && now < _cachedIdTokenExp) return _cachedIdToken;
-    
-    // Cold-boot readiness wait (up to 2.5 seconds) so Admin/Staff Firestore requests always include Auth
-    if (!_cachedIdToken && (window.activeUser || localStorage.getItem('dsActiveUser'))) {
-        for (var waitIter = 0; waitIter < 25; waitIter++) {
-            var hasAuthObj = (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) ||
-                             (window.CapacitorFirebaseAuthentication);
-            if (hasAuthObj) break;
-            await new Promise(function (r) { setTimeout(r, 100); });
-        }
-    }
 
     var isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+
+    // Cold-boot readiness wait (up to ~2.25s) so Admin/Staff Firestore requests always obtain and include a non-empty token
+    if (!_cachedIdToken && (window.activeUser || localStorage.getItem('dsUserToken'))) {
+        for (var waitIter = 0; waitIter < 15; waitIter++) {
+            if (isNative && window.CapacitorFirebaseAuthentication) {
+                try {
+                    var tRes = await window.CapacitorFirebaseAuthentication.getIdToken({ forceRefresh: forceRefresh });
+                    if (tRes && tRes.token) {
+                        _cachedIdToken = tRes.token;
+                        _cachedIdTokenExp = now + (20 * 60 * 1000);
+                        return _cachedIdToken;
+                    }
+                } catch (e) { }
+            } else if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+                try {
+                    var tok = await firebase.auth().currentUser.getIdToken(forceRefresh);
+                    if (tok) {
+                        _cachedIdToken = tok;
+                        _cachedIdTokenExp = now + (20 * 60 * 1000);
+                        return _cachedIdToken;
+                    }
+                } catch (e) { }
+            }
+            await new Promise(function (r) { setTimeout(r, 150); });
+        }
+    }
 
     // 1. If Native app, check Capacitor Firebase Auth first
     if (isNative && window.CapacitorFirebaseAuthentication) {
@@ -6213,6 +6264,14 @@ async function logout() {
         localStorage.removeItem('dsIsAdmin');
         window.isAdminMode = false;
         window.isSuperAdmin = false;
+        window.isStaff = false;
+        localStorage.removeItem('ds_active_on_behalf');
+        localStorage.removeItem('dsAdminOwnProfile');
+        ['crmHubModal', 'postCallCRMModal', 'incomingCallerLookupModal'].forEach(function (id) {
+            var m = document.getElementById(id);
+            if (m) m.style.display = 'none';
+        });
+        if (typeof window.syncAdminUI === 'function') window.syncAdminUI();
         window._compiledCustomersList = [];
         window._accountingReportsCache = null;
         if (typeof closeModals === 'function') closeModals(true);
@@ -6345,6 +6404,7 @@ async function openCustomerDetailsModal() {
         try { d = JSON.parse(stored); } catch (e) { }
     }
     var hasAccess = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
+    var isAdmin = hasAccess;
 
     if (!d && !hasAccess) {
         d = await fetchCustomerDetailsFromDB();
@@ -6421,6 +6481,7 @@ async function saveCustomerDetails() {
 
     if (btn) btn.innerText = "Saving...";
     var hasAccess = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
+    var isAdmin = hasAccess;
 
     var d = {
         name: name,
@@ -15381,16 +15442,28 @@ window.addStaffPhone = async function () {
         var token = await getCachedAuthToken(true);
         var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
 
-        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(fullPhone) + "?updateMask.fieldPaths=isStaff&updateMask.fieldPaths=phone", {
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(fullPhone) + "?updateMask.fieldPaths=isStaff&updateMask.fieldPaths=phone&updateMask.fieldPaths=role", {
             method: 'PATCH',
             headers: headers,
             body: JSON.stringify({
                 fields: {
                     phone: { stringValue: fullPhone },
-                    isStaff: { booleanValue: true }
+                    isStaff: { booleanValue: true },
+                    role: { stringValue: 'staff' }
                 }
             })
         });
+
+        // Also write to Settings/Roles
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Settings/Roles?updateMask.fieldPaths=" + encodeURIComponent(fullPhone), {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify({
+                fields: {
+                    [fullPhone]: { stringValue: 'staff' }
+                }
+            })
+        }).catch(function(e){ console.warn("Settings/Roles write error:", e); });
 
         alert("✓ Staff privileges granted to " + fullPhone);
         inp.value = '';

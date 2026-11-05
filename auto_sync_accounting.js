@@ -496,7 +496,8 @@ async function syncAccountingData() {
                     const json = await res.json();
                     (json.documents || []).forEach(doc => {
                         const f = doc.fields || {};
-                        const code = (f.partyCode && f.partyCode.stringValue) || decodeURIComponent(doc.name.split('/').pop());
+                        const rawCode = (f.partyCode && f.partyCode.stringValue) || decodeURIComponent(doc.name.split('/').pop());
+                        const code = String(rawCode || '').trim().toUpperCase();
                         if (code) {
                             localLinks[code] = Object.assign(localLinks[code] || {}, {
                                 name: (f.partyName && f.partyName.stringValue) || (f.name && f.name.stringValue) || (localLinks[code] && localLinks[code].name),
@@ -551,7 +552,7 @@ async function syncAccountingData() {
         let primaryPhone = phoneMap.get(code) || '';
         let phonesSet = allPhonesByParty.get(code) || new Set();
 
-        let linkData = localLinks[code] || null;
+        let linkData = localLinks[code] || localLinks[code.toUpperCase()] || null;
         if (linkData && linkData.phone) {
             extractMasterPhones(linkData.phone).forEach(pClean => {
                 if (!primaryPhone) primaryPhone = pClean;
