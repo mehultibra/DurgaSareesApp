@@ -155,36 +155,54 @@ async function syncAccountingData() {
     });
     console.log(`✅ Allowed Parties: ${allowedPartyCodes.size} (ATYPE=1 Customers & ATYPE=12 Agents/Brokers)`);
 
-    // Step 3: Phone mappings from ACGROUP & MST
-    console.log('📞 3. Building phone & broker mappings...');
+    // Step 3: Phone mappings from ACGROUP & MST (all contact numbers in master)
+    console.log('📞 3. Building phone & broker mappings from all master contact numbers...');
     const phoneMap = new Map();
     const allPhonesByParty = new Map();
 
+    function extractMasterPhones(raw) {
+        if (!raw) return [];
+        const str = String(raw).trim();
+        if (!str || /adhar|addar|aadhar|tin|bank|a\/c|acct|ifsc|pan/i.test(str)) return [];
+        const tokens = str.split(/[,;/|\\+\n\r\t&]+/);
+        const phones = [];
+        tokens.forEach(tok => {
+            tok.split(/\s+/).forEach(part => {
+                const digits = part.replace(/\D/g, '');
+                if (digits.length === 10 && /^[6-9]\d{9}$/.test(digits)) {
+                    phones.push(digits);
+                } else if ((digits.length === 11 || digits.length === 12) && digits.length >= 10) {
+                    const p10 = digits.slice(-10);
+                    if (/^[6-9]\d{9}$/.test(p10)) phones.push(p10);
+                } else if (digits.length === 10) {
+                    phones.push(digits);
+                }
+            });
+        });
+        return phones;
+    }
+
     acgroup.forEach(g => {
-        const code = String(g.code || '').trim().toUpperCase();
-        if (code && g.MO) {
-            let raw = String(g.MO).replace(/\D/g, '');
-            if (raw.length >= 10) {
-                let p10 = raw.slice(-10);
-                phoneMap.set(code, p10);
+        const code = String(g.code || g.value || g.label || '').trim().toUpperCase();
+        if (!code || !allowedPartyCodes.has(code)) return;
+        [g.MO, g.PH1, g.PH2, g.FX1, g.TEL, g.MOBILE, g.PHONE].forEach(f => {
+            extractMasterPhones(f).forEach(p10 => {
+                if (!phoneMap.has(code)) phoneMap.set(code, p10);
                 if (!allPhonesByParty.has(code)) allPhonesByParty.set(code, new Set());
                 allPhonesByParty.get(code).add(p10);
-            }
-        }
+            });
+        });
     });
 
     mst.forEach(m => {
         const code = String(m.partyname || m.value || '').trim().toUpperCase();
         if (!allowedPartyCodes.has(code)) return;
-        [m.MO, m.PH1, m.FX1].forEach(rawField => {
-            if (!rawField) return;
-            let raw = String(rawField).replace(/\D/g, '');
-            if (raw.length >= 10) {
-                let p10 = raw.slice(-10);
+        [m.MO, m.PH1, m.PH2, m.FX1, m.CTNM, m.TEL, m.MOBILE, m.PHONE, m.PHONE1, m.PHONE2, m.OFFICE, m.RES, m.CONTACT_NO].forEach(f => {
+            extractMasterPhones(f).forEach(p10 => {
                 if (!phoneMap.has(code)) phoneMap.set(code, p10);
                 if (!allPhonesByParty.has(code)) allPhonesByParty.set(code, new Set());
                 allPhonesByParty.get(code).add(p10);
-            }
+            });
         });
     });
 
@@ -519,11 +537,10 @@ async function syncAccountingData() {
 
         let linkData = localLinks[code] || null;
         if (linkData && linkData.phone) {
-            let pClean = String(linkData.phone).replace(/\D/g, '').slice(-10);
-            if (pClean.length === 10) {
-                primaryPhone = pClean;
+            extractMasterPhones(linkData.phone).forEach(pClean => {
+                if (!primaryPhone) primaryPhone = pClean;
                 phonesSet.add(pClean);
-            }
+            });
         }
 
         const detectedState = extractState(m);
@@ -544,6 +561,7 @@ async function syncAccountingData() {
             name: m.partyname || code,
             nameUpper: String(m.partyname || code).trim().toUpperCase(),
             phone: primaryPhone,
+            phones: cleanPhonesArr,
             cleanPhones: cleanPhonesArr,
             gst: finalGst,
             station: finalStation,
@@ -590,19 +608,23 @@ async function syncAccountingData() {
         if (!code.startsWith('APP_')) return;
         const link = localLinks[code];
         if (!link || !link.name) return;
-        const pClean = String(link.phone || '').replace(/\D/g, '').slice(-10);
+        const pCleanArr = extractMasterPhones(link.phone);
+        const pClean = pCleanArr[0] || String(link.phone || '').replace(/\D/g, '').slice(-10);
         const role = (link.role === 'agent' || link.isAgent) ? 'agent' : 'customer';
         const finalState = link.state || '';
         const finalAgent = link.agent || '';
         if (finalState) uniqueStates.add(finalState);
         if (finalAgent) uniqueAgents.add(finalAgent);
 
+        const cleanPhonesArr = pCleanArr.length ? pCleanArr : (pClean && pClean.length === 10 ? [pClean] : []);
+
         const summaryObj = {
             code: code,
             name: link.name,
             nameUpper: String(link.name).trim().toUpperCase(),
             phone: pClean,
-            phones: pClean ? [pClean] : [],
+            phones: cleanPhonesArr,
+            cleanPhones: cleanPhonesArr,
             station: link.station || '',
             state: finalState,
             agent: finalAgent,
@@ -620,26 +642,28 @@ async function syncAccountingData() {
         };
         customers.push(summaryObj);
 
-        if (pClean && pClean.length === 10) {
-            if (!phoneDirectoryMap[pClean]) {
-                phoneDirectoryMap[pClean] = {
-                    phone: pClean,
-                    primaryRole: role,
-                    matchedAccounts: [],
-                    updatedAt: nowIso
-                };
+        cleanPhonesArr.forEach(ph => {
+            if (ph && ph.length === 10) {
+                if (!phoneDirectoryMap[ph]) {
+                    phoneDirectoryMap[ph] = {
+                        phone: ph,
+                        primaryRole: role,
+                        matchedAccounts: [],
+                        updatedAt: nowIso
+                    };
+                }
+                phoneDirectoryMap[ph].matchedAccounts.push({
+                    code: code,
+                    name: link.name,
+                    station: link.station || '',
+                    state: finalState,
+                    agent: finalAgent,
+                    transport: link.transport || '',
+                    gst: link.gst || '',
+                    role: role
+                });
             }
-            phoneDirectoryMap[pClean].matchedAccounts.push({
-                code: code,
-                name: link.name,
-                station: link.station || '',
-                state: finalState,
-                agent: finalAgent,
-                transport: link.transport || '',
-                gst: link.gst || '',
-                role: role
-            });
-        }
+        });
     });
 
     // Step 8: Dashboard Meta Document

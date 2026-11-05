@@ -11621,10 +11621,22 @@ window.parseFirestoreCustomerDoc = function (d) {
     var f = d.fields;
     var aRole = (f.role && f.role.stringValue) ? f.role.stringValue : 'customer';
     var isAgent = aRole === 'agent' || (f.atype && f.atype.stringValue === '12');
+    var rawPhones = [];
+    if (f.cleanPhones && f.cleanPhones.arrayValue && Array.isArray(f.cleanPhones.arrayValue.values)) {
+        rawPhones = f.cleanPhones.arrayValue.values.map(function (v) { return v.stringValue || ''; }).filter(Boolean);
+    } else if (f.phones && f.phones.arrayValue && Array.isArray(f.phones.arrayValue.values)) {
+        rawPhones = f.phones.arrayValue.values.map(function (v) { return v.stringValue || ''; }).filter(Boolean);
+    }
+    var primaryP = f.phone ? f.phone.stringValue : (rawPhones[0] || '');
+    if (primaryP && !rawPhones.includes(primaryP)) {
+        rawPhones.unshift(primaryP);
+    }
     return {
         c: decodeURIComponent(f.code ? f.code.stringValue : (d.name ? d.name.split('/').pop() : '')),
         n: f.name ? f.name.stringValue : '',
-        p: f.phone ? f.phone.stringValue : '',
+        p: primaryP,
+        cleanPhones: rawPhones,
+        phones: rawPhones,
         ct: f.station ? f.station.stringValue : '',
         st: f.state ? f.state.stringValue : '',
         g: f.gst ? f.gst.stringValue : '',
@@ -11920,6 +11932,8 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                     c.n,
                     c.c,
                     c.p,
+                    (Array.isArray(c.cleanPhones) ? c.cleanPhones.join(' ') : ''),
+                    (Array.isArray(c.phones) ? c.phones.join(' ') : ''),
                     c.ct,
                     c.st,
                     c.ag,
@@ -12093,6 +12107,10 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                    style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #e5e7eb;">
                   <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
                 </a>
+                ${(Array.isArray(c.cleanPhones) && c.cleanPhones.length > 1) ? `
+                <span style="font-size:10px; color:#64748b; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:2px 5px; align-self:center;" title="${escHtml(c.cleanPhones.join(', '))}">
+                  +${c.cleanPhones.length - 1} more
+                </span>` : ''}
               ` : `<span style="font-size:11px; color:#9ca3af; font-style:italic;">No phone</span>`}
               <button type="button" onclick="event.stopPropagation(); window.openAddEditPartyContactModal(decodeURIComponent('${codeSafe}'))" style="display:inline-flex; align-items:center; gap:3px; background:#f1f5f9; color:#475569; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #cbd5e1; cursor:pointer;" title="Edit Contact"><i class="fas fa-edit" style="color:#64748b; font-size:10px;"></i> Edit</button>
             </div>
@@ -12207,6 +12225,15 @@ window.openCustomerReportsModal = async function (partyCode) {
                style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #e5e7eb;">
               <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
             </a>`;
+            if (Array.isArray(cust.cleanPhones) && cust.cleanPhones.length > 1) {
+                cust.cleanPhones.slice(1).forEach(function (extraP) {
+                    actHtml += `
+                    <a href="tel:${extraP}"
+                       style="display:inline-flex; align-items:center; gap:3px; background:#f8fafc; color:#475569; padding:4px 8px; border-radius:6px; font-size:10px; font-weight:600; text-decoration:none; border:1px solid #cbd5e1;" title="Call alternate number">
+                      <i class="fas fa-phone-alt" style="color:#0284c7; font-size:9px;"></i> ${extraP}
+                    </a>`;
+                });
+            }
         } else {
             actHtml += `<span style="font-size:11px; color:#94a3b8; font-style:italic;">No phone on record</span>`;
         }
@@ -13935,7 +13962,24 @@ window.ensureContactPermissions = async function (plugin) {
 };
 
 window.buildContactPayload = function (party) {
+    var rawPhones = Array.isArray(party.cleanPhones) && party.cleanPhones.length ? party.cleanPhones : (Array.isArray(party.phones) && party.phones.length ? party.phones : []);
     var cleanPhone = String(party.phone || party.p || '').replace(/\D/g, '').slice(-10);
+    if (cleanPhone && !rawPhones.includes(cleanPhone)) {
+        rawPhones.unshift(cleanPhone);
+    }
+    var phoneList = [];
+    var seenNums = new Set();
+    rawPhones.forEach(function (num) {
+        var p10 = String(num || '').replace(/\D/g, '').slice(-10);
+        if (p10.length === 10 && !seenNums.has(p10)) {
+            seenNums.add(p10);
+            phoneList.push(p10);
+        }
+    });
+    if (phoneList.length === 0 && cleanPhone.length === 10) {
+        phoneList.push(cleanPhone);
+    }
+
     var partyName = (party.name || party.n || party.firm || '').trim();
     var station = (party.station || party.ct || party.city || '').trim();
     var agent = (party.agent || party.ag || '').trim();
@@ -13947,23 +13991,37 @@ window.buildContactPayload = function (party) {
     var familyName = "DS";
     var orgName = `Agent: ${agent || 'DIRECT'} | Trans: ${transport || 'N/A'}`;
     var noteStr = `ERP:${code} | GST:${gst || 'N/A'}`;
-    var fullPhone = `+91${cleanPhone}`;
+
+    var phoneNumbers = phoneList.map(function (p10, idx) {
+        return {
+            type: idx === 0 ? 'MOBILE' : 'WORK',
+            value: '+91' + p10,
+            label: idx === 0 ? 'Mobile' : ('Work ' + idx)
+        };
+    });
+    var phonesNested = phoneList.map(function (p10, idx) {
+        return {
+            type: idx === 0 ? 'mobile' : 'work',
+            number: '+91' + p10
+        };
+    });
 
     return {
         givenName: givenName,
         familyName: familyName,
         organizationName: orgName,
         note: noteStr,
-        phoneNumbers: [{ type: 'MOBILE', value: fullPhone }],
+        phoneNumbers: phoneNumbers,
         name: { given: givenName, family: familyName },
         organization: { company: orgName },
-        phones: [{ type: 'mobile', number: fullPhone }]
+        phones: phonesNested
     };
 };
 
 window.computeContactHash = function (party) {
     var p = window.buildContactPayload(party);
-    var str = `${p.givenName}|${p.organizationName}|${p.note}|${p.phoneNumbers[0].value}`;
+    var phoneStr = (p.phones || []).map(function (x) { return x.number; }).join(',');
+    var str = `${p.givenName}|${p.organizationName}|${p.note}|${phoneStr}`;
     var hash = 0x811c9dc5;
     for (var i = 0; i < str.length; i++) {
         hash ^= str.charCodeAt(i);
@@ -13979,10 +14037,11 @@ window.syncSingleContactNative = async function (party) {
     var hasPerm = await window.ensureContactPermissions(plugin);
     if (!hasPerm) return null;
 
-    var cleanPhone = String(party.phone || party.p || '').replace(/\D/g, '').slice(-10);
-    if (cleanPhone.length !== 10) return null;
-
     var payload = window.buildContactPayload(party);
+    var phonesList = (payload.phones || []).map(function (ph) { return ph.number.replace(/\D/g, '').slice(-10); });
+    if (phonesList.length === 0) return null;
+    var cleanPhone = phonesList[0];
+
     var hash = window.computeContactHash(party);
     var code = String(party.code || party.c || ('APP_' + cleanPhone)).trim();
 
@@ -13999,7 +14058,7 @@ window.syncSingleContactNative = async function (party) {
                 var phones = dc.phoneNumbers || dc.phones || [];
                 var matched = phones.some(function (ph) {
                     var v = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
-                    return v === cleanPhone;
+                    return phonesList.includes(v);
                 });
                 if (matched) {
                     targetContactId = dc.id || dc.contactId;
@@ -14089,15 +14148,24 @@ window.startAutomaticContactSync = async function () {
 
         var deltaQueue = [];
         list.forEach(function (c) {
-            var rawPhone = c.p || c.phone;
-            var cleanPhone = String(rawPhone || '').replace(/\D/g, '').slice(-10);
-            if (cleanPhone.length !== 10) return;
+            var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+            var validNums = rawList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(p10) { return p10.length === 10; });
+            if (validNums.length === 0) return;
+            var cleanPhone = validNums[0];
             var code = String(c.c || c.code || ('APP_' + cleanPhone)).trim();
             var partyHash = window.computeContactHash(c);
 
             var existingRec = recordsMap.get(code);
-            var devMatch = devicePhoneMap.get(cleanPhone);
-            var knownContactId = existingRec ? existingRec.contactId : (devMatch ? devMatch.id : null);
+            var knownContactId = existingRec ? existingRec.contactId : null;
+            if (!knownContactId) {
+                for (var vi = 0; vi < validNums.length; vi++) {
+                    var devMatch = devicePhoneMap.get(validNums[vi]);
+                    if (devMatch && devMatch.id) {
+                        knownContactId = devMatch.id;
+                        break;
+                    }
+                }
+            }
 
             if (existingRec && existingRec.hash === partyHash && existingRec.contactId) {
                 return;
@@ -14214,7 +14282,10 @@ window.openAddEditPartyContactModal = function (partyCode) {
         if (titleEl) titleEl.innerText = "Edit Party Contact";
         if (codeInput) codeInput.value = party ? (party.c || party.code || partyCode) : partyCode;
         if (nameInput) nameInput.value = party ? (party.n || party.name || '') : partyCode;
-        if (phoneInput) phoneInput.value = party ? (party.p || party.phone || '') : '';
+        if (phoneInput) {
+            var pArr = Array.isArray(party && (party.cleanPhones || party.phones)) ? (party.cleanPhones || party.phones) : (party && (party.p || party.phone) ? [party.p || party.phone] : []);
+            phoneInput.value = pArr.join(', ');
+        }
         if (stationInput) stationInput.value = party ? (party.ct || party.station || party.city || '') : '';
         if (stateInput) stateInput.value = party ? (party.st || party.state || '') : '';
         if (agentInput) agentInput.value = party ? (party.ag || party.agent || '') : '';
@@ -14264,13 +14335,19 @@ window.saveAddEditPartyContact = async function () {
 
     var name = (nameInput ? nameInput.value : '').trim();
     var rawPhone = (phoneInput ? phoneInput.value : '').trim();
-    var phone10 = rawPhone.replace(/\D/g, '').slice(-10);
+    var rawParts = rawPhone.split(/[,;/|\s]+/);
+    var cleanNums = [];
+    rawParts.forEach(function (part) {
+        var p10 = part.replace(/\D/g, '').slice(-10);
+        if (p10.length === 10 && !cleanNums.includes(p10)) cleanNums.push(p10);
+    });
+    var phone10 = cleanNums[0] || '';
 
     if (!name) {
         if (errEl) errEl.innerText = "Please enter party / business name.";
         return;
     }
-    if (phone10.length !== 10) {
+    if (cleanNums.length === 0) {
         if (errEl) errEl.innerText = "Please enter a valid 10-digit mobile number.";
         return;
     }
@@ -14293,6 +14370,8 @@ window.saveAddEditPartyContact = async function () {
         code: code,
         name: name,
         phone: phone10,
+        phones: cleanNums,
+        cleanPhones: cleanNums,
         station: station,
         state: state,
         agent: agent,
@@ -14337,7 +14416,8 @@ window.saveAddEditPartyContact = async function () {
                 name: { stringValue: name },
                 nameUpper: { stringValue: name.toUpperCase() },
                 phone: { stringValue: phone10 },
-                cleanPhones: { arrayValue: { values: [{ stringValue: phone10 }] } },
+                cleanPhones: { arrayValue: { values: cleanNums.map(function (num) { return { stringValue: num }; }) } },
+                phones: { arrayValue: { values: cleanNums.map(function (num) { return { stringValue: num }; }) } },
                 station: { stringValue: station },
                 state: { stringValue: state },
                 agent: { stringValue: agent },
@@ -14359,32 +14439,35 @@ window.saveAddEditPartyContact = async function () {
             body: JSON.stringify(custSummaryBody)
         });
 
-        // 3. Write to PhoneDirectory/{phone10}
-        var phoneDirBody = {
-            fields: {
-                phone: { stringValue: phone10 },
-                primaryRole: { stringValue: role },
-                matchedAccountsJson: {
-                    stringValue: JSON.stringify([{
-                        code: code,
-                        name: name,
-                        station: station,
-                        state: state,
-                        agent: agent,
-                        transport: transport,
-                        gst: gst,
-                        role: role
-                    }])
-                },
-                updatedAt: { timestampValue: nowIso }
-            }
-        };
+        // 3. Write to PhoneDirectory/{phone10} for all available numbers
+        for (var pi = 0; pi < cleanNums.length; pi++) {
+            var curPhone = cleanNums[pi];
+            var phoneDirBody = {
+                fields: {
+                    phone: { stringValue: curPhone },
+                    primaryRole: { stringValue: role },
+                    matchedAccountsJson: {
+                        stringValue: JSON.stringify([{
+                            code: code,
+                            name: name,
+                            station: station,
+                            state: state,
+                            agent: agent,
+                            transport: transport,
+                            gst: gst,
+                            role: role
+                        }])
+                    },
+                    updatedAt: { timestampValue: nowIso }
+                }
+            };
 
-        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PhoneDirectory/" + phone10, {
-            method: 'PATCH',
-            headers: headers,
-            body: JSON.stringify(phoneDirBody)
-        });
+            await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PhoneDirectory/" + curPhone, {
+                method: 'PATCH',
+                headers: headers,
+                body: JSON.stringify(phoneDirBody)
+            });
+        }
 
         // 4. Immediately Sync Contact Natively to Android Contacts
         await window.syncSingleContactNative(partyObj);
@@ -14396,6 +14479,8 @@ window.saveAddEditPartyContact = async function () {
             c: code,
             n: name,
             p: phone10,
+            cleanPhones: cleanNums,
+            phones: cleanNums,
             ct: station,
             st: state,
             ag: agent,
