@@ -824,7 +824,13 @@
           </div>
           <div id="custDirSubtitle" style="font-size:11px; color:#6b7280; margin-top:2px;">Tap any customer to view Ledger, Sales, Transport &amp; Outstanding</div>
         </div>
-        <i class="fas fa-times" style="font-size:22px; color:#9ca3af; cursor:pointer; padding:4px;" onclick="closeModals()"></i>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" onclick="window.startAutomaticContactSync(true)"
+            style="background:#f1f5f9; color:#0f172a; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:4px;">
+            <i class="fas fa-sync-alt" style="color:var(--myntra-pink);"></i> Sync Phone
+          </button>
+          <i class="fas fa-times" style="font-size:22px; color:#9ca3af; cursor:pointer; padding:4px;" onclick="closeModals()"></i>
+        </div>
       </div>
 
       <!-- Search Input -->
@@ -1589,6 +1595,10 @@
             <div style="font-size:11px; color:#64748b;">Daily Call Queue, Follow-Ups &amp; Team Feed</div>
           </div>
         </div>
+        <button type="button" onclick="window.startAutomaticContactSync(true)"
+            style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; margin-right:6px;">
+            <i class="fas fa-address-book" style="color:var(--myntra-pink);"></i> Sync Phone
+          </button>
         <button type="button" onclick="window.refreshCRMData()"
           style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
           <i class="fas fa-sync-alt" id="crmHubRefreshIcon"></i> Refresh

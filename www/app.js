@@ -162,7 +162,15 @@ history.replaceState({ modal: 'main' }, '');
 // --- ADMIN MODE GLOBALS ---
 window.isAdminMode = false;
 window.adminTapCount = 0;
-window.isSuperAdmin = localStorage.getItem('dsIsAdmin') === 'true';
+var _savedToken = '';
+try { _savedToken = (localStorage.getItem('dsUserToken') || localStorage.getItem('dsAdminPhone') || localStorage.getItem('dsUserPhone') || ''); } catch(e){}
+var _savedP10 = _savedToken.replace(/\D/g, '').slice(-10);
+if (_savedP10 === '9998232380' || _savedP10 === '9425032549' || _savedP10 === '9302632549') {
+    window.isSuperAdmin = true;
+    try { localStorage.setItem('dsIsAdmin', 'true'); } catch(e){}
+} else {
+    window.isSuperAdmin = localStorage.getItem('dsIsAdmin') === 'true';
+}
 window.isStaff = localStorage.getItem('dsIsStaff') === 'true';
 window.DS_APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx89H5yDUi-60Q2Rk12PH1TH34Nt-BncrMRhYSewu1LdLOj_GCWGKKz1Qmx2OmeGwlL/exec";
 
@@ -9449,6 +9457,10 @@ window.openLiveAdmin = function () {
                         historyHtml = `<div style="font-size:12px; color:#555; margin-top:4px;"><b>Recent:</b> ${esc(d.recentHistory.join(', '))}</div>`;
                     }
 
+                    let safeDocId = docId.replace(/\+/g, '').replace(/[^a-zA-Z0-9_]/g, '_');
+                    let pKey = getPhoneKey(docId);
+                    let uData = window.adminCustomerCache[docId] || (pKey ? window.adminCustomerCache[pKey] : null);
+
                     let roleBadge = '';
                     var isAdminUser = Boolean((d && (d.isAdmin || d.role === 'admin')) || (uData && (uData.isAdmin || uData.role === 'admin')));
                     if (!isGuest) {
@@ -9464,11 +9476,6 @@ window.openLiveAdmin = function () {
                     let namePortion = (d.customerName && d.customerName !== "Guest") ? d.customerName : (isGuest ? "Guest #" + docId.replace('guest_', '').substring(0, 6).toUpperCase() : docId);
                     let stationPortion = (d.customerStation && d.customerStation !== "Unknown") ? ' - ' + d.customerStation : '';
                     let dispName = namePortion + stationPortion;
-
-                    let safeDocId = docId.replace(/\+/g, '').replace(/[^a-zA-Z0-9_]/g, '_');
-                    let pKey = getPhoneKey(docId);
-
-                    let uData = window.adminCustomerCache[docId] || (pKey ? window.adminCustomerCache[pKey] : null);
                     if (!uData && (d.approvalStatus || d.linkedAccount || (d.matchedAccounts && d.matchedAccounts.length))) {
                         uData = {
                             actualDocId: d.actualDocId || docId,
@@ -14123,10 +14130,10 @@ window.ensureContactPermissions = async function (plugin) {
     try {
         if (!plugin || typeof plugin.checkPermissions !== 'function') return false;
         var status = await plugin.checkPermissions();
-        var isGranted = (status && (status.writeContacts === 'granted' || status.readContacts === 'granted'));
+        var isGranted = (status && (status.contacts === 'granted' || status.writeContacts === 'granted' || status.readContacts === 'granted'));
         if (!isGranted && typeof plugin.requestPermissions === 'function') {
             status = await plugin.requestPermissions();
-            isGranted = (status && (status.writeContacts === 'granted' || status.readContacts === 'granted'));
+            isGranted = (status && (status.contacts === 'granted' || status.writeContacts === 'granted' || status.readContacts === 'granted'));
         }
         return Boolean(isGranted);
     } catch (e) {
@@ -14286,9 +14293,15 @@ window.syncSingleContactNative = async function (party) {
 };
 window.upsertSingleNativeContact = window.syncSingleContactNative;
 
-window.startAutomaticContactSync = async function () {
-    if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) return;
-    if (window._isSyncingContacts) return;
+window.startAutomaticContactSync = async function (forceAll = false) {
+    if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) {
+        if (forceAll) alert("Contact sync is available on Android with Admin privileges.");
+        return;
+    }
+    if (window._isSyncingContacts) {
+        if (forceAll) alert("Contact sync is already running in background...");
+        return;
+    }
     window._isSyncingContacts = true;
 
     var banner = document.getElementById('contactSyncBanner');
@@ -14297,13 +14310,33 @@ window.startAutomaticContactSync = async function () {
 
     try {
         var plugin = window.getNativeContactsPlugin();
-        if (!plugin) { window._isSyncingContacts = false; return; }
+        if (!plugin) {
+            window._isSyncingContacts = false;
+            if (forceAll) alert("Device contacts plugin not available.");
+            return;
+        }
         var hasPerm = await window.ensureContactPermissions(plugin);
-        if (!hasPerm) { window._isSyncingContacts = false; return; }
+        if (!hasPerm) {
+            window._isSyncingContacts = false;
+            if (forceAll) alert("Contacts permission not granted. Please allow Contacts permission in App Settings.");
+            return;
+        }
 
         var list = window._compiledCustomersList || [];
+        if ((!list || list.length === 0) && typeof window.loadAccountingDirectoryData === 'function') {
+            if (banner && bannerText) {
+                banner.style.display = 'flex';
+                bannerText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading customer directory...';
+            }
+            try {
+                await window.loadAccountingDirectoryData(false);
+                list = window._compiledCustomersList || [];
+            } catch(lErr){}
+        }
         if (!list || list.length === 0) {
             window._isSyncingContacts = false;
+            if (banner) banner.style.display = 'none';
+            if (forceAll) alert("No customer contacts found in directory to sync.");
             return;
         }
 
@@ -14360,7 +14393,7 @@ window.startAutomaticContactSync = async function () {
                 }
             }
 
-            if (existingRec && existingRec.hash === partyHash && existingRec.contactId) {
+            if (!forceAll && existingRec && existingRec.hash === partyHash && existingRec.contactId) {
                 return;
             }
 
@@ -14379,6 +14412,7 @@ window.startAutomaticContactSync = async function () {
                 setTimeout(function () { if (banner) banner.style.display = 'none'; }, 3000);
             }
             window._isSyncingContacts = false;
+            if (forceAll) alert("✓ All contacts are already up to date on your device!");
             return;
         }
 
@@ -14393,6 +14427,7 @@ window.startAutomaticContactSync = async function () {
                     setTimeout(function () { if (banner) banner.style.display = 'none'; }, 4000);
                 }
                 window._isSyncingContacts = false;
+                if (forceAll) alert("✓ Successfully synced " + totalDelta + " contacts to your device address book!");
                 return;
             }
 
@@ -15110,6 +15145,9 @@ window.openCRMHubModal = function () {
     var modal = document.getElementById('crmHubModal');
     if (!modal) return;
     modal.style.display = 'flex';
+    if ((!window._compiledCustomersList || !window._compiledCustomersList.length) && typeof window.loadAccountingDirectoryData === 'function') {
+        window.loadAccountingDirectoryData(false).catch(function(){});
+    }
     window.switchCRMHubTab('followups');
 };
 
@@ -15539,6 +15577,9 @@ window.openIncomingCallerLookupModal = function () {
     if (card) {
         card.innerHTML = '<div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px;"><i class="fas fa-search" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i><div>Type any 4 to 10 digits to identify incoming party</div></div>';
     }
+    if ((!window._compiledCustomersList || !window._compiledCustomersList.length) && typeof window.loadAccountingDirectoryData === 'function') {
+        window.loadAccountingDirectoryData(false).catch(function(){});
+    }
 };
 
 window.closeIncomingCallerLookupModal = function () {
@@ -15556,6 +15597,14 @@ window.handleIncomingLookupSearch = async function (val) {
     }
 
     var list = window._compiledCustomersList || [];
+    if (list.length === 0 && typeof window.loadAccountingDirectoryData === 'function') {
+        card.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading customer directory...</div>';
+        try {
+            await window.loadAccountingDirectoryData(false);
+            list = window._compiledCustomersList || [];
+        } catch(e){}
+    }
+
     var digitsOnly = query.replace(/\D/g, '');
 
     var match = list.find(function (c) {
@@ -15565,6 +15614,29 @@ window.handleIncomingLookupSearch = async function (val) {
         }
         return (c.n && c.n.toLowerCase().includes(query)) || (c.c && c.c.toLowerCase().includes(query));
     });
+
+    if (!match && digitsOnly.length >= 10 && typeof window.findAccountsByPhone === 'function') {
+        try {
+            var cloudAccts = await window.findAccountsByPhone(digitsOnly);
+            if (cloudAccts && cloudAccts.length > 0) {
+                var first = cloudAccts[0];
+                match = list.find(c => (c.c === first.code || c.n === first.name));
+                if (!match) {
+                    match = {
+                        c: first.code,
+                        n: first.name,
+                        ct: first.station,
+                        p: digitsOnly.slice(-10),
+                        ag: first.agent,
+                        tr: first.transport,
+                        g: first.gst,
+                        b: 0,
+                        d: ''
+                    };
+                }
+            }
+        } catch(e){}
+    }
 
     if (!match) {
         card.innerHTML = `
@@ -15773,6 +15845,11 @@ window.handleCRMQuickSearch = function (val) {
     }
 
     var list = window._compiledCustomersList || [];
+    if (list.length === 0 && typeof window.loadAccountingDirectoryData === 'function') {
+        window.loadAccountingDirectoryData(false).then(function() {
+            window.handleCRMQuickSearch(val);
+        }).catch(function(){});
+    }
     var digitsOnly = q.replace(/\D/g, '');
     var matches = list.filter(function (c) {
         if (digitsOnly.length >= 2) {
