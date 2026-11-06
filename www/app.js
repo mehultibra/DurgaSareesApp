@@ -1492,23 +1492,12 @@ async function checkAdminStatus(phone) {
             }
         }
 
-                if (window.isSuperAdmin) {
+                        if (window.isSuperAdmin) {
             localStorage.setItem('dsIsAdmin', 'true');
-            // Auto-trigger background contact sync for Super Admin after 3 seconds on native device
-            if (window.Capacitor && window.Capacitor.isNativePlatform() && typeof window.startAutomaticContactSync === 'function') {
-                setTimeout(function () {
-                    window.startAutomaticContactSync(false);
-                }, 3000);
-            }
         } else {
             localStorage.setItem('dsIsAdmin', 'false');
         }
         localStorage.setItem('dsIsStaff', window.isStaff ? 'true' : 'false');
-
-        // Enable native call monitor for Staff and Admin
-        if (typeof window.hasCRMAccess === 'function' && window.hasCRMAccess() && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor) {
-            try { window.Capacitor.Plugins.CallMonitor.enable(); } catch(e){}
-        }
 
         window.syncAdminUI();
 
@@ -9417,7 +9406,7 @@ window.openLiveAdmin = function () {
                     let actionsHtml = isGuest
                         ? `<span style="background:#e0e0e0; color:#555; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold;">Guest Visitor</span>`
                         : `<div style="display:flex; gap:8px;">
-                             <a href="tel:${docId}" style="background:#2563eb; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:5px;"><i class="fas fa-phone"></i> Call</a>
+                             <button type="button" onclick="window.initiateTrackedCall('${docId}', '${docId}', '${docId}', '', '')" style="background:#2563eb; color:white; padding:6px 12px; border-radius:4px; border:none; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><i class="fas fa-phone"></i> Call</button>
                              <a href="https://wa.me/${docId.replace(/\D/g, '')}" target="_blank" style="background:#16a34a; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:5px;"><i class="fab fa-whatsapp"></i> WA</a>
                            </div>`;
 
@@ -12086,12 +12075,26 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
             }
         }
 
-        if (loadedList.length > 0) {
+                if (loadedList.length > 0) {
             var seen = new Set();
             window._compiledCustomersList = loadedList.filter(function (c) {
                 var k = (c.n || c.c || '').trim().toUpperCase();
                 if (!k || seen.has(k)) return false;
                 seen.add(k);
+
+                // Ensure cleanPhones is always a deduplicated array of 10-digit strings
+                var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+                var phoneSet = new Set();
+                var clean10List = [];
+                rawList.forEach(function (num) {
+                    var p10 = String(num || '').replace(/\D/g, '').slice(-10);
+                    if (p10.length === 10 && !phoneSet.has(p10)) {
+                        phoneSet.add(p10);
+                        clean10List.push(p10);
+                    }
+                });
+                c.cleanPhones = clean10List;
+                if (!c.p && clean10List.length > 0) c.p = clean10List[0];
                 return true;
             });
 
@@ -12521,13 +12524,13 @@ window.openCustomerReportsModal = async function (partyCode) {
                style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; cursor:pointer;">
               <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
             </button>`;
-            if (Array.isArray(cust.cleanPhones) && cust.cleanPhones.length > 1) {
+                        if (Array.isArray(cust.cleanPhones) && cust.cleanPhones.length > 1) {
                 cust.cleanPhones.slice(1).forEach(function (extraP) {
                     actHtml += `
-                    <a href="tel:${extraP}"
-                       style="display:inline-flex; align-items:center; gap:3px; background:#f8fafc; color:#475569; padding:4px 8px; border-radius:6px; font-size:10px; font-weight:600; text-decoration:none; border:1px solid #cbd5e1;" title="Call alternate number">
+                    <button type="button" onclick="event.stopPropagation(); window.initiateTrackedCall('${codeSafe}', '${escHtml(cust.n)}', '${extraP}', '${escHtml(cust.ct)}', '${escHtml(cust.ag || '')}', ${cust.b || 0}, '${cust.d || ''}')"
+                       style="display:inline-flex; align-items:center; gap:3px; background:#f8fafc; color:#475569; padding:4px 8px; border-radius:6px; font-size:10px; font-weight:600; border:1px solid #cbd5e1; cursor:pointer;" title="Call alternate number">
                       <i class="fas fa-phone-alt" style="color:#0284c7; font-size:9px;"></i> ${extraP}
-                    </a>`;
+                    </button>`;
                 });
             }
         } else {
@@ -14280,208 +14283,12 @@ window.saveContactSyncRecordsBatch = async function (records) {
     }
 };
 
-window.getNativeContactsPlugin = function () {
-    if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) {
-        return null;
-    }
-    return (window.Capacitor && window.Capacitor.Plugins && (window.Capacitor.Plugins.CapacitorContacts || window.Capacitor.Plugins.Contacts)) || window.CapacitorContacts || null;
-};
-
-window.ensureContactPermissions = async function (plugin) {
-    try {
-        if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) return false;
-        if (!plugin || typeof plugin.checkPermissions !== 'function') return false;
-        var status = await plugin.checkPermissions();
-        var isGranted = (status && (status.readContacts === 'granted' || status.contacts === 'granted') && (status.writeContacts === 'granted' || status.contacts === 'granted'));
-        if (!isGranted && typeof plugin.requestPermissions === 'function') {
-            status = await plugin.requestPermissions();
-            isGranted = (status && (status.readContacts === 'granted' || status.contacts === 'granted') && (status.writeContacts === 'granted' || status.contacts === 'granted'));
-        }
-        return Boolean(isGranted);
-    } catch (e) {
-        console.warn("Contact permission check failed:", e);
-        return false;
-    }
-};
-
-window.buildContactPayload = function (party, existingPhoneObjects) {
-    var rawList = Array.isArray(party.cleanPhones) && party.cleanPhones.length ? party.cleanPhones.slice() : (Array.isArray(party.phones) && party.phones.length ? party.phones.slice() : (party.p || party.phone ? [party.p || party.phone] : []));
-    var phoneList10 = [];
-    var seen = new Set();
-    rawList.forEach(function (num) {
-        var p10 = String(num || '').replace(/\D/g, '').slice(-10);
-        if (p10.length === 10 && !seen.has(p10)) {
-            seen.add(p10);
-            phoneList10.push(p10);
-        }
-    });
-
-    var pName = (party.name || party.n || party.firm || '').trim();
-    var pStation = (party.station || party.ct || party.city || '').trim();
-    var pAgent = (party.agent || party.ag || '').trim();
-    var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
-
-    var phoneObjs = phoneList10.map(function (p10, idx) {
-        return {
-            value: '+91' + p10,
-            number: '+91' + p10,
-            label: idx === 0 ? 'mobile' : 'work',
-            type: idx === 0 ? 'MOBILE' : 'WORK'
-        };
-    });
-
-    if (Array.isArray(existingPhoneObjects)) {
-        existingPhoneObjects.forEach(function (eph) {
-            var val = typeof eph === 'string' ? eph : (eph.value || eph.number || '');
-            var ep10 = String(val).replace(/\D/g, '').slice(-10);
-            if (ep10.length === 10 && !seen.has(ep10)) {
-                seen.add(ep10);
-                phoneObjs.push({
-                    value: val.startsWith('+') ? val : ('+91' + ep10),
-                    number: val.startsWith('+') ? val : ('+91' + ep10),
-                    label: eph.label || 'other',
-                    type: eph.type || 'OTHER'
-                });
-            }
-        });
-    }
-
-    return {
-        contact: {
-            givenName: displayName,
-            organizationName: pName,
-            phoneNumbers: phoneObjs
-        },
-        givenName: displayName,
-        organizationName: pName,
-        phoneNumbers: phoneObjs
-    };
-};
-
-window.computeContactHash = function (party) {
-    var rawList = Array.isArray(party.cleanPhones) && party.cleanPhones.length ? party.cleanPhones : (Array.isArray(party.phones) && party.phones.length ? party.phones.slice() : (party.p || party.phone ? [party.p || party.phone] : []));
-    var pName = (party.name || party.n || party.firm || '').trim();
-    var pStation = (party.station || party.ct || party.city || '').trim();
-    var pAgent = (party.agent || party.ag || '').trim();
-    var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
-    var str = displayName + '|' + rawList.map(function(x){ return String(x).replace(/\D/g, '').slice(-10); }).sort().join(',');
-    var hash = 0x811c9dc5;
-    for (var i = 0; i < str.length; i++) {
-        hash ^= str.charCodeAt(i);
-        hash = (hash * 0x01000193) >>> 0;
-    }
-    return hash.toString(16);
-};
-
-window.syncSingleContactNative = async function (party) {
-    if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) return null;
-    var plugin = window.getNativeContactsPlugin();
-    if (!plugin) return null;
-    var hasPerm = await window.ensureContactPermissions(plugin);
-    if (!hasPerm) return null;
-
-    var payloadData = window.buildContactPayload(party);
-    var phoneObjs = payloadData.contact.phoneNumbers || [];
-    if (phoneObjs.length === 0) return null;
-
-    var code = String(party.code || party.c || ('APP_' + phoneObjs[0].number.replace(/\D/g, '').slice(-10))).trim();
-    var partyHash = window.computeContactHash(party);
-
-    var targetId = null;
-    var existingDevPhones = null;
-
-    if (typeof plugin.getContacts === 'function') {
-        try {
-            var devRes = await plugin.getContacts({ projection: { name: true, phones: true } });
-            var devList = (devRes && devRes.contacts) ? devRes.contacts : [];
-            var myNumbers = phoneObjs.map(function(p){ return p.number.replace(/\D/g, '').slice(-10); });
-            for (var i = 0; i < devList.length; i++) {
-                var dc = devList[i];
-                var phones = dc.phoneNumbers || dc.phones || [];
-                var matched = phones.some(function (ph) {
-                    var p10 = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
-                    return myNumbers.includes(p10);
-                });
-                if (matched) {
-                    targetId = dc.id || dc.contactId;
-                    existingDevPhones = phones;
-                    break;
-                }
-            }
-        } catch(e) {
-            console.warn("getContacts lookup error:", e);
-        }
-    }
-
-    if (existingDevPhones && existingDevPhones.length) {
-        payloadData = window.buildContactPayload(party, existingDevPhones);
-    }
-
-    if (targetId && typeof plugin.updateContactById === 'function') {
-        try {
-            await plugin.updateContactById({ id: String(targetId), contact: payloadData.contact });
-            var saved = {};
-            try { saved = JSON.parse(localStorage.getItem('ds_contact_sync_hashes_v2') || '{}'); } catch(e){}
-            saved[code] = partyHash;
-            localStorage.setItem('ds_contact_sync_hashes_v2', JSON.stringify(saved));
-            return { code: code, id: targetId, hash: partyHash };
-        } catch(upErr) {
-            console.warn("updateContactById failed, creating new:", upErr);
-        }
-    }
-
-    if (typeof plugin.createContact === 'function') {
-        try {
-            var cRes = await plugin.createContact(payloadData);
-            var newId = (cRes && (cRes.id || cRes.contactId)) ? String(cRes.id || cRes.contactId) : (targetId || 'created');
-            var saved2 = {};
-            try { saved2 = JSON.parse(localStorage.getItem('ds_contact_sync_hashes_v2') || '{}'); } catch(e){}
-            saved2[code] = partyHash;
-            localStorage.setItem('ds_contact_sync_hashes_v2', JSON.stringify(saved2));
-            return { code: code, id: newId, hash: partyHash };
-        } catch(crErr) {
-            console.warn("createContact error:", crErr);
-        }
-    }
-
-    return null;
-};
-window.upsertSingleNativeContact = window.syncSingleContactNative;
-
 window.startAutomaticContactSync = async function (isManual) {
     if (typeof isManual !== 'boolean') isManual = false;
 
-    // Strict SuperAdmin + Native platform guard
+    // Strict SuperAdmin + Native platform guard (Customers/Staff never prompted)
     if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) {
         if (isManual) alert("Contact sync is available on Android for Super Admin only.");
-        return;
-    }
-
-    // 1. Ensure directory data is loaded first
-    var list = window._compiledCustomersList || [];
-    if ((!list || list.length === 0) && typeof window.loadAccountingDirectoryData === 'function') {
-        var banner0 = document.getElementById('contactSyncBanner');
-        var bannerText0 = document.getElementById('contactSyncText');
-        if (banner0 && bannerText0) {
-            banner0.style.display = 'flex';
-            bannerText0.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading directory data...';
-        }
-        try {
-            await window.loadAccountingDirectoryData(false);
-            list = window._compiledCustomersList || [];
-        } catch(lErr){}
-    }
-
-    var plugin = window.getNativeContactsPlugin();
-    if (!plugin) {
-        if (isManual) alert("Contacts plugin is not available on this device.");
-        return;
-    }
-
-    // 2. Permission check
-    var hasPerm = await window.ensureContactPermissions(plugin);
-    if (!hasPerm) {
-        if (isManual) alert("Contacts permission not granted. Please allow Contacts permission in Android App Settings.");
         return;
     }
 
@@ -14489,166 +14296,132 @@ window.startAutomaticContactSync = async function (isManual) {
         if (isManual) alert("Contact sync is already running in background...");
         return;
     }
-    window._isSyncingContacts = true;
 
     var banner = document.getElementById('contactSyncBanner');
     var bannerText = document.getElementById('contactSyncText');
     var bannerCount = document.getElementById('contactSyncCount');
-    if (banner) banner.style.display = 'flex';
-    if (bannerText) bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Checking device contacts...';
-    if (bannerCount) bannerCount.innerText = '';
 
-    var savedHashes = {};
-    try {
-        savedHashes = JSON.parse(localStorage.getItem('ds_contact_sync_hashes_v2') || '{}');
-    } catch(e){}
+    // 1. Ensure directory data is loaded first
+    var list = window._compiledCustomersList || [];
+    if ((!list || list.length === 0) && typeof window.loadAccountingDirectoryData === 'function') {
+        if (banner && bannerText) {
+            banner.style.display = 'flex';
+            bannerText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading directory data...';
+        }
+        try {
+            await window.loadAccountingDirectoryData(false);
+            list = window._compiledCustomersList || [];
+        } catch (lErr) { }
+    }
 
-    // Filter to customers with at least one 10-digit number
+    var nativePlugin = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeContacts);
+    if (!nativePlugin || typeof nativePlugin.syncBatch !== 'function') {
+        if (isManual) alert("Native contacts plugin is not available on this device.");
+        return;
+    }
+
+    // Filter to parties with at least one clean 10-digit phone
     var candidateList = (list || []).filter(function (c) {
-        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-        return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10).length === 10; });
+        return Array.isArray(c.cleanPhones) && c.cleanPhones.length > 0;
     });
 
     if (candidateList.length === 0) {
-        window._isSyncingContacts = false;
         if (banner) banner.style.display = 'none';
         if (isManual) alert("No customer contacts with valid phone numbers to sync.");
         return;
     }
 
-    // Index existing device contacts by last 10 digits
-    var deviceContactPhoneMap = new Map();
-    var deviceContactsById = new Map();
-    if (typeof plugin.getContacts === 'function') {
-        try {
-            var devRes = await plugin.getContacts({ projection: { name: true, phones: true } });
-            var devList = (devRes && devRes.contacts) ? devRes.contacts : [];
-            devList.forEach(function (dc) {
-                var cid = dc.id || dc.contactId;
-                if (!cid) return;
-                var phones = dc.phoneNumbers || dc.phones || [];
-                deviceContactsById.set(String(cid), dc);
-                phones.forEach(function (ph) {
-                    var p10 = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
-                    if (p10.length === 10 && !deviceContactPhoneMap.has(p10)) {
-                        deviceContactPhoneMap.set(p10, String(cid));
-                    }
-                });
-            });
-        } catch(e) {
-            console.warn("Device contact index error:", e);
-        }
-    }
+    window._isSyncingContacts = true;
+    if (banner) banner.style.display = 'flex';
+    if (bannerText) bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing party contacts...';
+    if (bannerCount) bannerCount.innerText = '0 / ' + candidateList.length;
 
-    var syncQueue = [];
-    candidateList.forEach(function (c) {
-        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-        var valid10 = [];
-        var seenP = new Set();
-        rawList.forEach(function (p) {
-            var p10 = String(p || '').replace(/\D/g, '').slice(-10);
-            if (p10.length === 10 && !seenP.has(p10)) {
-                seenP.add(p10);
-                valid10.push(p10);
-            }
-        });
-        if (valid10.length === 0) return;
-
-        var pName = (c.n || c.name || c.firm || '').trim();
-        var pStation = (c.ct || c.station || '').trim();
-        var pAgent = (c.ag || c.agent || '').trim();
-        var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
-        var code = String(c.c || c.code || ('APP_' + valid10[0])).trim();
-        var partyHash = window.computeContactHash(c);
-
-        if (!isManual && savedHashes[code] === partyHash) {
-            return; // unchanged, skip instantly
-        }
-
-        var matchedCid = null;
-        for (var vi = 0; vi < valid10.length; vi++) {
-            if (deviceContactPhoneMap.has(valid10[vi])) {
-                matchedCid = deviceContactPhoneMap.get(valid10[vi]);
-                break;
-            }
-        }
-
-        syncQueue.push({
-            party: c,
-            code: code,
-            name: pName,
-            displayName: displayName,
-            phones10: valid10,
-            hashStr: partyHash,
-            existingContactId: matchedCid
-        });
-    });
-
-    if (syncQueue.length === 0) {
-        if (bannerText) {
-            bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> All contacts up to date';
-            setTimeout(function () { if (banner) banner.style.display = 'none'; }, 3000);
-        }
-        window._isSyncingContacts = false;
-        if (isManual) alert("✓ All " + candidateList.length + " contacts are already up to date on your phone!");
-        return;
-    }
-
-    var totalToSync = syncQueue.length;
+    var totalToSync = candidateList.length;
     var completedCount = 0;
-    var BATCH_SIZE = 10;
+    var BATCH_SIZE = 100;
 
-    for (var b = 0; b < syncQueue.length; b += BATCH_SIZE) {
-        var batch = syncQueue.slice(b, b + BATCH_SIZE);
-        for (var bi = 0; bi < batch.length; bi++) {
-            var item = batch[bi];
-            var existingDevPhones = null;
-            if (item.existingContactId && deviceContactsById.has(item.existingContactId)) {
-                var existingContact = deviceContactsById.get(item.existingContactId);
-                existingDevPhones = existingContact.phoneNumbers || existingContact.phones || [];
+    for (var b = 0; b < candidateList.length; b += BATCH_SIZE) {
+        var chunk = candidateList.slice(b, b + BATCH_SIZE);
+        var batchPayload = chunk.map(function (c) {
+            var pName = (c.n || c.name || c.firm || '').trim();
+            var pStation = (c.ct || c.station || '').trim();
+            var pAgent = (c.ag || c.agent || '').trim();
+            var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
+            return {
+                name: displayName,
+                org: (c.firm || c.n || c.name || '').trim(),
+                phones: c.cleanPhones
+            };
+        });
+
+        try {
+            await nativePlugin.syncBatch({ contacts: batchPayload });
+        } catch (batchErr) {
+            console.warn("NativeContacts batch sync error:", batchErr);
+            if (String(batchErr).includes("Permission denied")) {
+                window._isSyncingContacts = false;
+                if (banner) banner.style.display = 'none';
+                if (isManual) alert("Contacts permission not granted. Please allow Contacts permission in Android App Settings.");
+                return;
             }
-
-            var payload = window.buildContactPayload(item.party, existingDevPhones);
-
-            try {
-                if (item.existingContactId && typeof plugin.updateContactById === 'function') {
-                    await plugin.updateContactById({ id: String(item.existingContactId), contact: payload.contact });
-                } else if (typeof plugin.createContact === 'function') {
-                    var cRes = await plugin.createContact(payload);
-                    if (cRes && cRes.id) {
-                        item.existingContactId = String(cRes.id);
-                        item.phones10.forEach(function (p10) { deviceContactPhoneMap.set(p10, item.existingContactId); });
-                    }
-                }
-                savedHashes[item.code] = item.hashStr;
-            } catch(syncErr) {
-                console.warn("Contact sync error for " + item.code, syncErr);
-            }
-            completedCount++;
         }
 
-        // Live progress display
+        completedCount += chunk.length;
         if (bannerText && bannerCount) {
             bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing party contacts to phone...';
             bannerCount.innerText = completedCount + ' / ' + totalToSync;
         }
 
-        // Throttled 100ms pause between batches: prevents CPU lockup & crashes
-        await new Promise(function (r) { setTimeout(r, 100); });
+        // 50ms pause between batches
+        await new Promise(function (r) { setTimeout(r, 50); });
     }
-
-    try {
-        localStorage.setItem('ds_contact_sync_hashes_v2', JSON.stringify(savedHashes));
-    } catch(e){}
 
     if (bannerText && bannerCount) {
         bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> Synced ' + completedCount + ' party contacts to phone memory';
         bannerCount.innerText = '✅ Complete';
-        setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
+        setTimeout(function () { if (banner) banner.style.display = 'none'; }, 4000);
     }
     window._isSyncingContacts = false;
-    if (isManual) alert("✓ Successfully synced " + completedCount + " contacts to your phone address book!");
+    if (isManual) alert("✅ Synced " + completedCount + " party contacts to phone memory!");
 };
+
+window.syncSingleContactNative = async function (party) {
+    if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) return null;
+    var nativePlugin = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeContacts);
+    if (!nativePlugin || typeof nativePlugin.syncBatch !== 'function') return null;
+
+    var rawList = Array.isArray(party.cleanPhones) && party.cleanPhones.length ? party.cleanPhones : (Array.isArray(party.phones) && party.phones.length ? party.phones : (party.p || party.phone ? [party.p || party.phone] : []));
+    var clean10 = [];
+    var seen = new Set();
+    rawList.forEach(function (num) {
+        var p10 = String(num || '').replace(/\D/g, '').slice(-10);
+        if (p10.length === 10 && !seen.has(p10)) {
+            seen.add(p10);
+            clean10.push(p10);
+        }
+    });
+    if (clean10.length === 0) return null;
+
+    var pName = (party.name || party.n || party.firm || '').trim();
+    var pStation = (party.station || party.ct || party.city || '').trim();
+    var pAgent = (party.agent || party.ag || '').trim();
+    var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
+
+    try {
+        var res = await nativePlugin.syncBatch({
+            contacts: [{
+                name: displayName,
+                org: (party.firm || party.name || party.n || '').trim(),
+                phones: clean10
+            }]
+        });
+        return res;
+    } catch (e) {
+        console.warn("syncSingleContactNative error:", e);
+        return null;
+    }
+};
+window.upsertSingleNativeContact = window.syncSingleContactNative;
 
 window.openAddEditPartyContactModal = function (partyCode) {
     if (!window.isSuperAdmin) return;
@@ -14949,45 +14722,50 @@ window.startCRMCall = function (code, name, phone, station, agent, balance, drCr
 };
 window.initiateTrackedCall = window.startCRMCall;
 
-// 2. Auto-Return App Resume Listener with localStorage persistence & native resume hook
-function setupCRMCallReturnListener() {
-    function handleAppReturn() {
-        var rawCtx = window.activeCRMCallContext;
-        if (!rawCtx) {
-            try {
-                var stored = localStorage.getItem('ds_active_tracked_call');
-                if (stored) rawCtx = JSON.parse(stored);
-            } catch(e){}
-        }
-        if (!rawCtx || !rawCtx.startTime) return;
+// 2. Auto-Return App Resume Listener with localStorage persistence & checkPendingTrackedCall
+window.checkPendingTrackedCall = function () {
+    if (typeof window.hasCRMAccess !== 'function' || !window.hasCRMAccess()) return;
 
-        var elapsedSec = Math.round((Date.now() - rawCtx.startTime) / 1000);
+    var rawData = null;
+    try {
+        var stored = localStorage.getItem('ds_active_tracked_call');
+        if (stored) rawData = JSON.parse(stored);
+    } catch(e){}
+
+    if (!rawData || !rawData.startTime) return;
+
+    var elapsed = Date.now() - rawData.startTime;
+    if (elapsed > 2000 && elapsed < 1800000) { // between 2 seconds and 30 minutes
+        localStorage.removeItem('ds_active_tracked_call');
         window.activeCRMCallContext = null;
-        try { localStorage.removeItem('ds_active_tracked_call'); } catch(e){}
-
-        if (elapsedSec >= 2 && window.hasCRMAccess()) {
-            var ctx = Object.assign({}, rawCtx, { durationSec: elapsedSec });
-            setTimeout(function () {
-                window.openPostCallCRMModal(ctx);
-            }, 300);
-        }
+        var durationSec = Math.round(elapsed / 1000);
+        setTimeout(function () {
+            if (typeof window.openPostCallCRMModal === 'function') {
+                window.openPostCallCRMModal(rawData.code, rawData.name, rawData.phone, rawData.station, rawData.agent, 'outgoing', durationSec);
+            }
+        }, 400);
     }
+};
+
+function setupCRMCallReturnListener() {
+    if (window._crmReturnListenerAdded) return;
+    window._crmReturnListenerAdded = true;
 
     document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible') {
-            handleAppReturn();
+        if (!document.hidden) {
+            window.checkPendingTrackedCall();
         }
     });
 
     window.addEventListener('dsNativeAppResumed', function () {
-        handleAppReturn();
+        window.checkPendingTrackedCall();
     });
 
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
         try {
             window.Capacitor.Plugins.App.addListener('appStateChange', function (state) {
                 if (state && state.isActive) {
-                    handleAppReturn();
+                    window.checkPendingTrackedCall();
                 }
             });
         } catch (e) { }
@@ -14997,8 +14775,19 @@ window.setupCRMCallReturnListener = setupCRMCallReturnListener;
 setupCRMCallReturnListener();
 
 // 3. Post-Call CRM Modal Controller
-window.openPostCallCRMModal = function (ctx) {
+window.openPostCallCRMModal = function (ctx, name, phone, station, agent, callType, durationSec) {
     if (!window.hasCRMAccess()) return;
+    if (typeof ctx === 'string') {
+        ctx = {
+            code: ctx,
+            name: name || '',
+            phone: phone || '',
+            station: station || '',
+            agent: agent || '',
+            callType: callType || 'outgoing',
+            durationSec: durationSec || 0
+        };
+    }
     if (!ctx) return;
 
     var modal = document.getElementById('postCallCRMModal');

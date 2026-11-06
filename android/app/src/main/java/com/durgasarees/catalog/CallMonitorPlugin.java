@@ -7,22 +7,29 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 @CapacitorPlugin(name = "CallMonitor")
 public class CallMonitorPlugin extends Plugin {
-    private static boolean isEnabled = false;
+    private static volatile boolean isEnabled = false;
 
     @PluginMethod
     public void enable(PluginCall call) {
-        isEnabled = true;
-        call.resolve();
+        try {
+            isEnabled = true;
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("CallMonitor enable error: " + t.getMessage());
+        }
     }
 
     @PluginMethod
     public void disable(PluginCall call) {
-        isEnabled = false;
-        call.resolve();
+        try {
+            isEnabled = false;
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("CallMonitor disable error: " + t.getMessage());
+        }
     }
 
     public static boolean isMonitorEnabled() {
         return isEnabled;
     }
 }
-

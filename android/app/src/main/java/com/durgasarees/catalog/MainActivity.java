@@ -19,68 +19,94 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        instance = this;
-        registerPlugin(AndroidBackBridgePlugin.class);
-        registerPlugin(NativeSpeechPlugin.class);
-        registerPlugin(CallMonitorPlugin.class);
+        try {
+            instance = this;
+            registerPlugin(AndroidBackBridgePlugin.class);
+            registerPlugin(NativeSpeechPlugin.class);
+            registerPlugin(NativeContactsPlugin.class);
+            registerPlugin(CallMonitorPlugin.class);
+        } catch (Throwable t) {
+            // Ignore plugin registration errors
+        }
+
         super.onCreate(savedInstanceState);
 
-        enforceLightNavBar();
+        try {
+            enforceLightNavBar();
+        } catch (Throwable t) {}
 
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                final WebView view = (bridge != null) ? bridge.getWebView() : null;
-                if (webCanGoBack) {
-                    if (view != null) {
-                        view.post(() -> view.evaluateJavascript("window.history.back();", null));
-                    }
-                } else if (view != null && view.canGoBack()) {
-                    view.goBack();
-                } else {
-                    setEnabled(false);
-                    getOnBackPressedDispatcher().onBackPressed();
-                    setEnabled(true);
+        try {
+            getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+                @Override
+                public void handleOnBackPressed() {
+                    try {
+                        final WebView view = (bridge != null) ? bridge.getWebView() : null;
+                        if (webCanGoBack) {
+                            if (view != null) {
+                                view.post(() -> view.evaluateJavascript("window.history.back();", null));
+                            }
+                        } else if (view != null && view.canGoBack()) {
+                            view.goBack();
+                        } else {
+                            setEnabled(false);
+                            getOnBackPressedDispatcher().onBackPressed();
+                            setEnabled(true);
+                        }
+                    } catch (Throwable t) {}
                 }
-            }
-        });
+            });
+        } catch (Throwable t) {}
     }
 
     @SuppressWarnings("deprecation")
     private void enforceLightNavBar() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            getWindow().getInsetsController().setSystemBarsAppearance(
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            );
-        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            android.view.View decorView = getWindow().getDecorView();
-            int flags = decorView.getSystemUiVisibility();
-            flags |= android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-            decorView.setSystemUiVisibility(flags);
-        }
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                if (getWindow() != null && getWindow().getInsetsController() != null) {
+                    getWindow().getInsetsController().setSystemBarsAppearance(
+                        android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                        android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                    );
+                }
+            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (getWindow() != null) {
+                    android.view.View decorView = getWindow().getDecorView();
+                    if (decorView != null) {
+                        int flags = decorView.getSystemUiVisibility();
+                        flags |= android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                        decorView.setSystemUiVisibility(flags);
+                    }
+                }
+            }
+        } catch (Throwable t) {}
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        enforceLightNavBar();
+        try {
+            enforceLightNavBar();
+        } catch (Throwable t) {}
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        enforceLightNavBar();
-        if (bridge != null && CallMonitorPlugin.isMonitorEnabled()) {
-            bridge.triggerWindowJSEvent("dsNativeAppResumed");
-        }
+        try {
+            enforceLightNavBar();
+            if (bridge != null && CallMonitorPlugin.isMonitorEnabled()) {
+                bridge.triggerWindowJSEvent("dsNativeAppResumed");
+            }
+        } catch (Throwable t) {}
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
-            enforceLightNavBar();
-        }
+        try {
+            if (hasFocus) {
+                enforceLightNavBar();
+            }
+        } catch (Throwable t) {}
     }
 }

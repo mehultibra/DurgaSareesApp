@@ -684,7 +684,7 @@ async function syncAccountingData() {
     });
 
     // Step 8: Dashboard Meta Document & Compact Directory Chunks
-    const CHUNK_SIZE = 1500;
+    const CHUNK_SIZE = 800;
     const totalChunks = Math.ceil(customers.length / CHUNK_SIZE);
 
     const dashboardDoc = {
