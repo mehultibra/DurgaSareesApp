@@ -816,8 +816,9 @@ window.addEventListener('DOMContentLoaded', function () {
         try { localStorage.removeItem("dsPendingOta"); } catch (e) { }
     }
 
-    // Check for updates on ALL platforms (Native & Web)
-    setTimeout(checkForOTAUpdates, 2000);
+    // Check for updates on ALL platforms (Native & Web) FIRST immediately on launch
+    window.checkForOTAUpdates = checkForOTAUpdates;
+    window._otaCheckPromise = checkForOTAUpdates();
 
     // Set Version Display
     setTimeout(async () => {
@@ -846,15 +847,16 @@ async function checkForOTAUpdates() {
 
         if (latestVersion && latestVersion !== currentVersion) {
             console.log("OTA update available:", latestVersion);
-            if (window.Capacitor && window.Capacitor.Plugins.CapacitorUpdater && updateUrl) {
-                var versionData = await window.Capacitor.Plugins.CapacitorUpdater.download({
+            var updaterPlugin = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) || window.CapacitorUpdater;
+            if (updaterPlugin && updateUrl && typeof updaterPlugin.download === 'function') {
+                var versionData = await updaterPlugin.download({
                     url: updateUrl,
                     version: latestVersion
                 });
                 localStorage.setItem("dsOtaVersion", latestVersion);
                 localStorage.removeItem("dsPendingOta");
-                if (versionData && typeof window.Capacitor.Plugins.CapacitorUpdater.next === 'function') {
-                    await window.Capacitor.Plugins.CapacitorUpdater.next(versionData);
+                if (versionData && typeof updaterPlugin.next === 'function') {
+                    await updaterPlugin.next(versionData);
                     console.log("OTA update staged for next launch:", latestVersion);
                 }
             } else {
@@ -866,6 +868,7 @@ async function checkForOTAUpdates() {
         console.log("OTA check skipped:", e.message);
     }
 }
+window.checkForOTAUpdates = checkForOTAUpdates;
 
 var dsVerificationId = null;
 
@@ -1800,7 +1803,13 @@ function initApp() {
             if (!loadedFromCache) {
                 processProducts(docs);
             }
-            setTimeout(() => syncImages(true), 2000);
+            // Scan and fetch OTA updates FIRST, then scan images once OTA check finishes
+            var otaP = window._otaCheckPromise || (typeof window.checkForOTAUpdates === 'function' ? window.checkForOTAUpdates() : Promise.resolve());
+            Promise.resolve(otaP).catch(function () {}).finally(function () {
+                setTimeout(function () {
+                    if (typeof syncImages === 'function') syncImages(true);
+                }, 1500);
+            });
         })
         .catch(err => {
             console.log("Offline or fetch failed:", err);
@@ -1811,11 +1820,19 @@ function initApp() {
                     var cachedDocs2 = JSON.parse(localStorage.getItem("dsOfflineProducts"));
                     if (cachedDocs2 && cachedDocs2.length > 0) {
                         processProducts(cachedDocs2);
-                        return;
+                    } else {
+                        processProducts([]);
                     }
-                } catch (e) { }
-                processProducts([]);
+                } catch (e) {
+                    processProducts([]);
+                }
             }
+            var otaP2 = window._otaCheckPromise || (typeof window.checkForOTAUpdates === 'function' ? window.checkForOTAUpdates() : Promise.resolve());
+            Promise.resolve(otaP2).catch(function () {}).finally(function () {
+                setTimeout(function () {
+                    if (typeof syncImages === 'function') syncImages(true);
+                }, 2500);
+            });
         });
 }
 
