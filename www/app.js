@@ -15028,6 +15028,18 @@ window.pasteAndLookupCaller = async function () {
             window.renderCustomerDirectoryUI();
         }
     }
+
+    // Direct 1-tap open: If exactly 1 customer matches this phone number, open their full Sales & OS reports modal directly!
+    var list = window._compiledCustomersList || [];
+    var matched = list.filter(function (c) {
+        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+        return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+    });
+    if (matched.length === 1 && typeof window.openCustomerReportsModal === 'function') {
+        setTimeout(function () {
+            window.openCustomerReportsModal(matched[0].c || matched[0].code || matched[0].n);
+        }, 150);
+    }
 };
 
 // 5. Save & Upsert CRM Follow-Up to Firestore
