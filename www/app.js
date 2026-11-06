@@ -847,22 +847,32 @@ async function checkForOTAUpdates(isManual) {
         var latestVersion = data.version;
         var updateUrl = data.url;
 
-        var currentVersion = localStorage.getItem("dsOtaVersion") || "builtin";
+        var savedOtaVer = localStorage.getItem("dsOtaVersion");
+        if (!savedOtaVer && !isManual) {
+            // Fresh install from Play Store / APK already has latest code built-in
+            if (latestVersion) localStorage.setItem("dsOtaVersion", latestVersion);
+            return;
+        }
+
+        var currentVersion = savedOtaVer || "builtin";
 
         if (latestVersion && latestVersion !== currentVersion) {
             console.log("OTA update available:", latestVersion);
             var updaterPlugin = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) || window.CapacitorUpdater;
             
-            // Show non-intrusive live updating pill
-            var toast = document.getElementById('dsOtaProgressToast');
-            if (!toast) {
-                toast = document.createElement('div');
-                toast.id = 'dsOtaProgressToast';
-                toast.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 18px; border-radius:30px; font-size:12px; font-weight:bold; z-index:999999; box-shadow:0 8px 24px rgba(0,0,0,0.4); display:flex; align-items:center; gap:8px;';
-                document.body.appendChild(toast);
+            var toast = null;
+            if (isManual) {
+                // Show non-intrusive live updating pill ONLY for manual check
+                toast = document.getElementById('dsOtaProgressToast');
+                if (!toast) {
+                    toast = document.createElement('div');
+                    toast.id = 'dsOtaProgressToast';
+                    toast.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 18px; border-radius:30px; font-size:12px; font-weight:bold; z-index:999999; box-shadow:0 8px 24px rgba(0,0,0,0.4); display:flex; align-items:center; gap:8px;';
+                    document.body.appendChild(toast);
+                }
+                toast.innerHTML = '<i class="fas fa-sync-alt fa-spin" style="color:#38bdf8;"></i> Updating app to ' + latestVersion + '...';
+                toast.style.display = 'flex';
             }
-            toast.innerHTML = '<i class="fas fa-sync-alt fa-spin" style="color:#38bdf8;"></i> Updating app to ' + latestVersion + '...';
-            toast.style.display = 'flex';
 
             if (updaterPlugin && updateUrl && typeof updaterPlugin.download === 'function') {
                 var versionData = await updaterPlugin.download({
@@ -872,23 +882,27 @@ async function checkForOTAUpdates(isManual) {
                 localStorage.setItem("dsOtaVersion", latestVersion);
                 localStorage.removeItem("dsPendingOta");
 
-                // Live seamless in-place reload without closing the app!
-                if (versionData && typeof updaterPlugin.set === 'function') {
-                    toast.innerHTML = '<i class="fas fa-check-circle" style="color:#22c55e;"></i> Update installed! Reloading...';
-                    setTimeout(async function () {
-                        try {
-                            await updaterPlugin.set(versionData);
-                        } catch (setErr) {
-                            window.location.reload();
-                        }
-                    }, 500);
-                } else if (versionData && typeof updaterPlugin.next === 'function') {
-                    await updaterPlugin.next(versionData);
-                    window.location.reload();
+                if (isManual) {
+                    // Manual click: Live seamless in-place reload
+                    if (versionData && typeof updaterPlugin.set === 'function') {
+                        if (toast) toast.innerHTML = '<i class="fas fa-check-circle" style="color:#22c55e;"></i> Update installed! Reloading...';
+                        setTimeout(async function () {
+                            try {
+                                await updaterPlugin.set(versionData);
+                            } catch (setErr) {
+                                window.location.reload();
+                            }
+                        }, 500);
+                    } else {
+                        window.location.reload();
+                    }
                 } else {
-                    window.location.reload();
+                    // Background silent check: stage for next startup, zero interruption!
+                    if (versionData && typeof updaterPlugin.next === 'function') {
+                        await updaterPlugin.next(versionData);
+                    }
                 }
-            } else {
+            } else if (isManual) {
                 localStorage.setItem("dsOtaVersion", latestVersion);
                 window.location.reload();
             }
@@ -1441,6 +1455,9 @@ window.syncAdminUI = function () {
         var scorecardTabBtn = document.getElementById('crmTabBtnScorecard');
         if (scorecardTabBtn) {
             scorecardTabBtn.style.display = window.isSuperAdmin ? 'inline-block' : 'none';
+        }
+        if (document.getElementById('btnCheckLiveUpdate')) {
+            document.getElementById('btnCheckLiveUpdate').style.display = window.isSuperAdmin ? 'inline-flex' : 'none';
         }
         if (typeof window.updateOrderOnBehalfBanner === 'function') {
             window.updateOrderOnBehalfBanner();
