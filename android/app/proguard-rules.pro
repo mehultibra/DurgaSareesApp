@@ -23,6 +23,7 @@
 # Capacitor and Firebase keep rules
 -keep class com.getcapacitor.** { *; }
 -keep class com.capacitorjs.plugins.** { *; }
+-keep class com.durgasarees.catalog.** { *; }
 
 # Ignore warnings for missing classes in third-party plugins
 -dontwarn com.getcapacitor.**
