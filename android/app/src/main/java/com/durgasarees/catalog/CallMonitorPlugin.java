@@ -69,38 +69,10 @@ public class CallMonitorPlugin extends Plugin {
 
     @PluginMethod
     public void requestCallScreeningRole(PluginCall call) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                RoleManager roleManager = (RoleManager) getContext().getSystemService(Context.ROLE_SERVICE);
-                if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_CALL_SCREENING)) {
-                    if (roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) {
-                        JSObject ret = new JSObject();
-                        ret.put("status", "already_granted");
-                        ret.put("held", true);
-                        call.resolve(ret);
-                        return;
-                    }
-                    Intent intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING);
-                    if (getActivity() != null) {
-                        getActivity().startActivity(intent);
-                        JSObject ret = new JSObject();
-                        ret.put("status", "requested");
-                        ret.put("held", false);
-                        call.resolve(ret);
-                        return;
-                    }
-                }
-            }
-            JSObject ret = new JSObject();
-            ret.put("status", "not_supported");
-            ret.put("held", false);
-            call.resolve(ret);
-        } catch (Throwable t) {
-            JSObject ret = new JSObject();
-            ret.put("status", "error");
-            ret.put("message", t.getMessage());
-            call.resolve(ret);
-        }
+        JSObject ret = new JSObject();
+        ret.put("status", "not_needed");
+        ret.put("held", false);
+        call.resolve(ret);
     }
 
     @PluginMethod
