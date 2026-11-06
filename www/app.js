@@ -14336,22 +14336,22 @@ window.startAutomaticContactSync = async function (isManual) {
     var bannerText = document.getElementById('contactSyncText');
     var bannerCount = document.getElementById('contactSyncCount');
 
-    // 1. Ensure directory data is loaded first
+    // 1. Ensure directory data is loaded first (force load if manual)
     var list = window._compiledCustomersList || [];
-    if ((!list || list.length === 0) && typeof window.loadAccountingDirectoryData === 'function') {
+    if ((!list || list.length === 0 || isManual) && typeof window.loadAccountingDirectoryData === 'function') {
         if (banner && bannerText) {
             banner.style.display = 'flex';
             bannerText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading directory data...';
         }
         try {
-            await window.loadAccountingDirectoryData(false);
+            await window.loadAccountingDirectoryData(isManual);
             list = window._compiledCustomersList || [];
         } catch (lErr) { }
     }
 
     var nativePlugin = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeContacts);
     if (!nativePlugin || typeof nativePlugin.syncBatch !== 'function') {
-        if (isManual) alert("Phonebook contact sync requires APK v1.0.7 (Version Code 10). Please install the latest APK update from Play Store.");
+        if (isManual) alert("Phonebook contact sync requires the latest APK build. Please update the APK.");
         return;
     }
 
@@ -14368,11 +14368,14 @@ window.startAutomaticContactSync = async function (isManual) {
 
     window._isSyncingContacts = true;
     if (banner) banner.style.display = 'flex';
-    if (bannerText) bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing party contacts...';
+    if (bannerText) bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Preparing contact sync...';
     if (bannerCount) bannerCount.innerText = '0 / ' + candidateList.length;
 
     var totalToSync = candidateList.length;
     var completedCount = 0;
+    var totalAdded = 0;
+    var totalUpdated = 0;
+    var lastAccountUsed = '';
     var BATCH_SIZE = 100;
 
     for (var b = 0; b < candidateList.length; b += BATCH_SIZE) {
@@ -14390,7 +14393,12 @@ window.startAutomaticContactSync = async function (isManual) {
         });
 
         try {
-            await nativePlugin.syncBatch({ contacts: batchPayload });
+            var res = await nativePlugin.syncBatch({ contacts: batchPayload });
+            if (res) {
+                totalAdded += (res.added || 0);
+                totalUpdated += (res.updated || 0);
+                if (res.accountUsed) lastAccountUsed = res.accountUsed;
+            }
         } catch (batchErr) {
             console.warn("NativeContacts batch sync error:", batchErr);
             if (String(batchErr).includes("Permission denied")) {
@@ -14403,7 +14411,7 @@ window.startAutomaticContactSync = async function (isManual) {
 
         completedCount += chunk.length;
         if (bannerText && bannerCount) {
-            bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing party contacts to phone...';
+            bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing to ' + (lastAccountUsed || 'Phonebook') + '...';
             bannerCount.innerText = completedCount + ' / ' + totalToSync;
         }
 
@@ -14412,12 +14420,14 @@ window.startAutomaticContactSync = async function (isManual) {
     }
 
     if (bannerText && bannerCount) {
-        bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> Synced ' + completedCount + ' party contacts to phone memory';
+        bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> Synced ' + completedCount + ' contacts (' + totalAdded + ' added, ' + totalUpdated + ' updated)';
         bannerCount.innerText = '✅ Complete';
-        setTimeout(function () { if (banner) banner.style.display = 'none'; }, 4000);
+        setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
     window._isSyncingContacts = false;
-    if (isManual) alert("✅ Synced " + completedCount + " party contacts to phone memory!");
+    if (isManual) {
+        alert("✅ Phonebook Contact Sync Complete!\n\n• Contacts Processed: " + completedCount + "\n• New Added: " + totalAdded + "\n• Existing Updated: " + totalUpdated + (lastAccountUsed ? "\n• Target Account: " + lastAccountUsed : ""));
+    }
 };
 
 window.syncSingleContactNative = async function (party) {
@@ -14882,6 +14892,20 @@ window.checkLiveCallOnResume = async function () {
     // Strictly for Super Admin only
     if (!window.isSuperAdmin) return;
 
+    // 1. Check native CallMonitor plugin for recently screened incoming/outgoing call (DurgaCallScreeningService)
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getLastDetectedCall === 'function') {
+        try {
+            var callInfo = await window.Capacitor.Plugins.CallMonitor.getLastDetectedCall();
+            if (callInfo && callInfo.phone && callInfo.ageMs != null && callInfo.ageMs < 900000) { // within 15 min
+                if (window._lastHandledCallTimestamp !== callInfo.timestamp) {
+                    window._lastHandledCallTimestamp = callInfo.timestamp;
+                    window.handleDetectedNativeCall(callInfo.phone, callInfo.direction);
+                    return;
+                }
+            }
+        } catch (e) { }
+    }
+
     var list = window._compiledCustomersList || [];
     if (!list || list.length === 0) return;
 
@@ -14890,16 +14914,16 @@ window.checkLiveCallOnResume = async function () {
         try {
             var st = await window.Capacitor.Plugins.CallMonitor.getCallState();
             isInCall = Boolean(st && st.isInCall);
-        } catch(e){}
+        } catch (e) { }
     }
 
     var tracked = null;
     try {
         var rawTrk = localStorage.getItem('ds_active_tracked_call');
         if (rawTrk) tracked = JSON.parse(rawTrk);
-    } catch(e){}
+    } catch (e) { }
 
-    // 1. If actively on a call initiated from the app (< 45 minutes ago)
+    // 2. If actively on a call initiated from the app (< 45 minutes ago)
     if (tracked && tracked.code && (Date.now() - (tracked.startTime || 0)) < 2700000) {
         var modal = document.getElementById('customerDetailReportsModal');
         if (!modal || modal.style.display !== 'flex' || !window._currentReportingCustomer || window._currentReportingCustomer.c !== tracked.code) {
@@ -14910,7 +14934,7 @@ window.checkLiveCallOnResume = async function () {
         return;
     }
 
-    // 2. If live phone call is detected on device
+    // 3. Fallback: If live phone call audio is active on device
     if (isInCall) {
         try {
             if (navigator.clipboard && navigator.clipboard.readText) {
@@ -14930,7 +14954,7 @@ window.checkLiveCallOnResume = async function () {
                     }
                 }
             }
-        } catch(e){}
+        } catch (e) { }
 
         var curM2 = document.getElementById('customerDetailReportsModal');
         if (!curM2 || curM2.style.display !== 'flex') {
@@ -14941,31 +14965,107 @@ window.checkLiveCallOnResume = async function () {
     }
 };
 
-window.showLiveCallFloatBanner = function () {
+window.handleDetectedNativeCall = async function (phone, direction) {
+    if (!window.isSuperAdmin) return;
+    var p10 = String(phone || '').replace(/\D/g, '').slice(-10);
+    if (p10.length !== 10) return;
+
+    var list = window._compiledCustomersList || [];
+    if ((!list || list.length === 0) && typeof window.loadAccountingDirectoryData === 'function') {
+        try {
+            await window.loadAccountingDirectoryData(false);
+            list = window._compiledCustomersList || [];
+        } catch (e) { }
+    }
+
+    var matched = list.find(function (c) {
+        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+        return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+    });
+
+    if (matched) {
+        var curM = document.getElementById('customerDetailReportsModal');
+        var curCode = window._currentReportingCustomer ? window._currentReportingCustomer.c : null;
+        if (!curM || curM.style.display !== 'flex' || curCode !== matched.c) {
+            if (typeof window.openCustomerReportsModal === 'function') {
+                window.openCustomerReportsModal(matched.c);
+            }
+        }
+        window.showLiveCallFloatBanner(matched.n || matched.name, p10, direction);
+    } else {
+        // Not matched in local list -> open customer hub lookup
+        if (typeof window.openCustomerHubModal === 'function') {
+            window.openCustomerHubModal();
+            if (typeof window.switchCustomerHubSection === 'function') {
+                window.switchCustomerHubSection('lookup');
+            }
+            var inp = document.getElementById('incomingCallerInput');
+            if (inp) {
+                inp.value = p10;
+                if (typeof window.handleIncomingLookupSearch === 'function') {
+                    window.handleIncomingLookupSearch(p10);
+                }
+            }
+        }
+        window.showLiveCallFloatBanner('Unsaved Party', p10, direction);
+    }
+};
+
+window.enableNativeCallScreening = async function () {
+    if (!window.isSuperAdmin) {
+        alert("🔒 Admin privileges required.");
+        return;
+    }
+    if (!window.Capacitor || !window.Capacitor.isNativePlatform()) {
+        alert("Auto Call Catch is available on Android native app.");
+        return;
+    }
+    var plugin = window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor;
+    if (!plugin || typeof plugin.requestCallScreeningRole !== 'function') {
+        alert("Please install the latest APK update for Call Catching.");
+        return;
+    }
+    try {
+        var res = await plugin.requestCallScreeningRole();
+        if (res && res.held) {
+            alert("✅ Auto Call Catch is already active and screening calls!");
+        } else if (res && res.requested) {
+            // Android system dialog will prompt user to set Durga Sarees as Call Screening app
+        } else if (res && res.status === 'not_supported') {
+            alert("Call Screening is supported on Android 10 (API 29) or higher.");
+        }
+    } catch (e) {
+        alert("Error enabling Call Catch: " + (e.message || e));
+    }
+};
+
+window.showLiveCallFloatBanner = function (callerName, callerPhone, direction) {
     var banner = document.getElementById('dsLiveCallFloatBanner');
+    var title = callerName ? 'LIVE CALL: ' + callerName : 'LIVE CALL ACTIVE';
+    var sub = callerPhone ? (direction === 'outgoing' ? 'Outgoing to ' : 'Incoming from ') + callerPhone : 'Super Admin: Tap to view caller dispatches & OS';
     if (!banner) {
         banner = document.createElement('div');
         banner.id = 'dsLiveCallFloatBanner';
         banner.style.cssText = 'position:fixed; top:12px; left:12px; right:12px; z-index:99999; background:linear-gradient(135deg, #15803d, #16a34a); color:#fff; border-radius:12px; padding:10px 14px; box-shadow:0 4px 16px rgba(0,0,0,0.25); display:flex; align-items:center; justify-content:space-between; gap:8px;';
-        banner.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px;">
-                <i class="fas fa-phone-volume fa-shake" style="color:#bbf7d0; font-size:16px;"></i>
-                <div>
-                    <div style="font-size:12px; font-weight:bold; letter-spacing:0.5px;">LIVE CALL ACTIVE</div>
-                    <div style="font-size:10px; opacity:0.9;">Super Admin: Tap to view caller dispatches &amp; OS</div>
-                </div>
-            </div>
-            <div style="display:flex; gap:6px;">
-                <button type="button" onclick="window.pasteAndLookupCaller()" style="background:#fff; color:#15803d; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
-                    <i class="fas fa-clipboard"></i> Paste Caller
-                </button>
-                <button type="button" onclick="window.hideLiveCallFloatBanner()" style="background:rgba(255,255,255,0.2); color:#fff; border:none; border-radius:6px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `;
         document.body.appendChild(banner);
     }
+    banner.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+            <i class="fas fa-phone-volume fa-shake" style="color:#bbf7d0; font-size:16px; flex-shrink:0;"></i>
+            <div style="overflow:hidden;">
+                <div style="font-size:12px; font-weight:bold; letter-spacing:0.5px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${title}</div>
+                <div style="font-size:10px; opacity:0.9; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${sub}</div>
+            </div>
+        </div>
+        <div style="display:flex; gap:6px; flex-shrink:0;">
+            <button type="button" onclick="window.pasteAndLookupCaller()" style="background:#fff; color:#15803d; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+                <i class="fas fa-clipboard"></i> Lookup
+            </button>
+            <button type="button" onclick="window.hideLiveCallFloatBanner()" style="background:rgba(255,255,255,0.2); color:#fff; border:none; border-radius:6px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
     banner.style.display = 'flex';
 };
 
@@ -14995,6 +15095,12 @@ function setupCRMCallReturnListener() {
 
     window.addEventListener('dsNativeAppResumed', function () {
         handleAppResumeEvents();
+    });
+
+    window.addEventListener('dsNativeCallDetected', function (ev) {
+        if (ev && ev.detail && ev.detail.phone) {
+            window.handleDetectedNativeCall(ev.detail.phone, ev.detail.direction);
+        }
     });
 
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {

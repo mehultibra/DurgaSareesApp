@@ -49,6 +49,96 @@ public class NativeContactsPlugin extends Plugin {
 
             new Thread(() -> {
                 try {
+                    String targetAccountType = null;
+                    String targetAccountName = null;
+                    Long myContactsGroupId = null;
+
+                    // 1. Detect target primary visible account (Google preferred, then Samsung)
+                    Cursor actCursor = null;
+                    try {
+                        actCursor = getContext().getContentResolver().query(
+                            ContactsContract.RawContacts.CONTENT_URI,
+                            new String[]{ ContactsContract.RawContacts.ACCOUNT_TYPE, ContactsContract.RawContacts.ACCOUNT_NAME },
+                            ContactsContract.RawContacts.ACCOUNT_TYPE + " IS NOT NULL AND " + ContactsContract.RawContacts.DELETED + "=0",
+                            null,
+                            null
+                        );
+                        if (actCursor != null) {
+                            int typeIdx = actCursor.getColumnIndex(ContactsContract.RawContacts.ACCOUNT_TYPE);
+                            int nameIdx = actCursor.getColumnIndex(ContactsContract.RawContacts.ACCOUNT_NAME);
+                            String fallbackType = null;
+                            String fallbackName = null;
+
+                            while (actCursor.moveToNext()) {
+                                String at = actCursor.getString(typeIdx);
+                                String an = actCursor.getString(nameIdx);
+                                if (at != null && !at.trim().isEmpty() && an != null && !an.trim().isEmpty()) {
+                                    if ("com.google".equalsIgnoreCase(at)) {
+                                        targetAccountType = at;
+                                        targetAccountName = an;
+                                        break; // Preferred
+                                    } else if (at.toLowerCase().contains("sec.contact") || at.toLowerCase().contains("samsung")) {
+                                        if (targetAccountType == null) {
+                                            targetAccountType = at;
+                                            targetAccountName = an;
+                                        }
+                                    } else if (fallbackType == null) {
+                                        fallbackType = at;
+                                        fallbackName = an;
+                                    }
+                                }
+                            }
+                            if (targetAccountType == null && fallbackType != null) {
+                                targetAccountType = fallbackType;
+                                targetAccountName = fallbackName;
+                            }
+                        }
+                    } catch (Throwable t) {
+                        // Ignore
+                    } finally {
+                        if (actCursor != null) {
+                            try { actCursor.close(); } catch (Throwable ignored) {}
+                        }
+                    }
+
+                    // 2. Locate My Contacts group for the account so contacts display in main list
+                    if (targetAccountType != null && targetAccountName != null) {
+                        Cursor grpCursor = null;
+                        try {
+                            grpCursor = getContext().getContentResolver().query(
+                                ContactsContract.Groups.CONTENT_URI,
+                                new String[]{ ContactsContract.Groups._ID, ContactsContract.Groups.TITLE, ContactsContract.Groups.AUTO_ADD },
+                                ContactsContract.Groups.ACCOUNT_TYPE + "=? AND " + ContactsContract.Groups.ACCOUNT_NAME + "=? AND " + ContactsContract.Groups.DELETED + "=0",
+                                new String[]{ targetAccountType, targetAccountName },
+                                null
+                            );
+                            if (grpCursor != null) {
+                                int idIdx = grpCursor.getColumnIndex(ContactsContract.Groups._ID);
+                                int titleIdx = grpCursor.getColumnIndex(ContactsContract.Groups.TITLE);
+                                int autoAddIdx = grpCursor.getColumnIndex(ContactsContract.Groups.AUTO_ADD);
+
+                                while (grpCursor.moveToNext()) {
+                                    long gid = grpCursor.getLong(idIdx);
+                                    String title = (titleIdx >= 0) ? grpCursor.getString(titleIdx) : "";
+                                    int autoAdd = (autoAddIdx >= 0) ? grpCursor.getInt(autoAddIdx) : 0;
+
+                                    if (autoAdd != 0 || (title != null && (title.contains("My Contacts") || title.equalsIgnoreCase("System Group: My Contacts")))) {
+                                        myContactsGroupId = gid;
+                                        break;
+                                    } else if (myContactsGroupId == null) {
+                                        myContactsGroupId = gid;
+                                    }
+                                }
+                            }
+                        } catch (Throwable t) {
+                            // Ignore
+                        } finally {
+                            if (grpCursor != null) {
+                                try { grpCursor.close(); } catch (Throwable ignored) {}
+                            }
+                        }
+                    }
+
                     Map<String, Long> existingPhoneToRawId = new HashMap<>();
                     Map<Long, Set<String>> rawIdToExistingNumbers = new HashMap<>();
 
@@ -148,12 +238,17 @@ public class NativeContactsPlugin extends Plugin {
                             }
                             if (updatedAny) updatedCount++;
                         } else {
-                            // New Contact -> insert RawContact and Data rows
+                            // New Contact -> insert RawContact with detected account and Data rows
                             int backRef = ops.size();
-                            ops.add(ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
-                                .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null)
-                                .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null)
-                                .build());
+                            ContentProviderOperation.Builder rawBuilder = ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI);
+                            if (targetAccountType != null && targetAccountName != null) {
+                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, targetAccountType);
+                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_NAME, targetAccountName);
+                            } else {
+                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null);
+                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null);
+                            }
+                            ops.add(rawBuilder.build());
 
                             ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
                                 .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
@@ -166,6 +261,14 @@ public class NativeContactsPlugin extends Plugin {
                                     .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
                                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE)
                                     .withValue(ContactsContract.CommonDataKinds.Organization.COMPANY, org.trim())
+                                    .build());
+                            }
+
+                            if (myContactsGroupId != null) {
+                                ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
+                                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)
+                                    .withValue(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID, myContactsGroupId)
                                     .build());
                             }
 
@@ -201,8 +304,10 @@ public class NativeContactsPlugin extends Plugin {
                     }
 
                     JSObject ret = new JSObject();
+                    ret.put("totalReceived", items.length());
                     ret.put("added", addedCount);
                     ret.put("updated", updatedCount);
+                    ret.put("accountUsed", targetAccountType != null ? (targetAccountName + " (" + targetAccountType + ")") : "Device Default");
                     call.resolve(ret);
                 } catch (Throwable t) {
                     call.reject("Native contact sync failed: " + t.getMessage());
