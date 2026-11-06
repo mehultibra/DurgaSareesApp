@@ -835,10 +835,14 @@ window.addEventListener('DOMContentLoaded', function () {
     }, 1000);
 });
 
-async function checkForOTAUpdates() {
+async function checkForOTAUpdates(isManual) {
+    if (typeof isManual !== 'boolean') isManual = false;
     try {
         var response = await fetch("https://durga-sarees.web.app/version.json?t=" + new Date().getTime());
-        if (!response.ok) return;
+        if (!response.ok) {
+            if (isManual) alert("Update server unreachable or offline.");
+            return;
+        }
         var data = await response.json();
         var latestVersion = data.version;
         var updateUrl = data.url;
@@ -848,6 +852,18 @@ async function checkForOTAUpdates() {
         if (latestVersion && latestVersion !== currentVersion) {
             console.log("OTA update available:", latestVersion);
             var updaterPlugin = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) || window.CapacitorUpdater;
+            
+            // Show non-intrusive live updating pill
+            var toast = document.getElementById('dsOtaProgressToast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'dsOtaProgressToast';
+                toast.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 18px; border-radius:30px; font-size:12px; font-weight:bold; z-index:999999; box-shadow:0 8px 24px rgba(0,0,0,0.4); display:flex; align-items:center; gap:8px;';
+                document.body.appendChild(toast);
+            }
+            toast.innerHTML = '<i class="fas fa-sync-alt fa-spin" style="color:#38bdf8;"></i> Updating app to ' + latestVersion + '...';
+            toast.style.display = 'flex';
+
             if (updaterPlugin && updateUrl && typeof updaterPlugin.download === 'function') {
                 var versionData = await updaterPlugin.download({
                     url: updateUrl,
@@ -855,17 +871,33 @@ async function checkForOTAUpdates() {
                 });
                 localStorage.setItem("dsOtaVersion", latestVersion);
                 localStorage.removeItem("dsPendingOta");
-                if (versionData && typeof updaterPlugin.next === 'function') {
+
+                // Live seamless in-place reload without closing the app!
+                if (versionData && typeof updaterPlugin.set === 'function') {
+                    toast.innerHTML = '<i class="fas fa-check-circle" style="color:#22c55e;"></i> Update installed! Reloading...';
+                    setTimeout(async function () {
+                        try {
+                            await updaterPlugin.set(versionData);
+                        } catch (setErr) {
+                            window.location.reload();
+                        }
+                    }, 500);
+                } else if (versionData && typeof updaterPlugin.next === 'function') {
                     await updaterPlugin.next(versionData);
-                    console.log("OTA update staged for next launch:", latestVersion);
+                    window.location.reload();
+                } else {
+                    window.location.reload();
                 }
             } else {
                 localStorage.setItem("dsOtaVersion", latestVersion);
-                console.log("Web update available. Will apply on next page refresh.");
+                window.location.reload();
             }
+        } else {
+            if (isManual) alert("✅ App is already up to date!\n\nVersion: " + currentVersion);
         }
     } catch (e) {
         console.log("OTA check skipped:", e.message);
+        if (isManual) alert("Update check failed: " + (e.message || e));
     }
 }
 window.checkForOTAUpdates = checkForOTAUpdates;
