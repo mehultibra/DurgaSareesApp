@@ -1006,6 +1006,12 @@
         </div>
       </div>
 
+      <!-- Live Call Context Indicator -->
+      <div id="liveCallStatusBadge" style="display:none; background:#dcfce7; border:1px solid #86efac; color:#166534; padding:5px 10px; border-radius:8px; font-size:11px; font-weight:bold; align-items:center; justify-content:space-between; margin-top:6px;">
+        <span><i class="fas fa-phone-volume fa-shake" style="color:#16a34a; margin-right:5px;"></i> Live Call Active with this Customer</span>
+        <span style="font-size:10px; color:#15803d;">Dispatches &amp; Orders Ready</span>
+      </div>
+
       <!-- Quick Actions: WhatsApp & Call & Print -->
       <div style="display:flex; gap:8px; padding:6px 0; border-bottom:1px solid #f1f5f9; align-items:center; justify-content:space-between; flex-wrap:wrap;">
         <div id="custRepActionButtons" style="display:flex; gap:6px;">
@@ -1022,6 +1028,19 @@
           </button>
         </div>
       </div>
+
+      <!-- Quick CRM Follow-Up Bar (Super Admin live call discussions) -->
+      <div id="custRepQuickCRMBar" style="display:flex; gap:6px; align-items:center; padding:5px 8px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; margin-top:6px;">
+        <i class="fas fa-headset" style="color:#16a34a; font-size:12px;"></i>
+        <input type="text" id="custRepQuickNote" placeholder="Type or speak call discussion..." style="flex:1; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11px; background:#fff; color:#1e293b; outline:none;">
+        <button type="button" onclick="window.toggleQuickNoteSpeech()" style="background:#fff; color:#dc2626; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11px; cursor:pointer;" title="Speak Note">
+          <i class="fas fa-microphone"></i>
+        </button>
+        <button type="button" onclick="window.saveQuickCRMNote()" style="background:#16a34a; color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:bold; cursor:pointer;">
+          Save
+        </button>
+      </div>
+      <div id="custRepQuickNoteMsg" style="font-size:10px; color:#16a34a; margin-top:2px; display:none; font-weight:600;"></div>
 
       <!-- 📅 Date Range Filter Bar for Reports -->
       <div style="display:flex; gap:6px; align-items:center; padding:6px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin-top:6px; flex-wrap:wrap;">

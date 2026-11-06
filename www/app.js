@@ -12531,12 +12531,16 @@ window.openCustomerReportsModal = async function (partyCode) {
         var waMsg = `Namaste ${cust.n},\nGreeting from Durga Sarees!\nYour current ledger balance is ${waBal}.\nKindly let us know if you require any invoices or ledger statements. Thank you!`;
 
         var actHtml = '';
-        if (cust.p) {
+                if (cust.p) {
             actHtml += `
             <a href="https://wa.me/${waPhone}?text=${encodeURIComponent(waMsg)}" target="_blank"
                style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
               <i class="fab fa-whatsapp"></i> WhatsApp
             </a>
+            <button type="button" onclick="window.sendCatalogDesignsWhatsApp('${encodeURIComponent(cust.c)}', '${escHtml(cust.n)}', '${cust.p}')"
+               style="display:inline-flex; align-items:center; gap:4px; background:#7c3aed; color:#fff; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; border:none; cursor:pointer;" title="Send catalog & designs on WhatsApp for new orders">
+              <i class="fas fa-images"></i> Send Designs
+            </button>
             <button type="button" onclick="window.startCRMCall('${encodeURIComponent(cust.c)}', '${escHtml(cust.n)}', '${cust.p}', '${escHtml(cust.ct)}', '${escHtml(cust.ag || '')}', ${cust.b || 0}, '${cust.d || ''}')"
                style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; cursor:pointer;">
               <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
@@ -12555,6 +12559,20 @@ window.openCustomerReportsModal = async function (partyCode) {
         }
         actHtml += `<button type="button" onclick="window.openAddEditPartyContactModal(decodeURIComponent('${encodeURIComponent(cust.c)}'))" style="display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; color:#475569; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #cbd5e1; cursor:pointer;"><i class="fas fa-user-edit" style="color:#64748b; font-size:10px;"></i> Edit Contact</button>`;
         actionsEl.innerHTML = actHtml;
+    }
+
+        // Check & display live call indicator
+    var liveBadge = document.getElementById('liveCallStatusBadge');
+    if (liveBadge) {
+        var isLiveCall = false;
+        try {
+            var rawTrk = localStorage.getItem('ds_active_tracked_call');
+            if (rawTrk) {
+                var trk = JSON.parse(rawTrk);
+                if (trk && (trk.code === cust.c || trk.phone === cust.p)) isLiveCall = true;
+            }
+        } catch(e){}
+        liveBadge.style.display = isLiveCall ? 'flex' : 'none';
     }
 
     // Open Modal
@@ -14764,25 +14782,226 @@ window.checkPendingTrackedCall = function () {
     }
 };
 
+window.sendCatalogDesignsWhatsApp = function (code, name, phone) {
+    if (!phone) {
+        alert("No mobile number on record for this customer.");
+        return;
+    }
+    var clean10 = String(phone).replace(/\D/g, '').slice(-10);
+    var custName = decodeURIComponent(name || 'Customer');
+    var catalogUrl = "https://durga-sarees.web.app/?ref=" + encodeURIComponent(code || '');
+    var msg = "Namaste " + custName + ",\n\nGreeting from Durga Sarees!\nPlease check our latest saree designs & ready stock catalog here:\n" + catalogUrl + "\n\nKindly reply here with design numbers to place your order. Thank you!";
+
+    try {
+        localStorage.setItem('ds_active_wa_customer', JSON.stringify({ name: custName, phone: clean10, code: code }));
+    } catch(e){}
+
+    var waUrl = "https://wa.me/91" + clean10 + "?text=" + encodeURIComponent(msg);
+    window.open(waUrl, '_blank');
+};
+
+window.saveQuickCRMNote = async function () {
+    var cust = window._currentReportingCustomer;
+    if (!cust) return;
+    var inp = document.getElementById('custRepQuickNote');
+    var msgEl = document.getElementById('custRepQuickNoteMsg');
+    var noteText = (inp ? inp.value : '').trim();
+    if (!noteText) {
+        alert("Please enter or speak a call note.");
+        return;
+    }
+
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
+        var safeCode = window.sanitizeDocId ? window.sanitizeDocId(cust.c) : cust.c.replace(/[\/\.#\?\[\]\s]/g, '_');
+        var nowIso = new Date().toISOString();
+
+        var body = {
+            fields: {
+                partyCode: { stringValue: cust.c },
+                partyName: { stringValue: cust.n || cust.c },
+                station: { stringValue: cust.ct || '' },
+                phone: { stringValue: cust.p || '' },
+                agent: { stringValue: cust.ag || '' },
+                note: { stringValue: noteText },
+                callType: { stringValue: 'call' },
+                callOutcome: { stringValue: 'live_call_discussion' },
+                createdAt: { timestampValue: nowIso }
+            }
+        };
+
+        var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode + "/Timeline";
+        await fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body) });
+
+        if (inp) inp.value = '';
+        if (msgEl) {
+            msgEl.innerText = "✓ CRM Note saved to timeline!";
+            msgEl.style.display = 'block';
+            setTimeout(function () { msgEl.style.display = 'none'; }, 3000);
+        }
+    } catch (e) {
+        console.warn("Save quick note error:", e);
+        alert("Failed to save CRM note: " + e.message);
+    }
+};
+
+window.toggleQuickNoteSpeech = async function () {
+    var inp = document.getElementById('custRepQuickNote');
+    if (!inp) return;
+
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeSpeech) {
+        try {
+            var res = await window.Capacitor.Plugins.NativeSpeech.startListening({ lang: 'hi-IN' });
+            if (res && res.text) {
+                inp.value = (inp.value ? inp.value.trim() + ' ' : '') + res.text.trim();
+                inp.focus();
+            }
+        } catch(e) {
+            console.warn("Speech error:", e);
+        }
+        return;
+    }
+
+    var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRec) {
+        try {
+            var rec = new SpeechRec();
+            rec.lang = 'hi-IN';
+            rec.onresult = function (ev) {
+                if (ev.results && ev.results[0] && ev.results[0][0]) {
+                    inp.value = (inp.value ? inp.value.trim() + ' ' : '') + ev.results[0][0].transcript;
+                }
+            };
+            rec.start();
+        } catch(e){}
+    }
+};
+
+window.checkLiveCallOnResume = async function () {
+    // Strictly for Super Admin only
+    if (!window.isSuperAdmin) return;
+
+    var list = window._compiledCustomersList || [];
+    if (!list || list.length === 0) return;
+
+    var isInCall = false;
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getCallState === 'function') {
+        try {
+            var st = await window.Capacitor.Plugins.CallMonitor.getCallState();
+            isInCall = Boolean(st && st.isInCall);
+        } catch(e){}
+    }
+
+    var tracked = null;
+    try {
+        var rawTrk = localStorage.getItem('ds_active_tracked_call');
+        if (rawTrk) tracked = JSON.parse(rawTrk);
+    } catch(e){}
+
+    // 1. If actively on a call initiated from the app (< 45 minutes ago)
+    if (tracked && tracked.code && (Date.now() - (tracked.startTime || 0)) < 2700000) {
+        var modal = document.getElementById('customerDetailReportsModal');
+        if (!modal || modal.style.display !== 'flex' || !window._currentReportingCustomer || window._currentReportingCustomer.c !== tracked.code) {
+            if (typeof window.openCustomerReportsModal === 'function') {
+                window.openCustomerReportsModal(tracked.code);
+            }
+        }
+        return;
+    }
+
+    // 2. If live phone call is detected on device
+    if (isInCall) {
+        try {
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                var clipText = await navigator.clipboard.readText();
+                var p10 = String(clipText || '').replace(/\D/g, '').slice(-10);
+                if (p10.length === 10) {
+                    var matchedCust = list.find(function (c) {
+                        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+                        return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+                    });
+                    if (matchedCust && typeof window.openCustomerReportsModal === 'function') {
+                        var curM = document.getElementById('customerDetailReportsModal');
+                        if (!curM || curM.style.display !== 'flex' || !window._currentReportingCustomer || window._currentReportingCustomer.c !== matchedCust.c) {
+                            window.openCustomerReportsModal(matchedCust.c);
+                            return;
+                        }
+                    }
+                }
+            }
+        } catch(e){}
+
+        var curM2 = document.getElementById('customerDetailReportsModal');
+        if (!curM2 || curM2.style.display !== 'flex') {
+            window.showLiveCallFloatBanner();
+        }
+    } else {
+        window.hideLiveCallFloatBanner();
+    }
+};
+
+window.showLiveCallFloatBanner = function () {
+    var banner = document.getElementById('dsLiveCallFloatBanner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'dsLiveCallFloatBanner';
+        banner.style.cssText = 'position:fixed; top:12px; left:12px; right:12px; z-index:99999; background:linear-gradient(135deg, #15803d, #16a34a); color:#fff; border-radius:12px; padding:10px 14px; box-shadow:0 4px 16px rgba(0,0,0,0.25); display:flex; align-items:center; justify-content:space-between; gap:8px;';
+        banner.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px;">
+                <i class="fas fa-phone-volume fa-shake" style="color:#bbf7d0; font-size:16px;"></i>
+                <div>
+                    <div style="font-size:12px; font-weight:bold; letter-spacing:0.5px;">LIVE CALL ACTIVE</div>
+                    <div style="font-size:10px; opacity:0.9;">Super Admin: Tap to view caller dispatches &amp; OS</div>
+                </div>
+            </div>
+            <div style="display:flex; gap:6px;">
+                <button type="button" onclick="window.pasteAndLookupCaller()" style="background:#fff; color:#15803d; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+                    <i class="fas fa-clipboard"></i> Paste Caller
+                </button>
+                <button type="button" onclick="window.hideLiveCallFloatBanner()" style="background:rgba(255,255,255,0.2); color:#fff; border:none; border-radius:6px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        document.body.appendChild(banner);
+    }
+    banner.style.display = 'flex';
+};
+
+window.hideLiveCallFloatBanner = function () {
+    var banner = document.getElementById('dsLiveCallFloatBanner');
+    if (banner) banner.style.display = 'none';
+};
+
 function setupCRMCallReturnListener() {
     if (window._crmReturnListenerAdded) return;
     window._crmReturnListenerAdded = true;
 
+    function handleAppResumeEvents() {
+        if (typeof window.checkPendingTrackedCall === 'function') {
+            window.checkPendingTrackedCall();
+        }
+        if (typeof window.checkLiveCallOnResume === 'function') {
+            window.checkLiveCallOnResume();
+        }
+    }
+
     document.addEventListener('visibilitychange', function () {
         if (!document.hidden) {
-            window.checkPendingTrackedCall();
+            handleAppResumeEvents();
         }
     });
 
     window.addEventListener('dsNativeAppResumed', function () {
-        window.checkPendingTrackedCall();
+        handleAppResumeEvents();
     });
 
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
         try {
             window.Capacitor.Plugins.App.addListener('appStateChange', function (state) {
                 if (state && state.isActive) {
-                    window.checkPendingTrackedCall();
+                    handleAppResumeEvents();
                 }
             });
         } catch (e) { }

@@ -1,5 +1,8 @@
 package com.durgasarees.catalog;
 
+import android.content.Context;
+import android.media.AudioManager;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -26,6 +29,24 @@ public class CallMonitorPlugin extends Plugin {
             call.resolve();
         } catch (Throwable t) {
             call.reject("CallMonitor disable error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void getCallState(PluginCall call) {
+        try {
+            AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
+            boolean isInCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION);
+            JSObject ret = new JSObject();
+            ret.put("isInCall", isInCall);
+            ret.put("mode", mode);
+            call.resolve(ret);
+        } catch (Throwable t) {
+            JSObject ret = new JSObject();
+            ret.put("isInCall", false);
+            ret.put("mode", 0);
+            call.resolve(ret);
         }
     }
 

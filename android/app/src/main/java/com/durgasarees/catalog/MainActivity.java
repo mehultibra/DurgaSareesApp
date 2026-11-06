@@ -94,7 +94,7 @@ public class MainActivity extends BridgeActivity {
         super.onResume();
         try {
             enforceLightNavBar();
-            if (bridge != null && CallMonitorPlugin.isMonitorEnabled()) {
+            if (bridge != null) {
                 bridge.triggerWindowJSEvent("dsNativeAppResumed");
             }
         } catch (Throwable t) {}
