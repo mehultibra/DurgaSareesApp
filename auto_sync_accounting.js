@@ -683,12 +683,17 @@ async function syncAccountingData() {
         });
     });
 
-    // Step 8: Dashboard Meta Document
+    // Step 8: Dashboard Meta Document & Compact Directory Chunks
+    const CHUNK_SIZE = 1500;
+    const totalChunks = Math.ceil(customers.length / CHUNK_SIZE);
+
     const dashboardDoc = {
         totalCustomers: customers.filter(c => c.role === 'customer').length,
         totalAgents: customers.filter(c => c.role === 'agent').length,
         states: Array.from(uniqueStates).filter(Boolean).sort(),
         agents: Array.from(uniqueAgents).filter(Boolean).sort(),
+        dirChunkCount: totalChunks,
+        totalRecords: customers.length,
         lastSyncedAt: nowIso
     };
 
@@ -822,6 +827,52 @@ async function syncAccountingData() {
             hashKey: 'meta_dashboard',
             hashValue: dashHash
         });
+    }
+
+    // E. Directory Chunks in AccountingMeta/dir_chunk_0..N (Fast instant mobile loading)
+    for (let ci = 0; ci < totalChunks; ci++) {
+        const slice = customers.slice(ci * CHUNK_SIZE, (ci + 1) * CHUNK_SIZE);
+        const chunkItems = slice.map(c => ({
+            c: c.code,
+            n: c.name,
+            p: c.phone || '',
+            cleanPhones: c.cleanPhones || [],
+            phones: c.cleanPhones || [],
+            ct: c.station || '',
+            st: c.state || '',
+            g: c.gst || '',
+            ag: c.agent || '',
+            tr: c.transport || '',
+            b: c.netBalance || 0,
+            d: c.drCr || 'Dr',
+            totDr: c.totalDebit || 0,
+            pb: c.outstandingCount || 0,
+            sbills: c.salesBillsCount || 0,
+            ho: (c.outstandingCount > 0),
+            hs: (c.salesBillsCount > 0),
+            role: c.role || 'customer'
+        }));
+
+        const chunkDoc = {
+            chunkIndex: ci,
+            totalChunks: totalChunks,
+            count: chunkItems.length,
+            itemsJson: JSON.stringify(chunkItems),
+            updatedAt: nowIso
+        };
+
+        const docId = 'dir_chunk_' + ci;
+        const hKey = 'meta_' + docId;
+        const currentHash = computeHash(chunkDoc);
+        if (existingHashes[hKey] !== currentHash) {
+            pendingWrites.push({
+                collection: 'AccountingMeta',
+                docId: docId,
+                data: chunkDoc,
+                hashKey: hKey,
+                hashValue: currentHash
+            });
+        }
     }
 
     console.log(`📊 Delta Analysis: ${pendingWrites.length} documents modified/new since last sync.`);

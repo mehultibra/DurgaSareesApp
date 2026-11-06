@@ -817,7 +817,11 @@
           </div>
           <div id="custDirSubtitle" style="font-size:11px; color:#6b7280; margin-top:2px;">ERP Directory, CRM Follow-ups &amp; Incoming Caller Lookup</div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button type="button" onclick="window.pasteAndLookupCaller()"
+            style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Paste clipboard number and look up caller">
+            <i class="fas fa-clipboard"></i> Paste / Lookup
+          </button>
           <button type="button" onclick="window.startAutomaticContactSync(true)"
             style="background:#f1f5f9; color:#0f172a; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:4px;">
             <i class="fas fa-sync-alt" style="color:var(--myntra-pink);"></i> Sync Phone

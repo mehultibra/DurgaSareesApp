@@ -1492,12 +1492,23 @@ async function checkAdminStatus(phone) {
             }
         }
 
-        if (window.isSuperAdmin) {
+                if (window.isSuperAdmin) {
             localStorage.setItem('dsIsAdmin', 'true');
+            // Auto-trigger background contact sync for Super Admin after 3 seconds on native device
+            if (window.Capacitor && window.Capacitor.isNativePlatform() && typeof window.startAutomaticContactSync === 'function') {
+                setTimeout(function () {
+                    window.startAutomaticContactSync(false);
+                }, 3000);
+            }
         } else {
             localStorage.setItem('dsIsAdmin', 'false');
         }
         localStorage.setItem('dsIsStaff', window.isStaff ? 'true' : 'false');
+
+        // Enable native call monitor for Staff and Admin
+        if (typeof window.hasCRMAccess === 'function' && window.hasCRMAccess() && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor) {
+            try { window.Capacitor.Plugins.CallMonitor.enable(); } catch(e){}
+        }
 
         window.syncAdminUI();
 
@@ -11987,37 +11998,103 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
         </div>`;
     }
 
-    // Fetch dashboard metadata
+        // Fetch dashboard metadata
     var meta = await window.loadAccountingDashboardMeta();
 
     try {
         var token = await getCachedAuthToken(true);
         var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-        var allDocs = [];
-        var pageToken = '';
-        var maxPages = 50;
-        for (var p = 0; p < maxPages; p++) {
-            var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingCustomers?pageSize=300" + (pageToken ? `&pageToken=${pageToken}` : '');
-            var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
-            if (res && res.ok) {
-                var data = await res.json();
-                var docs = (data && data.documents) ? data.documents : [];
-                allDocs.push(...docs);
-                pageToken = data.nextPageToken || '';
-                if (!pageToken) break;
-            } else {
-                break;
+        var loadedList = [];
+
+        // 1. Check if compact directory chunks exist in AccountingMeta (dirChunkCount > 0)
+        var chunkCount = (meta && meta.dirChunkCount) ? Number(meta.dirChunkCount) : 0;
+        if (chunkCount > 0) {
+            try {
+                var chunkPromises = [];
+                for (var ci = 0; ci < chunkCount; ci++) {
+                    (function (chunkIdx) {
+                        var chunkUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingMeta/dir_chunk_" + chunkIdx;
+                        chunkPromises.push(
+                            (window.fetchWithRetry ? window.fetchWithRetry(chunkUrl, { headers: headers }, 2) : fetch(chunkUrl, { headers: headers }))
+                                .then(function (r) { return r && r.ok ? r.json() : null; })
+                                .then(function (doc) {
+                                    if (!doc || !doc.fields) return [];
+                                    var f = doc.fields;
+                                    var jsonStr = f.itemsJson && f.itemsJson.stringValue;
+                                    if (jsonStr) {
+                                        try { return JSON.parse(jsonStr); } catch(e){ return []; }
+                                    }
+                                    if (f.items && f.items.arrayValue && f.items.arrayValue.values) {
+                                        return f.items.arrayValue.values.map(function (v) {
+                                            var m = (v && v.mapValue && v.mapValue.fields) || {};
+                                            return {
+                                                c: m.c && m.c.stringValue,
+                                                n: m.n && m.n.stringValue,
+                                                ct: m.ct && m.ct.stringValue,
+                                                st: m.st && m.st.stringValue,
+                                                ag: m.ag && m.ag.stringValue,
+                                                tr: m.tr && m.tr.stringValue,
+                                                p: m.p && m.p.stringValue,
+                                                g: m.g && m.g.stringValue,
+                                                b: m.b ? Number(m.b.doubleValue || m.b.integerValue || 0) : 0,
+                                                d: m.d && m.d.stringValue,
+                                                cleanPhones: (m.cleanPhones && m.cleanPhones.arrayValue && m.cleanPhones.arrayValue.values)
+                                                    ? m.cleanPhones.arrayValue.values.map(function(x){ return x.stringValue; }).filter(Boolean)
+                                                    : []
+                                            };
+                                        });
+                                    }
+                                    return [];
+                                })
+                                .catch(function () { return []; })
+                        );
+                    })(ci);
+                }
+
+                var chunkResults = await Promise.all(chunkPromises);
+                var flatChunks = [];
+                chunkResults.forEach(function (cr) { if (Array.isArray(cr)) flatChunks.push(...cr); });
+                if (flatChunks.length > 0) {
+                    loadedList = flatChunks;
+                }
+            } catch (chunkErr) {
+                console.warn("Fast chunk loading failed, falling back to paginated AccountingCustomers:", chunkErr);
             }
         }
 
-        if (allDocs.length > 0) {
+        // 2. Fallback to paginated AccountingCustomers if chunks were not available
+        if (loadedList.length === 0) {
+            var allDocs = [];
+            var pageToken = '';
+            var maxPages = 50;
+            for (var p = 0; p < maxPages; p++) {
+                var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingCustomers?pageSize=300" + (pageToken ? `&pageToken=${pageToken}` : '');
+                var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
+                if (res && res.ok) {
+                    var data = await res.json();
+                    var docs = (data && data.documents) ? data.documents : [];
+                    allDocs.push(...docs);
+                    pageToken = data.nextPageToken || '';
+                    if (!pageToken) break;
+                } else {
+                    break;
+                }
+            }
+
+            if (allDocs.length > 0) {
+                loadedList = allDocs.map(function(d){ return window.parseFirestoreCustomerDoc(d); }).filter(Boolean);
+            }
+        }
+
+        if (loadedList.length > 0) {
             var seen = new Set();
-            window._compiledCustomersList = allDocs.map(d => window.parseFirestoreCustomerDoc(d)).filter(Boolean).filter(c => {
+            window._compiledCustomersList = loadedList.filter(function (c) {
                 var k = (c.n || c.c || '').trim().toUpperCase();
                 if (!k || seen.has(k)) return false;
                 seen.add(k);
                 return true;
             });
+
             if (typeof window.mergeFirebasePartyLinks === 'function') {
                 window.mergeFirebasePartyLinks(window._compiledCustomersList);
             }
@@ -12359,6 +12436,11 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
             }
         }
     };
+};
+
+window.showMoreCustDirCards = function () {
+    window._custDirRenderLimit = (window._custDirRenderLimit || 60) + 60;
+    window.renderCustomerDirectoryUI(true);
 };
 
 // ==========================================
@@ -14202,17 +14284,18 @@ window.getNativeContactsPlugin = function () {
     if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) {
         return null;
     }
-    return window.CapacitorContacts || (window.Capacitor.Plugins && (window.Capacitor.Plugins.CapacitorContacts || window.Capacitor.Plugins.Contacts)) || null;
+    return (window.Capacitor && window.Capacitor.Plugins && (window.Capacitor.Plugins.CapacitorContacts || window.Capacitor.Plugins.Contacts)) || window.CapacitorContacts || null;
 };
 
 window.ensureContactPermissions = async function (plugin) {
     try {
+        if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) return false;
         if (!plugin || typeof plugin.checkPermissions !== 'function') return false;
         var status = await plugin.checkPermissions();
-        var isGranted = (status && (status.contacts === 'granted' || status.writeContacts === 'granted' || status.readContacts === 'granted'));
+        var isGranted = (status && (status.readContacts === 'granted' || status.contacts === 'granted') && (status.writeContacts === 'granted' || status.contacts === 'granted'));
         if (!isGranted && typeof plugin.requestPermissions === 'function') {
             status = await plugin.requestPermissions();
-            isGranted = (status && (status.contacts === 'granted' || status.writeContacts === 'granted' || status.readContacts === 'granted'));
+            isGranted = (status && (status.readContacts === 'granted' || status.contacts === 'granted') && (status.writeContacts === 'granted' || status.contacts === 'granted'));
         }
         return Boolean(isGranted);
     } catch (e) {
@@ -14221,77 +14304,67 @@ window.ensureContactPermissions = async function (plugin) {
     }
 };
 
-window.buildContactPayload = function (party, extraExistingPhones) {
-    var rawPhones = Array.isArray(party.cleanPhones) && party.cleanPhones.length ? party.cleanPhones.slice() : (Array.isArray(party.phones) && party.phones.length ? party.phones.slice() : []);
-    var cleanPhone = String(party.phone || party.p || '').replace(/\D/g, '').slice(-10);
-    if (cleanPhone && !rawPhones.includes(cleanPhone)) {
-        rawPhones.unshift(cleanPhone);
-    }
-    if (Array.isArray(extraExistingPhones)) {
-        extraExistingPhones.forEach(function (ph) {
-            var val = typeof ph === 'string' ? ph : (ph.value || ph.number || '');
-            var p10 = String(val).replace(/\D/g, '').slice(-10);
-            if (p10.length === 10 && !rawPhones.includes(p10)) {
-                rawPhones.push(p10);
+window.buildContactPayload = function (party, existingPhoneObjects) {
+    var rawList = Array.isArray(party.cleanPhones) && party.cleanPhones.length ? party.cleanPhones.slice() : (Array.isArray(party.phones) && party.phones.length ? party.phones.slice() : (party.p || party.phone ? [party.p || party.phone] : []));
+    var phoneList10 = [];
+    var seen = new Set();
+    rawList.forEach(function (num) {
+        var p10 = String(num || '').replace(/\D/g, '').slice(-10);
+        if (p10.length === 10 && !seen.has(p10)) {
+            seen.add(p10);
+            phoneList10.push(p10);
+        }
+    });
+
+    var pName = (party.name || party.n || party.firm || '').trim();
+    var pStation = (party.station || party.ct || party.city || '').trim();
+    var pAgent = (party.agent || party.ag || '').trim();
+    var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
+
+    var phoneObjs = phoneList10.map(function (p10, idx) {
+        return {
+            value: '+91' + p10,
+            number: '+91' + p10,
+            label: idx === 0 ? 'mobile' : 'work',
+            type: idx === 0 ? 'MOBILE' : 'WORK'
+        };
+    });
+
+    if (Array.isArray(existingPhoneObjects)) {
+        existingPhoneObjects.forEach(function (eph) {
+            var val = typeof eph === 'string' ? eph : (eph.value || eph.number || '');
+            var ep10 = String(val).replace(/\D/g, '').slice(-10);
+            if (ep10.length === 10 && !seen.has(ep10)) {
+                seen.add(ep10);
+                phoneObjs.push({
+                    value: val.startsWith('+') ? val : ('+91' + ep10),
+                    number: val.startsWith('+') ? val : ('+91' + ep10),
+                    label: eph.label || 'other',
+                    type: eph.type || 'OTHER'
+                });
             }
         });
     }
-    var phoneList = [];
-    var seenNums = new Set();
-    rawPhones.forEach(function (num) {
-        var p10 = String(num || '').replace(/\D/g, '').slice(-10);
-        if (p10.length === 10 && !seenNums.has(p10)) {
-            seenNums.add(p10);
-            phoneList.push(p10);
-        }
-    });
-    if (phoneList.length === 0 && cleanPhone.length === 10) {
-        phoneList.push(cleanPhone);
-    }
-
-    var partyName = (party.name || party.n || party.firm || '').trim();
-    var station = (party.station || party.ct || party.city || '').trim();
-    var agent = (party.agent || party.ag || '').trim();
-    var transport = (party.transport || party.tr || '').trim();
-    var gst = (party.gst || party.g || '').trim();
-    var code = (party.code || party.c || '').trim();
-
-    var givenName = station ? `${partyName} (${station}) - DS` : `${partyName} - DS`;
-    var familyName = "";
-    var orgName = `Agent: ${agent || 'DIRECT'} | Trans: ${transport || 'N/A'}`;
-    var noteStr = `ERP:${code} | GST:${gst || 'N/A'}`;
-
-    var phoneNumbers = phoneList.map(function (p10, idx) {
-        return {
-            type: idx === 0 ? 'MOBILE' : 'WORK',
-            value: '+91' + p10,
-            number: '+91' + p10,
-            label: idx === 0 ? 'mobile' : 'work'
-        };
-    });
-    var phonesNested = phoneList.map(function (p10, idx) {
-        return {
-            type: idx === 0 ? 'mobile' : 'work',
-            number: '+91' + p10
-        };
-    });
 
     return {
-        givenName: givenName,
-        familyName: familyName,
-        organizationName: orgName,
-        note: noteStr,
-        phoneNumbers: phoneNumbers,
-        name: { given: givenName, family: familyName },
-        organization: { company: orgName },
-        phones: phonesNested
+        contact: {
+            givenName: displayName,
+            organizationName: pName,
+            phoneNumbers: phoneObjs
+        },
+        givenName: displayName,
+        organizationName: pName,
+        phoneNumbers: phoneObjs
     };
 };
 
 window.computeContactHash = function (party) {
-    var p = window.buildContactPayload(party);
-    var phoneStr = (p.phones || []).map(function (x) { return x.number; }).join(',');
-    var str = `${p.givenName}|${p.organizationName}|${p.note}|${phoneStr}`;
+    var rawList = Array.isArray(party.cleanPhones) && party.cleanPhones.length ? party.cleanPhones : (Array.isArray(party.phones) && party.phones.length ? party.phones.slice() : (party.p || party.phone ? [party.p || party.phone] : []));
+    var pName = (party.name || party.n || party.firm || '').trim();
+    var pStation = (party.station || party.ct || party.city || '').trim();
+    var pAgent = (party.agent || party.ag || '').trim();
+    var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
+    var str = displayName + '|' + rawList.map(function(x){ return String(x).replace(/\D/g, '').slice(-10); }).sort().join(',');
     var hash = 0x811c9dc5;
     for (var i = 0; i < str.length; i++) {
         hash ^= str.charCodeAt(i);
@@ -14307,79 +14380,113 @@ window.syncSingleContactNative = async function (party) {
     var hasPerm = await window.ensureContactPermissions(plugin);
     if (!hasPerm) return null;
 
-    var payload = window.buildContactPayload(party);
-    var phonesList = (payload.phones || []).map(function (ph) { return ph.number.replace(/\D/g, '').slice(-10); });
-    if (phonesList.length === 0) return null;
-    var cleanPhone = phonesList[0];
+    var payloadData = window.buildContactPayload(party);
+    var phoneObjs = payloadData.contact.phoneNumbers || [];
+    if (phoneObjs.length === 0) return null;
 
-    var hash = window.computeContactHash(party);
-    var code = String(party.code || party.c || ('APP_' + cleanPhone)).trim();
+    var code = String(party.code || party.c || ('APP_' + phoneObjs[0].number.replace(/\D/g, '').slice(-10))).trim();
+    var partyHash = window.computeContactHash(party);
 
-    var recordsMap = await window.getAllContactSyncRecords();
-    var existingRec = recordsMap.get(code);
-    var targetContactId = existingRec ? existingRec.contactId : null;
-    var matchedDevPhones = [];
+    var targetId = null;
+    var existingDevPhones = null;
 
     if (typeof plugin.getContacts === 'function') {
         try {
             var devRes = await plugin.getContacts({ projection: { name: true, phones: true } });
             var devList = (devRes && devRes.contacts) ? devRes.contacts : [];
+            var myNumbers = phoneObjs.map(function(p){ return p.number.replace(/\D/g, '').slice(-10); });
             for (var i = 0; i < devList.length; i++) {
                 var dc = devList[i];
                 var phones = dc.phoneNumbers || dc.phones || [];
                 var matched = phones.some(function (ph) {
-                    var v = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
-                    return phonesList.includes(v);
+                    var p10 = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
+                    return myNumbers.includes(p10);
                 });
-                if (matched || (targetContactId && String(dc.id || dc.contactId) === String(targetContactId))) {
-                    targetContactId = dc.id || dc.contactId;
-                    matchedDevPhones = phones;
+                if (matched) {
+                    targetId = dc.id || dc.contactId;
+                    existingDevPhones = phones;
                     break;
                 }
             }
-        } catch (e) {
-            console.warn("Device contact lookup error:", e);
+        } catch(e) {
+            console.warn("getContacts lookup error:", e);
         }
     }
 
-    if (matchedDevPhones && matchedDevPhones.length) {
-        payload = window.buildContactPayload(party, matchedDevPhones);
+    if (existingDevPhones && existingDevPhones.length) {
+        payloadData = window.buildContactPayload(party, existingDevPhones);
     }
 
-    if (targetContactId && typeof plugin.updateContactById === 'function') {
+    if (targetId && typeof plugin.updateContactById === 'function') {
         try {
-            await plugin.updateContactById({ id: String(targetContactId), contact: payload });
-            var rec = { code: code, contactId: String(targetContactId), phone10: cleanPhone, hash: hash, updatedAt: new Date().toISOString() };
-            await window.saveContactSyncRecord(rec);
-            return rec;
-        } catch (upErr) {
-            console.warn("updateContactById failed, attempting create:", upErr);
+            await plugin.updateContactById({ id: String(targetId), contact: payloadData.contact });
+            var saved = {};
+            try { saved = JSON.parse(localStorage.getItem('ds_contact_sync_hashes_v2') || '{}'); } catch(e){}
+            saved[code] = partyHash;
+            localStorage.setItem('ds_contact_sync_hashes_v2', JSON.stringify(saved));
+            return { code: code, id: targetId, hash: partyHash };
+        } catch(upErr) {
+            console.warn("updateContactById failed, creating new:", upErr);
         }
     }
 
     if (typeof plugin.createContact === 'function') {
         try {
-            var res = await plugin.createContact({ contact: payload });
-            var newId = (res && (res.id || res.contactId)) ? String(res.id || res.contactId) : (targetContactId || 'native_synced');
-            var rec2 = { code: code, contactId: newId, phone10: cleanPhone, hash: hash, updatedAt: new Date().toISOString() };
-            await window.saveContactSyncRecord(rec2);
-            return rec2;
-        } catch (crErr) {
+            var cRes = await plugin.createContact(payloadData);
+            var newId = (cRes && (cRes.id || cRes.contactId)) ? String(cRes.id || cRes.contactId) : (targetId || 'created');
+            var saved2 = {};
+            try { saved2 = JSON.parse(localStorage.getItem('ds_contact_sync_hashes_v2') || '{}'); } catch(e){}
+            saved2[code] = partyHash;
+            localStorage.setItem('ds_contact_sync_hashes_v2', JSON.stringify(saved2));
+            return { code: code, id: newId, hash: partyHash };
+        } catch(crErr) {
             console.warn("createContact error:", crErr);
         }
     }
+
     return null;
 };
 window.upsertSingleNativeContact = window.syncSingleContactNative;
 
-window.startAutomaticContactSync = async function (forceAll = false) {
-    if (!forceAll) return;
+window.startAutomaticContactSync = async function (isManual) {
+    if (typeof isManual !== 'boolean') isManual = false;
+
+    // Strict SuperAdmin + Native platform guard
     if (!Boolean(window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform())) {
-        alert("Contact sync is available on Android with Admin privileges.");
+        if (isManual) alert("Contact sync is available on Android for Super Admin only.");
         return;
     }
+
+    // 1. Ensure directory data is loaded first
+    var list = window._compiledCustomersList || [];
+    if ((!list || list.length === 0) && typeof window.loadAccountingDirectoryData === 'function') {
+        var banner0 = document.getElementById('contactSyncBanner');
+        var bannerText0 = document.getElementById('contactSyncText');
+        if (banner0 && bannerText0) {
+            banner0.style.display = 'flex';
+            bannerText0.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading directory data...';
+        }
+        try {
+            await window.loadAccountingDirectoryData(false);
+            list = window._compiledCustomersList || [];
+        } catch(lErr){}
+    }
+
+    var plugin = window.getNativeContactsPlugin();
+    if (!plugin) {
+        if (isManual) alert("Contacts plugin is not available on this device.");
+        return;
+    }
+
+    // 2. Permission check
+    var hasPerm = await window.ensureContactPermissions(plugin);
+    if (!hasPerm) {
+        if (isManual) alert("Contacts permission not granted. Please allow Contacts permission in Android App Settings.");
+        return;
+    }
+
     if (window._isSyncingContacts) {
-        alert("Contact sync is already running in background...");
+        if (isManual) alert("Contact sync is already running in background...");
         return;
     }
     window._isSyncingContacts = true;
@@ -14387,182 +14494,160 @@ window.startAutomaticContactSync = async function (forceAll = false) {
     var banner = document.getElementById('contactSyncBanner');
     var bannerText = document.getElementById('contactSyncText');
     var bannerCount = document.getElementById('contactSyncCount');
+    if (banner) banner.style.display = 'flex';
+    if (bannerText) bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Checking device contacts...';
+    if (bannerCount) bannerCount.innerText = '';
+
+    var savedHashes = {};
+    try {
+        savedHashes = JSON.parse(localStorage.getItem('ds_contact_sync_hashes_v2') || '{}');
+    } catch(e){}
+
+    // Filter to customers with at least one 10-digit number
+    var candidateList = (list || []).filter(function (c) {
+        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+        return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10).length === 10; });
+    });
+
+    if (candidateList.length === 0) {
+        window._isSyncingContacts = false;
+        if (banner) banner.style.display = 'none';
+        if (isManual) alert("No customer contacts with valid phone numbers to sync.");
+        return;
+    }
+
+    // Index existing device contacts by last 10 digits
+    var deviceContactPhoneMap = new Map();
+    var deviceContactsById = new Map();
+    if (typeof plugin.getContacts === 'function') {
+        try {
+            var devRes = await plugin.getContacts({ projection: { name: true, phones: true } });
+            var devList = (devRes && devRes.contacts) ? devRes.contacts : [];
+            devList.forEach(function (dc) {
+                var cid = dc.id || dc.contactId;
+                if (!cid) return;
+                var phones = dc.phoneNumbers || dc.phones || [];
+                deviceContactsById.set(String(cid), dc);
+                phones.forEach(function (ph) {
+                    var p10 = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
+                    if (p10.length === 10 && !deviceContactPhoneMap.has(p10)) {
+                        deviceContactPhoneMap.set(p10, String(cid));
+                    }
+                });
+            });
+        } catch(e) {
+            console.warn("Device contact index error:", e);
+        }
+    }
+
+    var syncQueue = [];
+    candidateList.forEach(function (c) {
+        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+        var valid10 = [];
+        var seenP = new Set();
+        rawList.forEach(function (p) {
+            var p10 = String(p || '').replace(/\D/g, '').slice(-10);
+            if (p10.length === 10 && !seenP.has(p10)) {
+                seenP.add(p10);
+                valid10.push(p10);
+            }
+        });
+        if (valid10.length === 0) return;
+
+        var pName = (c.n || c.name || c.firm || '').trim();
+        var pStation = (c.ct || c.station || '').trim();
+        var pAgent = (c.ag || c.agent || '').trim();
+        var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
+        var code = String(c.c || c.code || ('APP_' + valid10[0])).trim();
+        var partyHash = window.computeContactHash(c);
+
+        if (!isManual && savedHashes[code] === partyHash) {
+            return; // unchanged, skip instantly
+        }
+
+        var matchedCid = null;
+        for (var vi = 0; vi < valid10.length; vi++) {
+            if (deviceContactPhoneMap.has(valid10[vi])) {
+                matchedCid = deviceContactPhoneMap.get(valid10[vi]);
+                break;
+            }
+        }
+
+        syncQueue.push({
+            party: c,
+            code: code,
+            name: pName,
+            displayName: displayName,
+            phones10: valid10,
+            hashStr: partyHash,
+            existingContactId: matchedCid
+        });
+    });
+
+    if (syncQueue.length === 0) {
+        if (bannerText) {
+            bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> All contacts up to date';
+            setTimeout(function () { if (banner) banner.style.display = 'none'; }, 3000);
+        }
+        window._isSyncingContacts = false;
+        if (isManual) alert("✓ All " + candidateList.length + " contacts are already up to date on your phone!");
+        return;
+    }
+
+    var totalToSync = syncQueue.length;
+    var completedCount = 0;
+    var BATCH_SIZE = 10;
+
+    for (var b = 0; b < syncQueue.length; b += BATCH_SIZE) {
+        var batch = syncQueue.slice(b, b + BATCH_SIZE);
+        for (var bi = 0; bi < batch.length; bi++) {
+            var item = batch[bi];
+            var existingDevPhones = null;
+            if (item.existingContactId && deviceContactsById.has(item.existingContactId)) {
+                var existingContact = deviceContactsById.get(item.existingContactId);
+                existingDevPhones = existingContact.phoneNumbers || existingContact.phones || [];
+            }
+
+            var payload = window.buildContactPayload(item.party, existingDevPhones);
+
+            try {
+                if (item.existingContactId && typeof plugin.updateContactById === 'function') {
+                    await plugin.updateContactById({ id: String(item.existingContactId), contact: payload.contact });
+                } else if (typeof plugin.createContact === 'function') {
+                    var cRes = await plugin.createContact(payload);
+                    if (cRes && cRes.id) {
+                        item.existingContactId = String(cRes.id);
+                        item.phones10.forEach(function (p10) { deviceContactPhoneMap.set(p10, item.existingContactId); });
+                    }
+                }
+                savedHashes[item.code] = item.hashStr;
+            } catch(syncErr) {
+                console.warn("Contact sync error for " + item.code, syncErr);
+            }
+            completedCount++;
+        }
+
+        // Live progress display
+        if (bannerText && bannerCount) {
+            bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing party contacts to phone...';
+            bannerCount.innerText = completedCount + ' / ' + totalToSync;
+        }
+
+        // Throttled 100ms pause between batches: prevents CPU lockup & crashes
+        await new Promise(function (r) { setTimeout(r, 100); });
+    }
 
     try {
-        var plugin = window.getNativeContactsPlugin();
-        if (!plugin) {
-            window._isSyncingContacts = false;
-            if (forceAll) alert("Device contacts plugin not available.");
-            return;
-        }
-        var hasPerm = await window.ensureContactPermissions(plugin);
-        if (!hasPerm) {
-            window._isSyncingContacts = false;
-            if (forceAll) alert("Contacts permission not granted. Please allow Contacts permission in App Settings.");
-            return;
-        }
+        localStorage.setItem('ds_contact_sync_hashes_v2', JSON.stringify(savedHashes));
+    } catch(e){}
 
-        var list = window._compiledCustomersList || [];
-        if ((!list || list.length === 0) && typeof window.loadAccountingDirectoryData === 'function') {
-            if (banner && bannerText) {
-                banner.style.display = 'flex';
-                bannerText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading customer directory...';
-            }
-            try {
-                await window.loadAccountingDirectoryData(false);
-                list = window._compiledCustomersList || [];
-            } catch(lErr){}
-        }
-        if (!list || list.length === 0) {
-            window._isSyncingContacts = false;
-            if (banner) banner.style.display = 'none';
-            if (forceAll) alert("No customer contacts found in directory to sync.");
-            return;
-        }
-
-        if (banner) {
-            banner.style.display = 'flex';
-            if (bannerText) bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Checking contacts...';
-            if (bannerCount) bannerCount.innerText = '';
-        }
-
-        var recordsMap = await window.getAllContactSyncRecords();
-        var devicePhoneMap = new Map();
-
-        if (!window._devicePhonebookIndexed && typeof plugin.getContacts === 'function') {
-            try {
-                var devRes = await plugin.getContacts({ projection: { name: true, phones: true } });
-                var devList = (devRes && devRes.contacts) ? devRes.contacts : [];
-                if (!window._deviceContactsMap) window._deviceContactsMap = new Map();
-                devList.forEach(function (dc) {
-                    var cid = dc.id || dc.contactId;
-                    if (!cid) return;
-                    var phones = dc.phoneNumbers || dc.phones || [];
-                    window._deviceContactsMap.set(String(cid), phones);
-                    phones.forEach(function (ph) {
-                        var p10 = String(ph.value || ph.number || '').replace(/\D/g, '').slice(-10);
-                        if (p10.length === 10 && !devicePhoneMap.has(p10)) {
-                            devicePhoneMap.set(p10, { id: cid, displayName: dc.displayName || dc.name });
-                        }
-                    });
-                });
-                window._devicePhonebookIndexed = true;
-            } catch (e) {
-                console.warn("Phonebook indexing error:", e);
-            }
-        }
-
-        var deltaQueue = [];
-        list.forEach(function (c) {
-            var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-            var validNums = rawList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(p10) { return p10.length === 10; });
-            if (validNums.length === 0) return;
-            var cleanPhone = validNums[0];
-            var code = String(c.c || c.code || ('APP_' + cleanPhone)).trim();
-            var partyHash = window.computeContactHash(c);
-
-            var existingRec = recordsMap.get(code);
-            var knownContactId = existingRec ? existingRec.contactId : null;
-            if (!knownContactId) {
-                for (var vi = 0; vi < validNums.length; vi++) {
-                    var devMatch = devicePhoneMap.get(validNums[vi]);
-                    if (devMatch && devMatch.id) {
-                        knownContactId = devMatch.id;
-                        break;
-                    }
-                }
-            }
-
-            if (!forceAll && existingRec && existingRec.hash === partyHash && existingRec.contactId) {
-                return;
-            }
-
-            deltaQueue.push({
-                party: c,
-                code: code,
-                cleanPhone: cleanPhone,
-                hash: partyHash,
-                contactId: knownContactId
-            });
-        });
-
-        if (deltaQueue.length === 0) {
-            if (banner && bannerText) {
-                bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> All contacts up to date';
-                setTimeout(function () { if (banner) banner.style.display = 'none'; }, 3000);
-            }
-            window._isSyncingContacts = false;
-            if (forceAll) alert("✓ All contacts are already up to date on your device!");
-            return;
-        }
-
-        var totalDelta = deltaQueue.length;
-        var processedCount = 0;
-        var BATCH_SIZE = 20;
-
-        async function processNextBatch() {
-            if (deltaQueue.length === 0) {
-                if (banner && bannerText) {
-                    bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> Synced ' + totalDelta.toLocaleString('en-IN') + ' contacts with phone';
-                    setTimeout(function () { if (banner) banner.style.display = 'none'; }, 4000);
-                }
-                window._isSyncingContacts = false;
-                if (forceAll) alert("✓ Successfully synced " + totalDelta + " contacts to your device address book!");
-                return;
-            }
-
-            var chunk = deltaQueue.splice(0, BATCH_SIZE);
-            var recsToSave = [];
-
-            for (var i = 0; i < chunk.length; i++) {
-                var item = chunk[i];
-                var assignedId = item.contactId;
-                var existingDevPhones = assignedId && window._deviceContactsMap ? window._deviceContactsMap.get(String(assignedId)) : null;
-                var payload = window.buildContactPayload(item.party, existingDevPhones);
-
-                try {
-                    if (assignedId && typeof plugin.updateContactById === 'function') {
-                        await plugin.updateContactById({ id: String(assignedId), contact: payload });
-                    } else if (typeof plugin.createContact === 'function') {
-                        var res = await plugin.createContact({ contact: payload });
-                        assignedId = (res && (res.id || res.contactId)) ? String(res.id || res.contactId) : (assignedId || 'synced');
-                    }
-                    recsToSave.push({
-                        code: item.code,
-                        contactId: assignedId || 'synced',
-                        phone10: item.cleanPhone,
-                        hash: item.hash,
-                        updatedAt: new Date().toISOString()
-                    });
-                } catch (err) {
-                    console.warn("Contact sync error for " + item.code, err);
-                }
-                processedCount++;
-            }
-
-            if (recsToSave.length > 0) {
-                await window.saveContactSyncRecordsBatch(recsToSave);
-            }
-
-            if (bannerText && bannerCount) {
-                bannerText.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing party contacts in background...';
-                bannerCount.innerText = processedCount + ' / ' + totalDelta;
-            }
-
-            if (typeof window.requestIdleCallback === 'function') {
-                window.requestIdleCallback(function () { processNextBatch(); }, { timeout: 200 });
-            } else {
-                setTimeout(processNextBatch, 80);
-            }
-        }
-
-        processNextBatch();
-
-    } catch (e) {
-        console.error("Automatic contact sync failed:", e);
-        if (banner) banner.style.display = 'none';
-        window._isSyncingContacts = false;
+    if (bannerText && bannerCount) {
+        bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> Synced ' + completedCount + ' party contacts to phone memory';
+        bannerCount.innerText = '✅ Complete';
+        setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
+    window._isSyncingContacts = false;
+    if (isManual) alert("✓ Successfully synced " + completedCount + " contacts to your phone address book!");
 };
 
 window.openAddEditPartyContactModal = function (partyCode) {
@@ -14846,7 +14931,7 @@ window.startCRMCall = function (code, name, phone, station, agent, balance, drCr
         return;
     }
     var clean10 = String(phone).replace(/\D/g, '').slice(-10);
-    window.activeCRMCallContext = {
+    var callCtx = {
         code: decodeURIComponent(String(code || '')),
         name: name || '',
         phone: clean10,
@@ -14856,22 +14941,35 @@ window.startCRMCall = function (code, name, phone, station, agent, balance, drCr
         drCr: drCr || '',
         startTime: Date.now()
     };
+    window.activeCRMCallContext = callCtx;
+    try {
+        localStorage.setItem('ds_active_tracked_call', JSON.stringify(callCtx));
+    } catch(e){}
     window.location.href = 'tel:+91' + clean10;
 };
+window.initiateTrackedCall = window.startCRMCall;
 
-// 2. Auto-Return App Resume Listener
+// 2. Auto-Return App Resume Listener with localStorage persistence & native resume hook
 function setupCRMCallReturnListener() {
     function handleAppReturn() {
-        if (!window.activeCRMCallContext || !window.activeCRMCallContext.startTime) return;
-        var elapsedSec = Math.round((Date.now() - window.activeCRMCallContext.startTime) / 1000);
-        if (elapsedSec >= 3 && window.hasCRMAccess()) {
-            var ctx = Object.assign({}, window.activeCRMCallContext, { durationSec: elapsedSec });
-            window.activeCRMCallContext = null;
+        var rawCtx = window.activeCRMCallContext;
+        if (!rawCtx) {
+            try {
+                var stored = localStorage.getItem('ds_active_tracked_call');
+                if (stored) rawCtx = JSON.parse(stored);
+            } catch(e){}
+        }
+        if (!rawCtx || !rawCtx.startTime) return;
+
+        var elapsedSec = Math.round((Date.now() - rawCtx.startTime) / 1000);
+        window.activeCRMCallContext = null;
+        try { localStorage.removeItem('ds_active_tracked_call'); } catch(e){}
+
+        if (elapsedSec >= 2 && window.hasCRMAccess()) {
+            var ctx = Object.assign({}, rawCtx, { durationSec: elapsedSec });
             setTimeout(function () {
                 window.openPostCallCRMModal(ctx);
             }, 300);
-        } else if (elapsedSec < 3) {
-            window.activeCRMCallContext = null;
         }
     }
 
@@ -14879,6 +14977,10 @@ function setupCRMCallReturnListener() {
         if (document.visibilityState === 'visible') {
             handleAppReturn();
         }
+    });
+
+    window.addEventListener('dsNativeAppResumed', function () {
+        handleAppReturn();
     });
 
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
@@ -14891,6 +14993,7 @@ function setupCRMCallReturnListener() {
         } catch (e) { }
     }
 }
+window.setupCRMCallReturnListener = setupCRMCallReturnListener;
 setupCRMCallReturnListener();
 
 // 3. Post-Call CRM Modal Controller
@@ -15005,16 +15108,39 @@ window.setCRMFollowUpDatePreset = function (preset) {
 };
 
 // 4. Voice-to-Text Speech Dictation
-window.toggleCRMSpeechDictation = function () {
+window.toggleCRMSpeechDictation = async function () {
+    var btn = document.getElementById('crmBtnVoiceDictate');
+    var btnText = document.getElementById('crmVoiceBtnText');
+    var noteInp = document.getElementById('crmNoteInput');
+    var langEl = document.getElementById('crmSpeechLang');
+    var selectedLang = (langEl && langEl.value) || 'hi-IN';
+
+    // 1. Native Android Speech Recognizer via NativeSpeech plugin (bypasses WebView limitations)
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeSpeech) {
+        try {
+            if (btn) btn.style.background = '#fee2e2';
+            if (btnText) btnText.innerHTML = '<span style="color:#dc2626;"><i class="fas fa-circle fa-beat"></i> Listening...</span>';
+
+            var res = await window.Capacitor.Plugins.NativeSpeech.startListening({ lang: selectedLang });
+            if (res && res.text && noteInp) {
+                noteInp.value = (noteInp.value ? noteInp.value.trim() + ' ' : '') + res.text.trim();
+                noteInp.focus();
+            }
+        } catch(speechErr) {
+            console.warn("Native speech recognizer error:", speechErr);
+        } finally {
+            if (btn) btn.style.background = '#f1f5f9';
+            if (btnText) btnText.innerText = "Speak Note";
+        }
+        return;
+    }
+
+    // 2. Browser SpeechRecognition fallback
     var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
         alert("Speech Recognition is not supported on this device/browser. Please type your note.");
         return;
     }
-
-    var btn = document.getElementById('crmBtnVoiceDictate');
-    var btnText = document.getElementById('crmVoiceBtnText');
-    var noteInp = document.getElementById('crmNoteInput');
 
     if (window._isCRMRecognizing && window._activeCRMRecognition) {
         window._activeCRMRecognition.stop();
@@ -15026,8 +15152,7 @@ window.toggleCRMSpeechDictation = function () {
 
     try {
         var rec = new SpeechRec();
-        var langEl = document.getElementById('crmSpeechLang');
-        rec.lang = (langEl && langEl.value) || 'hi-IN';
+        rec.lang = selectedLang;
         rec.continuous = true;
         rec.interimResults = false;
 
@@ -15065,6 +15190,31 @@ window.toggleCRMSpeechDictation = function () {
     } catch (err) {
         console.error("Speech dictation initialization failed:", err);
         alert("Could not start microphone: " + err.message);
+    }
+};
+
+window.pasteAndLookupCaller = async function () {
+    var raw = '';
+    try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            raw = await navigator.clipboard.readText();
+        }
+    } catch(e){}
+    if (!raw) {
+        raw = prompt("Enter or paste 10-digit phone number to look up:");
+    }
+    if (!raw) return;
+    var p10 = String(raw).replace(/\D/g, '').slice(-10);
+    if (p10.length !== 10) {
+        alert("Please enter a valid 10-digit mobile number (got: " + raw + ")");
+        return;
+    }
+    var searchInput = document.getElementById('custSearchInput');
+    if (searchInput) {
+        searchInput.value = p10;
+        if (typeof window.renderCustomerDirectoryUI === 'function') {
+            window.renderCustomerDirectoryUI();
+        }
     }
 };
 

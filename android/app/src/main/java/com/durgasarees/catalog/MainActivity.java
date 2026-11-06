@@ -21,6 +21,8 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         instance = this;
         registerPlugin(AndroidBackBridgePlugin.class);
+        registerPlugin(NativeSpeechPlugin.class);
+        registerPlugin(CallMonitorPlugin.class);
         super.onCreate(savedInstanceState);
 
         enforceLightNavBar();
@@ -69,6 +71,9 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         enforceLightNavBar();
+        if (bridge != null && CallMonitorPlugin.isMonitorEnabled()) {
+            bridge.triggerWindowJSEvent("dsNativeAppResumed");
+        }
     }
 
     @Override
