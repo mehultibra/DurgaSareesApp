@@ -14333,7 +14333,7 @@ window.startAutomaticContactSync = async function (isManual) {
 
     var nativePlugin = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeContacts);
     if (!nativePlugin || typeof nativePlugin.syncBatch !== 'function') {
-        if (isManual) alert("Native contacts plugin is not available on this device.");
+        if (isManual) alert("Phonebook contact sync requires APK v1.0.7 (Version Code 10). Please install the latest APK update from Play Store.");
         return;
     }
 
@@ -14941,7 +14941,13 @@ window.toggleCRMSpeechDictation = async function () {
         return;
     }
 
-    // 2. Browser SpeechRecognition fallback
+    // If on native platform but NativeSpeech plugin is missing (running on APK v9 or older)
+    if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+        alert("Voice dictation requires APK v1.0.7 (Version Code 10). Please install the latest APK update from Play Store.");
+        return;
+    }
+
+    // 2. Browser SpeechRecognition fallback (for desktop web)
     var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
         alert("Speech Recognition is not supported on this device/browser. Please type your note.");
