@@ -96,6 +96,7 @@ public class DurgaCallScreeningService extends CallScreeningService {
                 );
                 channel.setDescription("Shows active caller info and Durga Sarees ERP shortcuts during calls");
                 channel.enableVibration(true);
+                channel.setLockscreenVisibility(NotificationCompat.VISIBILITY_PUBLIC);
                 nm.createNotificationChannel(channel);
             }
 
@@ -111,15 +112,17 @@ public class DurgaCallScreeningService extends CallScreeningService {
             }
             PendingIntent pendingIntent = PendingIntent.getActivity(this, 101, intent, flags);
 
-            String title = "📞 Live Call: " + (partyName != null && !partyName.trim().isEmpty() ? partyName : "+91 " + p10);
+            String dirPrefix = "outgoing".equalsIgnoreCase(direction) ? "📞 Outgoing: " : "📞 Live Call: ";
+            String title = dirPrefix + (partyName != null && !partyName.trim().isEmpty() ? partyName : "+91 " + p10);
             String body = "Tap to view Live Dispatches, O/S, Last Talk & Take Order";
 
             NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
                 .setContentText(body)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setFullScreenIntent(pendingIntent, true)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);

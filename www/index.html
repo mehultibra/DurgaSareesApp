@@ -185,6 +185,17 @@
     </div>
 
     <div id="gridWrapper" onpointerdown="if(document.activeElement) document.activeElement.blur();">
+      <!-- SuperAdmin Live Call Auto-Popup Promo Banner -->
+      <div id="enableCallPopupBanner" style="display:none; background:linear-gradient(135deg, #15803d, #16a34a); color:#fff; padding:7px 14px; font-size:12px; font-weight:bold; align-items:center; justify-content:space-between; box-shadow:0 2px 5px rgba(0,0,0,0.15); z-index:90; cursor:pointer;" onclick="window.enableCallPopupSuperAdmin()">
+        <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+          <i class="fas fa-phone-volume fa-shake" style="font-size:13px; color:#bbf7d0;"></i>
+          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📞 Tap here to enable Live Call Auto-Popup for Customer Calls</span>
+        </div>
+        <button type="button" onclick="event.stopPropagation(); window.enableCallPopupSuperAdmin()" style="background:#fff; color:#15803d; border:none; padding:3px 9px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;">
+          Enable
+        </button>
+      </div>
+
       <!-- Admin Order on Behalf Notification Banner -->
       <!-- Admin Active Party Banner (Shows Party Name and Station) -->
       <div id="orderOnBehalfBanner" style="display:none; background:#be185d; color:#fff; padding:7px 14px; font-size:12px; font-weight:bold; align-items:center; justify-content:space-between; box-shadow:0 2px 5px rgba(0,0,0,0.15); z-index:90; cursor:pointer;" onclick="openCustomerDetailsModal()">

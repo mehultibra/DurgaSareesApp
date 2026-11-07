@@ -1571,6 +1571,28 @@ async function checkAdminStatus(phone) {
 
         window.syncAdminUI();
 
+        if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform()) {
+            // Check Live Call Screening role banner
+            if (window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.checkCallerIdRole === 'function') {
+                window.Capacitor.Plugins.CallMonitor.checkCallerIdRole().then(function (st) {
+                    var banner = document.getElementById('enableCallPopupBanner');
+                    if (banner) {
+                        banner.style.display = (!st || !st.held) ? 'flex' : 'none';
+                    }
+                }).catch(function () {});
+            }
+
+            // Automatic Contact Sync Migration once per session (12s after startup)
+            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v3') !== 'true') {
+                window._contactsMigrationScheduled = true;
+                setTimeout(function () {
+                    if (typeof window.startAutomaticContactSync === 'function') {
+                        window.startAutomaticContactSync(false);
+                    }
+                }, 12000);
+            }
+        }
+
     } catch (e) {
         if (typeof window.logAppError === 'function') window.logAppError("checkAdminStatus", e.message);
     }
@@ -14871,7 +14893,8 @@ window.startAutomaticContactSync = async function (isManual) {
         } catch (batchErr) {
             console.warn("NativeContacts batch sync error:", batchErr);
             if (String(batchErr).includes("Permission denied")) {
-                window._isSyncingContacts = false;
+                try { localStorage.setItem('ds_contacts_account_migrated_v3', 'true'); } catch(e){}
+    window._isSyncingContacts = false;
                 if (banner) banner.style.display = 'none';
                 if (isManual) alert("Contacts permission not granted. Please allow Contacts permission in Android App Settings.");
                 return;
@@ -14893,6 +14916,7 @@ window.startAutomaticContactSync = async function (isManual) {
         bannerCount.innerText = '✅ Complete';
         setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
+    try { localStorage.setItem('ds_contacts_account_migrated_v3', 'true'); } catch(e){}
     window._isSyncingContacts = false;
     if (isManual) {
         alert("✅ Phonebook Contact Sync Complete!\n\n• Contacts Processed: " + completedCount + "\n• New Added: " + totalAdded + "\n• Existing Updated: " + totalUpdated + (lastAccountUsed ? "\n• Target Account: " + lastAccountUsed : ""));
@@ -15218,8 +15242,9 @@ window.startCRMCall = function (code, name, phone, station, agent, balance, drCr
         return;
     }
     var clean10 = String(phone).replace(/\D/g, '').slice(-10);
+    var targetCode = decodeURIComponent(String(code || ''));
     var callCtx = {
-        code: decodeURIComponent(String(code || '')),
+        code: targetCode,
         name: name || '',
         phone: clean10,
         station: station || '',
@@ -15232,6 +15257,14 @@ window.startCRMCall = function (code, name, phone, station, agent, balance, drCr
     try {
         localStorage.setItem('ds_active_tracked_call', JSON.stringify(callCtx));
     } catch(e){}
+
+    // Immediately open Customer Detail Reports with live call context BEFORE dialing
+    if (targetCode && typeof window.openCustomerReportsModal === 'function') {
+        try {
+            window.openCustomerReportsModal(targetCode, true);
+        } catch(e){}
+    }
+
     window.location.href = 'tel:+91' + clean10;
 };
 window.initiateTrackedCall = window.startCRMCall;
@@ -15368,6 +15401,9 @@ window.checkLiveCallOnResume = async function () {
             if (callInfo && callInfo.phone && callInfo.ageMs != null && callInfo.ageMs < 900000) { // within 15 min
                 if (window._lastHandledCallTimestamp !== callInfo.timestamp) {
                     window._lastHandledCallTimestamp = callInfo.timestamp;
+                    if (typeof window.Capacitor.Plugins.CallMonitor.clearLastDetectedCall === 'function') {
+                        try { await window.Capacitor.Plugins.CallMonitor.clearLastDetectedCall(); } catch(e){}
+                    }
                     window.handleDetectedNativeCall(callInfo.phone, callInfo.direction);
                     return;
                 }
@@ -15510,6 +15546,8 @@ window.enableCallPopupSuperAdmin = async function () {
         var fn = (typeof plugin.requestCallerIdRole === 'function') ? plugin.requestCallerIdRole : plugin.requestCallScreeningRole;
         var res = await fn.call(plugin);
         if (res && res.held) {
+            var banner = document.getElementById('enableCallPopupBanner');
+            if (banner) banner.style.display = 'none';
             alert("✅ Caller ID & Live Call Catching is ACTIVE!\n\nIncoming calls from party numbers will now automatically open Customer Reports with 1-tap CRM.");
         } else if (res && res.status === 'unsupported') {
             alert("Call Screening is supported on Android 10 (API 29) or higher.");

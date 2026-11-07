@@ -4,6 +4,7 @@ import android.Manifest;
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.content.ContentProviderOperation;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.net.Uri;
@@ -37,19 +38,127 @@ public class NativeContactsPlugin extends Plugin {
     public static final String ACCOUNT_NAME = "Durga Sarees ERP";
     private static volatile boolean sGmailCleaned = false;
 
-    private void ensureDurgaAccount() {
+    private static class AccountInfo {
+        final String accountName;
+        final String accountType;
+        final long groupId;
+
+        AccountInfo(String accountName, String accountType, long groupId) {
+            this.accountName = accountName;
+            this.accountType = accountType;
+            this.groupId = groupId;
+        }
+    }
+
+    private AccountInfo ensureDurgaAccount() {
+        String targetName = ACCOUNT_NAME;
+        String targetType = ACCOUNT_TYPE;
         try {
             AccountManager am = AccountManager.get(getContext());
-            Account erpAccount = new Account(ACCOUNT_NAME, ACCOUNT_TYPE);
-            am.addAccountExplicitly(erpAccount, null, null);
+            try {
+                Account erpAccount = new Account(ACCOUNT_NAME, ACCOUNT_TYPE);
+                am.addAccountExplicitly(erpAccount, null, null);
+            } catch (Throwable ignored) {}
 
-            ContentValues cv = new ContentValues();
-            cv.put(ContactsContract.Settings.ACCOUNT_NAME, ACCOUNT_NAME);
-            cv.put(ContactsContract.Settings.ACCOUNT_TYPE, ACCOUNT_TYPE);
-            cv.put(ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
-            cv.put(ContactsContract.Settings.SHOULD_SYNC, 0);
-            getContext().getContentResolver().insert(ContactsContract.Settings.CONTENT_URI, cv);
-        } catch (Throwable ignored) {}
+            Account[] accts = null;
+            try {
+                accts = am.getAccountsByType(ACCOUNT_TYPE);
+            } catch (Throwable ignored) {}
+
+            boolean customAccountValid = false;
+            if (accts != null) {
+                for (Account a : accts) {
+                    if (ACCOUNT_NAME.equals(a.name)) {
+                        customAccountValid = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!customAccountValid) {
+                // Fallback: Samsung local phone account or device default
+                Account[] secAccts = null;
+                try {
+                    secAccts = am.getAccountsByType("vnd.sec.contact.phone");
+                } catch (Throwable ignored) {}
+                if (secAccts != null && secAccts.length > 0) {
+                    targetType = "vnd.sec.contact.phone";
+                    targetName = secAccts[0].name != null ? secAccts[0].name : "Phone";
+                } else {
+                    targetName = null;
+                    targetType = null;
+                }
+            }
+
+            // Both update and insert into ContactsContract.Settings
+            if (targetType != null && targetName != null) {
+                ContentValues cv = new ContentValues();
+                cv.put(ContactsContract.Settings.ACCOUNT_NAME, targetName);
+                cv.put(ContactsContract.Settings.ACCOUNT_TYPE, targetType);
+                cv.put(ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
+                cv.put(ContactsContract.Settings.SHOULD_SYNC, 1);
+                try {
+                    int updated = getContext().getContentResolver().update(
+                        ContactsContract.Settings.CONTENT_URI,
+                        cv,
+                        ContactsContract.Settings.ACCOUNT_NAME + " = ? AND " + ContactsContract.Settings.ACCOUNT_TYPE + " = ?",
+                        new String[]{ targetName, targetType }
+                    );
+                    if (updated == 0) {
+                        getContext().getContentResolver().insert(ContactsContract.Settings.CONTENT_URI, cv);
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            // Ensure visible Contact Group exists
+            long groupId = -1;
+            if (targetType != null && targetName != null) {
+                Cursor gc = null;
+                try {
+                    gc = getContext().getContentResolver().query(
+                        ContactsContract.Groups.CONTENT_URI,
+                        new String[]{ ContactsContract.Groups._ID },
+                        ContactsContract.Groups.ACCOUNT_NAME + " = ? AND " +
+                        ContactsContract.Groups.ACCOUNT_TYPE + " = ? AND " +
+                        ContactsContract.Groups.TITLE + " = ? AND " +
+                        ContactsContract.Groups.DELETED + " = 0",
+                        new String[]{ targetName, targetType, "Durga Sarees ERP" },
+                        null
+                    );
+                    if (gc != null && gc.moveToFirst()) {
+                        int gIdx = gc.getColumnIndex(ContactsContract.Groups._ID);
+                        if (gIdx >= 0) groupId = gc.getLong(gIdx);
+                    }
+                } catch (Throwable ignored) {
+                } finally {
+                    if (gc != null) {
+                        try { gc.close(); } catch (Throwable ignored) {}
+                    }
+                }
+
+                if (groupId <= 0) {
+                    try {
+                        ContentValues gv = new ContentValues();
+                        gv.put(ContactsContract.Groups.ACCOUNT_NAME, targetName);
+                        gv.put(ContactsContract.Groups.ACCOUNT_TYPE, targetType);
+                        gv.put(ContactsContract.Groups.TITLE, "Durga Sarees ERP");
+                        gv.put(ContactsContract.Groups.GROUP_VISIBLE, 1);
+                        gv.put(ContactsContract.Groups.AUTO_ADD, 1);
+                        Uri gUri = ContactsContract.Groups.CONTENT_URI.buildUpon()
+                            .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                            .build();
+                        Uri insUri = getContext().getContentResolver().insert(gUri, gv);
+                        if (insUri != null) {
+                            groupId = ContentUris.parseId(insUri);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+
+            return new AccountInfo(targetName, targetType, groupId);
+        } catch (Throwable ignored) {
+            return new AccountInfo(targetName, targetType, -1);
+        }
     }
 
     private int cleanGmailErpContacts() {
@@ -140,8 +249,11 @@ public class NativeContactsPlugin extends Plugin {
 
             new Thread(() -> {
                 try {
-                    // 1. Ensure dedicated "Durga Sarees ERP" account exists
-                    ensureDurgaAccount();
+                    // 1. Ensure dedicated "Durga Sarees ERP" account exists and get group
+                    AccountInfo acctInfo = ensureDurgaAccount();
+                    String targetAccountName = acctInfo.accountName;
+                    String targetAccountType = acctInfo.accountType;
+                    long groupId = acctInfo.groupId;
 
                     // 2. Perform one-time cleanup of legacy ERP contacts from com.google
                     int cleanedCount = 0;
@@ -150,17 +262,22 @@ public class NativeContactsPlugin extends Plugin {
                         sGmailCleaned = true;
                     }
 
-                    // 3. Map existing contacts inside the "Durga Sarees ERP" account
+                    // 3. Map existing contacts inside the target account
                     Map<String, Long> existingPhoneToRawId = new HashMap<>();
                     Map<Long, Set<String>> rawIdToExistingNumbers = new HashMap<>();
+
+                    String querySelection = (targetAccountType != null)
+                        ? (ContactsContract.RawContacts.ACCOUNT_TYPE + " = ?")
+                        : (ContactsContract.RawContacts.ACCOUNT_TYPE + " IS NULL");
+                    String[] queryArgs = (targetAccountType != null) ? new String[]{ targetAccountType } : null;
 
                     Cursor cursor = null;
                     try {
                         cursor = getContext().getContentResolver().query(
                             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                             new String[]{ ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.RAW_CONTACT_ID },
-                            ContactsContract.RawContacts.ACCOUNT_TYPE + " = ?",
-                            new String[]{ ACCOUNT_TYPE },
+                            querySelection,
+                            queryArgs,
                             null
                         );
                         if (cursor != null) {
@@ -192,8 +309,16 @@ public class NativeContactsPlugin extends Plugin {
                     }
 
                     ArrayList<ContentProviderOperation> ops = new ArrayList<>();
+                    Set<String> seenInThisBatch = new HashSet<>();
                     int addedCount = 0;
                     int updatedCount = 0;
+
+                    Uri rawUriWithSync = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
+                        .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                        .build();
+                    Uri dataUriWithSync = ContactsContract.Data.CONTENT_URI.buildUpon()
+                        .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                        .build();
 
                     for (int i = 0; i < items.length(); i++) {
                         JSONObject item = items.optJSONObject(i);
@@ -218,6 +343,17 @@ public class NativeContactsPlugin extends Plugin {
                         }
                         if (cleanPhones.isEmpty()) continue;
 
+                        // Deduplicate duplicate party accounts sharing phone numbers in the same batch
+                        boolean alreadySeen = false;
+                        for (String p10 : cleanPhones) {
+                            if (seenInThisBatch.contains(p10)) {
+                                alreadySeen = true;
+                                break;
+                            }
+                        }
+                        if (alreadySeen) continue;
+                        seenInThisBatch.addAll(cleanPhones);
+
                         Long matchedRawId = null;
                         for (String p10 : cleanPhones) {
                             if (existingPhoneToRawId.containsKey(p10)) {
@@ -227,7 +363,7 @@ public class NativeContactsPlugin extends Plugin {
                         }
 
                         if (matchedRawId != null) {
-                            // Existing Contact in Durga Sarees ERP -> update phone numbers if missing
+                            // Existing Contact in account -> update phone numbers if missing
                             Set<String> existingNumbers = rawIdToExistingNumbers.get(matchedRawId);
                             if (existingNumbers == null) {
                                 existingNumbers = new HashSet<>();
@@ -236,7 +372,7 @@ public class NativeContactsPlugin extends Plugin {
                             boolean updatedAny = false;
                             for (String p10 : cleanPhones) {
                                 if (!existingNumbers.contains(p10)) {
-                                    ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                                    ops.add(ContentProviderOperation.newInsert(dataUriWithSync)
                                         .withValue(ContactsContract.Data.RAW_CONTACT_ID, matchedRawId)
                                         .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
                                         .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, "+91" + p10)
@@ -249,21 +385,32 @@ public class NativeContactsPlugin extends Plugin {
                             }
                             if (updatedAny) updatedCount++;
                         } else {
-                            // New Contact -> insert exclusively into Durga Sarees ERP account
+                            // New Contact -> insert with CALLER_IS_SYNCADAPTER
                             int backRef = ops.size();
-                            ContentProviderOperation.Builder rawBuilder = ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI);
-                            rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, ACCOUNT_TYPE);
-                            rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_NAME, ACCOUNT_NAME);
+                            ContentProviderOperation.Builder rawBuilder = ContentProviderOperation.newInsert(rawUriWithSync);
+                            if (targetAccountType != null && targetAccountName != null) {
+                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, targetAccountType);
+                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_NAME, targetAccountName);
+                            }
                             ops.add(rawBuilder.build());
 
-                            ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                            ops.add(ContentProviderOperation.newInsert(dataUriWithSync)
                                 .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
                                 .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
                                 .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
                                 .build());
 
+                            // Attach to visible Group if available
+                            if (groupId > 0) {
+                                ops.add(ContentProviderOperation.newInsert(dataUriWithSync)
+                                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
+                                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)
+                                    .withValue(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID, groupId)
+                                    .build());
+                            }
+
                             if (org != null && !org.trim().isEmpty()) {
-                                ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                                ops.add(ContentProviderOperation.newInsert(dataUriWithSync)
                                     .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
                                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE)
                                     .withValue(ContactsContract.CommonDataKinds.Organization.COMPANY, org.trim())
@@ -272,7 +419,7 @@ public class NativeContactsPlugin extends Plugin {
 
                             for (int pi = 0; pi < cleanPhones.size(); pi++) {
                                 String p10 = cleanPhones.get(pi);
-                                ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                                ops.add(ContentProviderOperation.newInsert(dataUriWithSync)
                                     .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
                                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
                                     .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, "+91" + p10)
@@ -302,7 +449,8 @@ public class NativeContactsPlugin extends Plugin {
                     ret.put("added", addedCount);
                     ret.put("updated", updatedCount);
                     ret.put("gmailCleaned", cleanedCount);
-                    ret.put("accountUsed", "Durga Sarees ERP (" + ACCOUNT_TYPE + ")");
+                    ret.put("groupId", groupId);
+                    ret.put("accountUsed", (targetAccountName != null ? targetAccountName : "Local Device") + " (" + (targetAccountType != null ? targetAccountType : "local") + ")");
                     call.resolve(ret);
                 } catch (Throwable t) {
                     call.reject("Native contact sync failed: " + t.getMessage());

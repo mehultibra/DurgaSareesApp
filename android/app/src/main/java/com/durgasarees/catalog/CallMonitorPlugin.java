@@ -1,5 +1,6 @@
 package com.durgasarees.catalog;
 
+import android.Manifest;
 import android.app.role.RoleManager;
 import android.content.Context;
 import android.content.Intent;
@@ -7,12 +8,21 @@ import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.os.Build;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
-@CapacitorPlugin(name = "CallMonitor")
+@CapacitorPlugin(
+    name = "CallMonitor",
+    permissions = {
+        @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = "notifications")
+    }
+)
 public class CallMonitorPlugin extends Plugin {
     private static volatile boolean isEnabled = false;
     private static CallMonitorPlugin instance;
@@ -68,7 +78,45 @@ public class CallMonitorPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void checkCallerIdRole(PluginCall call) {
+        try {
+            boolean held = false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                RoleManager rm = (RoleManager) getContext().getSystemService(Context.ROLE_SERVICE);
+                held = rm != null && rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING);
+            }
+            boolean notifGranted = true;
+            if (Build.VERSION.SDK_INT >= 33) {
+                notifGranted = getPermissionState("notifications") == PermissionState.GRANTED;
+            }
+            JSObject ret = new JSObject();
+            ret.put("held", held);
+            ret.put("notificationsGranted", notifGranted);
+            call.resolve(ret);
+        } catch (Throwable t) {
+            call.reject("checkCallerIdRole error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
     public void requestCallerIdRole(PluginCall call) {
+        try {
+            if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
+                requestPermissionForAlias("notifications", call, "notificationsCallback");
+                return;
+            }
+            launchCallScreeningRoleIntent(call);
+        } catch (Throwable t) {
+            call.reject("requestCallerIdRole error: " + t.getMessage());
+        }
+    }
+
+    @PermissionCallback
+    private void notificationsCallback(PluginCall call) {
+        launchCallScreeningRoleIntent(call);
+    }
+
+    private void launchCallScreeningRoleIntent(PluginCall call) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 RoleManager rm = (RoleManager) getContext().getSystemService(Context.ROLE_SERVICE);
@@ -90,11 +138,11 @@ public class CallMonitorPlugin extends Plugin {
             ret.put("held", false);
             call.resolve(ret);
         } catch (Throwable t) {
-            call.reject("requestCallerIdRole error: " + t.getMessage());
+            call.reject("launchCallScreeningRoleIntent error: " + t.getMessage());
         }
     }
 
-    @com.getcapacitor.annotation.ActivityCallback
+    @ActivityCallback
     private void callScreeningRoleCallback(PluginCall call, androidx.activity.result.ActivityResult result) {
         try {
             boolean held = false;
