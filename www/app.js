@@ -1130,6 +1130,8 @@ window.findAccountsByPhone = async function (phoneStr) {
                         agent: f.agent ? f.agent.stringValue : '',
                         transport: f.transport ? f.transport.stringValue : '',
                         gst: f.gst ? f.gst.stringValue : '',
+                        totalDebit: f.totalDebit ? Number(f.totalDebit.integerValue || f.totalDebit.doubleValue || 0) : (f.totDr ? Number(f.totDr.integerValue || f.totDr.doubleValue || 0) : 0),
+                        totalSales: f.totalSales ? Number(f.totalSales.integerValue || f.totalSales.doubleValue || 0) : (f.totalDebit ? Number(f.totalDebit.integerValue || f.totalDebit.doubleValue || 0) : 0),
                         role: aRole,
                         isAgent: aRole === 'agent'
                     };
@@ -9142,6 +9144,14 @@ window.openLiveAdmin = function () {
 
     if (window.liveAdminInterval) clearInterval(window.liveAdminInterval);
 
+    if ((!window._compiledCustomersList || !window._compiledCustomersList.length) && typeof window.loadAccountingDirectoryData === 'function') {
+        window.loadAccountingDirectoryData(false).then(function () {
+            if (typeof window.refreshLiveApprovalBoxes === 'function') {
+                window.refreshLiveApprovalBoxes();
+            }
+        }).catch(function () {});
+    }
+
     function parseFirestoreRest(fields) {
         if (!fields) return {};
         let result = {};
@@ -9696,7 +9706,7 @@ window.openLiveAdmin = function () {
                         ${viewingHtml}
                         ${historyHtml}
                         ${(d.cartSummary && d.cartSummary.length) ? `<div style="font-size:12px; color:#333; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;"><b>Cart:</b><br>${d.cartSummary.join('<br>')}</div>` : ''}
-                        <div id="approval_box_${safeDocId}">${approvalHtml}</div>
+                        <div id="approval_box_${safeDocId}" data-doc-id="${esc(docId)}" data-safe-id="${safeDocId}">${approvalHtml}</div>
                     </div>`;
                     contentEl.insertAdjacentHTML('beforeend', html);
                 });
@@ -9749,6 +9759,20 @@ window.closeLiveAdmin = function () {
     }
 };
 
+window.refreshLiveApprovalBoxes = function () {
+    var boxes = document.querySelectorAll('[id^="approval_box_"]');
+    boxes.forEach(function (box) {
+        var docId = box.getAttribute('data-doc-id');
+        var safeDocId = box.getAttribute('data-safe-id');
+        if (docId && safeDocId && window.adminCustomerCache && window.adminCustomerCache[docId]) {
+            var uData = window.adminCustomerCache[docId];
+            if (!uData.isApproved && uData.approvalStatus !== 'approved' && uData.matchedAccounts && uData.matchedAccounts.length) {
+                box.innerHTML = window.renderApprovalBoxHtml(docId, safeDocId, uData);
+            }
+        }
+    });
+};
+
 // 📋 Render Account Approval & Linking Card
 window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
     if (!uData || uData.isAdmin || uData.role === 'admin') return '';
@@ -9781,9 +9805,19 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
         var mRole = (m.role === 'agent' || m.isAgent) ? 'agent' : 'customer';
         var cleanCode = (m.code || '').replace(/'/g, "\\'");
         var cleanName = (m.name || '').replace(/'/g, "\\'");
-        var sCust = (window._compiledCustomersList || []).find(x => x.c === m.code || x.n === m.name);
-        var sGst = m.gst || (sCust ? sCust.g : '');
-        var sSales = (sCust && sCust.totDr) ? ('₹ ' + sCust.totDr.toLocaleString('en-IN')) : '';
+        var mCodeUpper = String(m.code || '').trim().toUpperCase();
+        var mNameUpper = String(m.name || '').trim().toUpperCase();
+        var sCust = (window._compiledCustomersList || []).find(x => {
+            var xc = String(x.c || '').trim().toUpperCase();
+            var xn = String(x.n || '').trim().toUpperCase();
+            return (mCodeUpper && xc === mCodeUpper) || (mNameUpper && xn === mNameUpper);
+        });
+        var sGst = (m.gst || (sCust ? (sCust.g || sCust.gst) : '') || '').trim();
+        var sSalesNum = Number(
+            (sCust && (sCust.totDr || sCust.totalDebit || sCust.totalSales)) ||
+            m.totalSales || m.totalDebit || m.sales || m.totDr || 0
+        );
+        var sSales = sSalesNum > 0 ? ('₹ ' + sSalesNum.toLocaleString('en-IN')) : (sCust ? '₹ 0' : '');
         return `
             <div style="background:#fffbeb; border:1px solid #fde68a; padding:8px 10px; border-radius:6px; margin-top:8px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -9794,14 +9828,16 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
                         ${mRole === 'agent' ? 'AGENT' : 'CUSTOMER'}
                     </span>
                 </div>
-                <div style="font-size:12px; color:#1e293b; margin-bottom:4px;">
+                <div style="font-size:12px; color:#1e293b; margin-bottom:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                     <b>Auto-Matched:</b> ${esc(m.name)} ${m.station ? '(' + esc(m.station) + ')' : ''} [${esc(m.code)}]
+                    <span onclick="event.stopPropagation(); window.openCustomerReportsModal('${esc(m.code)}')" style="background:#fdf2f8; border:1px solid #fbcfe8; color:#be185d; border-radius:3px; font-size:9px; font-weight:bold; padding:1px 5px; cursor:pointer; display:inline-flex; align-items:center; gap:2px;" title="View ERP details for ${esc(m.name)}">
+                        <i class="fas fa-chart-line"></i> ERP
+                    </span>
                 </div>
-                ${(sGst || sSales) ? `
                 <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:10px; flex-wrap:wrap;">
-                    ${sGst ? `<span style="background:#e0f2fe; color:#0369a1; padding:1px 5px; border-radius:3px; font-weight:600;">GST: ${esc(sGst)}</span>` : ''}
-                    ${sSales ? `<span style="background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:3px; font-weight:bold;">Sales: ${sSales}</span>` : ''}
-                </div>` : ''}
+                    ${sGst ? `<span style="background:#e0f2fe; color:#0369a1; padding:1px 5px; border-radius:3px; font-weight:600;"><i class="fas fa-file-invoice" style="font-size:9px;"></i> GST: ${esc(sGst)}</span>` : `<span style="background:#f1f5f9; color:#64748b; padding:1px 5px; border-radius:3px; font-size:9px;">GST: Unregistered</span>`}
+                    ${sSales ? `<span style="background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:3px; font-weight:bold;"><i class="fas fa-rupee-sign" style="font-size:9px;"></i> Sales: ${sSales}</span>` : `<span style="background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:3px; font-weight:bold;"><i class="fas fa-rupee-sign" style="font-size:9px;"></i> Sales: ₹ 0</span>`}
+                </div>
                 <button type="button" onclick="window.approveUserAccount('${docId}', '${cleanCode}', '${cleanName}', '${mRole}')"
                         style="background:#059669; color:#fff; border:none; padding:5px 12px; border-radius:5px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
                     <i class="fas fa-check-circle"></i> Approve &amp; Link Permanently
@@ -9827,9 +9863,19 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
             <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;">
                 ${matches.map((acc, idx) => {
                     var aRole = (acc.role === 'agent' || acc.isAgent) ? 'agent' : 'customer';
-                    var custInfo = (window._compiledCustomersList || []).find(x => x.c === acc.code || x.n === acc.name);
-                    var gstNum = acc.gst || (custInfo ? custInfo.g : '');
-                    var totalSalesVal = (custInfo && custInfo.totDr) ? ('₹ ' + custInfo.totDr.toLocaleString('en-IN')) : '';
+                    var accCodeUpper = String(acc.code || '').trim().toUpperCase();
+                    var accNameUpper = String(acc.name || '').trim().toUpperCase();
+                    var custInfo = (window._compiledCustomersList || []).find(x => {
+                        var xc = String(x.c || '').trim().toUpperCase();
+                        var xn = String(x.n || '').trim().toUpperCase();
+                        return (accCodeUpper && xc === accCodeUpper) || (accNameUpper && xn === accNameUpper);
+                    });
+                    var gstNum = (acc.gst || (custInfo ? (custInfo.g || custInfo.gst) : '') || '').trim();
+                    var salesAmt = Number(
+                        (custInfo && (custInfo.totDr || custInfo.totalDebit || custInfo.totalSales)) ||
+                        acc.totalSales || acc.totalDebit || acc.sales || acc.totDr || 0
+                    );
+                    var totalSalesVal = salesAmt > 0 ? ('₹ ' + salesAmt.toLocaleString('en-IN')) : (custInfo ? '₹ 0' : '');
                     return `
                         <label style="display:flex; align-items:flex-start; gap:8px; background:#fff; border:1px solid #cbd5e1; padding:6px 8px; border-radius:5px; cursor:pointer;">
                             <input type="radio" name="link_acc_${safeDocId}" value="${esc(acc.code)}" ${idx === 0 ? 'checked' : ''} data-name="${esc(acc.name)}" data-role="${aRole}" style="margin-top:2px;">
@@ -9839,12 +9885,14 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
                                         ${aRole === 'agent' ? 'AGENT' : 'PARTY'}
                                     </span>
                                     <b>${esc(acc.name)}</b> ${acc.station ? '(' + esc(acc.station) + ')' : ''} [${esc(acc.code)}]
+                                    <span onclick="event.stopPropagation(); window.openCustomerReportsModal('${esc(acc.code)}')" style="background:#fdf2f8; border:1px solid #fbcfe8; color:#be185d; border-radius:3px; font-size:9px; font-weight:bold; padding:1px 5px; cursor:pointer; display:inline-flex; align-items:center; gap:2px;" title="View ERP details for ${esc(acc.name)}">
+                                        <i class="fas fa-chart-line"></i> ERP
+                                    </span>
                                 </div>
-                                ${(gstNum || totalSalesVal) ? `
                                 <div style="display:flex; gap:6px; align-items:center; margin-top:3px; font-size:10px; flex-wrap:wrap;">
-                                    ${gstNum ? `<span style="background:#e0f2fe; color:#0369a1; padding:1px 5px; border-radius:3px; font-weight:600;">GST: ${esc(gstNum)}</span>` : ''}
-                                    ${totalSalesVal ? `<span style="background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:3px; font-weight:bold;">Total Sales: ${totalSalesVal}</span>` : ''}
-                                </div>` : ''}
+                                    ${gstNum ? `<span style="background:#e0f2fe; color:#0369a1; padding:1px 5px; border-radius:3px; font-weight:600;"><i class="fas fa-file-invoice" style="font-size:9px;"></i> GST: ${esc(gstNum)}</span>` : `<span style="background:#f1f5f9; color:#64748b; padding:1px 5px; border-radius:3px; font-size:9px;">GST: Unregistered</span>`}
+                                    ${totalSalesVal ? `<span style="background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:3px; font-weight:bold;"><i class="fas fa-rupee-sign" style="font-size:9px;"></i> Sales: ${totalSalesVal}</span>` : `<span style="background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:3px; font-weight:bold;"><i class="fas fa-rupee-sign" style="font-size:9px;"></i> Sales: ₹ 0</span>`}
+                                </div>
                             </div>
                         </label>
                     `;
@@ -9865,7 +9913,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
         return;
     }
 
-    var safeId = docId.replace(/\+/g, '');
+    var safeId = docId.replace(/\+/g, '').replace(/[^a-zA-Z0-9_]/g, '_');
     var selectedCode = directCode || '';
     var selectedName = directName || '';
     var selectedRole = directRole || 'customer';

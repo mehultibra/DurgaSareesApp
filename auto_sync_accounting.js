@@ -615,6 +615,8 @@ async function syncAccountingData() {
                 agent: finalAgent,
                 transport: finalTransport,
                 gst: finalGst,
+                totalDebit: Math.round(totalDrByParty.get(code) || 0),
+                totalSales: Math.round(totalDrByParty.get(code) || 0),
                 role: role
             });
         });
@@ -677,6 +679,8 @@ async function syncAccountingData() {
                     agent: finalAgent,
                     transport: link.transport || '',
                     gst: link.gst || '',
+                    totalDebit: 0,
+                    totalSales: 0,
                     role: role
                 });
             }
