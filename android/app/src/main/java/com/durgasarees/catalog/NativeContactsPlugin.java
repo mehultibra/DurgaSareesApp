@@ -1,8 +1,12 @@
 package com.durgasarees.catalog;
 
 import android.Manifest;
+import android.accounts.Account;
+import android.accounts.AccountManager;
 import android.content.ContentProviderOperation;
+import android.content.ContentValues;
 import android.database.Cursor;
+import android.net.Uri;
 import android.provider.ContactsContract;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -29,6 +33,93 @@ import java.util.Set;
     }
 )
 public class NativeContactsPlugin extends Plugin {
+    public static final String ACCOUNT_TYPE = "com.durgasarees.catalog";
+    public static final String ACCOUNT_NAME = "Durga Sarees ERP";
+    private static volatile boolean sGmailCleaned = false;
+
+    private void ensureDurgaAccount() {
+        try {
+            AccountManager am = AccountManager.get(getContext());
+            Account erpAccount = new Account(ACCOUNT_NAME, ACCOUNT_TYPE);
+            am.addAccountExplicitly(erpAccount, null, null);
+
+            ContentValues cv = new ContentValues();
+            cv.put(ContactsContract.Settings.ACCOUNT_NAME, ACCOUNT_NAME);
+            cv.put(ContactsContract.Settings.ACCOUNT_TYPE, ACCOUNT_TYPE);
+            cv.put(ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
+            cv.put(ContactsContract.Settings.SHOULD_SYNC, 0);
+            getContext().getContentResolver().insert(ContactsContract.Settings.CONTENT_URI, cv);
+        } catch (Throwable ignored) {}
+    }
+
+    private int cleanGmailErpContacts() {
+        int deleted = 0;
+        Cursor c = null;
+        try {
+            c = getContext().getContentResolver().query(
+                ContactsContract.RawContacts.CONTENT_URI,
+                new String[]{ ContactsContract.RawContacts._ID },
+                ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'com.google' AND " +
+                ContactsContract.RawContacts.DELETED + " = 0 AND (" +
+                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%[%' OR " +
+                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%(Ag:%')",
+                null,
+                null
+            );
+            if (c != null) {
+                int idIdx = c.getColumnIndex(ContactsContract.RawContacts._ID);
+                ArrayList<ContentProviderOperation> deleteOps = new ArrayList<>();
+                Uri uriWithSync = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
+                    .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                    .build();
+
+                while (c.moveToNext()) {
+                    long rawId = c.getLong(idIdx);
+                    deleteOps.add(ContentProviderOperation.newDelete(uriWithSync)
+                        .withSelection(ContactsContract.RawContacts._ID + " = ?", new String[]{ String.valueOf(rawId) })
+                        .build());
+                    deleted++;
+
+                    if (deleteOps.size() >= 100) {
+                        try {
+                            getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, deleteOps);
+                        } catch (Throwable ignored) {}
+                        deleteOps.clear();
+                    }
+                }
+                if (!deleteOps.isEmpty()) {
+                    try {
+                        getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, deleteOps);
+                    } catch (Throwable ignored) {}
+                    deleteOps.clear();
+                }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (c != null) {
+                try { c.close(); } catch (Throwable ignored) {}
+            }
+        }
+        return deleted;
+    }
+
+    @PluginMethod
+    public void cleanGmailContacts(PluginCall call) {
+        try {
+            if (getPermissionState("contacts") != PermissionState.GRANTED) {
+                requestPermissionForAlias("contacts", call, "contactsPermsCallback");
+                return;
+            }
+            new Thread(() -> {
+                int count = cleanGmailErpContacts();
+                JSObject ret = new JSObject();
+                ret.put("deleted", count);
+                call.resolve(ret);
+            }).start();
+        } catch (Throwable t) {
+            call.reject("cleanGmailContacts error: " + t.getMessage());
+        }
+    }
 
     @PluginMethod
     public void syncBatch(PluginCall call) {
@@ -49,96 +140,17 @@ public class NativeContactsPlugin extends Plugin {
 
             new Thread(() -> {
                 try {
-                    String targetAccountType = null;
-                    String targetAccountName = null;
-                    Long myContactsGroupId = null;
+                    // 1. Ensure dedicated "Durga Sarees ERP" account exists
+                    ensureDurgaAccount();
 
-                    // 1. Detect target primary visible account (Google preferred, then Samsung)
-                    Cursor actCursor = null;
-                    try {
-                        actCursor = getContext().getContentResolver().query(
-                            ContactsContract.RawContacts.CONTENT_URI,
-                            new String[]{ ContactsContract.RawContacts.ACCOUNT_TYPE, ContactsContract.RawContacts.ACCOUNT_NAME },
-                            ContactsContract.RawContacts.ACCOUNT_TYPE + " IS NOT NULL AND " + ContactsContract.RawContacts.DELETED + "=0",
-                            null,
-                            null
-                        );
-                        if (actCursor != null) {
-                            int typeIdx = actCursor.getColumnIndex(ContactsContract.RawContacts.ACCOUNT_TYPE);
-                            int nameIdx = actCursor.getColumnIndex(ContactsContract.RawContacts.ACCOUNT_NAME);
-                            String fallbackType = null;
-                            String fallbackName = null;
-
-                            while (actCursor.moveToNext()) {
-                                String at = actCursor.getString(typeIdx);
-                                String an = actCursor.getString(nameIdx);
-                                if (at != null && !at.trim().isEmpty() && an != null && !an.trim().isEmpty()) {
-                                    if ("com.google".equalsIgnoreCase(at)) {
-                                        targetAccountType = at;
-                                        targetAccountName = an;
-                                        break; // Preferred
-                                    } else if (at.toLowerCase().contains("sec.contact") || at.toLowerCase().contains("samsung")) {
-                                        if (targetAccountType == null) {
-                                            targetAccountType = at;
-                                            targetAccountName = an;
-                                        }
-                                    } else if (fallbackType == null) {
-                                        fallbackType = at;
-                                        fallbackName = an;
-                                    }
-                                }
-                            }
-                            if (targetAccountType == null && fallbackType != null) {
-                                targetAccountType = fallbackType;
-                                targetAccountName = fallbackName;
-                            }
-                        }
-                    } catch (Throwable t) {
-                        // Ignore
-                    } finally {
-                        if (actCursor != null) {
-                            try { actCursor.close(); } catch (Throwable ignored) {}
-                        }
+                    // 2. Perform one-time cleanup of legacy ERP contacts from com.google
+                    int cleanedCount = 0;
+                    if (!sGmailCleaned) {
+                        cleanedCount = cleanGmailErpContacts();
+                        sGmailCleaned = true;
                     }
 
-                    // 2. Locate My Contacts group for the account so contacts display in main list
-                    if (targetAccountType != null && targetAccountName != null) {
-                        Cursor grpCursor = null;
-                        try {
-                            grpCursor = getContext().getContentResolver().query(
-                                ContactsContract.Groups.CONTENT_URI,
-                                new String[]{ ContactsContract.Groups._ID, ContactsContract.Groups.TITLE, ContactsContract.Groups.AUTO_ADD },
-                                ContactsContract.Groups.ACCOUNT_TYPE + "=? AND " + ContactsContract.Groups.ACCOUNT_NAME + "=? AND " + ContactsContract.Groups.DELETED + "=0",
-                                new String[]{ targetAccountType, targetAccountName },
-                                null
-                            );
-                            if (grpCursor != null) {
-                                int idIdx = grpCursor.getColumnIndex(ContactsContract.Groups._ID);
-                                int titleIdx = grpCursor.getColumnIndex(ContactsContract.Groups.TITLE);
-                                int autoAddIdx = grpCursor.getColumnIndex(ContactsContract.Groups.AUTO_ADD);
-
-                                while (grpCursor.moveToNext()) {
-                                    long gid = grpCursor.getLong(idIdx);
-                                    String title = (titleIdx >= 0) ? grpCursor.getString(titleIdx) : "";
-                                    int autoAdd = (autoAddIdx >= 0) ? grpCursor.getInt(autoAddIdx) : 0;
-
-                                    if (autoAdd != 0 || (title != null && (title.contains("My Contacts") || title.equalsIgnoreCase("System Group: My Contacts")))) {
-                                        myContactsGroupId = gid;
-                                        break;
-                                    } else if (myContactsGroupId == null) {
-                                        myContactsGroupId = gid;
-                                    }
-                                }
-                            }
-                        } catch (Throwable t) {
-                            // Ignore
-                        } finally {
-                            if (grpCursor != null) {
-                                try { grpCursor.close(); } catch (Throwable ignored) {}
-                            }
-                        }
-                    }
-
+                    // 3. Map existing contacts inside the "Durga Sarees ERP" account
                     Map<String, Long> existingPhoneToRawId = new HashMap<>();
                     Map<Long, Set<String>> rawIdToExistingNumbers = new HashMap<>();
 
@@ -147,8 +159,8 @@ public class NativeContactsPlugin extends Plugin {
                         cursor = getContext().getContentResolver().query(
                             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                             new String[]{ ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.RAW_CONTACT_ID },
-                            null,
-                            null,
+                            ContactsContract.RawContacts.ACCOUNT_TYPE + " = ?",
+                            new String[]{ ACCOUNT_TYPE },
                             null
                         );
                         if (cursor != null) {
@@ -172,8 +184,7 @@ public class NativeContactsPlugin extends Plugin {
                                 }
                             }
                         }
-                    } catch (Throwable t) {
-                        // Ignore cursor error
+                    } catch (Throwable ignored) {
                     } finally {
                         if (cursor != null) {
                             try { cursor.close(); } catch (Throwable ignored) {}
@@ -216,7 +227,7 @@ public class NativeContactsPlugin extends Plugin {
                         }
 
                         if (matchedRawId != null) {
-                            // Existing Contact Found -> rawId
+                            // Existing Contact in Durga Sarees ERP -> update phone numbers if missing
                             Set<String> existingNumbers = rawIdToExistingNumbers.get(matchedRawId);
                             if (existingNumbers == null) {
                                 existingNumbers = new HashSet<>();
@@ -238,16 +249,11 @@ public class NativeContactsPlugin extends Plugin {
                             }
                             if (updatedAny) updatedCount++;
                         } else {
-                            // New Contact -> insert RawContact with detected account and Data rows
+                            // New Contact -> insert exclusively into Durga Sarees ERP account
                             int backRef = ops.size();
                             ContentProviderOperation.Builder rawBuilder = ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI);
-                            if (targetAccountType != null && targetAccountName != null) {
-                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, targetAccountType);
-                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_NAME, targetAccountName);
-                            } else {
-                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null);
-                                rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null);
-                            }
+                            rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, ACCOUNT_TYPE);
+                            rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_NAME, ACCOUNT_NAME);
                             ops.add(rawBuilder.build());
 
                             ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
@@ -261,14 +267,6 @@ public class NativeContactsPlugin extends Plugin {
                                     .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
                                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE)
                                     .withValue(ContactsContract.CommonDataKinds.Organization.COMPANY, org.trim())
-                                    .build());
-                            }
-
-                            if (myContactsGroupId != null) {
-                                ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
-                                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)
-                                    .withValue(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID, myContactsGroupId)
                                     .build());
                             }
 
@@ -287,9 +285,7 @@ public class NativeContactsPlugin extends Plugin {
                         if (ops.size() >= 150) {
                             try {
                                 getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
-                            } catch (Throwable t) {
-                                // Ignore partial batch error and proceed
-                            }
+                            } catch (Throwable ignored) {}
                             ops.clear();
                         }
                     }
@@ -297,9 +293,7 @@ public class NativeContactsPlugin extends Plugin {
                     if (!ops.isEmpty()) {
                         try {
                             getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
-                        } catch (Throwable t) {
-                            // Ignore
-                        }
+                        } catch (Throwable ignored) {}
                         ops.clear();
                     }
 
@@ -307,7 +301,8 @@ public class NativeContactsPlugin extends Plugin {
                     ret.put("totalReceived", items.length());
                     ret.put("added", addedCount);
                     ret.put("updated", updatedCount);
-                    ret.put("accountUsed", targetAccountType != null ? (targetAccountName + " (" + targetAccountType + ")") : "Device Default");
+                    ret.put("gmailCleaned", cleanedCount);
+                    ret.put("accountUsed", "Durga Sarees ERP (" + ACCOUNT_TYPE + ")");
                     call.resolve(ret);
                 } catch (Throwable t) {
                     call.reject("Native contact sync failed: " + t.getMessage());
@@ -328,4 +323,3 @@ public class NativeContactsPlugin extends Plugin {
         }
     }
 }
-

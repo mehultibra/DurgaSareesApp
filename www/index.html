@@ -138,6 +138,7 @@
           <i class="fas fa-shopping-bag"></i>
           <div class="cart-badge-top" id="cartCountHeader">0</div>
         </div>
+        <i id="btnTopMyReports" class="fas fa-file-invoice-dollar" onclick="window.openMyReportsSelfService()" style="display:none; cursor:pointer; color:#0284c7; margin-left:8px; margin-right:3px; font-size:16px;" title="My Reports (Bills, LR &amp; Ledger)"></i>
         <i id="btnTopCustomerHub" class="fas fa-address-book" onclick="window.openUnifiedCustomerHub()" style="display:none; cursor:pointer; color:var(--myntra-pink); margin-left:8px; margin-right:3px; font-size:16px;" title="Customer Hub (ERP, CRM & Lookup)"></i>
         <i id="btnTopLiveAdmin" class="fas fa-users" onclick="window.openLiveAdmin()" style="display:none; cursor:pointer; color:#4caf50; margin-left:8px; margin-right:5px; font-size:16px;" title="Live Customers"></i>
         <i class="fas fa-sync-alt" onclick="syncImages()" style="cursor:pointer; margin-left:5px;"></i>
@@ -146,6 +147,9 @@
             style="cursor:pointer; color:#555; padding: 0 5px;" title="Menu"></i>
           <div id="hdrMenu"
             style="display:none; position:absolute; right:0; top:25px; background:#fff; border:1px solid var(--border); border-radius:4px; box-shadow:0 4px 10px rgba(0,0,0,0.1); z-index:1000; width:185px;">
+            <div id="menuMyReports" onclick="window.openMyReportsSelfService()" style="display:none; padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:#0284c7; font-size:14px; font-weight:bold; align-items:center; gap:8px;">
+              <i class="fas fa-file-invoice-dollar" style="color:#0284c7; width:18px; text-align:center;"></i> 📊 My Reports
+            </div>
             <div onclick="openSyncReportModal()"
               style="padding:12px; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text-main); font-size:14px; display:flex; align-items:center; gap:8px;">
               <i class="fas fa-file-contract" style="color:var(--myntra-pink);"></i> Sync Report</div>
@@ -821,6 +825,10 @@
           <div id="custDirSubtitle" style="font-size:11px; color:#6b7280; margin-top:2px;">ERP Directory, CRM Follow-ups &amp; Incoming Caller Lookup</div>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
+          <button type="button" id="btnEnableCallPopup" onclick="window.enableCallPopupSuperAdmin()"
+            style="display:none; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:bold; cursor:pointer; align-items:center; gap:4px;" title="Enable Live Call Popup when phone rings">
+            <i class="fas fa-phone-volume"></i> Enable Call Popup
+          </button>
           <button type="button" onclick="window.pasteAndLookupCaller()"
             style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Paste clipboard number and look up caller">
             <i class="fas fa-clipboard"></i> Paste / Lookup
@@ -1002,10 +1010,20 @@
         </div>
         <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
           <div id="custRepBalBadge" style="font-size:12px; font-weight:bold; padding:3px 7px; border-radius:5px; background:#f3f4f6; color:#374151;">₹ 0.00</div>
-          <button type="button" onclick="window.startOrderOnBehalf()"
+          <button type="button" id="btnCustRepTakeOrder" onclick="window.startOrderOnBehalf()"
             style="background:#059669; color:#fff; border:none; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
             <i class="fas fa-cart-plus"></i> Take Order
           </button>
+        </div>
+      </div>
+
+      <!-- Multi-Account Selector for Customers/Agents with Multiple Linked Accounts -->
+      <div id="custRepAccountSelectWrapper" style="display:none; margin-top:6px; padding:4px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:10px; font-weight:bold; color:#475569;">Switch Linked Account:</span>
+          <select id="custRepAccountSelect" onchange="window.switchCustomerReportsAccount(this.value)"
+            style="padding:3px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:11px; font-weight:bold; background:#fff; color:#1e293b; outline:none; max-width:240px;">
+          </select>
         </div>
       </div>
 
@@ -1013,6 +1031,10 @@
       <div id="liveCallStatusBadge" style="display:none; background:#dcfce7; border:1px solid #86efac; color:#166534; padding:5px 10px; border-radius:8px; font-size:11px; font-weight:bold; align-items:center; justify-content:space-between; margin-top:6px;">
         <span><i class="fas fa-phone-volume fa-shake" style="color:#16a34a; margin-right:5px;"></i> Live Call Active with this Customer</span>
         <span style="font-size:10px; color:#15803d;">Dispatches &amp; Orders Ready</span>
+      </div>
+
+      <!-- Last Talk / CRM Follow-Up Summary Banner (SuperAdmin & Staff during call) -->
+      <div id="custRepLastTalkBanner" style="display:none; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:6px 10px; margin-top:6px; font-size:11px; color:#0369a1; line-height:1.4;">
       </div>
 
       <!-- Quick Actions: WhatsApp & Call & Print -->

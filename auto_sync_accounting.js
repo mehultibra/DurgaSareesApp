@@ -131,7 +131,7 @@ function readJsonSafe(filePath, retries = 5, delayMs = 1500) {
             }
             console.warn(`⏳ [Attempt ${attempt}/${retries}] File ${path.basename(filePath)} is busy or mid-write (${e.message}). Waiting ${delayMs}ms...`);
             const end = Date.now() + delayMs;
-            while (Date.now() < end) {}
+            while (Date.now() < end) { }
         }
     }
 }
@@ -478,9 +478,9 @@ async function syncAccountingData() {
     let localLinks = {};
     const fallbackBackup = path.join(__dirname, 'www', 'party_links_backup.json');
     if (fs.existsSync(PARTY_LINKS_BACKUP)) {
-        try { localLinks = JSON.parse(fs.readFileSync(PARTY_LINKS_BACKUP, 'utf8')); } catch(e){}
+        try { localLinks = JSON.parse(fs.readFileSync(PARTY_LINKS_BACKUP, 'utf8')); } catch (e) { }
     } else if (fs.existsSync(fallbackBackup)) {
-        try { localLinks = JSON.parse(fs.readFileSync(fallbackBackup, 'utf8')); } catch(e){}
+        try { localLinks = JSON.parse(fs.readFileSync(fallbackBackup, 'utf8')); } catch (e) { }
     }
 
     try {
@@ -717,7 +717,7 @@ async function syncAccountingData() {
     console.log('☁️ 8. Checking delta changes for Firestore push...');
     let existingHashes = {};
     if (fs.existsSync(HASHES_FILE)) {
-        try { existingHashes = JSON.parse(fs.readFileSync(HASHES_FILE, 'utf8')); } catch(e){}
+        try { existingHashes = JSON.parse(fs.readFileSync(HASHES_FILE, 'utf8')); } catch (e) { }
     }
     const newHashes = Object.assign({}, existingHashes);
 

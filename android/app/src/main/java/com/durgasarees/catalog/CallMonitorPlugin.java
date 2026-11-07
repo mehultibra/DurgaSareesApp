@@ -68,11 +68,52 @@ public class CallMonitorPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void requestCallerIdRole(PluginCall call) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                RoleManager rm = (RoleManager) getContext().getSystemService(Context.ROLE_SERVICE);
+                if (rm != null) {
+                    if (rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) {
+                        JSObject ret = new JSObject();
+                        ret.put("status", "already_granted");
+                        ret.put("held", true);
+                        call.resolve(ret);
+                        return;
+                    }
+                    Intent intent = rm.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING);
+                    startActivityForResult(call, intent, "callScreeningRoleCallback");
+                    return;
+                }
+            }
+            JSObject ret = new JSObject();
+            ret.put("status", "unsupported");
+            ret.put("held", false);
+            call.resolve(ret);
+        } catch (Throwable t) {
+            call.reject("requestCallerIdRole error: " + t.getMessage());
+        }
+    }
+
+    @com.getcapacitor.annotation.ActivityCallback
+    private void callScreeningRoleCallback(PluginCall call, androidx.activity.result.ActivityResult result) {
+        try {
+            boolean held = false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                RoleManager rm = (RoleManager) getContext().getSystemService(Context.ROLE_SERVICE);
+                held = rm != null && rm.isRoleHeld(RoleManager.ROLE_CALL_SCREENING);
+            }
+            JSObject ret = new JSObject();
+            ret.put("status", held ? "granted" : "denied");
+            ret.put("held", held);
+            call.resolve(ret);
+        } catch (Throwable t) {
+            call.reject("Callback error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
     public void requestCallScreeningRole(PluginCall call) {
-        JSObject ret = new JSObject();
-        ret.put("status", "not_needed");
-        ret.put("held", false);
-        call.resolve(ret);
+        requestCallerIdRole(call);
     }
 
     @PluginMethod
@@ -84,12 +125,13 @@ public class CallMonitorPlugin extends Plugin {
             long timestamp = sp.getLong("last_call_time", 0);
 
             JSObject ret = new JSObject();
-            if (phone != null && !phone.isEmpty()) {
-                long ageMs = System.currentTimeMillis() - timestamp;
+            long now = System.currentTimeMillis();
+            // Return call if within last 15 minutes
+            if (phone != null && !phone.isEmpty() && (now - timestamp < 15 * 60 * 1000)) {
                 ret.put("phone", phone);
                 ret.put("direction", dir);
                 ret.put("timestamp", timestamp);
-                ret.put("ageMs", ageMs);
+                ret.put("ageMs", now - timestamp);
             } else {
                 ret.put("phone", null);
             }

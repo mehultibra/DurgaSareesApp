@@ -123,11 +123,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /AccountingCustomers/{docId} {
-      allow read: if isStaffOrAdmin();
-      allow write: if isStaffOrAdmin();
+      allow get: if request.auth != null;
+      allow list, write: if isStaffOrAdmin();
     }
     match /AccountingReports/{docId} {
-      allow read: if isStaffOrAdmin();
+      allow get: if request.auth != null;
+      allow list: if isStaffOrAdmin();
       allow write: if isAdmin();
     }
     match /PhoneDirectory/{phoneId} {

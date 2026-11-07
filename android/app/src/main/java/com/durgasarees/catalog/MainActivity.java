@@ -90,10 +90,37 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleLiveCallIntent(intent);
+    }
+
+    private void handleLiveCallIntent(android.content.Intent intent) {
+        if (intent == null) return;
+        String phone = intent.getStringExtra("live_call_phone");
+        if (phone != null && !phone.trim().isEmpty()) {
+            intent.removeExtra("live_call_phone");
+            try {
+                getSharedPreferences("ds_call_prefs", MODE_PRIVATE)
+                    .edit()
+                    .putString("last_call_phone", phone)
+                    .putString("last_call_dir", "incoming")
+                    .putLong("last_call_time", System.currentTimeMillis())
+                    .apply();
+                if (bridge != null) {
+                    bridge.triggerWindowJSEvent("dsNativeCallDetected", "{ phone: '" + phone + "', direction: 'incoming' }");
+                }
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
         try {
             enforceLightNavBar();
+            handleLiveCallIntent(getIntent());
             if (bridge != null) {
                 bridge.triggerWindowJSEvent("dsNativeAppResumed");
             }
