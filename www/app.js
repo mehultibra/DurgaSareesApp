@@ -1028,8 +1028,8 @@ async function verifyOtp() {
                     role: f.role ? f.role.stringValue : "customer",
                     linkedAccount: f.linkedAccount ? f.linkedAccount.stringValue : "",
                     linkedAccountName: f.linkedAccountName ? f.linkedAccountName.stringValue : "",
-                    approvalStatus: f.approvalStatus ? f.approvalStatus.stringValue : "approved",
-                    isApproved: f.isApproved ? f.isApproved.booleanValue : true,
+                    approvalStatus: f.approvalStatus ? f.approvalStatus.stringValue : "pending",
+                    isApproved: Boolean(f.isApproved && f.isApproved.booleanValue === true),
                     approvedByAdmin: f.approvedByAdmin ? f.approvedByAdmin.stringValue : "",
                     approvedAt: f.approvedAt ? f.approvedAt.timestampValue : ""
                 };
@@ -1586,8 +1586,9 @@ async function checkAdminStatus(phone) {
             if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v3') !== 'true') {
                 window._contactsMigrationScheduled = true;
                 setTimeout(function () {
+                    try { localStorage.removeItem('ds_contact_sync_hashes_v2'); } catch(e){}
                     if (typeof window.startAutomaticContactSync === 'function') {
-                        window.startAutomaticContactSync(false);
+                        window.startAutomaticContactSync(true);
                     }
                 }, 12000);
             }
@@ -15470,10 +15471,13 @@ window.checkLiveCallOnResume = async function () {
     }
 };
 
-window.handleDetectedNativeCall = async function (phone, direction) {
+window.handleDetectedNativeCall = async function (phoneOrName, direction) {
     if (!window.isSuperAdmin) return;
-    var p10 = String(phone || '').replace(/\D/g, '').slice(-10);
-    if (p10.length !== 10) return;
+    var inputStr = String(phoneOrName || '').trim();
+    if (!inputStr) return;
+
+    var p10 = inputStr.replace(/\D/g, '').slice(-10);
+    var cleanNameSearch = inputStr.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim().toUpperCase();
 
     var list = window._compiledCustomersList || [];
     if ((!list || list.length === 0) && typeof window.loadAccountingDirectoryData === 'function') {
@@ -15483,10 +15487,21 @@ window.handleDetectedNativeCall = async function (phone, direction) {
         } catch (e) { }
     }
 
-    var matched = list.find(function (c) {
-        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-        return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
-    });
+    var matched = null;
+    if (p10.length === 10) {
+        matched = list.find(function (c) {
+            var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+            return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+        });
+    }
+
+    if (!matched && cleanNameSearch) {
+        matched = list.find(function (c) {
+            var cName = String(c.n || c.name || '').trim().toUpperCase();
+            var cCode = String(c.c || c.code || '').trim().toUpperCase();
+            return cName === cleanNameSearch || cCode === cleanNameSearch || (cleanNameSearch.length >= 4 && (cName.startsWith(cleanNameSearch) || cleanNameSearch.startsWith(cName)));
+        });
+    }
 
     if (matched) {
         var curM = document.getElementById('customerDetailReportsModal');
@@ -15496,7 +15511,7 @@ window.handleDetectedNativeCall = async function (phone, direction) {
                 window.openCustomerReportsModal(matched.c, true);
             }
         }
-        window.showLiveCallFloatBanner(matched.n || matched.name, p10, direction);
+        window.showLiveCallFloatBanner(matched.n || matched.name, matched.p || p10, direction);
     } else {
         // Not matched in local list -> open customer hub lookup
         if (typeof window.openCustomerHubModal === 'function') {
@@ -15506,15 +15521,17 @@ window.handleDetectedNativeCall = async function (phone, direction) {
             }
             var inp = document.getElementById('incomingCallerInput');
             if (inp) {
-                inp.value = p10;
+                inp.value = p10.length === 10 ? p10 : inputStr;
                 if (typeof window.handleIncomingLookupSearch === 'function') {
-                    window.handleIncomingLookupSearch(p10);
+                    window.handleIncomingLookupSearch(inp.value);
                 }
             }
         }
-        window.showLiveCallFloatBanner('Unsaved Party', p10, direction);
+        window.showLiveCallFloatBanner(cleanNameSearch || 'Unsaved Party', p10, direction);
     }
 };
+
+window.handleDetectedLiveCall = window.handleDetectedNativeCall;
 
 window.handleLiveDetectedCall = function (phone) {
     if (typeof window.handleDetectedNativeCall === 'function') {
@@ -15545,10 +15562,25 @@ window.enableCallPopupSuperAdmin = async function () {
     try {
         var fn = (typeof plugin.requestCallerIdRole === 'function') ? plugin.requestCallerIdRole : plugin.requestCallScreeningRole;
         var res = await fn.call(plugin);
+        var banner = document.getElementById('enableCallPopupBanner');
         if (res && res.held) {
-            var banner = document.getElementById('enableCallPopupBanner');
             if (banner) banner.style.display = 'none';
-            alert("✅ Caller ID & Live Call Catching is ACTIVE!\n\nIncoming calls from party numbers will now automatically open Customer Reports with 1-tap CRM.");
+
+            // Also check Notification Listener access for Samsung outgoing & saved contact detection
+            if (typeof plugin.checkCallerIdRole === 'function') {
+                try {
+                    var st = await plugin.checkCallerIdRole();
+                    if (st && !st.notificationListenerEnabled && typeof plugin.requestNotificationListener === 'function') {
+                        if (confirm("✅ Caller ID Role is active!\n\nTo also enable live popups for outgoing calls and saved contacts on Samsung, please enable 'Durga Sarees' on the Notification Access screen.")) {
+                            await plugin.requestNotificationListener();
+                        }
+                    } else {
+                        alert("✅ Caller ID & Live Call Catching is ACTIVE!\n\nIncoming & outgoing party calls will automatically open Customer Reports with 1-tap CRM.");
+                    }
+                } catch(e){}
+            } else {
+                alert("✅ Caller ID & Live Call Catching is ACTIVE!\n\nIncoming calls from party numbers will now automatically open Customer Reports with 1-tap CRM.");
+            }
         } else if (res && res.status === 'unsupported') {
             alert("Call Screening is supported on Android 10 (API 29) or higher.");
         }

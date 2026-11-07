@@ -61,7 +61,7 @@ public class DurgaCallScreeningService extends CallScreeningService {
             CallMonitorPlugin.notifyLiveCall(this, p10, direction);
 
             // Show High-Priority Heads-Up Notification
-            showCallNotification(p10, partyName, direction);
+            showCallNotification(this, p10, partyName, direction);
         } catch (Throwable ignored) {}
     }
 
@@ -83,9 +83,10 @@ public class DurgaCallScreeningService extends CallScreeningService {
         return null;
     }
 
-    private void showCallNotification(String p10, String partyName, String direction) {
+    public static void showCallNotification(Context context, String p10, String partyName, String direction) {
+        if (context == null) return;
         try {
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -100,7 +101,7 @@ public class DurgaCallScreeningService extends CallScreeningService {
                 nm.createNotificationChannel(channel);
             }
 
-            Intent intent = new Intent(this, MainActivity.class);
+            Intent intent = new Intent(context, MainActivity.class);
             intent.setAction(Intent.ACTION_VIEW);
             intent.putExtra("live_call_phone", p10);
             intent.putExtra("live_call_name", partyName);
@@ -110,19 +111,18 @@ public class DurgaCallScreeningService extends CallScreeningService {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 flags |= PendingIntent.FLAG_IMMUTABLE;
             }
-            PendingIntent pendingIntent = PendingIntent.getActivity(this, 101, intent, flags);
+            PendingIntent pendingIntent = PendingIntent.getActivity(context, 101, intent, flags);
 
             String dirPrefix = "outgoing".equalsIgnoreCase(direction) ? "📞 Outgoing: " : "📞 Live Call: ";
             String title = dirPrefix + (partyName != null && !partyName.trim().isEmpty() ? partyName : "+91 " + p10);
             String body = "Tap to view Live Dispatches, O/S, Last Talk & Take Order";
 
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
-                .setFullScreenIntent(pendingIntent, true)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);

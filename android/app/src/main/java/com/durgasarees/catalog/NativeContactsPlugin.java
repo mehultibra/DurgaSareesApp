@@ -58,6 +58,8 @@ public class NativeContactsPlugin extends Plugin {
             try {
                 Account erpAccount = new Account(ACCOUNT_NAME, ACCOUNT_TYPE);
                 am.addAccountExplicitly(erpAccount, null, null);
+                android.content.ContentResolver.setIsSyncable(erpAccount, ContactsContract.AUTHORITY, 1);
+                android.content.ContentResolver.setSyncAutomatically(erpAccount, ContactsContract.AUTHORITY, false);
             } catch (Throwable ignored) {}
 
             Account[] accts = null;
@@ -267,8 +269,8 @@ public class NativeContactsPlugin extends Plugin {
                     Map<Long, Set<String>> rawIdToExistingNumbers = new HashMap<>();
 
                     String querySelection = (targetAccountType != null)
-                        ? (ContactsContract.RawContacts.ACCOUNT_TYPE + " = ?")
-                        : (ContactsContract.RawContacts.ACCOUNT_TYPE + " IS NULL");
+                        ? (ContactsContract.RawContacts.ACCOUNT_TYPE + " = ? AND " + ContactsContract.RawContacts.DELETED + " = 0")
+                        : (ContactsContract.RawContacts.ACCOUNT_TYPE + " IS NULL AND " + ContactsContract.RawContacts.DELETED + " = 0");
                     String[] queryArgs = (targetAccountType != null) ? new String[]{ targetAccountType } : null;
 
                     Cursor cursor = null;

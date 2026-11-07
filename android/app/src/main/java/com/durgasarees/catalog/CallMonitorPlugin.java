@@ -89,12 +89,42 @@ public class CallMonitorPlugin extends Plugin {
             if (Build.VERSION.SDK_INT >= 33) {
                 notifGranted = getPermissionState("notifications") == PermissionState.GRANTED;
             }
+            boolean notifListenerEnabled = false;
+            try {
+                String flat = android.provider.Settings.Secure.getString(getContext().getContentResolver(), "enabled_notification_listeners");
+                notifListenerEnabled = flat != null && flat.contains(getContext().getPackageName());
+            } catch (Throwable ignored) {}
+
             JSObject ret = new JSObject();
             ret.put("held", held);
             ret.put("notificationsGranted", notifGranted);
+            ret.put("notificationListenerEnabled", notifListenerEnabled);
             call.resolve(ret);
         } catch (Throwable t) {
             call.reject("checkCallerIdRole error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void requestNotificationListener(PluginCall call) {
+        try {
+            String flat = android.provider.Settings.Secure.getString(getContext().getContentResolver(), "enabled_notification_listeners");
+            boolean enabled = flat != null && flat.contains(getContext().getPackageName());
+            if (enabled) {
+                JSObject ret = new JSObject();
+                ret.put("enabled", true);
+                call.resolve(ret);
+                return;
+            }
+            Intent intent = new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS");
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            JSObject ret = new JSObject();
+            ret.put("enabled", false);
+            ret.put("opened", true);
+            call.resolve(ret);
+        } catch (Throwable t) {
+            call.reject("requestNotificationListener error: " + t.getMessage());
         }
     }
 
