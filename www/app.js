@@ -5817,6 +5817,17 @@ function handleHardwareBack() {
     if (hasActiveModal) {
         history.back(); // Step back to previous modal or home
     } else {
+        // Check if returning from "Take Order" to Customer Report
+        var retParty = window._returnToReportPartyCode || localStorage.getItem('ds_return_to_report_party');
+        if (retParty) {
+            window._returnToReportPartyCode = null;
+            try { localStorage.removeItem('ds_return_to_report_party'); } catch(e){}
+            if (typeof window.openCustomerReportsModal === 'function') {
+                window.openCustomerReportsModal(retParty, false);
+                return;
+            }
+        }
+
         // We are on the main home screen
         if (backButtonPressedOnce) {
             if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
@@ -12619,7 +12630,10 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         var waMsg = `Namaste ${c.n},\nGreeting from Durga Sarees!\nKindly let us know if you require any invoices or statements. Thank you!`;
         var waPhone = (c.p && c.p.length === 10) ? ('91' + c.p) : (c.p || '');
 
-        var codeSafe = encodeURIComponent(c.c);
+        var codeSafe = encodeURIComponent(c.c).replace(/'/g, "%27");
+        var nameSafe = encodeURIComponent(c.n || c.c).replace(/'/g, "%27");
+        var ctSafe = encodeURIComponent(c.ct || '').replace(/'/g, "%27");
+        var agSafe = encodeURIComponent(c.ag || '').replace(/'/g, "%27");
         var nameDisplay = (tokens && tokens.length > 0 && typeof highlightContactMatch === 'function') ? highlightContactMatch(c.n, tokens) : escHtml(c.n);
         var locDisplay = [c.ct, (c.st && c.st !== c.ct ? c.st : '')].filter(Boolean).map(x => (tokens && tokens.length > 0 && typeof highlightContactMatch === 'function') ? highlightContactMatch(x, tokens) : escHtml(x)).join(', ');
 
@@ -12656,7 +12670,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                    style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
                   <i class="fab fa-whatsapp"></i> WhatsApp
                 </a>
-                <button type="button" onclick="event.stopPropagation(); window.startCRMCall(decodeURIComponent('${codeSafe}'), '${escHtml(c.n)}', '${c.p}', '${escHtml(c.ct)}', '${escHtml(c.ag)}', ${c.b || 0}, '${c.d || ''}')"
+                <button type="button" onclick="event.stopPropagation(); window.startCRMCall(decodeURIComponent('${codeSafe}'), decodeURIComponent('${nameSafe}'), '${c.p}', decodeURIComponent('${ctSafe}'), decodeURIComponent('${agSafe}'), ${c.b || 0}, '${c.d || ''}')"
                    style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; cursor:pointer;">
                   <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
                 </button>
@@ -12910,7 +12924,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
         }
     }
 
-    var isSelfService = !window.isAdminMode && !window.isSuperAdmin;
+    var isSelfService = !window.hasCRMAccess();
     var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
     var agentKeywords = isAgentUser ? (window.getAgentKeywords ? window.getAgentKeywords(myCd) : []) : [];
 
@@ -12940,17 +12954,31 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
         }
     }
 
-    var cust = list.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm || String(x.n || '').trim().toUpperCase() === pCodeNorm) || {
-        c: partyCode,
-        n: partyCode,
-        p: '',
-        ct: '',
-        g: '',
-        b: 0,
-        d: ''
-    };
+    var cust = list.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm || String(x.n || '').trim().toUpperCase() === pCodeNorm);
+    if (!cust && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+        cust = window._customerDirectoryMaster.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm || String(x.n || '').trim().toUpperCase() === pCodeNorm);
+    }
+    if (!cust) {
+        cust = {
+            c: partyCode,
+            n: partyCode,
+            p: '',
+            ct: '',
+            g: '',
+            b: 0,
+            d: ''
+        };
+    }
 
     window._currentReportingCustomer = cust;
+
+    // Reset In-Window Quick Party Search
+    var qSearchInp = document.getElementById('custRepQuickPartySearch');
+    if (qSearchInp) qSearchInp.value = '';
+    var qSearchDrop = document.getElementById('custRepQuickSearchResults');
+    if (qSearchDrop) { qSearchDrop.style.display = 'none'; qSearchDrop.innerHTML = ''; }
+    var qSearchClr = document.getElementById('btnCustRepClearSearch');
+    if (qSearchClr) qSearchClr.style.display = 'none';
 
     // Multi-Account Switcher for Customers/Agents with Multiple Linked Sister Firms or Brokered Accounts
     var acctWrapper = document.getElementById('custRepAccountSelectWrapper');
@@ -13002,7 +13030,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
         window._activeCustomerReportTab = 'sales';
     }
 
-    // Populate Header
+    // Populate Header: Name, Station, Agent (below station), GST (remove code)
     var nameEl = document.getElementById('custRepName');
     if (nameEl) nameEl.innerText = cust.n || cust.c;
 
@@ -13018,9 +13046,21 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
         gstEl.style.display = cust.g ? 'inline' : 'none';
     }
 
+    var agRow = document.getElementById('custRepAgentRow');
+    var agNameEl = document.getElementById('custRepAgentName');
+    var agVal = cust.ag || cust.agent || (Array.isArray(cust.agents) && cust.agents.length > 0 ? cust.agents.join(', ') : '');
+    if (agRow && agNameEl) {
+        if (agVal) {
+            agNameEl.innerText = agVal;
+            agRow.style.display = 'block';
+        } else {
+            agRow.style.display = 'none';
+        }
+    }
+
     var codeEl = document.getElementById('custRepCode');
     if (codeEl) {
-        codeEl.innerText = `Code: ${cust.c}`;
+        codeEl.style.display = 'none';
     }
 
     var balBadge = document.getElementById('custRepBalBadge');
@@ -13042,7 +13082,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
         }
     }
 
-    // Quick action buttons
+    // Quick action buttons (Removed "Send Designs" button)
     var actionsEl = document.getElementById('custRepActionButtons');
     if (actionsEl) {
         if (isSelfService) {
@@ -13052,26 +13092,26 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
             var waPhone = (cust.p && cust.p.length === 10) ? ('91' + cust.p) : (cust.p || '');
             var waBal = (cust.b > 0) ? `₹ ${cust.b.toLocaleString('en-IN')} ${cust.d}` : '0.00';
             var waMsg = `Namaste ${cust.n},\nGreeting from Durga Sarees!\nYour current ledger balance is ${waBal}.\nKindly let us know if you require any invoices or ledger statements. Thank you!`;
+            var codeSafe = encodeURIComponent(cust.c).replace(/'/g, "%27");
+            var nameSafe = encodeURIComponent(cust.n || cust.c).replace(/'/g, "%27");
+            var ctSafe = encodeURIComponent(cust.ct || '').replace(/'/g, "%27");
+            var agSafe = encodeURIComponent(agVal || '').replace(/'/g, "%27");
 
             var actHtml = '';
             if (cust.p) {
                 actHtml += `
                 <a href="https://wa.me/${waPhone}?text=${encodeURIComponent(waMsg)}" target="_blank"
-                   style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
+                   style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
                   <i class="fab fa-whatsapp"></i> WhatsApp
                 </a>
-                <button type="button" onclick="window.sendCatalogDesignsWhatsApp('${encodeURIComponent(cust.c)}', '${escHtml(cust.n)}', '${cust.p}')"
-                   style="display:inline-flex; align-items:center; gap:4px; background:#7c3aed; color:#fff; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; border:none; cursor:pointer;" title="Send catalog & designs on WhatsApp for new orders">
-                  <i class="fas fa-images"></i> Send Designs
-                </button>
-                <button type="button" onclick="window.startCRMCall('${encodeURIComponent(cust.c)}', '${escHtml(cust.n)}', '${cust.p}', '${escHtml(cust.ct)}', '${escHtml(cust.ag || '')}', ${cust.b || 0}, '${cust.d || ''}')"
-                   style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; cursor:pointer;">
+                <button type="button" onclick="window.startCRMCall(decodeURIComponent('${codeSafe}'), decodeURIComponent('${nameSafe}'), '${cust.p}', decodeURIComponent('${ctSafe}'), decodeURIComponent('${agSafe}'), ${cust.b || 0}, '${cust.d || ''}')"
+                   style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; cursor:pointer;">
                   <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
                 </button>`;
                 if (Array.isArray(cust.cleanPhones) && cust.cleanPhones.length > 1) {
                     cust.cleanPhones.slice(1).forEach(function (extraP) {
                         actHtml += `
-                        <button type="button" onclick="event.stopPropagation(); window.initiateTrackedCall('${codeSafe}', '${escHtml(cust.n)}', '${extraP}', '${escHtml(cust.ct)}', '${escHtml(cust.ag || '')}', ${cust.b || 0}, '${cust.d || ''}')"
+                        <button type="button" onclick="event.stopPropagation(); window.startCRMCall(decodeURIComponent('${codeSafe}'), decodeURIComponent('${nameSafe}'), '${extraP}', decodeURIComponent('${ctSafe}'), decodeURIComponent('${agSafe}'), ${cust.b || 0}, '${cust.d || ''}')"
                            style="display:inline-flex; align-items:center; gap:3px; background:#f8fafc; color:#475569; padding:4px 8px; border-radius:6px; font-size:10px; font-weight:600; border:1px solid #cbd5e1; cursor:pointer;" title="Call alternate number">
                           <i class="fas fa-phone-alt" style="color:#0284c7; font-size:9px;"></i> ${extraP}
                         </button>`;
@@ -13080,7 +13120,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
             } else {
                 actHtml += `<span style="font-size:11px; color:#94a3b8; font-style:italic;">No phone on record</span>`;
             }
-            actHtml += `<button type="button" onclick="window.openAddEditPartyContactModal(decodeURIComponent('${encodeURIComponent(cust.c)}'))" style="display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; color:#475569; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #cbd5e1; cursor:pointer;"><i class="fas fa-user-edit" style="color:#64748b; font-size:10px;"></i> Edit Contact</button>`;
+            actHtml += `<button type="button" onclick="window.openAddEditPartyContactModal(decodeURIComponent('${codeSafe}'))" style="display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; color:#475569; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #cbd5e1; cursor:pointer;"><i class="fas fa-user-edit" style="color:#64748b; font-size:10px;"></i> Edit</button>`;
             actionsEl.innerHTML = actHtml;
         }
     }
@@ -13218,7 +13258,7 @@ window.setReportDatePreset = function (preset) {
 window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
-    var isSelfService = !window.isAdminMode && !window.isSuperAdmin;
+    var isSelfService = !window.hasCRMAccess();
     var hasApprovedLinkedAcc = Boolean((myCd.linkedAccount || (myCd.matchedAccounts && myCd.matchedAccounts.length > 0)) && myCd.isApproved !== false);
     if (isSelfService && !hasApprovedLinkedAcc) return;
 
@@ -13259,7 +13299,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         try {
             var token = await getCachedAuthToken(true);
             var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-            var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + codeClean;
+            var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + encodeURIComponent(codeClean);
             var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
             if (res && res.ok) {
                 var doc = await res.json();
@@ -13388,39 +13428,29 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             : `--- FINANCIAL YEAR 2026-2027`;
 
         var html = `
-        <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b;">
-          
-          <!-- Banner Header matching Image 1 -->
-          <div style="background:#1d4ed8; color:#fff; font-weight:bold; font-size:12px; padding:6px 10px; border-radius:6px 6px 0 0; text-align:center; letter-spacing:0.5px;">
-            FINISH SALES DETAILED REPORT -- COMPANY: DURGA SAREES
-          </div>
-          <div style="background:#eff6ff; border:1px solid #bfdbfe; border-top:none; padding:8px 10px; font-size:11px; color:#1e3a8a; line-height:1.4; margin-bottom:8px;">
-            <div><b>PARTY:</b> ${escHtml(cust.n)} - ${escHtml(cust.c)}${cust.a ? (', ' + escHtml(cust.a)) : ''} ${cust.p ? (' - <b>Mob:</b> ' + escHtml(cust.p)) : ''}</div>
-            <div style="font-size:10px; color:#64748b; margin-top:2px;">${fsDateText} • Tap any Bill No to open full Tax Invoice</div>
-          </div>
-
+        <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:10px; color:#1e293b; width:100%;">
           <!-- Table Container with Horizontal Scroll -->
-          <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-            <table style="width:100%; border-collapse:collapse; font-size:10.5px; text-align:left; white-space:nowrap;">
+          <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05); -webkit-overflow-scrolling:touch;">
+            <table style="width:100%; border-collapse:collapse; font-size:10px; text-align:left; white-space:nowrap;">
               <thead>
-                <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:10px;">
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">DATE</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">BILL</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">SCREEN NAME</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">COLOUR</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">PACI</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">UN</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">PC</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">MTR</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">RATE</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">GROS</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">BILL AMT</th>
-                  <th style="padding:6px 8px; text-align:center; border-right:1px solid #e2e8f0;">DAYS</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">TRANSPO</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">L/R NO.</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">DESTINATION</th>
-                  <th style="padding:6px 8px; text-align:center; border-right:1px solid #e2e8f0;">P/</th>
-                  <th style="padding:6px 8px;">HASTE</th>
+                <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:9.5px;">
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DATE</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">BILL</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">SCREEN NAME</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">COLOUR</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">PACI</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">UN</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">PC</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">MTR</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">RATE</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">GROS</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">BILL AMT</th>
+                  <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">DAYS</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">TRANSPO</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">L/R NO.</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DESTINATION</th>
+                  <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">P/</th>
+                  <th style="padding:4px 6px;">HASTE</th>
                 </tr>
               </thead>
               <tbody>
@@ -13455,15 +13485,15 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                     var diff = Date.now() - new Date(billDt).getTime();
                     if (!isNaN(diff) && diff > 0) unpDays = Math.floor(diff / (1000 * 60 * 60 * 24));
                 }
-                daysBadge = `<span style="font-weight:bold; color:#dc2626; background:#fee2e2; padding:2px 6px; border-radius:4px; font-size:10px;">${unpDays || 0} Days</span>`;
+                daysBadge = `<span style="font-weight:bold; color:#dc2626; background:#fee2e2; padding:1px 5px; border-radius:3px; font-size:9.5px;">${unpDays || 0}d</span>`;
             } else {
-                daysBadge = `<span style="font-weight:bold; color:#16a34a; background:#dcfce7; padding:2px 6px; border-radius:4px; font-size:10px;">Paid</span>`;
+                daysBadge = `<span style="font-weight:bold; color:#16a34a; background:#dcfce7; padding:1px 5px; border-radius:3px; font-size:9.5px;">Paid</span>`;
             }
 
             var dateCell = isFirst ? escHtml(r[0]) : '';
             var billCell = isFirst ? `
               <span style="font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
-                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r[1])}
+                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:2px;"></i>${escHtml(r[1])}
               </span>` : '';
             var billAmtCell = isFirst ? (r[10] ? Math.round(r[10]).toLocaleString('en-IN') : '-') : '';
             var daysCell = isFirst ? daysBadge : '';
@@ -13475,39 +13505,39 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
 
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${dateCell}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9;">${billCell}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:600; color:#1e293b;">${escHtml(r[2])}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[3])}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[4])}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[5])}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r[6] ? r[6].toLocaleString('en-IN') : '-'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9;">${r[7] ? r[7].toFixed(2) : '-'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9;">${r[8] ? r[8].toFixed(2) : '-'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r[9] ? Math.round(r[9]).toLocaleString('en-IN') : '-'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e293b;">${billAmtCell}</td>
-              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9;">${daysCell}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${trnCell}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9;">${lrCell}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${destCell}</td>
-              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9;">${prclCell}</td>
-              <td style="padding:5px 8px; color:#64748b;">${hasteCell}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${dateCell}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9;">${billCell}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:600; color:#1e293b;">${escHtml(r[2])}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[3])}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[4])}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[5])}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r[6] ? r[6].toLocaleString('en-IN') : '-'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9;">${r[7] ? r[7].toFixed(2) : '-'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9;">${r[8] ? r[8].toFixed(2) : '-'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r[9] ? Math.round(r[9]).toLocaleString('en-IN') : '-'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e293b;">${billAmtCell}</td>
+              <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9;">${daysCell}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${trnCell}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9;">${lrCell}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#64748b;">${destCell}</td>
+              <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9;">${prclCell}</td>
+              <td style="padding:4px 6px; color:#64748b;">${hasteCell}</td>
             </tr>`;
         });
 
-        // Grand Total row matching Image 1
+        // Grand Total row
         html += `
               </tbody>
               <tfoot>
                 <tr style="background:#dbeafe; font-weight:bold; border-top:2px solid #93c5fd; color:#1e3a8a;">
-                  <td colspan="6" style="padding:8px; border-right:1px solid #bfdbfe; font-weight:bold; text-align:center;">GRAND TOTAL</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">${totPcs.toLocaleString('en-IN')}</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">${totMtr.toFixed(2)}</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">${avgRate.toFixed(2)}</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totGross).toLocaleString('en-IN')}</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totBill).toLocaleString('en-IN')}</td>
-                  <td colspan="4" style="padding:8px; border-right:1px solid #bfdbfe;"></td>
-                  <td style="padding:8px; text-align:center; border-right:1px solid #bfdbfe;">${totParcels}</td>
+                  <td colspan="6" style="padding:6px; border-right:1px solid #bfdbfe; font-weight:bold; text-align:center;">GRAND TOTAL</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">${totPcs.toLocaleString('en-IN')}</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">${totMtr.toFixed(2)}</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">${avgRate.toFixed(2)}</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totGross).toLocaleString('en-IN')}</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totBill).toLocaleString('en-IN')}</td>
+                  <td colspan="4" style="padding:6px; border-right:1px solid #bfdbfe;"></td>
+                  <td style="padding:6px; text-align:center; border-right:1px solid #bfdbfe;">${totParcels}</td>
                   <td></td>
                 </tr>
               </tfoot>
@@ -13516,6 +13546,10 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         </div>`;
 
         area.innerHTML = html;
+        if (window._reportZoomLevel && window._reportZoomLevel !== 1) {
+            var wrap = document.getElementById('erpReportPrintWrapper');
+            if (wrap) wrap.style.zoom = window._reportZoomLevel;
+        }
         return;
     }
 
@@ -13602,33 +13636,22 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             : '';
 
         var html = `
-        <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b;">
-          
-          <!-- Banner Header matching Image 4 -->
-          <div style="background:#b91c1c; color:#fff; font-weight:bold; font-size:12px; padding:6px 10px; border-radius:6px 6px 0 0; text-align:center; letter-spacing:0.5px;">
-            OUTSTANDING REPORT -- COMPANY: DURGA SAREES
-          </div>
-          <div style="background:#fef2f2; border:1px solid #fecaca; border-top:none; padding:8px 10px; font-size:11px; color:#991b1b; line-height:1.4; margin-bottom:8px;">
-            <div><b>PARTY:</b> ${escHtml(cust.n)} &nbsp;&nbsp; <b>PH:</b> ${escHtml(cust.p || 'N/A')}</div>
-            <div><b>ADDR:</b> ${escHtml(cust.a || 'N/A')}${osDateText}</div>
-            <div style="font-size:10px; color:#64748b; margin-top:2px;">--- Tap any Bill No to open full Tax Invoice</div>
-          </div>
-
+        <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:10px; color:#1e293b; width:100%;">
           <!-- Table Container with Horizontal Scroll -->
-          <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-            <table style="width:100%; border-collapse:collapse; font-size:11px; text-align:left; white-space:nowrap;">
+          <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05); -webkit-overflow-scrolling:touch;">
+            <table style="width:100%; border-collapse:collapse; font-size:10px; text-align:left; white-space:nowrap;">
               <thead>
-                <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:10px;">
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">BILL DATE</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">BILL NO.</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">NET BILL AMT</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">GOODS RET.</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">GR PEND</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">PAID AMT.</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0; background:#fee2e2; color:#991b1b;">PEND. AMT.</th>
-                  <th style="padding:6px 8px; text-align:center; border-right:1px solid #e2e8f0;">DA</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">DESTINATION</th>
-                  <th style="padding:6px 8px;">BROKER</th>
+                <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:9.5px;">
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">BILL DATE</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">BILL NO.</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">NET BILL AMT</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">GOODS RET.</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">GR PEND</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">PAID AMT.</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0; background:#fee2e2; color:#991b1b;">PEND. AMT.</th>
+                  <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">DA</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DESTINATION</th>
+                  <th style="padding:4px 6px;">BROKER</th>
                 </tr>
               </thead>
               <tbody>
@@ -13640,33 +13663,33 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             var crBadge = (r.pamt < 0 || String(r.bno || '').includes('GR-')) ? `<span style="background:#fef08a; color:#854d0e; font-size:9px; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">CR NOTE</span>` : '';
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.dt)}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
-                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(r.bno)}${frmBadge}${crBadge}
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.dt)}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
+                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:2px;"></i>${escHtml(r.bno)}${frmBadge}${crBadge}
               </td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r.bamt ? r.bamt.toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.ret ? r.ret.toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.grpend ? r.grpend.toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; color:#16a34a;">${r.paid ? r.paid.toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#dc2626; background:#fff1f2;">${r.pamt ? r.pamt.toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:#b91c1c;">${r.du || 0}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.ct)}</td>
-              <td style="padding:5px 8px; color:#64748b;">${escHtml(r.ag)}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r.bamt ? r.bamt.toFixed(2) : '0.00'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.ret ? r.ret.toFixed(2) : '0.00'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.grpend ? r.grpend.toFixed(2) : '0.00'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; color:#16a34a;">${r.paid ? r.paid.toFixed(2) : '0.00'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#dc2626; background:#fff1f2;">${r.pamt ? r.pamt.toFixed(2) : '0.00'}</td>
+              <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:#b91c1c;">${r.du || 0}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.ct)}</td>
+              <td style="padding:4px 6px; color:#64748b;">${escHtml(r.ag)}</td>
             </tr>`;
         });
 
-        // Grand Total row matching Image 4
+        // Grand Total row
         html += `
               </tbody>
               <tfoot>
                 <tr style="background:#fee2e2; font-weight:bold; border-top:2px solid #fca5a5; color:#991b1b;">
-                  <td colspan="2" style="padding:8px; border-right:1px solid #fecaca; text-align:center;">GRAND TOTAL</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca;">₹ ${totNet.toFixed(2)}</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca;">${totRet ? ('-₹ ' + Math.abs(totRet).toFixed(2)) : '0.00'}</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca;">0.00</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca;">${totPaid ? ('-₹ ' + Math.abs(totPaid).toFixed(2)) : '0.00'}</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #fecaca; font-size:12px; color:#dc2626; font-weight:bold;">₹ ${totPend.toFixed(2)}</td>
-                  <td style="padding:8px; text-align:center; border-right:1px solid #fecaca;">${avgDays}</td>
+                  <td colspan="2" style="padding:6px; border-right:1px solid #fecaca; text-align:center;">GRAND TOTAL</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">₹ ${totNet.toFixed(2)}</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">${totRet ? ('-₹ ' + Math.abs(totRet).toFixed(2)) : '0.00'}</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">0.00</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">${totPaid ? ('-₹ ' + Math.abs(totPaid).toFixed(2)) : '0.00'}</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #fecaca; font-size:11px; color:#dc2626; font-weight:bold;">₹ ${totPend.toFixed(2)}</td>
+                  <td style="padding:6px; text-align:center; border-right:1px solid #fecaca;">${avgDays}</td>
                   <td colspan="2"></td>
                 </tr>
               </tfoot>
@@ -13675,6 +13698,10 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         </div>`;
 
         area.innerHTML = html;
+        if (window._reportZoomLevel && window._reportZoomLevel !== 1) {
+            var wrap = document.getElementById('erpReportPrintWrapper');
+            if (wrap) wrap.style.zoom = window._reportZoomLevel;
+        }
         return;
     }
 
@@ -13817,29 +13844,20 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         var ldTo = fmtDate(toDate || '2027-03-31');
 
         var html = `
-        <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b;">
-          
-          <!-- Banner Header matching Image 5 -->
-          <div style="background:#334155; color:#fff; font-weight:bold; font-size:12px; padding:6px 10px; border-radius:6px 6px 0 0; text-align:center; letter-spacing:0.5px;">
-            DURGA SAREES &nbsp;&nbsp; A/C: ${escHtml(cust.n).toUpperCase()} &nbsp;&nbsp; FROM:${ldFrom} &nbsp;&nbsp; TO:${ldTo} &nbsp;&nbsp; PHONE: ${escHtml(cust.p || 'N/A')}
-          </div>
-          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-top:none; padding:6px 10px; font-size:10px; color:#64748b; margin-bottom:8px;">
-            FINANCIAL YEAR STATEMENT • Tap any Bill No to open full Tax Invoice
-          </div>
-
+        <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:10px; color:#1e293b; width:100%;">
           <!-- Table Container with Horizontal Scroll -->
-          <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-            <table style="width:100%; border-collapse:collapse; font-size:11px; text-align:left; white-space:nowrap;">
+          <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05); -webkit-overflow-scrolling:touch;">
+            <table style="width:100%; border-collapse:collapse; font-size:10px; text-align:left; white-space:nowrap;">
               <thead>
-                <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:10px;">
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">DATE</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">CHQ/BILL</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">A/C</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0; color:#dc2626;">DEBIT</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0; color:#16a34a;">CREDIT</th>
-                  <th style="padding:6px 8px; text-align:right; border-right:1px solid #e2e8f0;">BALANCE</th>
-                  <th style="padding:6px 8px; border-right:1px solid #e2e8f0;">V NO.</th>
-                  <th style="padding:6px 8px;">REMARK</th>
+                <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:9.5px;">
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DATE</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">CHQ/BILL</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">A/C</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0; color:#dc2626;">DEBIT</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0; color:#16a34a;">CREDIT</th>
+                  <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">BALANCE</th>
+                  <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">V NO.</th>
+                  <th style="padding:4px 6px;">REMARK</th>
                 </tr>
               </thead>
               <tbody>
@@ -13848,36 +13866,36 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         ldList.forEach((r, idx) => {
             var chqStr = String(r.v || '');
             var isBill = chqStr.includes('/GST') || chqStr.includes('/');
-            var chqDisplay = isBill ? `<span onclick="window.openBillInvoiceModal('${escHtml(chqStr)}')" style="color:#0284c7; font-weight:bold; cursor:pointer;" title="Click to view Tax Invoice"><i class="fas fa-file-invoice" style="font-size:9px; margin-right:3px;"></i>${escHtml(chqStr)}</span>` : escHtml(chqStr);
+            var chqDisplay = isBill ? `<span onclick="window.openBillInvoiceModal('${escHtml(chqStr)}')" style="color:#0284c7; font-weight:bold; cursor:pointer;" title="Click to view Tax Invoice"><i class="fas fa-file-invoice" style="font-size:9px; margin-right:2px;"></i>${escHtml(chqStr)}</span>` : escHtml(chqStr);
 
             var balStr = (r.bal !== undefined) ? ((r.bal !== 0) ? `${Math.abs(r.bal).toFixed(2)} ${r.bal > 0 ? 'Dr' : 'Cr'}` : '0.00') : '';
 
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.d)}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9;">${chqDisplay}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; font-weight:600; color:#334155;">${escHtml(r.r)}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r.dr > 0 ? '#dc2626' : '#94a3b8'};">${r.dr ? r.dr.toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r.cr > 0 ? '#16a34a' : '#94a3b8'};">${r.cr ? r.cr.toFixed(2) : '0.00'}</td>
-              <td style="padding:5px 8px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e293b;">${balStr}</td>
-              <td style="padding:5px 8px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r.vno)}</td>
-              <td style="padding:5px 8px; color:#64748b;">${escHtml(r.rmk)}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.d)}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9;">${chqDisplay}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:600; color:#334155;">${escHtml(r.r)}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r.dr > 0 ? '#dc2626' : '#94a3b8'};">${r.dr ? r.dr.toFixed(2) : '0.00'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:${r.cr > 0 ? '#16a34a' : '#94a3b8'};">${r.cr ? r.cr.toFixed(2) : '0.00'}</td>
+              <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e293b;">${balStr}</td>
+              <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r.vno)}</td>
+              <td style="padding:4px 6px; color:#64748b;">${escHtml(r.rmk)}</td>
             </tr>`;
         });
 
-        // Totals & Closing Balance matching Image 5
+        // Totals & Closing Balance
         html += `
               </tbody>
               <tfoot>
                 <tr style="background:#f1f5f9; font-weight:bold; border-top:2px solid #cbd5e1; color:#1e293b;">
-                  <td colspan="3" style="padding:8px; border-right:1px solid #cbd5e1; text-align:center;">TRANSACTION TOTAL</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #cbd5e1; color:#dc2626;">₹ ${totDr.toFixed(2)}</td>
-                  <td style="padding:8px; text-align:right; border-right:1px solid #cbd5e1; color:#16a34a;">₹ ${totCr.toFixed(2)}</td>
+                  <td colspan="3" style="padding:6px; border-right:1px solid #cbd5e1; text-align:center;">TRANSACTION TOTAL</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #cbd5e1; color:#dc2626;">₹ ${totDr.toFixed(2)}</td>
+                  <td style="padding:6px; text-align:right; border-right:1px solid #cbd5e1; color:#16a34a;">₹ ${totCr.toFixed(2)}</td>
                   <td colspan="3"></td>
                 </tr>
-                <tr style="background:#e2e8f0; font-weight:bold; color:#0f172a; font-size:12px;">
-                  <td colspan="3" style="padding:8px; border-right:1px solid #cbd5e1; text-align:center;">CLOSING BALANCE</td>
-                  <td colspan="2" style="padding:8px; text-align:right; border-right:1px solid #cbd5e1; color:${closingBal > 0 ? '#dc2626' : '#16a34a'};">${closingBalText}</td>
+                <tr style="background:#e2e8f0; font-weight:bold; color:#0f172a; font-size:11px;">
+                  <td colspan="3" style="padding:6px; border-right:1px solid #cbd5e1; text-align:center;">CLOSING BALANCE</td>
+                  <td colspan="2" style="padding:6px; text-align:right; border-right:1px solid #cbd5e1; color:${closingBal > 0 ? '#dc2626' : '#16a34a'};">${closingBalText}</td>
                   <td colspan="3"></td>
                 </tr>
               </tfoot>
@@ -13886,8 +13904,106 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         </div>`;
 
         area.innerHTML = html;
+        if (window._reportZoomLevel && window._reportZoomLevel !== 1) {
+            var wrap = document.getElementById('erpReportPrintWrapper');
+            if (wrap) wrap.style.zoom = window._reportZoomLevel;
+        }
         return;
     }
+};
+
+// ==========================================
+// 🔍 IN-WINDOW PARTY SEARCH & REPORT ZOOM
+// ==========================================
+window._reportZoomLevel = 1.0;
+window.zoomCustomerReport = function (delta) {
+    window._reportZoomLevel = Math.max(0.6, Math.min(1.5, Math.round((window._reportZoomLevel + delta) * 10) / 10));
+    var zoomValEl = document.getElementById('custRepZoomVal');
+    if (zoomValEl) zoomValEl.innerText = Math.round(window._reportZoomLevel * 100) + '%';
+    var wrap = document.getElementById('erpReportPrintWrapper');
+    if (wrap) {
+        wrap.style.zoom = window._reportZoomLevel;
+    }
+};
+
+window.resetCustomerReportZoom = function () {
+    window._reportZoomLevel = 1.0;
+    var zoomValEl = document.getElementById('custRepZoomVal');
+    if (zoomValEl) zoomValEl.innerText = '100%';
+    var wrap = document.getElementById('erpReportPrintWrapper');
+    if (wrap) {
+        wrap.style.zoom = 1.0;
+    }
+};
+
+window.handleCustRepQuickSearch = function (query) {
+    var q = String(query || '').trim().toLowerCase();
+    var drop = document.getElementById('custRepQuickSearchResults');
+    var clrBtn = document.getElementById('btnCustRepClearSearch');
+    if (clrBtn) clrBtn.style.display = q ? 'inline' : 'none';
+    if (!drop) return;
+    if (!q || q.length < 2) {
+        drop.style.display = 'none';
+        drop.innerHTML = '';
+        return;
+    }
+    var list = window._compiledCustomersList || window._customerDirectoryMaster || [];
+    var tokens = q.split(/\s+/).filter(Boolean);
+    var matches = [];
+    for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        var haystack = ((c.n || '') + ' ' + (c.c || '') + ' ' + (c.ct || '') + ' ' + (c.p || '') + ' ' + (c.ag || '')).toLowerCase();
+        var matchAll = tokens.every(t => haystack.includes(t));
+        if (matchAll) {
+            matches.push(c);
+            if (matches.length >= 8) break;
+        }
+    }
+    if (matches.length === 0) {
+        drop.innerHTML = '<div style="padding:10px; font-size:11px; color:#64748b; text-align:center;">No matching customers found</div>';
+        drop.style.display = 'block';
+        return;
+    }
+    drop.innerHTML = matches.map(m => {
+        var mCodeSafe = encodeURIComponent(m.c || m.n).replace(/'/g, "%27");
+        var mBal = (m.b > 0) ? `<span style="font-size:10px; font-weight:bold; color:${m.d === 'Dr' ? '#dc2626' : '#16a34a'};">₹ ${m.b.toLocaleString('en-IN')} ${m.d || ''}</span>` : '';
+        return `
+        <div onclick="window.selectCustRepQuickSearch('${mCodeSafe}')"
+          style="padding:7px 10px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; justify-content:space-between; align-items:center;"
+          onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
+          <div>
+            <div style="font-weight:bold; font-size:12px; color:#1e293b;">${escHtml(m.n)}</div>
+            <div style="font-size:10px; color:#64748b; display:flex; gap:6px; align-items:center; margin-top:2px;">
+              ${m.ct ? `<span><i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:9px;"></i> ${escHtml(m.ct)}</span>` : ''}
+              ${m.ag ? `<span><i class="fas fa-user-tie" style="color:#0284c7; font-size:9px;"></i> ${escHtml(m.ag)}</span>` : ''}
+              ${m.p ? `<span><i class="fas fa-phone-alt" style="font-size:9px;"></i> ${escHtml(m.p)}</span>` : ''}
+            </div>
+          </div>
+          <div style="text-align:right;">
+            ${mBal}
+          </div>
+        </div>`;
+    }).join('');
+    drop.style.display = 'block';
+};
+
+window.selectCustRepQuickSearch = function (codeSafe) {
+    var drop = document.getElementById('custRepQuickSearchResults');
+    if (drop) drop.style.display = 'none';
+    var sInp = document.getElementById('custRepQuickPartySearch');
+    if (sInp) sInp.value = '';
+    var clrBtn = document.getElementById('btnCustRepClearSearch');
+    if (clrBtn) clrBtn.style.display = 'none';
+    window.openCustomerReportsModal(decodeURIComponent(codeSafe), false);
+};
+
+window.clearCustRepQuickSearch = function () {
+    var sInp = document.getElementById('custRepQuickPartySearch');
+    if (sInp) sInp.value = '';
+    var drop = document.getElementById('custRepQuickSearchResults');
+    if (drop) { drop.style.display = 'none'; drop.innerHTML = ''; }
+    var clrBtn = document.getElementById('btnCustRepClearSearch');
+    if (clrBtn) clrBtn.style.display = 'none';
 };
 
 // ==========================================
@@ -14715,6 +14831,10 @@ window.startOrderOnBehalf = function () {
     var cust = window._currentReportingCustomer;
     if (!cust) return;
 
+    var partyCodeVal = cust.c || cust.n;
+    window._returnToReportPartyCode = partyCodeVal;
+    try { localStorage.setItem('ds_return_to_report_party', partyCodeVal); } catch(e){}
+
     var partyTransport = cust.tr || '';
     try {
         var rep = (window._accountingReportsCache && window._accountingReportsCache.reports) || {};
@@ -14745,10 +14865,37 @@ window.startOrderOnBehalf = function () {
 
     window.updateOrderOnBehalfBanner();
     window.closeCustomerReportsModal();
+    var hubM = document.getElementById('customerHubModal');
+    if (hubM) hubM.style.display = 'none';
     if (typeof closeModals === 'function') closeModals(true);
 
+    // Non-blocking toast notification to guide user
+    var toastId = 'takeOrderToast_' + Date.now();
     var locAlert = [details.station, details.state].filter(Boolean).join(', ');
-    alert(`✅ Order Mode Active for: ${cust.n}${locAlert ? ' (' + locAlert + ')' : ''}\n\nState: ${details.state || '-'}\nAgent: ${details.agent || '-'}\nTransport: ${details.transport || '-'}\nGST: ${details.gst || '-'}\n\nAll details are prefilled and editable in the order form.`);
+    var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:#059669; color:#fff; padding:10px 18px; border-radius:30px; font-size:12px; font-weight:bold; box-shadow:0 4px 15px rgba(0,0,0,0.3); z-index:999999; text-align:center; display:flex; align-items:center; gap:8px; pointer-events:none; transition:opacity 0.4s;">
+      <i class="fas fa-check-circle" style="font-size:14px;"></i>
+      <span>Order for: ${escHtml(cust.n)}${locAlert ? ' (' + escHtml(locAlert) + ')' : ''} (Press Back to return to report)</span>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', toastHtml);
+    setTimeout(() => {
+        var t = document.getElementById(toastId);
+        if (t) {
+            t.style.opacity = '0';
+            setTimeout(() => t.remove(), 400);
+        }
+    }, 3500);
+};
+
+window.returnToCustomerReport = function () {
+    var retParty = window._returnToReportPartyCode || localStorage.getItem('ds_return_to_report_party');
+    if (!retParty) {
+        var stored = null;
+        try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+        if (stored && (stored.firm || stored.name)) retParty = stored.firm || stored.name;
+    }
+    if (retParty && typeof window.openCustomerReportsModal === 'function') {
+        window.openCustomerReportsModal(retParty, false);
+    }
 };
 
 window.exitOrderOnBehalf = function () {
@@ -14756,6 +14903,8 @@ window.exitOrderOnBehalf = function () {
     try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
     var pName = stored ? (stored.name || "party") : "party";
     if (confirm(`Clear selected party (${pName})?`)) {
+        window._returnToReportPartyCode = null;
+        try { localStorage.removeItem('ds_return_to_report_party'); } catch(e){}
         localStorage.removeItem("ds_active_on_behalf");
         localStorage.removeItem("dsCustomerDetails");
         var adminOwn = localStorage.getItem("dsAdminOwnProfile");

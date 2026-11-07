@@ -203,7 +203,10 @@
           <i class="fas fa-store" style="font-size:13px; color:#fbcfe8;"></i>
           <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Party Name</span>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button type="button" onclick="event.stopPropagation(); window.returnToCustomerReport()" style="background:rgba(255,255,255,0.25); color:#fff; border:none; padding:3px 8px; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" title="Return to Customer Report">
+            <i class="fas fa-file-invoice"></i> Report
+          </button>
           <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-weight:normal;">Change</span>
           <button type="button" onclick="event.stopPropagation(); window.exitOrderOnBehalf()" style="background:#fff; color:#be185d; border:none; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;" title="Clear Party">
             <i class="fas fa-times"></i>
@@ -1005,26 +1008,43 @@
       
       <!-- Top Bar: Back, Name & Balance -->
       <div style="display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:8px; border-bottom:1px solid #eee; gap:8px;">
-        <div style="display:flex; align-items:center; gap:10px; flex:1;">
+        <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
           <button type="button" onclick="window.closeCustomerReportsModal()"
-            style="background:#f1f5f9; border:none; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#475569;">
+            style="background:#f1f5f9; border:none; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#475569; flex-shrink:0;">
             <i class="fas fa-arrow-left"></i>
           </button>
-          <div style="flex:1;">
-            <div id="custRepName" style="font-weight:bold; font-size:15px; color:var(--text-main); line-height:1.2;">Customer Name</div>
+          <div style="flex:1; min-width:0;">
+            <div id="custRepName" style="font-weight:bold; font-size:15px; color:var(--text-main); line-height:1.2; word-break:break-word;">Customer Name</div>
             <div style="display:flex; gap:6px; align-items:center; margin-top:2px; flex-wrap:wrap;">
               <span id="custRepCity" style="font-size:11px; color:#64748b;"><i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> City</span>
-              <span id="custRepGst" style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 5px; border-radius:3px;">GST</span>
-              <span id="custRepCode" style="font-size:10px; font-weight:600; color:#475569; background:#f1f5f9; padding:1px 5px; border-radius:3px;">Code</span>
+              <span id="custRepGst" style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 5px; border-radius:3px; display:none;">GST</span>
+            </div>
+            <div id="custRepAgentRow" style="font-size:11px; color:#475569; font-weight:600; margin-top:2px; display:none;">
+              <i class="fas fa-user-tie" style="color:#0284c7; font-size:10px;"></i> <span id="custRepAgentName">Agent</span>
             </div>
           </div>
         </div>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0;">
           <div id="custRepBalBadge" style="font-size:12px; font-weight:bold; padding:3px 7px; border-radius:5px; background:#f3f4f6; color:#374151;">₹ 0.00</div>
           <button type="button" id="btnCustRepTakeOrder" onclick="window.startOrderOnBehalf()"
             style="background:#059669; color:#fff; border:none; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
             <i class="fas fa-cart-plus"></i> Take Order
           </button>
+        </div>
+      </div>
+
+      <!-- In-Window Quick Party Search (Search any customer directly from this window) -->
+      <div id="custRepSearchContainer" style="position:relative; margin-top:6px;">
+        <div style="display:flex; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:3px 8px; gap:6px;">
+          <i class="fas fa-search" style="color:#64748b; font-size:11px;"></i>
+          <input type="text" id="custRepQuickPartySearch" placeholder="🔍 Switch party: type name, city, phone..."
+            oninput="window.handleCustRepQuickSearch(this.value)" autocomplete="off"
+            style="border:none; background:transparent; font-size:11px; color:#1e293b; width:100%; outline:none;">
+          <i class="fas fa-times" id="btnCustRepClearSearch" onclick="window.clearCustRepQuickSearch()"
+            style="color:#94a3b8; font-size:11px; cursor:pointer; display:none;"></i>
+        </div>
+        <div id="custRepQuickSearchResults"
+          style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.18); z-index:10060; max-height:220px; overflow-y:auto; margin-top:3px;">
         </div>
       </div>
 
@@ -1048,19 +1068,35 @@
       <div id="custRepLastTalkBanner" style="display:none; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:6px 10px; margin-top:6px; font-size:11px; color:#0369a1; line-height:1.4;">
       </div>
 
-      <!-- Quick Actions: WhatsApp & Call & Print -->
-      <div style="display:flex; gap:8px; padding:6px 0; border-bottom:1px solid #f1f5f9; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+      <!-- Quick Actions: WhatsApp & Call & Zoom & Print -->
+      <div style="display:flex; gap:6px; padding:6px 0; border-bottom:1px solid #f1f5f9; align-items:center; justify-content:space-between; flex-wrap:wrap;">
         <div id="custRepActionButtons" style="display:flex; gap:6px;">
           <!-- Injected dynamically: WhatsApp & Call -->
         </div>
-        <div style="display:flex; gap:6px; align-items:center;">
+        <div style="display:flex; gap:5px; align-items:center;">
+          <!-- Report Zoom Controls -->
+          <div style="display:inline-flex; align-items:center; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 3px; gap:2px;" title="Zoom Report">
+            <button type="button" onclick="window.zoomCustomerReport(-0.1)" title="Zoom Out"
+              style="background:none; border:none; color:#334155; font-size:11px; padding:2px 5px; cursor:pointer; font-weight:bold;">
+              <i class="fas fa-minus"></i>
+            </button>
+            <span id="custRepZoomVal" style="font-size:10px; font-weight:700; color:#1e293b; min-width:32px; text-align:center;">100%</span>
+            <button type="button" onclick="window.zoomCustomerReport(0.1)" title="Zoom In"
+              style="background:none; border:none; color:#334155; font-size:11px; padding:2px 5px; cursor:pointer; font-weight:bold;">
+              <i class="fas fa-plus"></i>
+            </button>
+            <button type="button" onclick="window.resetCustomerReportZoom()" title="Reset 100%"
+              style="background:none; border:none; color:#64748b; font-size:9px; padding:2px 4px; cursor:pointer;">
+              1:1
+            </button>
+          </div>
           <button type="button" onclick="window.shareReportPDF()"
-            style="background:#be185d; color:#fff; border:none; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
-            <i class="fas fa-share-alt"></i> Share PDF
+            style="background:#be185d; color:#fff; border:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
+            <i class="fas fa-share-alt"></i> PDF
           </button>
           <button type="button" onclick="window.printActiveCustomerReport()"
-            style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
-            <i class="fas fa-print"></i> Print
+            style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:4px 7px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+            <i class="fas fa-print"></i>
           </button>
         </div>
       </div>
