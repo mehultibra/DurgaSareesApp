@@ -34,6 +34,13 @@ service cloud.firestore {
         (getUserDoc() != null && getUserDoc().get('isStaff', false) == true)
       );
     }
+    function isApprovedUser() {
+      return isStaffOrAdmin() || (
+        getUserDoc() != null &&
+        getUserDoc().get('isApproved', false) == true &&
+        getUserDoc().get('approvalStatus', 'pending') == 'approved'
+      );
+    }
     function isInventory() { return request.auth != null && getRole() == 'inventory'; }
     function isPacking() { return request.auth != null && getRole() == 'packing'; }
 
@@ -123,11 +130,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /AccountingCustomers/{docId} {
-      allow get: if request.auth != null;
+      allow get: if isApprovedUser();
       allow list, write: if isStaffOrAdmin();
     }
     match /AccountingReports/{docId} {
-      allow get: if request.auth != null;
+      allow get: if isApprovedUser();
       allow list: if isStaffOrAdmin();
       allow write: if isAdmin();
     }

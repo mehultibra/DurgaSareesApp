@@ -199,6 +199,7 @@ public class CallMonitorPlugin extends Plugin {
         try {
             SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
             String phone = sp.getString("last_call_phone", null);
+            String name = sp.getString("last_call_name", "");
             String dir = sp.getString("last_call_dir", "incoming");
             long timestamp = sp.getLong("last_call_time", 0);
 
@@ -207,6 +208,7 @@ public class CallMonitorPlugin extends Plugin {
             // Return call if within last 15 minutes
             if (phone != null && !phone.isEmpty() && (now - timestamp < 15 * 60 * 1000)) {
                 ret.put("phone", phone);
+                ret.put("name", name != null ? name : "");
                 ret.put("direction", dir);
                 ret.put("timestamp", timestamp);
                 ret.put("ageMs", now - timestamp);
@@ -232,6 +234,15 @@ public class CallMonitorPlugin extends Plugin {
         }
     }
 
+    private static String escapeJsString(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "");
+    }
+
     public static void notifyLiveCall(Context context, String phone, String direction) {
         try {
             if (context != null) {
@@ -246,7 +257,9 @@ public class CallMonitorPlugin extends Plugin {
             if (instance != null && instance.getBridge() != null && instance.getBridge().getWebView() != null) {
                 instance.getBridge().getWebView().post(() -> {
                     try {
-                        String js = "window.dispatchEvent(new CustomEvent('dsNativeCallDetected', { detail: { phone: '" + phone + "', direction: '" + direction + "' } }));";
+                        String safePhone = escapeJsString(phone);
+                        String safeDirection = escapeJsString(direction);
+                        String js = "window.dispatchEvent(new CustomEvent('dsNativeCallDetected', { detail: { phone: '" + safePhone + "', direction: '" + safeDirection + "' } }));";
                         instance.getBridge().getWebView().evaluateJavascript(js, null);
                     } catch (Throwable ignored) {}
                 });

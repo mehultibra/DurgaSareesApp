@@ -235,6 +235,7 @@ async function syncAccountingData() {
     const reportsByParty = {};
     const transportByParty = new Map();
     const agentByParty = new Map();
+    const allAgentsByParty = new Map();
 
     function getPartyReport(code) {
         const k = String(code || '').trim().toUpperCase();
@@ -301,6 +302,16 @@ async function syncAccountingData() {
         if (Array.isArray(party.billDetails)) {
             party.billDetails.forEach(b => {
                 const billNo = String(b.BILL || b.VNO || '').trim();
+                const billAgent = String(b.BCODE || '').trim();
+                const billHaste = String(b.haste || '').trim();
+                const combinedAgentHaste = (billAgent && billHaste && billAgent.toUpperCase() !== billHaste.toUpperCase())
+                    ? `${billAgent} (Haste: ${billHaste})`
+                    : (billAgent || billHaste || '');
+                if (billAgent) {
+                    if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
+                    allAgentsByParty.get(code).add(billAgent);
+                }
+
                 const items = (b.IDE && detMap.get(b.IDE)) ? detMap.get(b.IDE) : [];
                 const itemRows = [];
 
@@ -358,7 +369,7 @@ async function syncAccountingData() {
                             b.RRNO || '',
                             b.PLC || '',
                             b.PRCL || b.CSNO || '1',
-                            b.haste || b.BCODE || '',
+                            combinedAgentHaste,
                             itemIdx === 0
                         ]);
                     });
@@ -380,7 +391,7 @@ async function syncAccountingData() {
                         b.RRNO || '',
                         b.PLC || '',
                         b.PRCL || b.CSNO || '1',
-                        b.haste || b.BCODE || '',
+                        combinedAgentHaste,
                         true
                     ]);
                 }
@@ -401,7 +412,7 @@ async function syncAccountingData() {
                         b.WGT || '',                               // 10: Weight
                         b.FRT || '',                               // 11: Freight
                         b.EWB || '',                               // 12: e-Way
-                        b.haste || b.BCODE || '',                  // 13: Broker / Haste
+                        combinedAgentHaste,                        // 13: Broker / Haste
                         parseFloat(b.grsamt || b.BAMT) || 0,       // 14: Gross Amount
                         'Discount',                                // 15: Discount Label
                         parseFloat(b.DISC || b.billdis || 0),      // 16: Discount %
@@ -454,7 +465,11 @@ async function syncAccountingData() {
                     const diffTime = Date.now() - new Date(billDt).getTime();
                     osDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
                 }
-                const bBroker = b.BCODE || b.BROKER || '';
+                const bBroker = String(b.BCODE || b.BROKER || '').trim();
+                if (bBroker) {
+                    if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
+                    allAgentsByParty.get(code).add(bBroker);
+                }
                 p.outstanding.push({
                     bno: b.BILL || b.VNO || b.BILLNO || '',
                     dt: billDt,
@@ -467,7 +482,7 @@ async function syncAccountingData() {
                     f: b.FRM || (b.CNO === '2' ? 'R.F' : (b.CNO === '1' ? 'DSPL' : 'DS'))
                 });
                 if (bBroker && !agentByParty.has(code)) {
-                    agentByParty.set(code, String(bBroker).trim());
+                    agentByParty.set(code, bBroker);
                 }
             });
         }
@@ -565,6 +580,12 @@ async function syncAccountingData() {
         const finalStation = (linkData && linkData.station) ? linkData.station : (m.city || m.CITY || '');
         const finalTransport = (linkData && linkData.transport) ? linkData.transport : (transportByParty.get(code) || '');
         const finalAgent = (linkData && linkData.agent) ? linkData.agent : (agentByParty.get(code) || '');
+        if (finalAgent) {
+            if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
+            allAgentsByParty.get(code).add(finalAgent);
+        }
+        const customerAgents = Array.from(allAgentsByParty.get(code) || []);
+        if (finalAgent && !customerAgents.includes(finalAgent)) customerAgents.push(finalAgent);
         const finalGst = (linkData && linkData.gst) ? linkData.gst : (m.GST || '');
         const role = isAgent ? 'agent' : 'customer';
 
@@ -585,6 +606,7 @@ async function syncAccountingData() {
             state: finalState,
             transport: finalTransport,
             agent: finalAgent,
+            agents: customerAgents,
             atype: m.ATYPE,
             role: role,
             totalDebit: Math.round(totalDrByParty.get(code) || 0),
@@ -647,6 +669,7 @@ async function syncAccountingData() {
             station: link.station || '',
             state: finalState,
             agent: finalAgent,
+            agents: finalAgent ? [finalAgent] : [],
             transport: link.transport || '',
             gst: link.gst || '',
             atype: role === 'agent' ? '12' : '1',
@@ -846,6 +869,7 @@ async function syncAccountingData() {
             st: c.state || '',
             g: c.gst || '',
             ag: c.agent || '',
+            agList: c.agents || (c.agent ? [c.agent] : []),
             tr: c.transport || '',
             b: c.netBalance || 0,
             d: c.drCr || 'Dr',

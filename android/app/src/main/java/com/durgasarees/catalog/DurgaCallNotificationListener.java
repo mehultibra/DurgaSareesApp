@@ -57,16 +57,34 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
 
             String partyName = null;
             if (p10 != null) {
-                partyName = lookupNameByPhone(p10);
-            } else if (!title.isEmpty()) {
-                // If title has contact name, lookup phone number from device contacts
-                partyName = title;
-                p10 = lookupPhoneByName(title);
+                if (!isGenericDialerStatus(title)) {
+                    partyName = title;
+                } else {
+                    partyName = lookupNameByPhone(p10);
+                }
+            } else {
+                // If no phone in notification text, check title and text against contacts
+                if (!isGenericDialerStatus(title)) {
+                    p10 = lookupPhoneByName(title);
+                    if (p10 != null) partyName = title;
+                }
+                if (p10 == null && !isGenericDialerStatus(text)) {
+                    p10 = lookupPhoneByName(text);
+                    if (p10 != null) partyName = text;
+                }
             }
 
-            if (p10 == null && partyName == null) return;
+            // CRITICAL: Never trigger without a verified 10-digit phone number!
+            if (p10 == null || p10.length() != 10) return;
 
-            String dedupeKey = (p10 != null ? p10 : "") + "|" + (partyName != null ? partyName : "");
+            if (partyName == null || isGenericDialerStatus(partyName)) {
+                partyName = lookupNameByPhone(p10);
+            }
+            if (partyName == null || partyName.trim().isEmpty()) {
+                partyName = p10;
+            }
+
+            String dedupeKey = p10 + "|" + partyName;
             long now = System.currentTimeMillis();
             if (dedupeKey.equals(sLastProcessedKey) && (now - sLastProcessedTime < 60000)) {
                 return; // Debounce within 60 seconds
@@ -74,20 +92,34 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             sLastProcessedKey = dedupeKey;
             sLastProcessedTime = now;
 
-            String effectivePhone = p10 != null ? p10 : "";
-            String effectiveName = partyName != null ? partyName : "";
-
             SharedPreferences sp = getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
             sp.edit()
-                .putString("last_call_phone", effectivePhone)
-                .putString("last_call_name", effectiveName)
+                .putString("last_call_phone", p10)
+                .putString("last_call_name", partyName)
                 .putString("last_call_dir", "active")
                 .putLong("last_call_time", now)
                 .apply();
 
-            CallMonitorPlugin.notifyLiveCall(this, !effectivePhone.isEmpty() ? effectivePhone : effectiveName, "active");
-            DurgaCallScreeningService.showCallNotification(this, effectivePhone, effectiveName, "active");
+            CallMonitorPlugin.notifyLiveCall(this, p10, "active");
+            DurgaCallScreeningService.showCallNotification(this, p10, partyName, "active");
         } catch (Throwable ignored) {}
+    }
+
+    private boolean isGenericDialerStatus(String s) {
+        if (s == null) return true;
+        String lower = s.trim().toLowerCase();
+        if (lower.isEmpty()) return true;
+        return lower.contains("ongoing call") ||
+               lower.contains("incoming call") ||
+               lower.contains("dialing") ||
+               lower.contains("calling") ||
+               lower.contains("call ended") ||
+               lower.contains("missed call") ||
+               lower.contains("volte") ||
+               lower.contains("wi-fi call") ||
+               lower.contains("wifi call") ||
+               lower.contains("speaker") ||
+               lower.contains("muted");
     }
 
     private String lookupNameByPhone(String p10) {

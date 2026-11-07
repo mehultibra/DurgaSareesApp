@@ -37,6 +37,35 @@ public class NativeContactsPlugin extends Plugin {
     public static final String ACCOUNT_TYPE = "com.durgasarees.catalog";
     public static final String ACCOUNT_NAME = "Durga Sarees ERP";
     private static volatile boolean sGmailCleaned = false;
+    private String mLastBatchError = null;
+
+    private int executeBatchSafely(ArrayList<ContentProviderOperation> ops, int newContactsInBatch) {
+        if (ops == null || ops.isEmpty()) return 0;
+        try {
+            getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
+            return newContactsInBatch;
+        } catch (Throwable t1) {
+            try {
+                ArrayList<ContentProviderOperation> fallbackOps = new ArrayList<>();
+                for (ContentProviderOperation op : ops) {
+                    if (op.toString().contains(ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)) {
+                        continue;
+                    }
+                    fallbackOps.add(op);
+                }
+                if (!fallbackOps.isEmpty()) {
+                    getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, fallbackOps);
+                    return newContactsInBatch;
+                }
+            } catch (Throwable t2) {
+                mLastBatchError = t2.getMessage();
+            }
+            if (mLastBatchError == null) {
+                mLastBatchError = t1.getMessage();
+            }
+            return 0;
+        }
+    }
 
     private static class AccountInfo {
         final String accountName;
@@ -311,9 +340,11 @@ public class NativeContactsPlugin extends Plugin {
                     }
 
                     ArrayList<ContentProviderOperation> ops = new ArrayList<>();
+                    ArrayList<ContentProviderOperation> groupOps = new ArrayList<>();
                     Set<String> seenInThisBatch = new HashSet<>();
                     int addedCount = 0;
                     int updatedCount = 0;
+                    int pendingNewInBatch = 0;
 
                     Uri rawUriWithSync = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
                         .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
@@ -402,15 +433,6 @@ public class NativeContactsPlugin extends Plugin {
                                 .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
                                 .build());
 
-                            // Attach to visible Group if available
-                            if (groupId > 0) {
-                                ops.add(ContentProviderOperation.newInsert(dataUriWithSync)
-                                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
-                                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)
-                                    .withValue(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID, groupId)
-                                    .build());
-                            }
-
                             if (org != null && !org.trim().isEmpty()) {
                                 ops.add(ContentProviderOperation.newInsert(dataUriWithSync)
                                     .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
@@ -428,31 +450,47 @@ public class NativeContactsPlugin extends Plugin {
                                     .withValue(ContactsContract.CommonDataKinds.Phone.TYPE, pi == 0 ? ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE : ContactsContract.CommonDataKinds.Phone.TYPE_WORK)
                                     .build());
                             }
-                            addedCount++;
+
+                            // Attach to visible Group if available (appended at tail of batch)
+                            if (groupId > 0) {
+                                groupOps.add(ContentProviderOperation.newInsert(dataUriWithSync)
+                                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
+                                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)
+                                    .withValue(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID, groupId)
+                                    .build());
+                            }
+
+                            pendingNewInBatch++;
                         }
 
-                        if (ops.size() >= 150) {
-                            try {
-                                getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
-                            } catch (Throwable ignored) {}
+                        if (ops.size() >= 120) {
+                            ops.addAll(groupOps);
+                            groupOps.clear();
+                            addedCount += executeBatchSafely(ops, pendingNewInBatch);
                             ops.clear();
+                            pendingNewInBatch = 0;
                         }
                     }
 
                     if (!ops.isEmpty()) {
-                        try {
-                            getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
-                        } catch (Throwable ignored) {}
+                        ops.addAll(groupOps);
+                        groupOps.clear();
+                        addedCount += executeBatchSafely(ops, pendingNewInBatch);
                         ops.clear();
+                        pendingNewInBatch = 0;
                     }
 
                     JSObject ret = new JSObject();
                     ret.put("totalReceived", items.length());
                     ret.put("added", addedCount);
                     ret.put("updated", updatedCount);
+                    ret.put("existingCount", existingPhoneToRawId.size());
                     ret.put("gmailCleaned", cleanedCount);
                     ret.put("groupId", groupId);
                     ret.put("accountUsed", (targetAccountName != null ? targetAccountName : "Local Device") + " (" + (targetAccountType != null ? targetAccountType : "local") + ")");
+                    if (mLastBatchError != null) {
+                        ret.put("lastError", mLastBatchError);
+                    }
                     call.resolve(ret);
                 } catch (Throwable t) {
                     call.reject("Native contact sync failed: " + t.getMessage());

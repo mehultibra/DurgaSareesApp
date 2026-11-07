@@ -1547,15 +1547,25 @@ async function checkAdminStatus(phone) {
         window.isStaff = isStaffUser;
 
         if (f) {
-            let userProfile = {
-                name: f.name ? f.name.stringValue : "",
-                firm: f.firm ? f.firm.stringValue : "",
-                station: f.station ? f.station.stringValue : "",
-                state: f.state ? f.state.stringValue : "",
+            var existingCd = {};
+            try { existingCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+            var userProfile = {
+                name: f.name ? f.name.stringValue : (existingCd.name || ""),
+                firm: f.firm ? f.firm.stringValue : (existingCd.firm || ""),
+                station: f.station ? f.station.stringValue : (existingCd.station || ""),
+                state: f.state ? f.state.stringValue : (existingCd.state || ""),
                 phone: phone,
                 isStaff: isStaffUser,
-                isAdmin: isSuper
+                isAdmin: isSuper,
+                approvalStatus: f.approvalStatus ? f.approvalStatus.stringValue : (existingCd.approvalStatus || "pending"),
+                isApproved: Boolean(f.isApproved ? f.isApproved.booleanValue === true : (existingCd.isApproved === true)),
+                linkedAccount: f.linkedAccount ? f.linkedAccount.stringValue : (existingCd.linkedAccount || ""),
+                role: f.role ? f.role.stringValue : (existingCd.role || "customer"),
+                matchedAccounts: existingCd.matchedAccounts || []
             };
+            if (f.matchedAccountsJson && f.matchedAccountsJson.stringValue) {
+                try { userProfile.matchedAccounts = JSON.parse(f.matchedAccountsJson.stringValue); } catch(e){}
+            }
             localStorage.setItem("dsAdminOwnProfile", JSON.stringify(userProfile));
             if (!localStorage.getItem("ds_active_on_behalf")) {
                 localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile));
@@ -12700,18 +12710,65 @@ window.showMoreCustDirCards = function () {
 // (Ledger, Sales Item Wise, Transport Receipt, Outstanding)
 // ==========================================
 
+window.getAgentKeywords = function (myCd) {
+    var kws = [];
+    if (!myCd) return kws;
+    if (myCd.name) kws.push(String(myCd.name).trim().toUpperCase());
+    if (myCd.linkedAccountName) kws.push(String(myCd.linkedAccountName).trim().toUpperCase());
+    if (myCd.accountCode) kws.push(String(myCd.accountCode).trim().toUpperCase());
+    if (myCd.linkedAccount) kws.push(String(myCd.linkedAccount).trim().toUpperCase());
+    if (Array.isArray(myCd.matchedAccounts)) {
+        myCd.matchedAccounts.forEach(function (m) {
+            if (m.name || m.n) kws.push(String(m.name || m.n).trim().toUpperCase());
+            if (m.code || m.c) kws.push(String(m.code || m.c).trim().toUpperCase());
+        });
+    }
+    return Array.from(new Set(kws.filter(Boolean)));
+};
+
+window.customerMatchesAgent = function (c, agentKeywords) {
+    if (!c || !agentKeywords || agentKeywords.length === 0) return false;
+    var cAgent = String(c.ag || c.agent || '').trim().toUpperCase();
+    if (cAgent && agentKeywords.some(function (kw) { return cAgent.includes(kw) || kw.includes(cAgent); })) return true;
+    var agList = Array.isArray(c.agList) ? c.agList : (Array.isArray(c.agents) ? c.agents : []);
+    return agList.some(function (a) {
+        var aUpper = String(a || '').trim().toUpperCase();
+        return aUpper && agentKeywords.some(function (kw) { return aUpper.includes(kw) || kw.includes(aUpper); });
+    });
+};
+
 window.openMyReportsSelfService = function () {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+
+    if (!window.hasCRMAccess()) {
+        if (myCd.isApproved !== true || myCd.approvalStatus === 'pending') {
+            var btnTop = document.getElementById('btnTopMyReports');
+            if (btnTop) btnTop.style.display = 'none';
+            var menuRep = document.getElementById('menuMyReports');
+            if (menuRep) menuRep.style.display = 'none';
+            alert("Your account is pending admin approval.");
+            return;
+        }
+    }
+
+    var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent);
+    var list = window._compiledCustomersList || [];
     var matches = myCd.matchedAccounts || [];
-    var targetCode = myCd.linkedAccount || (matches[0] && (matches[0].code || matches[0].c));
+    var targetCode = null;
+
+    if (isAgentUser) {
+        var agentKws = window.getAgentKeywords(myCd);
+        var agentCusts = list.filter(function (c) {
+            return window.customerMatchesAgent(c, agentKws);
+        });
+        targetCode = (agentCusts[0] && (agentCusts[0].c || agentCusts[0].code)) || myCd.linkedAccount || (matches[0] && (matches[0].code || matches[0].c));
+    } else {
+        targetCode = myCd.linkedAccount || (matches[0] && (matches[0].code || matches[0].c));
+    }
 
     if (!targetCode) {
         alert("Your account is pending admin linking. Please contact Durga Sarees support or wait for approval.");
-        return;
-    }
-    if (myCd.isApproved === false || myCd.approvalStatus === 'pending') {
-        alert("⏳ Your account approval is pending with Durga Sarees. Once approved, your 24x7 bills, transport LR and ledger will be available here.");
         return;
     }
     window.openCustomerReportsModal(targetCode, false);
@@ -12841,11 +12898,37 @@ window.saveCustRepQuickNote = async function (disposition) {
 window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
-    var isSelfService = !window.isAdminMode && !window.isSuperAdmin;
 
+    if (!window.hasCRMAccess()) {
+        if (myCd.isApproved !== true || myCd.approvalStatus === 'pending') {
+            var btnTop = document.getElementById('btnTopMyReports');
+            if (btnTop) btnTop.style.display = 'none';
+            var menuRep = document.getElementById('menuMyReports');
+            if (menuRep) menuRep.style.display = 'none';
+            alert("Your account is pending admin approval.");
+            return;
+        }
+    }
+
+    var isSelfService = !window.isAdminMode && !window.isSuperAdmin;
+    var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
+    var agentKeywords = isAgentUser ? (window.getAgentKeywords ? window.getAgentKeywords(myCd) : []) : [];
+
+    var list = window._compiledCustomersList || [];
     var linkedAcc = String(myCd.linkedAccount || '').trim().toUpperCase();
     var matches = myCd.matchedAccounts || [];
     var allowedCodes = [linkedAcc, ...matches.map(m => String(m.code || m.c || '').trim().toUpperCase())].filter(Boolean);
+
+    var agentCustomers = [];
+    if (isAgentUser) {
+        agentCustomers = list.filter(function (c) {
+            return window.customerMatchesAgent ? window.customerMatchesAgent(c, agentKeywords) : false;
+        });
+        agentCustomers.forEach(function (c) {
+            var codeUpper = String(c.c || c.code || '').trim().toUpperCase();
+            if (codeUpper && !allowedCodes.includes(codeUpper)) allowedCodes.push(codeUpper);
+        });
+    }
 
     var pCodeNorm = decodeURIComponent(String(partyCode || '')).trim().toUpperCase();
 
@@ -12857,7 +12940,6 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
         }
     }
 
-    var list = window._compiledCustomersList || [];
     var cust = list.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm || String(x.n || '').trim().toUpperCase() === pCodeNorm) || {
         c: partyCode,
         n: partyCode,
@@ -12870,11 +12952,19 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
 
     window._currentReportingCustomer = cust;
 
-    // Multi-Account Switcher for Customers/Agents with Multiple Linked Sister Firms
+    // Multi-Account Switcher for Customers/Agents with Multiple Linked Sister Firms or Brokered Accounts
     var acctWrapper = document.getElementById('custRepAccountSelectWrapper');
     var acctSelect = document.getElementById('custRepAccountSelect');
     if (acctWrapper && acctSelect) {
-        if (allowedCodes.length > 1) {
+        if (isAgentUser && agentCustomers.length > 1) {
+            acctSelect.innerHTML = agentCustomers.map(c => {
+                var cCode = c.c || c.code;
+                var cName = c.n || c.name || cCode;
+                var isSel = (cCode && String(cCode).trim().toUpperCase() === pCodeNorm) ? 'selected' : '';
+                return `<option value="${esc(cCode)}" ${isSel}>${esc(cName)} [${esc(cCode)}]</option>`;
+            }).join('');
+            acctWrapper.style.display = 'block';
+        } else if (allowedCodes.length > 1 && matches.length > 1) {
             acctSelect.innerHTML = matches.map(m => {
                 var mCode = m.code || m.c;
                 var mName = m.name || m.n || mCode;
@@ -12887,21 +12977,29 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
         }
     }
 
-    // Privacy Controls for Customer Self-Service Mode
+    // Privacy Controls for Customer & Agent Self-Service Mode
     var crmTab = document.getElementById('tabBtnCRM');
-    if (crmTab) crmTab.style.display = isSelfService ? 'none' : 'inline-block';
+    if (crmTab) crmTab.style.display = (isSelfService || isAgentUser) ? 'none' : 'inline-block';
 
     var quickCRM = document.getElementById('custRepQuickCRMBar');
-    if (quickCRM) quickCRM.style.display = isSelfService ? 'none' : 'flex';
+    if (quickCRM) quickCRM.style.display = (isSelfService || isAgentUser) ? 'none' : 'flex';
 
     var takeOrderBtn = document.getElementById('btnCustRepTakeOrder');
-    if (takeOrderBtn) takeOrderBtn.style.display = isSelfService ? 'none' : 'inline-flex';
+    if (takeOrderBtn) takeOrderBtn.style.display = (isSelfService || isAgentUser) ? 'none' : 'inline-flex';
 
-    // Agent Privacy: Do NOT show party ledger to agent
-    var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent || (cust && cust.role === 'agent') || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
+    // Agent Privacy: Do NOT show party ledger to agent 100%
     var ledgerTab = document.getElementById('tabBtnLedger');
     if (ledgerTab) {
         ledgerTab.style.display = isAgentUser ? 'none' : 'inline-block';
+    }
+
+    var firmWrapper = document.getElementById('custRepFirmWrapper');
+    if (firmWrapper && isAgentUser) {
+        firmWrapper.style.display = 'none';
+    }
+
+    if (isAgentUser && (window._activeCustomerReportTab === 'ledger' || window._activeCustomerReportTab === 'crm')) {
+        window._activeCustomerReportTab = 'sales';
     }
 
     // Populate Header
@@ -12927,14 +13025,20 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
 
     var balBadge = document.getElementById('custRepBalBadge');
     if (balBadge) {
-        var balText = (cust.b > 0) ? `₹ ${cust.b.toLocaleString('en-IN')} ${cust.d}` : 'Clear';
-        balBadge.innerText = balText;
-        if (cust.b > 0) {
-            balBadge.style.color = (cust.d === 'Dr') ? '#dc2626' : '#16a34a';
-            balBadge.style.background = (cust.d === 'Dr') ? '#fee2e2' : '#dcfce7';
+        if (isAgentUser) {
+            balBadge.innerText = 'Calculating O/S...';
+            balBadge.style.color = '#64748b';
+            balBadge.style.background = '#f1f5f9';
         } else {
-            balBadge.style.color = '#374151';
-            balBadge.style.background = '#f3f4f6';
+            var balText = (cust.b > 0) ? `₹ ${cust.b.toLocaleString('en-IN')} ${cust.d}` : 'Clear';
+            balBadge.innerText = balText;
+            if (cust.b > 0) {
+                balBadge.style.color = (cust.d === 'Dr') ? '#dc2626' : '#16a34a';
+                balBadge.style.background = (cust.d === 'Dr') ? '#fee2e2' : '#dcfce7';
+            } else {
+                balBadge.style.color = '#374151';
+                balBadge.style.background = '#f3f4f6';
+            }
         }
     }
 
@@ -13202,27 +13306,31 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     }
 
     var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent || (cust && cust.role === 'agent') || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
-
-    var agentKeywords = [];
-    if (isAgentUser) {
-        if (myCd.name) agentKeywords.push(String(myCd.name).trim().toUpperCase());
-        if (myCd.linkedAccountName) agentKeywords.push(String(myCd.linkedAccountName).trim().toUpperCase());
-        if (myCd.accountCode) agentKeywords.push(String(myCd.accountCode).trim().toUpperCase());
-        if (myCd.linkedAccount) agentKeywords.push(String(myCd.linkedAccount).trim().toUpperCase());
-        if (Array.isArray(myCd.matchedAccounts)) {
-            myCd.matchedAccounts.forEach(m => {
-                if (m.name) agentKeywords.push(String(m.name).trim().toUpperCase());
-                if (m.code || m.c) agentKeywords.push(String(m.code || m.c).trim().toUpperCase());
-            });
-        }
-        agentKeywords = Array.from(new Set(agentKeywords.filter(Boolean)));
-    }
+    var agentKeywords = isAgentUser ? (window.getAgentKeywords ? window.getAgentKeywords(myCd) : []) : [];
 
     function matchesAgentBill(val) {
         if (!isAgentUser) return true;
         if (!val || agentKeywords.length === 0) return false;
         var normVal = String(val).trim().toUpperCase();
         return agentKeywords.some(kw => normVal.includes(kw) || kw.includes(normVal));
+    }
+
+    if (isAgentUser) {
+        var rawOs = partyRep.outstanding || partyRep.os || [];
+        var agTotPend = 0;
+        rawOs.forEach(function (r) {
+            var agName = r.ag || r.agent || r.broker || (Array.isArray(r) ? r[9] : '');
+            if (matchesAgentBill(agName)) {
+                var pAmt = r.pamt !== undefined ? r.pamt : (r.pending || (Array.isArray(r) ? r[6] : 0));
+                agTotPend += (parseFloat(pAmt) || 0);
+            }
+        });
+        var balBadge = document.getElementById('custRepBalBadge');
+        if (balBadge) {
+            balBadge.innerText = (agTotPend > 0) ? `Your O/S: ₹ ${Math.round(agTotPend).toLocaleString('en-IN')}` : 'Your O/S: Clear';
+            balBadge.style.color = (agTotPend > 0) ? '#dc2626' : '#16a34a';
+            balBadge.style.background = (agTotPend > 0) ? '#fee2e2' : '#dcfce7';
+        }
     }
 
     // ==========================================
@@ -13820,6 +13928,20 @@ window.openBillInvoiceModal = function (billNo) {
         return;
     }
 
+    // Agent Privacy: only allow viewing if agent matches bill Broker/Haste (b[13])
+    var myCd = {};
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+    var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent);
+    if (isAgentUser) {
+        var agentKws = window.getAgentKeywords ? window.getAgentKeywords(myCd) : [];
+        var billBroker = String(b[13] || '').trim().toUpperCase();
+        var isBrokerMatch = agentKws.some(function (kw) { return billBroker.includes(kw) || kw.includes(billBroker); });
+        if (!isBrokerMatch) {
+            alert("🔒 Access Denied: You can only view invoices where you are the broker.");
+            return;
+        }
+    }
+
     window._currentActiveBillData = b;
 
     var container = document.getElementById('billInvoicePrintableContainer');
@@ -13942,6 +14064,8 @@ window.openBillInvoiceModal = function (billNo) {
     var modal = document.getElementById('billDetailModal');
     if (modal) modal.style.display = 'flex';
 };
+
+window.openBillModal = window.openBillInvoiceModal;
 
 window.closeBillModal = function () {
     var modal = document.getElementById('billDetailModal');
@@ -14867,6 +14991,7 @@ window.startAutomaticContactSync = async function (isManual) {
     var completedCount = 0;
     var totalAdded = 0;
     var totalUpdated = 0;
+    var totalExisting = 0;
     var lastAccountUsed = '';
     var BATCH_SIZE = 100;
 
@@ -14889,14 +15014,14 @@ window.startAutomaticContactSync = async function (isManual) {
             if (res) {
                 totalAdded += (res.added || 0);
                 totalUpdated += (res.updated || 0);
+                if (res.existingCount) totalExisting = (res.existingCount || 0);
                 if (res.accountUsed) lastAccountUsed = res.accountUsed;
             }
         } catch (batchErr) {
             console.warn("NativeContacts batch sync error:", batchErr);
             if (String(batchErr).includes("Permission denied")) {
-                try { localStorage.setItem('ds_contacts_account_migrated_v3', 'true'); } catch(e){}
-    window._isSyncingContacts = false;
                 if (banner) banner.style.display = 'none';
+                window._isSyncingContacts = false;
                 if (isManual) alert("Contacts permission not granted. Please allow Contacts permission in Android App Settings.");
                 return;
             }
@@ -14917,7 +15042,9 @@ window.startAutomaticContactSync = async function (isManual) {
         bannerCount.innerText = '✅ Complete';
         setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
-    try { localStorage.setItem('ds_contacts_account_migrated_v3', 'true'); } catch(e){}
+    if (totalAdded > 0 || totalUpdated > 0 || totalExisting > 0) {
+        try { localStorage.setItem('ds_contacts_account_migrated_v3', 'true'); } catch(e){}
+    }
     window._isSyncingContacts = false;
     if (isManual) {
         alert("✅ Phonebook Contact Sync Complete!\n\n• Contacts Processed: " + completedCount + "\n• New Added: " + totalAdded + "\n• Existing Updated: " + totalUpdated + (lastAccountUsed ? "\n• Target Account: " + lastAccountUsed : ""));
