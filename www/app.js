@@ -9171,11 +9171,18 @@ window.openLiveAdmin = function () {
         return result;
     }
 
-    function fetchLiveData() {
+    async function fetchLiveData() {
         if (document.getElementById('adminLiveModal').style.display === 'none') {
             clearInterval(window.liveAdminInterval);
             return;
         }
+
+        var token = null;
+        if (typeof getCachedAuthToken === 'function') {
+            try { token = await getCachedAuthToken(true); } catch(e){}
+        }
+        var authHeaders = { 'Content-Type': 'application/json' };
+        if (token) authHeaders['Authorization'] = 'Bearer ' + token;
 
         let limitDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         let runQueryUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery";
@@ -9204,7 +9211,7 @@ window.openLiveAdmin = function () {
 
         let pLive = window.fetchWithRetry(runQueryUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders,
             body: JSON.stringify(liveQueryPayload)
         }).then(res => res.json()).catch(err => {
             console.error("LiveSessions query error:", err);
@@ -9213,15 +9220,19 @@ window.openLiveAdmin = function () {
 
         let pUsers = window.fetchWithRetry(runQueryUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders,
             body: JSON.stringify(usersQueryPayload)
         }).then(res => res.json()).catch(err => {
             console.error("Users query error:", err);
             return [];
         });
 
-        Promise.all([pLive, pUsers])
-            .then(([liveSnapshot, usersSnapshot]) => {
+        let pPartyLinks = window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyLinks?pageSize=1000", {
+            headers: (token ? { 'Authorization': 'Bearer ' + token } : {})
+        }).then(res => res.json()).catch(() => ({ documents: [] }));
+
+        Promise.all([pLive, pUsers, pPartyLinks])
+            .then(([liveSnapshot, usersSnapshot, partyLinksSnapshot]) => {
                 if (liveSnapshot && liveSnapshot.error && !Array.isArray(liveSnapshot)) {
                     console.warn("LiveSessions error:", liveSnapshot.error);
                     liveSnapshot = [];
@@ -9233,6 +9244,39 @@ window.openLiveAdmin = function () {
 
                 contentEl.innerHTML = '';
                 let hasLive = false;
+
+                let partyLinksByPhone = new Map();
+                let partyDocs = (partyLinksSnapshot && partyLinksSnapshot.documents) ? partyLinksSnapshot.documents : [];
+                partyDocs.forEach(pDoc => {
+                    if (!pDoc.fields) return;
+                    let pf = pDoc.fields;
+                    let pPhone = pf.phone ? pf.phone.stringValue : '';
+                    let p10 = String(pPhone).replace(/\D/g, '').slice(-10);
+                    if (p10.length === 10) {
+                        partyLinksByPhone.set(p10, {
+                            code: pf.partyCode ? pf.partyCode.stringValue : '',
+                            name: pf.partyName ? pf.partyName.stringValue : '',
+                            role: pf.role ? pf.role.stringValue : 'customer',
+                            isApproved: pf.isApproved ? pf.isApproved.booleanValue : true,
+                            approvalStatus: (pf.approvalStatus && pf.approvalStatus.stringValue) ? pf.approvalStatus.stringValue : 'approved',
+                            approvedByAdmin: pf.approvedByAdmin ? pf.approvedByAdmin.stringValue : 'Admin',
+                            approvedAt: pf.approvedAt ? (pf.approvedAt.timestampValue || pf.approvedAt.stringValue) : ''
+                        });
+                    }
+                });
+
+                try {
+                    let localBackup = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}');
+                    for (let k in localBackup) {
+                        let item = localBackup[k];
+                        if (item && item.phone) {
+                            let p10 = String(item.phone).replace(/\D/g, '').slice(-10);
+                            if (p10.length === 10 && !partyLinksByPhone.has(p10)) {
+                                partyLinksByPhone.set(p10, item);
+                            }
+                        }
+                    }
+                } catch(e){}
 
                 function getPhoneKey(p) {
                     if (!p) return '';
@@ -9416,6 +9460,21 @@ window.openLiveAdmin = function () {
                     });
                 });
 
+                // Enrich all sortedDocs with partyLinksByPhone before sorting & counting
+                sortedDocs.forEach(item => {
+                    let pKey = getPhoneKey(item.id) || getPhoneKey(item.data && (item.data.user || item.data.phone));
+                    let pl = pKey ? partyLinksByPhone.get(pKey) : null;
+                    if (pl && item.data) {
+                        item.data.isApproved = true;
+                        item.data.approvalStatus = 'approved';
+                        item.data.linkedAccount = pl.code || pl.partyCode;
+                        item.data.linkedAccountName = pl.name || pl.partyName;
+                        if (pl.approvedByAdmin) item.data.approvedByAdmin = pl.approvedByAdmin;
+                        if (pl.approvedAt) item.data.approvedAt = pl.approvedAt;
+                        if (pl.role) item.data.role = pl.role;
+                    }
+                });
+
                 // 5. Sort: 1) Live Now, 2) Pending Approval, 3) Recent Activity / Registration
                 sortedDocs.sort((a, b) => {
                     let aIsLive = a.data && a.data.lastActive && typeof a.data.lastActive.toDate === 'function' && (Date.now() - a.data.lastActive.toDate().getTime() < 60000);
@@ -9526,7 +9585,33 @@ window.openLiveAdmin = function () {
 
                     let safeDocId = docId.replace(/\+/g, '').replace(/[^a-zA-Z0-9_]/g, '_');
                     let pKey = getPhoneKey(docId);
+                    let pl = pKey ? partyLinksByPhone.get(pKey) : null;
                     let uData = window.adminCustomerCache[docId] || (pKey ? window.adminCustomerCache[pKey] : null);
+                    if (pl) {
+                        if (!uData) {
+                            uData = {
+                                actualDocId: d.actualDocId || docId,
+                                name: d.customerName || '',
+                                station: d.customerStation || '',
+                                approvalStatus: 'approved',
+                                isApproved: true,
+                                linkedAccount: pl.code || pl.partyCode,
+                                linkedAccountName: pl.name || pl.partyName,
+                                approvedByAdmin: pl.approvedByAdmin || 'Admin',
+                                approvedAt: pl.approvedAt || '',
+                                role: pl.role || d.role || 'customer'
+                            };
+                            window.adminCustomerCache[docId] = uData;
+                            if (pKey) window.adminCustomerCache[pKey] = uData;
+                        } else {
+                            uData.isApproved = true;
+                            uData.approvalStatus = 'approved';
+                            uData.linkedAccount = pl.code || pl.partyCode;
+                            uData.linkedAccountName = pl.name || pl.partyName;
+                            if (pl.approvedByAdmin) uData.approvedByAdmin = pl.approvedByAdmin;
+                            if (pl.approvedAt) uData.approvedAt = pl.approvedAt;
+                        }
+                    }
 
                     let roleBadge = '';
                     var isAdminUser = Boolean((d && (d.isAdmin || d.role === 'admin')) || (uData && (uData.isAdmin || uData.role === 'admin')));
@@ -9564,10 +9649,12 @@ window.openLiveAdmin = function () {
                         uData.role = 'admin';
                     }
 
-                    // Dynamically search accounts if needed (skip for guests and admins)
-                    if (!isGuest && !isAdminUser && (!uData || (!uData.isApproved && (!uData.matchedAccounts || !uData.matchedAccounts.length)))) {
+                    // Dynamically search accounts if needed (skip for guests, admins, and already approved accounts)
+                    var isAlreadyApproved = Boolean((uData && (uData.isApproved || uData.approvalStatus === 'approved')) || (pl && (pl.isApproved || pl.approvalStatus === 'approved')));
+                    if (!isGuest && !isAdminUser && !isAlreadyApproved && (!uData || (!uData.matchedAccounts || !uData.matchedAccounts.length))) {
                         window.findAccountsByPhone(docId).then(matches => {
                             if (matches && matches.length > 0) {
+                                if (pl || (window.adminCustomerCache[docId] && window.adminCustomerCache[docId].isApproved)) return;
                                 let fallbackData = {
                                     approvalStatus: 'pending',
                                     isApproved: false,
@@ -9823,8 +9910,13 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
 
         var nowIso = new Date().toISOString();
         var targetDocId = (window.adminCustomerCache && window.adminCustomerCache[docId] && window.adminCustomerCache[docId].actualDocId) ? window.adminCustomerCache[docId].actualDocId : docId;
-        var patchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(targetDocId) +
-            "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role";
+        var clean10 = String(docId).replace(/\D/g, '').slice(-10);
+        var possibleIds = [targetDocId, docId];
+        if (clean10.length === 10) {
+            possibleIds.push(clean10);
+            possibleIds.push('+91' + clean10);
+        }
+        possibleIds = [...new Set(possibleIds.filter(Boolean))];
 
         var patchBody = {
             fields: {
@@ -9838,22 +9930,18 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
             }
         };
 
-        await fetch(patchUrl, {
-            method: "PATCH",
-            headers: headers,
-            body: JSON.stringify(patchBody)
-        });
-
-        // Also update LiveSessions
-        try {
-            var livePatchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(docId) +
-                "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role";
-            await fetch(livePatchUrl, {
-                method: "PATCH",
-                headers: headers,
-                body: JSON.stringify(patchBody)
-            });
-        } catch(liveErr){}
+        for (var pId of possibleIds) {
+            try {
+                var pUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(pId) +
+                    "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role";
+                await fetch(pUrl, { method: "PATCH", headers: headers, body: JSON.stringify(patchBody) });
+            } catch(e) {}
+            try {
+                var lpUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(pId) +
+                    "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role";
+                await fetch(lpUrl, { method: "PATCH", headers: headers, body: JSON.stringify(patchBody) });
+            } catch(e) {}
+        }
 
         // ☁️ Persist to PartyLinks collection so it survives 2-hour accounting syncs
         if (selectedCode) {
@@ -9885,7 +9973,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
 
             try {
                 var localPartyLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}');
-                localPartyLinks[String(selectedCode).trim().toUpperCase()] = {
+                var approvedLinkObj = {
                     code: selectedCode,
                     name: selectedName,
                     phone: docId,
@@ -9895,13 +9983,18 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
                     approvedByAdmin: adminName,
                     approvedAt: nowIso
                 };
+                localPartyLinks[String(selectedCode).trim().toUpperCase()] = approvedLinkObj;
+                if (clean10 && clean10.length === 10) {
+                    localPartyLinks[clean10] = approvedLinkObj;
+                    localPartyLinks['+91' + clean10] = approvedLinkObj;
+                }
                 localStorage.setItem('ds_party_links_backup', JSON.stringify(localPartyLinks));
             } catch(e){}
         }
 
-        // Update cache
+        // Update cache across all docId variants
         if (!window.adminCustomerCache) window.adminCustomerCache = {};
-        window.adminCustomerCache[docId] = {
+        var updatedCacheItem = {
             isApproved: true,
             approvalStatus: 'approved',
             linkedAccount: selectedCode,
@@ -9910,11 +10003,14 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
             approvedAt: nowIso,
             role: selectedRole
         };
+        for (var pId of possibleIds) {
+            window.adminCustomerCache[pId] = updatedCacheItem;
+        }
 
         // Re-render UI card
         var box = document.getElementById('approval_box_' + safeId);
         if (box) {
-            box.innerHTML = window.renderApprovalBoxHtml(docId, safeId, window.adminCustomerCache[docId]);
+            box.innerHTML = window.renderApprovalBoxHtml(docId, safeId, updatedCacheItem);
         }
 
         alert(`✅ Account Approved & Linked Permanently!\n\nUser: ${docId}\nLinked to: ${selectedName} [${selectedRole.toUpperCase()}]\nApproved by: ${adminName}`);
