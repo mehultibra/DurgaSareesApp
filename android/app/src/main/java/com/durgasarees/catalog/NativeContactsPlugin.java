@@ -39,19 +39,39 @@ public class NativeContactsPlugin extends Plugin {
     private static volatile boolean sGmailCleaned = false;
     private String mLastBatchError = null;
 
-    private int executeBatchSafely(ArrayList<ContentProviderOperation> ops, int newContactsInBatch) {
+    private int applyContactOpsSafely(ArrayList<ContentProviderOperation> ops, int newContactsInBatch) {
         if (ops == null || ops.isEmpty()) return 0;
         try {
             getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, ops);
             return newContactsInBatch;
         } catch (Throwable t1) {
+            mLastBatchError = t1.getMessage();
             try {
+                // Determine Samsung local phone account or device default (null/null)
+                AccountManager am = AccountManager.get(getContext());
+                Account[] secAccts = null;
+                try {
+                    secAccts = am.getAccountsByType("vnd.sec.contact.phone");
+                } catch (Throwable ignored) {}
+                String fbType = (secAccts != null && secAccts.length > 0) ? "vnd.sec.contact.phone" : null;
+                String fbName = (secAccts != null && secAccts.length > 0 && secAccts[0].name != null) ? secAccts[0].name : (fbType != null ? "Phone" : null);
+
                 ArrayList<ContentProviderOperation> fallbackOps = new ArrayList<>();
                 for (ContentProviderOperation op : ops) {
                     if (op.toString().contains(ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)) {
                         continue;
                     }
-                    fallbackOps.add(op);
+                    Uri uri = op.getUri();
+                    if (uri != null && uri.toString().contains("raw_contacts")) {
+                        ContentProviderOperation.Builder rawBuilder = ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI);
+                        if (fbType != null && fbName != null) {
+                            rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, fbType);
+                            rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_NAME, fbName);
+                        }
+                        fallbackOps.add(rawBuilder.build());
+                    } else {
+                        fallbackOps.add(op);
+                    }
                 }
                 if (!fallbackOps.isEmpty()) {
                     getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, fallbackOps);
@@ -59,9 +79,6 @@ public class NativeContactsPlugin extends Plugin {
                 }
             } catch (Throwable t2) {
                 mLastBatchError = t2.getMessage();
-            }
-            if (mLastBatchError == null) {
-                mLastBatchError = t1.getMessage();
             }
             return 0;
         }
@@ -340,7 +357,6 @@ public class NativeContactsPlugin extends Plugin {
                     }
 
                     ArrayList<ContentProviderOperation> ops = new ArrayList<>();
-                    ArrayList<ContentProviderOperation> groupOps = new ArrayList<>();
                     Set<String> seenInThisBatch = new HashSet<>();
                     int addedCount = 0;
                     int updatedCount = 0;
@@ -451,31 +467,18 @@ public class NativeContactsPlugin extends Plugin {
                                     .build());
                             }
 
-                            // Attach to visible Group if available (appended at tail of batch)
-                            if (groupId > 0) {
-                                groupOps.add(ContentProviderOperation.newInsert(dataUriWithSync)
-                                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
-                                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)
-                                    .withValue(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID, groupId)
-                                    .build());
-                            }
-
                             pendingNewInBatch++;
                         }
 
                         if (ops.size() >= 120) {
-                            ops.addAll(groupOps);
-                            groupOps.clear();
-                            addedCount += executeBatchSafely(ops, pendingNewInBatch);
+                            addedCount += applyContactOpsSafely(ops, pendingNewInBatch);
                             ops.clear();
                             pendingNewInBatch = 0;
                         }
                     }
 
                     if (!ops.isEmpty()) {
-                        ops.addAll(groupOps);
-                        groupOps.clear();
-                        addedCount += executeBatchSafely(ops, pendingNewInBatch);
+                        addedCount += applyContactOpsSafely(ops, pendingNewInBatch);
                         ops.clear();
                         pendingNewInBatch = 0;
                     }

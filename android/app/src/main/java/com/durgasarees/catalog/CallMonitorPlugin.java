@@ -205,8 +205,8 @@ public class CallMonitorPlugin extends Plugin {
 
             JSObject ret = new JSObject();
             long now = System.currentTimeMillis();
-            // Return call if within last 15 minutes
-            if (phone != null && !phone.isEmpty() && (now - timestamp < 15 * 60 * 1000)) {
+            // Return call if within last 15 minutes (match by phone or caller name)
+            if (((phone != null && !phone.isEmpty()) || (name != null && !name.isEmpty())) && (now - timestamp < 15 * 60 * 1000)) {
                 ret.put("phone", phone);
                 ret.put("name", name != null ? name : "");
                 ret.put("direction", dir);

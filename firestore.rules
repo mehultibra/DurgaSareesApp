@@ -126,12 +126,7 @@ service cloud.firestore {
     // ERP CLOUD COLLECTIONS (Accounting Brain)
     // ==========================================
     function isAllowedPartyReport(docId) {
-      return isStaffOrAdmin() || (
-        isApprovedUser() && getUserDoc() != null && (
-          getUserDoc().get('linkedAccount', '') == docId ||
-          getUserDoc().get('role', '') == 'agent'
-        )
-      );
+      return isApprovedUser();
     }
 
     match /AccountingMeta/{docId} {

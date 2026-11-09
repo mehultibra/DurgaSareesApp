@@ -1587,13 +1587,13 @@ async function checkAdminStatus(phone) {
                 window.Capacitor.Plugins.CallMonitor.checkCallerIdRole().then(function (st) {
                     var banner = document.getElementById('enableCallPopupBanner');
                     if (banner) {
-                        banner.style.display = (!st || !st.held) ? 'flex' : 'none';
+                        banner.style.display = (!st || !st.held || !st.notificationListenerEnabled) ? 'flex' : 'none';
                     }
                 }).catch(function () {});
             }
 
             // Automatic Contact Sync Migration once per session (12s after startup)
-            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v3') !== 'true') {
+            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v4') !== 'true') {
                 window._contactsMigrationScheduled = true;
                 setTimeout(function () {
                     try { localStorage.removeItem('ds_contact_sync_hashes_v2'); } catch(e){}
@@ -12778,7 +12778,7 @@ window.openMyReportsSelfService = function () {
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
 
     if (!window.hasCRMAccess()) {
-        if (myCd.isApproved !== true || myCd.approvalStatus === 'pending') {
+        if (myCd.isApproved !== true || myCd.approvalStatus !== 'approved') {
             var btnTop = document.getElementById('btnTopMyReports');
             if (btnTop) btnTop.style.display = 'none';
             var menuRep = document.getElementById('menuMyReports');
@@ -12936,7 +12936,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
 
     if (!window.hasCRMAccess()) {
-        if (myCd.isApproved !== true || myCd.approvalStatus === 'pending') {
+        if (myCd.isApproved !== true || myCd.approvalStatus !== 'approved') {
             var btnTop = document.getElementById('btnTopMyReports');
             if (btnTop) btnTop.style.display = 'none';
             var menuRep = document.getElementById('menuMyReports');
@@ -15230,8 +15230,8 @@ window.startAutomaticContactSync = async function (isManual) {
         bannerCount.innerText = '✅ Complete';
         setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
-    if (totalAdded > 0 || totalUpdated > 0 || totalExisting > 0) {
-        try { localStorage.setItem('ds_contacts_account_migrated_v3', 'true'); } catch(e){}
+    if (totalAdded > 0 || totalUpdated > 0) {
+        try { localStorage.setItem('ds_contacts_account_migrated_v4', 'true'); } catch(e){}
     }
     window._isSyncingContacts = false;
     if (isManual) {
@@ -15908,28 +15908,18 @@ window.enableCallPopupSuperAdmin = async function () {
     }
     try {
         var fn = (typeof plugin.requestCallerIdRole === 'function') ? plugin.requestCallerIdRole : plugin.requestCallScreeningRole;
-        var res = await fn.call(plugin);
-        var banner = document.getElementById('enableCallPopupBanner');
-        if (res && res.held) {
-            if (banner) banner.style.display = 'none';
+        await fn.call(plugin);
 
-            // Also check Notification Listener access for Samsung outgoing & saved contact detection
-            if (typeof plugin.checkCallerIdRole === 'function') {
-                try {
-                    var st = await plugin.checkCallerIdRole();
-                    if (st && !st.notificationListenerEnabled && typeof plugin.requestNotificationListener === 'function') {
-                        if (confirm("✅ Caller ID Role is active!\n\nTo also enable live popups for outgoing calls and saved contacts on Samsung, please enable 'Durga Sarees' on the Notification Access screen.")) {
-                            await plugin.requestNotificationListener();
-                        }
-                    } else {
-                        alert("✅ Caller ID & Live Call Catching is ACTIVE!\n\nIncoming & outgoing party calls will automatically open Customer Reports with 1-tap CRM.");
-                    }
-                } catch(e){}
-            } else {
-                alert("✅ Caller ID & Live Call Catching is ACTIVE!\n\nIncoming calls from party numbers will now automatically open Customer Reports with 1-tap CRM.");
+        if (typeof plugin.checkCallerIdRole === 'function') {
+            var st = await plugin.checkCallerIdRole();
+            if (st && !st.notificationListenerEnabled && typeof plugin.requestNotificationListener === 'function') {
+                alert("Now please turn ON 'Durga Sarees' in the next screen so Outgoing & Saved Contact calls also auto-open live reports!");
+                await plugin.requestNotificationListener();
+            } else if (st && st.held && st.notificationListenerEnabled) {
+                var banner = document.getElementById('enableCallPopupBanner');
+                if (banner) banner.style.display = 'none';
+                alert("✅ Caller ID & Live Call Catching is ACTIVE!\n\nIncoming & outgoing party calls will automatically open Customer Reports with 1-tap CRM.");
             }
-        } else if (res && res.status === 'unsupported') {
-            alert("Call Screening is supported on Android 10 (API 29) or higher.");
         }
     } catch (e) {
         alert("Error requesting Caller ID permission: " + (e.message || e));
@@ -16017,6 +16007,14 @@ function setupCRMCallReturnListener() {
         if (typeof window.checkLiveCallOnResume === 'function') {
             window.checkLiveCallOnResume();
         }
+        if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.checkCallerIdRole === 'function') {
+            window.Capacitor.Plugins.CallMonitor.checkCallerIdRole().then(function (st) {
+                var banner = document.getElementById('enableCallPopupBanner');
+                if (banner) {
+                    banner.style.display = (!st || !st.held || !st.notificationListenerEnabled) ? 'flex' : 'none';
+                }
+            }).catch(function () {});
+        }
     }
 
     document.addEventListener('visibilitychange', function () {
@@ -16030,7 +16028,7 @@ function setupCRMCallReturnListener() {
     });
 
     window.addEventListener('dsNativeCallDetected', function (ev) {
-        if (ev && ev.detail && ev.detail.phone) {
+        if (ev && ev.detail && (ev.detail.phone || ev.detail.name)) {
             window.handleDetectedNativeCall(ev.detail.phone, ev.detail.direction, ev.detail.name);
         }
     });

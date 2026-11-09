@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 public class DurgaCallNotificationListener extends NotificationListenerService {
     private static volatile long sLastProcessedTime = 0;
     private static volatile String sLastProcessedKey = "";
-    private static final Pattern PHONE_PATTERN = Pattern.compile("(?:\\+91|91|0)?[6-9]\\d{9}");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("(?:\\+?91[\\s\\-]*)?0?[6-9](?:[\\s\\-]*\\d){9}");
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
@@ -93,17 +93,30 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 }
             }
 
-            // CRITICAL: Never trigger without a verified 10-digit phone number!
-            if (p10 == null || p10.length() != 10) return;
+            // CRITICAL: Even if p10 is null (for example, if the contact was not synced to device phonebook yet,
+            // or READ_CONTACTS wasn't granted yet, but title is a non-generic caller name like "RADHIKA SAREES [SURAT]"),
+            // if !isGenericDialerStatus(title) and title contains [ or matches a valid party name, do NOT abort!
+            // Pass p10 = "" and partyName = title to CallMonitorPlugin.notifyLiveCall and showCallNotification!
+            if (p10 == null || p10.length() != 10) {
+                String candidateName = (!isGenericDialerStatus(title)) ? title : (!isGenericDialerStatus(bigTitle) ? bigTitle : "");
+                if (!candidateName.isEmpty() && (candidateName.contains("[") || candidateName.length() >= 4)) {
+                    p10 = "";
+                    partyName = candidateName;
+                } else {
+                    return;
+                }
+            }
 
             if (partyName == null || isGenericDialerStatus(partyName)) {
-                partyName = lookupNameByPhone(p10);
+                if (p10 != null && !p10.isEmpty()) {
+                    partyName = lookupNameByPhone(p10);
+                }
             }
             if (partyName == null || partyName.trim().isEmpty()) {
                 partyName = p10;
             }
 
-            String dedupeKey = p10 + "|" + partyName;
+            String dedupeKey = (p10.isEmpty() ? partyName : p10) + "|" + partyName;
             long now = System.currentTimeMillis();
             if (dedupeKey.equals(sLastProcessedKey) && (now - sLastProcessedTime < 60000)) {
                 return; // Debounce within 60 seconds
@@ -128,12 +141,22 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
         if (s == null) return true;
         String lower = s.trim().toLowerCase();
         if (lower.isEmpty()) return true;
+        if (lower.matches("^\\d{1,2}:\\d{2}(?::\\d{2})?$")) return true;
         return lower.contains("ongoing call") ||
                lower.contains("incoming call") ||
+               lower.contains("active call") ||
+               lower.contains("call in progress") ||
+               lower.contains("return to call") ||
+               lower.contains("tap to return") ||
                lower.contains("dialing") ||
                lower.contains("calling") ||
+               lower.contains("ringing") ||
+               lower.contains("connecting") ||
                lower.contains("call ended") ||
                lower.contains("missed call") ||
+               lower.contains("sim 1") ||
+               lower.contains("sim 2") ||
+               lower.contains("hd") ||
                lower.contains("volte") ||
                lower.contains("wi-fi call") ||
                lower.contains("wifi call") ||
@@ -160,13 +183,15 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
     }
 
     private String lookupPhoneByName(String name) {
+        if (name == null || name.trim().isEmpty()) return null;
+        String trimmed = name.trim();
         Cursor cursor = null;
         try {
             cursor = getContentResolver().query(
                 ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                 new String[]{ ContactsContract.CommonDataKinds.Phone.NUMBER },
                 ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " = ?",
-                new String[]{ name },
+                new String[]{ trimmed },
                 null
             );
             if (cursor != null && cursor.moveToFirst()) {
@@ -177,6 +202,38 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                         String digits = num.replaceAll("\\D", "");
                         if (digits.length() >= 10) {
                             return digits.substring(digits.length() - 10);
+                        }
+                    }
+                }
+            }
+            if (cursor != null) {
+                cursor.close();
+                cursor = null;
+            }
+
+            // Fallback: strip [CITY] if present and query DISPLAY_NAME LIKE baseName%
+            String baseName = trimmed;
+            int bracketIdx = baseName.indexOf('[');
+            if (bracketIdx > 0) {
+                baseName = baseName.substring(0, bracketIdx).trim();
+            }
+            if (baseName.length() >= 4) {
+                cursor = getContentResolver().query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    new String[]{ ContactsContract.CommonDataKinds.Phone.NUMBER },
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " LIKE ?",
+                    new String[]{ baseName + "%" },
+                    null
+                );
+                if (cursor != null && cursor.moveToFirst()) {
+                    int idx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+                    if (idx >= 0) {
+                        String num = cursor.getString(idx);
+                        if (num != null) {
+                            String digits = num.replaceAll("\\D", "");
+                            if (digits.length() >= 10) {
+                                return digits.substring(digits.length() - 10);
+                            }
                         }
                     }
                 }
