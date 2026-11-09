@@ -13,12 +13,43 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class DurgaCallNotificationListener extends NotificationListenerService {
+    private static volatile DurgaCallNotificationListener sInstance = null;
     private static volatile long sLastProcessedTime = 0;
     private static volatile String sLastProcessedKey = "";
     private static final Pattern PHONE_PATTERN = Pattern.compile("(?:\\+?91[\\s\\-]*)?0?[6-9](?:[\\s\\-]*\\d){9}");
 
     @Override
+    public void onListenerConnected() {
+        super.onListenerConnected();
+        sInstance = this;
+    }
+
+    @Override
+    public void onDestroy() {
+        if (sInstance == this) sInstance = null;
+        super.onDestroy();
+    }
+
+    public static void scanActiveNotificationsNow(Context context) {
+        try {
+            DurgaCallNotificationListener listener = sInstance;
+            if (listener == null) return;
+            StatusBarNotification[] active = listener.getActiveNotifications();
+            if (active != null) {
+                for (StatusBarNotification sbn : active) {
+                    listener.processNotification(sbn);
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
+        sInstance = this;
+        processNotification(sbn);
+    }
+
+    private void processNotification(StatusBarNotification sbn) {
         try {
             if (sbn == null) return;
             String pkg = sbn.getPackageName();
@@ -74,11 +105,17 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                     partyName = title;
                 } else if (!isGenericDialerStatus(bigTitle)) {
                     partyName = bigTitle;
+                } else if (!isGenericDialerStatus(text)) {
+                    partyName = text;
+                } else if (!isGenericDialerStatus(bigText)) {
+                    partyName = bigText;
+                } else if (!isGenericDialerStatus(sub)) {
+                    partyName = sub;
                 } else {
                     partyName = lookupNameByPhone(p10);
                 }
             } else {
-                // If no phone in notification text, check title and text against contacts
+                // If no phone in notification text, check title, bigTitle, text, bigText, sub against contacts
                 if (!isGenericDialerStatus(title)) {
                     p10 = lookupPhoneByName(title);
                     if (p10 != null) partyName = title;
@@ -91,14 +128,34 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                     p10 = lookupPhoneByName(text);
                     if (p10 != null) partyName = text;
                 }
+                if (p10 == null && !isGenericDialerStatus(bigText)) {
+                    p10 = lookupPhoneByName(bigText);
+                    if (p10 != null) partyName = bigText;
+                }
+                if (p10 == null && !isGenericDialerStatus(sub)) {
+                    p10 = lookupPhoneByName(sub);
+                    if (p10 != null) partyName = sub;
+                }
             }
 
             // CRITICAL: Even if p10 is null (for example, if the contact was not synced to device phonebook yet,
-            // or READ_CONTACTS wasn't granted yet, but title is a non-generic caller name like "RADHIKA SAREES [SURAT]"),
-            // if !isGenericDialerStatus(title) and title contains [ or matches a valid party name, do NOT abort!
-            // Pass p10 = "" and partyName = title to CallMonitorPlugin.notifyLiveCall and showCallNotification!
+            // or READ_CONTACTS wasn't granted yet, but title/text is a non-generic caller name like "RADHIKA SAREES [SURAT]"),
+            // if !isGenericDialerStatus and title/text contains [ or length >= 4, do NOT abort!
+            // Pass p10 = "" and partyName = candidateName to CallMonitorPlugin.notifyLiveCall and showCallNotification!
             if (p10 == null || p10.length() != 10) {
-                String candidateName = (!isGenericDialerStatus(title)) ? title : (!isGenericDialerStatus(bigTitle) ? bigTitle : "");
+                String candidateName = "";
+                if (!isGenericDialerStatus(title)) {
+                    candidateName = title;
+                } else if (!isGenericDialerStatus(bigTitle)) {
+                    candidateName = bigTitle;
+                } else if (!isGenericDialerStatus(text)) {
+                    candidateName = text;
+                } else if (!isGenericDialerStatus(bigText)) {
+                    candidateName = bigText;
+                } else if (!isGenericDialerStatus(sub)) {
+                    candidateName = sub;
+                }
+
                 if (!candidateName.isEmpty() && (candidateName.contains("[") || candidateName.length() >= 4)) {
                     p10 = "";
                     partyName = candidateName;
@@ -156,6 +213,7 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                lower.contains("missed call") ||
                lower.contains("sim 1") ||
                lower.contains("sim 2") ||
+               lower.contains("hd+") ||
                lower.contains("hd") ||
                lower.contains("volte") ||
                lower.contains("wi-fi call") ||

@@ -1468,7 +1468,7 @@ window.syncAdminUI = function () {
         // Customer / Agent Self-Service: "📊 My Reports"
         var myCd = {};
         try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
-        var hasApprovedLinkedAcc = Boolean((myCd.linkedAccount || (myCd.matchedAccounts && myCd.matchedAccounts.length > 0)) && myCd.isApproved !== false && myCd.approvalStatus !== 'pending');
+        var hasApprovedLinkedAcc = Boolean((myCd.linkedAccount || (myCd.matchedAccounts && myCd.matchedAccounts.length > 0)) && myCd.isApproved === true && myCd.approvalStatus === 'approved');
         var isSelfServiceUser = !window.isAdminMode && !window.isSuperAdmin;
 
         if (document.getElementById('btnTopMyReports')) {
@@ -1593,7 +1593,7 @@ async function checkAdminStatus(phone) {
             }
 
             // Automatic Contact Sync Migration once per session (12s after startup)
-            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v4') !== 'true') {
+            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v6') !== 'true') {
                 window._contactsMigrationScheduled = true;
                 setTimeout(function () {
                     try { localStorage.removeItem('ds_contact_sync_hashes_v2'); } catch(e){}
@@ -13298,7 +13298,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
     var isSelfService = !window.hasCRMAccess();
-    var hasApprovedLinkedAcc = Boolean((myCd.linkedAccount || (myCd.matchedAccounts && myCd.matchedAccounts.length > 0)) && myCd.isApproved !== false);
+    var hasApprovedLinkedAcc = Boolean((myCd.linkedAccount || (myCd.matchedAccounts && myCd.matchedAccounts.length > 0)) && myCd.isApproved === true && myCd.approvalStatus === 'approved');
     if (isSelfService && !hasApprovedLinkedAcc) return;
 
     var area = document.getElementById('custReportContentArea');
@@ -15231,7 +15231,7 @@ window.startAutomaticContactSync = async function (isManual) {
         setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
     if (totalAdded > 0 || totalUpdated > 0) {
-        try { localStorage.setItem('ds_contacts_account_migrated_v4', 'true'); } catch(e){}
+        try { localStorage.setItem('ds_contacts_account_migrated_v6', 'true'); } catch(e){}
     }
     window._isSyncingContacts = false;
     if (isManual) {

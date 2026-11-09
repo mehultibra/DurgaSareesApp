@@ -126,6 +126,7 @@ public class MainActivity extends BridgeActivity {
         try {
             enforceLightNavBar();
             handleLiveCallIntent(getIntent());
+            DurgaCallNotificationListener.scanActiveNotificationsNow(this);
             if (bridge != null) {
                 bridge.triggerWindowJSEvent("dsNativeAppResumed");
             }

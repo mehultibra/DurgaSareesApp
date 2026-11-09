@@ -304,9 +304,9 @@ async function syncAccountingData() {
                 const billNo = String(b.BILL || b.VNO || '').trim();
                 const billAgent = String(b.BCODE || '').trim();
                 const billHaste = String(b.haste || '').trim();
-                const combinedAgentHaste = (billAgent && billHaste && billAgent.toUpperCase() !== billHaste.toUpperCase())
-                    ? `${billAgent} (Haste: ${billHaste})`
-                    : (billAgent || billHaste || '');
+                const combinedAgentHaste = billAgent
+                    ? (billHaste && billAgent.toUpperCase() !== billHaste.toUpperCase() ? `${billAgent} (Haste: ${billHaste})` : billAgent)
+                    : (billHaste || '');
                 if (billAgent) {
                     if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
                     allAgentsByParty.get(code).add(billAgent);
@@ -635,6 +635,7 @@ async function syncAccountingData() {
                 station: finalStation,
                 state: finalState,
                 agent: finalAgent,
+                agents: customerAgents,
                 transport: finalTransport,
                 gst: finalGst,
                 totalDebit: Math.round(totalDrByParty.get(code) || 0),
@@ -700,6 +701,7 @@ async function syncAccountingData() {
                     station: link.station || '',
                     state: finalState,
                     agent: finalAgent,
+                    agents: finalAgent ? [finalAgent] : [],
                     transport: link.transport || '',
                     gst: link.gst || '',
                     totalDebit: 0,
