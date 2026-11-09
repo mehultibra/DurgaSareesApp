@@ -491,11 +491,8 @@ async function syncAccountingData() {
     // Step 6: Load party links overrides (Fetch live from Firestore & merge into local cache)
     console.log('🔄 6. Fetching live PartyLinks from Firestore...');
     let localLinks = {};
-    const fallbackBackup = path.join(__dirname, 'www', 'party_links_backup.json');
     if (fs.existsSync(PARTY_LINKS_BACKUP)) {
         try { localLinks = JSON.parse(fs.readFileSync(PARTY_LINKS_BACKUP, 'utf8')); } catch (e) { }
-    } else if (fs.existsSync(fallbackBackup)) {
-        try { localLinks = JSON.parse(fs.readFileSync(fallbackBackup, 'utf8')); } catch (e) { }
     }
 
     try {
