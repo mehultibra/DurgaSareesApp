@@ -99,17 +99,21 @@ public class MainActivity extends BridgeActivity {
     private void handleLiveCallIntent(android.content.Intent intent) {
         if (intent == null) return;
         String phone = intent.getStringExtra("live_call_phone");
+        String name = intent.getStringExtra("live_call_name");
         if (phone != null && !phone.trim().isEmpty()) {
             intent.removeExtra("live_call_phone");
+            intent.removeExtra("live_call_name");
             try {
                 getSharedPreferences("ds_call_prefs", MODE_PRIVATE)
                     .edit()
                     .putString("last_call_phone", phone)
+                    .putString("last_call_name", name != null ? name : "")
                     .putString("last_call_dir", "incoming")
                     .putLong("last_call_time", System.currentTimeMillis())
                     .apply();
                 if (bridge != null) {
-                    bridge.triggerWindowJSEvent("dsNativeCallDetected", "{ phone: '" + phone + "', direction: 'incoming' }");
+                    String safeName = name != null ? name.replace("\\", "\\\\").replace("'", "\\'") : "";
+                    bridge.triggerWindowJSEvent("dsNativeCallDetected", "{ phone: '" + phone + "', name: '" + safeName + "', direction: 'incoming' }");
                 }
             } catch (Throwable ignored) {}
         }

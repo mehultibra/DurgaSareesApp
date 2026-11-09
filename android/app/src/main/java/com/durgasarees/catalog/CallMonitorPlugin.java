@@ -244,11 +244,16 @@ public class CallMonitorPlugin extends Plugin {
     }
 
     public static void notifyLiveCall(Context context, String phone, String direction) {
+        notifyLiveCall(context, phone, "", direction);
+    }
+
+    public static void notifyLiveCall(Context context, String phone, String name, String direction) {
         try {
             if (context != null) {
                 SharedPreferences sp = context.getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
                 sp.edit()
                     .putString("last_call_phone", phone)
+                    .putString("last_call_name", name != null ? name : "")
                     .putString("last_call_dir", direction)
                     .putLong("last_call_time", System.currentTimeMillis())
                     .apply();
@@ -258,8 +263,9 @@ public class CallMonitorPlugin extends Plugin {
                 instance.getBridge().getWebView().post(() -> {
                     try {
                         String safePhone = escapeJsString(phone);
+                        String safeName = escapeJsString(name);
                         String safeDirection = escapeJsString(direction);
-                        String js = "window.dispatchEvent(new CustomEvent('dsNativeCallDetected', { detail: { phone: '" + safePhone + "', direction: '" + safeDirection + "' } }));";
+                        String js = "window.dispatchEvent(new CustomEvent('dsNativeCallDetected', { detail: { phone: '" + safePhone + "', name: '" + safeName + "', direction: '" + safeDirection + "' } }));";
                         instance.getBridge().getWebView().evaluateJavascript(js, null);
                     } catch (Throwable ignored) {}
                 });

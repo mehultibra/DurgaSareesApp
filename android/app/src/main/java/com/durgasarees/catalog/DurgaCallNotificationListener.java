@@ -24,12 +24,19 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             String pkg = sbn.getPackageName();
             if (pkg == null) return;
 
-            // Only phone dialer / in-call UI packages
-            if (!pkg.equals("com.samsung.android.incallui") &&
-                !pkg.equals("com.android.incallui") &&
-                !pkg.equals("com.google.android.dialer") &&
-                !pkg.equals("com.samsung.android.dialer") &&
-                !pkg.equals("com.android.server.telecom")) {
+            // Only phone dialer / in-call UI packages (including Samsung One UI telephonyui and com.android.phone)
+            boolean isDialerPkg = pkg.equals("com.samsung.android.incallui") ||
+                pkg.equals("com.samsung.android.dialer") ||
+                pkg.equals("com.samsung.android.app.telephonyui") ||
+                pkg.equals("com.android.phone") ||
+                pkg.equals("com.google.android.dialer") ||
+                pkg.equals("com.android.incallui") ||
+                pkg.equals("com.android.dialer") ||
+                pkg.equals("com.android.server.telecom") ||
+                pkg.contains("incall") ||
+                pkg.contains("dialer") ||
+                pkg.contains("telephony");
+            if (!isDialerPkg) {
                 return;
             }
 
@@ -39,13 +46,19 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             Bundle extras = n.extras;
             CharSequence titleCs = extras.getCharSequence(Notification.EXTRA_TITLE);
             CharSequence textCs = extras.getCharSequence(Notification.EXTRA_TEXT);
+            CharSequence subCs = extras.getCharSequence(Notification.EXTRA_SUB_TEXT);
+            CharSequence bigTitleCs = extras.getCharSequence(Notification.EXTRA_TITLE_BIG);
+            CharSequence bigTextCs = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
 
             String title = titleCs != null ? titleCs.toString().trim() : "";
             String text = textCs != null ? textCs.toString().trim() : "";
-            if (title.isEmpty() && text.isEmpty()) return;
+            String sub = subCs != null ? subCs.toString().trim() : "";
+            String bigTitle = bigTitleCs != null ? bigTitleCs.toString().trim() : "";
+            String bigText = bigTextCs != null ? bigTextCs.toString().trim() : "";
+            if (title.isEmpty() && text.isEmpty() && sub.isEmpty()) return;
 
-            // Check if title or text contains a 10-digit phone number
-            String combined = title + " " + text;
+            // Check if title, text, or subtext contains a 10-digit phone number
+            String combined = title + " " + text + " " + sub + " " + bigTitle + " " + bigText;
             String p10 = null;
             Matcher m = PHONE_PATTERN.matcher(combined);
             if (m.find()) {
@@ -59,6 +72,8 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             if (p10 != null) {
                 if (!isGenericDialerStatus(title)) {
                     partyName = title;
+                } else if (!isGenericDialerStatus(bigTitle)) {
+                    partyName = bigTitle;
                 } else {
                     partyName = lookupNameByPhone(p10);
                 }
@@ -67,6 +82,10 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 if (!isGenericDialerStatus(title)) {
                     p10 = lookupPhoneByName(title);
                     if (p10 != null) partyName = title;
+                }
+                if (p10 == null && !isGenericDialerStatus(bigTitle)) {
+                    p10 = lookupPhoneByName(bigTitle);
+                    if (p10 != null) partyName = bigTitle;
                 }
                 if (p10 == null && !isGenericDialerStatus(text)) {
                     p10 = lookupPhoneByName(text);
@@ -100,7 +119,7 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 .putLong("last_call_time", now)
                 .apply();
 
-            CallMonitorPlugin.notifyLiveCall(this, p10, "active");
+            CallMonitorPlugin.notifyLiveCall(this, p10, partyName, "active");
             DurgaCallScreeningService.showCallNotification(this, p10, partyName, "active");
         } catch (Throwable ignored) {}
     }

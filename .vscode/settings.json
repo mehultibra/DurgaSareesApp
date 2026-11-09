@@ -1,3 +1,10 @@
 {
-    "geminicodeassist.localCodebaseAwareness": false
+    "geminicodeassist.localCodebaseAwareness": false,
+    "java.configuration.updateBuildConfiguration": "disabled",
+    "java.server.launchMode": "LightWeight",
+    "java.gradle.buildServer.enabled": "off",
+    "java.gradle.buildServer.openBuildOutput": "neverOpen",
+    "java.jdt.ls.androidSupport.enabled": "off",
+    "gradle.autoDetect": "off",
+    "gradle.nestedProjects": false
 }

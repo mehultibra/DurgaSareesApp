@@ -9545,22 +9545,40 @@ window.openLiveAdmin = function () {
                     }
                 });
 
-                // 5. Sort: 1) Live Now, 2) Pending Approval, 3) Recent Activity / Registration
+                function getEffectiveTimeMs(item) {
+                    if (!item) return 0;
+                    let d = item.data || {};
+                    let candidates = [
+                        item.time,
+                        d.lastActive,
+                        d.updatedAt,
+                        d.approvedAt,
+                        d.createdAt,
+                        d.time
+                    ];
+                    let maxMs = 0;
+                    for (let c of candidates) {
+                        if (!c) continue;
+                        let ms = 0;
+                        if (typeof c.toDate === 'function') {
+                            try { ms = c.toDate().getTime(); } catch(e){}
+                        } else if (c instanceof Date) {
+                            ms = c.getTime();
+                        } else if (typeof c === 'number') {
+                            ms = c;
+                        } else if (typeof c === 'string') {
+                            let parsed = Date.parse(c);
+                            if (!isNaN(parsed)) ms = parsed;
+                        }
+                        if (ms > maxMs) maxMs = ms;
+                    }
+                    return maxMs;
+                }
+
+                // 5. Strictly sort date and time wise with latest on top
                 sortedDocs.sort((a, b) => {
-                    let aIsLive = a.data && a.data.lastActive && typeof a.data.lastActive.toDate === 'function' && (Date.now() - a.data.lastActive.toDate().getTime() < 60000);
-                    let bIsLive = b.data && b.data.lastActive && typeof b.data.lastActive.toDate === 'function' && (Date.now() - b.data.lastActive.toDate().getTime() < 60000);
-                    if (aIsLive && !bIsLive) return -1;
-                    if (!aIsLive && bIsLive) return 1;
-
-                    let aIsAdmin = a.data && (a.data.isAdmin || a.data.role === 'admin');
-                    let bIsAdmin = b.data && (b.data.isAdmin || b.data.role === 'admin');
-                    let aPending = !aIsAdmin && a.data && (a.data.approvalStatus === 'pending' || (!a.data.isApproved && !a.id.startsWith('guest_')));
-                    let bPending = !bIsAdmin && b.data && (b.data.approvalStatus === 'pending' || (!b.data.isApproved && !b.id.startsWith('guest_')));
-                    if (aPending && !bPending) return -1;
-                    if (!aPending && bPending) return 1;
-
-                    let aTime = a.time ? (a.time.getTime ? a.time.getTime() : new Date(a.time).getTime()) : 0;
-                    let bTime = b.time ? (b.time.getTime ? b.time.getTime() : new Date(b.time).getTime()) : 0;
+                    let aTime = getEffectiveTimeMs(a);
+                    let bTime = getEffectiveTimeMs(b);
                     return bTime - aTime;
                 });
 
@@ -9589,12 +9607,16 @@ window.openLiveAdmin = function () {
                     let lastSeenStr = (d.lastActive && typeof d.lastActive.toDate === 'function')
                         ? d.lastActive.toDate().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })
                         : null;
+                    let effectiveMs = getEffectiveTimeMs(item);
+                    let effectiveDateStr = effectiveMs > 0 ? new Date(effectiveMs).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : null;
 
                     let statusBadge = isLiveNow
                         ? `<span style="background:#10b981; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;">🟢 Live Now</span>`
                         : (lastSeenStr
                             ? `<span style="background:#94a3b8; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;"><i class="fas fa-history"></i> Last seen: ${lastSeenStr}</span>`
-                            : `<span style="background:#64748b; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;"><i class="fas fa-mobile-alt"></i> Registered (Offline)</span>`);
+                            : (effectiveDateStr
+                                ? `<span style="background:#64748b; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;"><i class="fas fa-calendar-alt"></i> ${effectiveDateStr}</span>`
+                                : `<span style="background:#64748b; color:white; padding:4px 8px; border-radius:12px; font-size:10px; font-weight:bold;"><i class="fas fa-mobile-alt"></i> Registered (Offline)</span>`));
 
                     let borderColor = isLiveNow ? '#10b981' : (lastSeenStr ? '#94a3b8' : '#64748b');
 
@@ -12959,10 +12981,27 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
         cust = window._customerDirectoryMaster.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm || String(x.n || '').trim().toUpperCase() === pCodeNorm);
     }
     if (!cust) {
+        var num10 = pCodeNorm.replace(/\D/g, '').slice(-10);
+        if (num10.length === 10) {
+            cust = list.find(function (x) {
+                var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+                return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === num10; });
+            });
+            if (!cust && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+                cust = window._customerDirectoryMaster.find(function (x) {
+                    var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+                    return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === num10; });
+                });
+            }
+        }
+    }
+    if (!cust) {
+        var pDigits = pCodeNorm.replace(/\D/g, '').slice(-10);
+        var fallbackName = (pDigits.length === 10 && window._lastActiveCallName) ? window._lastActiveCallName : partyCode;
         cust = {
             c: partyCode,
-            n: partyCode,
-            p: '',
+            n: fallbackName,
+            p: pDigits.length === 10 ? pDigits : '',
             ct: '',
             g: '',
             b: 0,
@@ -15547,7 +15586,7 @@ window.startCRMCall = function (code, name, phone, station, agent, balance, drCr
 window.initiateTrackedCall = window.startCRMCall;
 
 // 2. Auto-Return App Resume Listener with localStorage persistence & checkPendingTrackedCall
-window.checkPendingTrackedCall = function () {
+window.checkPendingTrackedCall = async function () {
     if (typeof window.hasCRMAccess !== 'function' || !window.hasCRMAccess()) return;
 
     var rawData = null;
@@ -15557,6 +15596,14 @@ window.checkPendingTrackedCall = function () {
     } catch(e){}
 
     if (!rawData || !rawData.startTime) return;
+
+    // If call audio is actively ongoing on device, do NOT end tracked call or open post-call modal yet
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getCallState === 'function') {
+        try {
+            var st = await window.Capacitor.Plugins.CallMonitor.getCallState();
+            if (st && st.isInCall) return;
+        } catch (e) { }
+    }
 
     var elapsed = Date.now() - rawData.startTime;
     if (elapsed > 2000 && elapsed < 1800000) { // between 2 seconds and 30 minutes
@@ -15668,28 +15715,14 @@ window.toggleQuickNoteSpeech = async function () {
 };
 
 window.checkLiveCallOnResume = async function () {
-    // Strictly for Super Admin only
-    if (!window.isSuperAdmin) return;
+    if (typeof window.hasCRMAccess === 'function' && !window.hasCRMAccess()) return;
 
-    // 1. Check native CallMonitor plugin for recently screened incoming/outgoing call (DurgaCallScreeningService)
+    var callInfo = null;
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getLastDetectedCall === 'function') {
         try {
-            var callInfo = await window.Capacitor.Plugins.CallMonitor.getLastDetectedCall();
-            if (callInfo && callInfo.phone && callInfo.ageMs != null && callInfo.ageMs < 900000) { // within 15 min
-                if (window._lastHandledCallTimestamp !== callInfo.timestamp) {
-                    window._lastHandledCallTimestamp = callInfo.timestamp;
-                    if (typeof window.Capacitor.Plugins.CallMonitor.clearLastDetectedCall === 'function') {
-                        try { await window.Capacitor.Plugins.CallMonitor.clearLastDetectedCall(); } catch(e){}
-                    }
-                    window.handleDetectedNativeCall(callInfo.phone, callInfo.direction);
-                    return;
-                }
-            }
+            callInfo = await window.Capacitor.Plugins.CallMonitor.getLastDetectedCall();
         } catch (e) { }
     }
-
-    var list = window._compiledCustomersList || [];
-    if (!list || list.length === 0) return;
 
     var isInCall = false;
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getCallState === 'function') {
@@ -15705,55 +15738,89 @@ window.checkLiveCallOnResume = async function () {
         if (rawTrk) tracked = JSON.parse(rawTrk);
     } catch (e) { }
 
+    var curM = document.getElementById('customerDetailReportsModal');
+    var isReportOpen = curM && curM.style.display === 'flex';
+
+    // 1. Check native CallMonitor plugin for recently screened incoming/outgoing call (< 15 min)
+    if (callInfo && callInfo.phone && callInfo.ageMs != null && callInfo.ageMs < 900000) {
+        window._lastActiveCallPhone = callInfo.phone;
+        window._lastActiveCallName = callInfo.name || '';
+        try { localStorage.setItem('ds_last_active_call_phone', callInfo.phone); } catch(e){}
+
+        if (!isReportOpen || window._lastHandledCallTimestamp !== callInfo.timestamp) {
+            window._lastHandledCallTimestamp = callInfo.timestamp;
+            window.handleDetectedNativeCall(callInfo.phone, callInfo.direction, callInfo.name);
+            return;
+        }
+    }
+
     // 2. If actively on a call initiated from the app (< 45 minutes ago)
     if (tracked && tracked.code && (Date.now() - (tracked.startTime || 0)) < 2700000) {
-        var modal = document.getElementById('customerDetailReportsModal');
-        if (!modal || modal.style.display !== 'flex' || !window._currentReportingCustomer || window._currentReportingCustomer.c !== tracked.code) {
+        window._lastActiveCallPhone = tracked.phone;
+        window._lastActiveCallName = tracked.name || '';
+        if (!isReportOpen || !window._currentReportingCustomer || window._currentReportingCustomer.c !== tracked.code) {
             if (typeof window.openCustomerReportsModal === 'function') {
-                window.openCustomerReportsModal(tracked.code);
+                window.openCustomerReportsModal(tracked.code, true);
             }
         }
+        window.showLiveCallFloatBanner(tracked.name, tracked.phone, 'outgoing');
         return;
     }
 
     // 3. Fallback: If live phone call audio is active on device
     if (isInCall) {
+        var savedPhone = window._lastActiveCallPhone;
+        if (!savedPhone) {
+            try { savedPhone = localStorage.getItem('ds_last_active_call_phone'); } catch(e){}
+        }
+
+        if (savedPhone) {
+            if (!isReportOpen) {
+                window.handleDetectedNativeCall(savedPhone, 'active', window._lastActiveCallName || '');
+            } else {
+                window.showLiveCallFloatBanner(window._lastActiveCallName || '', savedPhone, 'active');
+            }
+            return;
+        }
+
+        // Clipboard fallback if active phone wasn't already stored
         try {
             if (navigator.clipboard && navigator.clipboard.readText) {
                 var clipText = await navigator.clipboard.readText();
                 var p10 = String(clipText || '').replace(/\D/g, '').slice(-10);
                 if (p10.length === 10) {
-                    var matchedCust = list.find(function (c) {
-                        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-                        return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
-                    });
-                    if (matchedCust && typeof window.openCustomerReportsModal === 'function') {
-                        var curM = document.getElementById('customerDetailReportsModal');
-                        if (!curM || curM.style.display !== 'flex' || !window._currentReportingCustomer || window._currentReportingCustomer.c !== matchedCust.c) {
-                            window.openCustomerReportsModal(matchedCust.c);
-                            return;
-                        }
-                    }
+                    window.handleDetectedNativeCall(p10, 'active');
+                    return;
                 }
             }
         } catch (e) { }
 
         var curM2 = document.getElementById('customerDetailReportsModal');
         if (!curM2 || curM2.style.display !== 'flex') {
-            window.showLiveCallFloatBanner();
+            window.showLiveCallFloatBanner(window._lastActiveCallName || 'Active Call', savedPhone || '', 'active');
         }
     } else {
-        window.hideLiveCallFloatBanner();
+        if (!callInfo || !callInfo.phone || callInfo.ageMs >= 120000) {
+            window.hideLiveCallFloatBanner();
+        }
     }
 };
 
-window.handleDetectedNativeCall = async function (phoneOrName, direction) {
-    if (!window.isSuperAdmin) return;
+window.handleDetectedNativeCall = async function (phoneOrName, direction, partyNameHint) {
+    if (typeof window.hasCRMAccess === 'function' && !window.hasCRMAccess()) return;
     var inputStr = String(phoneOrName || '').trim();
     if (!inputStr) return;
 
     var p10 = inputStr.replace(/\D/g, '').slice(-10);
-    var cleanNameSearch = inputStr.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim().toUpperCase();
+    var cleanNameSearch = (partyNameHint || inputStr).replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim().toUpperCase();
+
+    if (p10.length === 10) {
+        window._lastActiveCallPhone = p10;
+        try { localStorage.setItem('ds_last_active_call_phone', p10); } catch(e){}
+    }
+    if (partyNameHint) {
+        window._lastActiveCallName = partyNameHint;
+    }
 
     var list = window._compiledCustomersList || [];
     if ((!list || list.length === 0) && typeof window.loadAccountingDirectoryData === 'function') {
@@ -15769,41 +15836,45 @@ window.handleDetectedNativeCall = async function (phoneOrName, direction) {
             var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
             return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
         });
+        if (!matched && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+            matched = window._customerDirectoryMaster.find(function (c) {
+                var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+                return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+            });
+        }
     }
 
-    if (!matched && cleanNameSearch) {
+    if (!matched && cleanNameSearch && cleanNameSearch !== p10) {
         matched = list.find(function (c) {
             var cName = String(c.n || c.name || '').trim().toUpperCase();
             var cCode = String(c.c || c.code || '').trim().toUpperCase();
             return cName === cleanNameSearch || cCode === cleanNameSearch || (cleanNameSearch.length >= 4 && (cName.startsWith(cleanNameSearch) || cleanNameSearch.startsWith(cName)));
         });
+        if (!matched && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+            matched = window._customerDirectoryMaster.find(function (c) {
+                var cName = String(c.n || c.name || '').trim().toUpperCase();
+                var cCode = String(c.c || c.code || '').trim().toUpperCase();
+                return cName === cleanNameSearch || cCode === cleanNameSearch || (cleanNameSearch.length >= 4 && (cName.startsWith(cleanNameSearch) || cleanNameSearch.startsWith(cName)));
+            });
+        }
     }
 
-    if (matched) {
+    var targetCode = matched ? matched.c : (p10.length === 10 ? p10 : inputStr);
+    var dispName = matched ? (matched.n || matched.name) : (partyNameHint || cleanNameSearch || (p10.length === 10 ? ('+91 ' + p10) : inputStr));
+    var dispPhone = (matched && matched.p) ? matched.p : (p10.length === 10 ? p10 : inputStr);
+
+    if (matched && matched.n) window._lastActiveCallName = matched.n;
+
+    // Show popup banner with phone number prominently
+    window.showLiveCallFloatBanner(dispName, dispPhone, direction);
+
+    // Auto-open Customer Report Modal automatically
+    if (typeof window.openCustomerReportsModal === 'function') {
         var curM = document.getElementById('customerDetailReportsModal');
         var curCode = window._currentReportingCustomer ? window._currentReportingCustomer.c : null;
-        if (!curM || curM.style.display !== 'flex' || curCode !== matched.c) {
-            if (typeof window.openCustomerReportsModal === 'function') {
-                window.openCustomerReportsModal(matched.c, true);
-            }
+        if (!curM || curM.style.display !== 'flex' || curCode !== targetCode) {
+            window.openCustomerReportsModal(targetCode, true);
         }
-        window.showLiveCallFloatBanner(matched.n || matched.name, matched.p || p10, direction);
-    } else {
-        // Not matched in local list -> open customer hub lookup
-        if (typeof window.openCustomerHubModal === 'function') {
-            window.openCustomerHubModal();
-            if (typeof window.switchCustomerHubSection === 'function') {
-                window.switchCustomerHubSection('lookup');
-            }
-            var inp = document.getElementById('incomingCallerInput');
-            if (inp) {
-                inp.value = p10.length === 10 ? p10 : inputStr;
-                if (typeof window.handleIncomingLookupSearch === 'function') {
-                    window.handleIncomingLookupSearch(inp.value);
-                }
-            }
-        }
-        window.showLiveCallFloatBanner(cleanNameSearch || 'Unsaved Party', p10, direction);
     }
 };
 
@@ -15870,28 +15941,59 @@ window.enableNativeCallScreening = async function () {
 };
 
 window.showLiveCallFloatBanner = function (callerName, callerPhone, direction) {
+    var phone = callerPhone || window._lastActiveCallPhone || '';
+    if (!phone) {
+        try { phone = localStorage.getItem('ds_last_active_call_phone') || ''; } catch(e){}
+    }
+    var name = callerName || window._lastActiveCallName || '';
+    var dir = direction || 'active';
+
+    if (phone) {
+        window._lastActiveCallPhone = phone;
+        try { localStorage.setItem('ds_last_active_call_phone', phone); } catch(e){}
+    }
+    if (name) {
+        window._lastActiveCallName = name;
+    }
+
     var banner = document.getElementById('dsLiveCallFloatBanner');
-    var title = callerName ? 'LIVE CALL: ' + callerName : 'LIVE CALL ACTIVE';
-    var sub = callerPhone ? (direction === 'outgoing' ? 'Outgoing to ' : 'Incoming from ') + callerPhone : 'Super Admin: Tap to view caller dispatches & OS';
+    var pDisp = phone ? ('+91 ' + String(phone).replace(/\D/g, '').slice(-10)) : 'Live Call';
+    var title = name && name !== phone ? `${pDisp} &bull; ${name}` : `${pDisp}`;
+    var dirLabel = dir === 'outgoing' ? 'Outgoing Call' : (dir === 'incoming' ? 'Incoming Call' : 'Active Call');
+    var sub = `📞 ${dirLabel} &bull; Tap to open Customer Report`;
+
     if (!banner) {
         banner = document.createElement('div');
         banner.id = 'dsLiveCallFloatBanner';
-        banner.style.cssText = 'position:fixed; top:12px; left:12px; right:12px; z-index:99999; background:linear-gradient(135deg, #15803d, #16a34a); color:#fff; border-radius:12px; padding:10px 14px; box-shadow:0 4px 16px rgba(0,0,0,0.25); display:flex; align-items:center; justify-content:space-between; gap:8px;';
+        banner.style.cssText = 'position:fixed; top:12px; left:12px; right:12px; z-index:99999; background:linear-gradient(135deg, #15803d, #16a34a); color:#fff; border-radius:12px; padding:10px 14px; box-shadow:0 4px 16px rgba(0,0,0,0.25); display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer;';
         document.body.appendChild(banner);
     }
+    banner.onclick = function (e) {
+        if (e.target && e.target.closest && e.target.closest('.ds-banner-close-btn')) return;
+        if (phone && typeof window.handleDetectedNativeCall === 'function') {
+            window.handleDetectedNativeCall(phone, dir, name);
+        } else if (typeof window.openCustomerReportsModal === 'function' && window._currentReportingCustomer) {
+            window.openCustomerReportsModal(window._currentReportingCustomer.c, true);
+        }
+    };
+    var safePhoneArg = String(phone || '').replace(/'/g, "\\'");
+    var safeDirArg = String(dir || '').replace(/'/g, "\\'");
+    var safeNameArg = encodeURIComponent(name || '');
     banner.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
-            <i class="fas fa-phone-volume fa-shake" style="color:#bbf7d0; font-size:16px; flex-shrink:0;"></i>
+        <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+            <div style="width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <i class="fas fa-phone-volume fa-shake" style="color:#bbf7d0; font-size:16px;"></i>
+            </div>
             <div style="overflow:hidden;">
-                <div style="font-size:12px; font-weight:bold; letter-spacing:0.5px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${title}</div>
-                <div style="font-size:10px; opacity:0.9; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${sub}</div>
+                <div style="font-size:13px; font-weight:bold; letter-spacing:0.3px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${title}</div>
+                <div style="font-size:11px; opacity:0.95; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${sub}</div>
             </div>
         </div>
         <div style="display:flex; gap:6px; flex-shrink:0;">
-            <button type="button" onclick="window.pasteAndLookupCaller()" style="background:#fff; color:#15803d; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
-                <i class="fas fa-clipboard"></i> Lookup
+            <button type="button" onclick="event.stopPropagation(); window.handleDetectedNativeCall('${safePhoneArg}', '${safeDirArg}', decodeURIComponent('${safeNameArg}'))" style="background:#fff; color:#15803d; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+                <i class="fas fa-file-invoice"></i> Report
             </button>
-            <button type="button" onclick="window.hideLiveCallFloatBanner()" style="background:rgba(255,255,255,0.2); color:#fff; border:none; border-radius:6px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+            <button type="button" class="ds-banner-close-btn" onclick="event.stopPropagation(); window.hideLiveCallFloatBanner()" style="background:rgba(255,255,255,0.2); color:#fff; border:none; border-radius:6px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -15929,7 +16031,7 @@ function setupCRMCallReturnListener() {
 
     window.addEventListener('dsNativeCallDetected', function (ev) {
         if (ev && ev.detail && ev.detail.phone) {
-            window.handleDetectedNativeCall(ev.detail.phone, ev.detail.direction);
+            window.handleDetectedNativeCall(ev.detail.phone, ev.detail.direction, ev.detail.name);
         }
     });
 
