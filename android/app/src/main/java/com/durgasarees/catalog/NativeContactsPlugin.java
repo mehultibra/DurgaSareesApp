@@ -155,12 +155,6 @@ public class NativeContactsPlugin extends Plugin {
                 null,
                 null
             );
-                ContactsContract.RawContacts.DELETED + " = 0 AND (" +
-                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%[%' OR " +
-                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%(Ag:%')",
-                null,
-                null
-            );
             if (c != null) {
                 int idIdx = c.getColumnIndex(ContactsContract.RawContacts._ID);
                 ArrayList<ContentProviderOperation> deleteOps = new ArrayList<>();
