@@ -15861,7 +15861,9 @@ window.handleDetectedNativeCall = async function (phoneOrName, direction, partyN
 
     var targetCode = matched ? matched.c : (p10.length === 10 ? p10 : inputStr);
     var dispName = matched ? (matched.n || matched.name) : (partyNameHint || cleanNameSearch || (p10.length === 10 ? ('+91 ' + p10) : inputStr));
-    var dispPhone = (matched && matched.p) ? matched.p : (p10.length === 10 ? p10 : inputStr);
+    var matchedPhone = (matched && (matched.p || (Array.isArray(matched.cleanPhones) && matched.cleanPhones[0]) || (Array.isArray(matched.phones) && matched.phones[0]))) || '';
+    var rawMatched10 = String(matchedPhone).replace(/\D/g, '').slice(-10);
+    var dispPhone = (p10.length === 10) ? p10 : (rawMatched10.length === 10 ? rawMatched10 : '');
 
     if (matched && matched.n) window._lastActiveCallName = matched.n;
 
@@ -15947,8 +15949,18 @@ window.showLiveCallFloatBanner = function (callerName, callerPhone, direction) {
     }
 
     var banner = document.getElementById('dsLiveCallFloatBanner');
-    var pDisp = phone ? ('+91 ' + String(phone).replace(/\D/g, '').slice(-10)) : 'Live Call';
-    var title = name && name !== phone ? `${pDisp} &bull; ${name}` : `${pDisp}`;
+    var rawDigits = String(phone || '').replace(/\D/g, '').slice(-10);
+    var pDisp = (rawDigits.length === 10) ? ('+91 ' + rawDigits) : '';
+    var title = '';
+    if (pDisp && name && name !== phone && name !== rawDigits) {
+        title = `${pDisp} &bull; ${name}`;
+    } else if (pDisp) {
+        title = pDisp;
+    } else if (name) {
+        title = name;
+    } else {
+        title = 'Live Call';
+    }
     var dirLabel = dir === 'outgoing' ? 'Outgoing Call' : (dir === 'incoming' ? 'Incoming Call' : 'Active Call');
     var sub = `📞 ${dirLabel} &bull; Tap to open Customer Report`;
 
