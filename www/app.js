@@ -4847,6 +4847,7 @@ async function getCachedAuthToken(forceRefresh = false) {
         } catch (e) { }
     }
 
+    if (_cachedIdToken) return _cachedIdToken;
     return "";
 }
 window.getCachedAuthToken = getCachedAuthToken;
@@ -12322,7 +12323,11 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
                                                 d: m.d && m.d.stringValue,
                                                 cleanPhones: (m.cleanPhones && m.cleanPhones.arrayValue && m.cleanPhones.arrayValue.values)
                                                     ? m.cleanPhones.arrayValue.values.map(function(x){ return x.stringValue; }).filter(Boolean)
-                                                    : []
+                                                    : [],
+                                                pb: m.pb ? Number(m.pb.integerValue || m.pb.doubleValue || 0) : 0,
+                                                sbills: m.sbills ? Number(m.sbills.integerValue || m.sbills.doubleValue || 0) : 0,
+                                                ho: m.ho ? Boolean(m.ho.booleanValue) : false,
+                                                hs: m.hs ? Boolean(m.hs.booleanValue) : false
                                             };
                                         });
                                     }
@@ -13042,12 +13047,14 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     var acctSelect = document.getElementById('custRepAccountSelect');
     if (acctWrapper && acctSelect) {
         if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
+            var shouldDefaultMerge = Boolean(sisterAccountsList && sisterAccountsList.length > 1);
             acctSelect.innerHTML = `
-                <option value="__MERGED__" selected>🌟 All Accounts Merged (${window._currentReportingSisterAccounts.length} sister firms)</option>
+                <option value="__MERGED__" ${shouldDefaultMerge ? 'selected' : ''}>🌟 All Accounts Merged (${window._currentReportingSisterAccounts.length} sister firms)</option>
                 ${window._currentReportingSisterAccounts.map(s => {
                     var sCode = s.c || s.code;
                     var sName = s.n || s.name || sCode;
-                    return `<option value="${esc(sCode)}">${esc(sName)} [${esc(sCode)}]</option>`;
+                    var isThisParty = (!shouldDefaultMerge && (sCode === cust.c || sName === cust.n));
+                    return `<option value="${esc(sCode)}" ${isThisParty ? 'selected' : ''}>${esc(sName)} [${esc(sCode)}]</option>`;
                 }).join('')}
             `;
             acctSelect.onchange = function () {
@@ -13235,15 +13242,12 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     var modal = document.getElementById('customerDetailReportsModal');
     if (modal) modal.style.display = 'flex';
 
-    // Set Default Date Range (Default to Last 3 Months)
+    // Set Default Date Range (Default to Financial Year 2026-2027)
     var fromEl = document.getElementById('repFromDate');
     var toEl = document.getElementById('repToDate');
-    var now = new Date();
-    var toStr = now.toISOString().slice(0, 10);
-    var dPast = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
-    var fromStr = dPast.toISOString().slice(0, 10);
-    if (fromEl) fromEl.value = fromStr;
-    if (toEl) toEl.value = toStr;
+    var todayStr = new Date().toISOString().slice(0, 10);
+    if (fromEl) fromEl.value = '2026-04-01';
+    if (toEl) toEl.value = todayStr;
 
     // Default firm to Durga Sarees (DS)
     var firmSel = document.getElementById('custRepFirmSelect');
@@ -13345,7 +13349,14 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     var cust = window._currentReportingCustomer;
     if (!cust) return;
 
-    var rawCode = cust.c || cust.n || '';
+    var acctSelEl = document.getElementById('custRepAccountSelect');
+    var selectedAcctCode = (acctSelEl && acctSelEl.value && acctSelEl.value !== '__MERGED__') ? acctSelEl.value : null;
+    if (selectedAcctCode) {
+        var matchedCust = (window._compiledCustomersList || []).find(x => x.c === selectedAcctCode || x.n === selectedAcctCode);
+        if (matchedCust) cust = matchedCust;
+    }
+
+    var rawCode = (selectedAcctCode || cust.c || cust.n || '');
     try { rawCode = decodeURIComponent(rawCode); } catch(e){}
     var codeClean = window.sanitizeDocId ? window.sanitizeDocId(rawCode) : String(rawCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
 
@@ -13374,10 +13385,10 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
           <div style="font-size:11px; margin-top:4px;">Retrieving on-demand ledger, sales bills, and transport...</div>
         </div>`;
         try {
-            var token = await getCachedAuthToken(true);
+            var token = await getCachedAuthToken();
             var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
             var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + encodeURIComponent(codeClean);
-            var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
+            var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 2) : fetch(url, { headers: headers }));
             if (res && res.ok) {
                 var doc = await res.json();
                 var parsed = window.parseFirestoreReportDoc(doc);
@@ -13385,26 +13396,49 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                 try {
                     localStorage.setItem(cacheKey, JSON.stringify({ data: parsed, cachedAt: Date.now() }));
                 } catch(e){}
-            } else {
+            } else if (res && res.status === 404) {
                 window._accountingReportsCache[codeClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
+            } else {
+                area.innerHTML = `
+                <div style="text-align:center; padding:40px 20px; color:#dc2626; font-size:13px;">
+                  <i class="fas fa-exclamation-circle" style="font-size:28px; margin-bottom:8px;"></i>
+                  <div style="font-weight:bold;">Report Temporarily Unavailable</div>
+                  <div style="font-size:11px; color:#64748b; margin-top:4px;">Could not load report from cloud server (HTTP ${res ? res.status : 'error'}).</div>
+                  <button type="button" onclick="window.renderCustomerReportActiveTab(true)" style="margin-top:12px; background:var(--myntra-pink); color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+                    <i class="fas fa-sync-alt"></i> Retry Loading
+                  </button>
+                </div>`;
+                return;
             }
         } catch(e) {
             console.warn("Could not fetch AccountingReports on-demand:", e);
-            window._accountingReportsCache[codeClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
+            area.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#dc2626; font-size:13px;">
+              <i class="fas fa-exclamation-circle" style="font-size:28px; margin-bottom:8px;"></i>
+              <div style="font-weight:bold;">Report Connection Failed</div>
+              <div style="font-size:11px; color:#64748b; margin-top:4px;">Please check internet connection and try again.</div>
+              <button type="button" onclick="window.renderCustomerReportActiveTab(true)" style="margin-top:12px; background:var(--myntra-pink); color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+                <i class="fas fa-sync-alt"></i> Retry Loading
+              </button>
+            </div>`;
+            return;
         }
     }
 
     var partyRep = window._accountingReportsCache[codeClean] || { finishSales: [], outstanding: [], ledger: [], bills: {} };
 
-    var acctSelEl = document.getElementById('custRepAccountSelect');
     var isMergedView = Boolean(acctSelEl && acctSelEl.value === '__MERGED__' && window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1);
 
     if (isMergedView) {
-        var token = await getCachedAuthToken(true);
+        var token = await getCachedAuthToken();
         var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-        await Promise.all(window._currentReportingSisterAccounts.map(async function (sAcc) {
+        var toFetch = window._currentReportingSisterAccounts.filter(sAcc => {
             var sClean = window.sanitizeDocId ? window.sanitizeDocId(sAcc.c) : String(sAcc.c).replace(/[\/\.\s]/g, '_');
-            if (!window._accountingReportsCache[sClean]) {
+            return !window._accountingReportsCache[sClean];
+        });
+        if (toFetch.length > 0) {
+            await Promise.all(toFetch.map(async function (sAcc) {
+                var sClean = window.sanitizeDocId ? window.sanitizeDocId(sAcc.c) : String(sAcc.c).replace(/[\/\.\s]/g, '_');
                 try {
                     var sUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + encodeURIComponent(sClean);
                     var sRes = await (window.fetchWithRetry ? window.fetchWithRetry(sUrl, { headers: headers }, 1) : fetch(sUrl, { headers: headers }));
@@ -13417,8 +13451,8 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                 } catch(e) {
                     window._accountingReportsCache[sClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
                 }
-            }
-        }));
+            }));
+        }
 
         var mergedFs = [];
         var mergedOs = [];
@@ -13484,7 +13518,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         return;
     }
 
-    var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent || (cust && cust.role === 'agent') || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
+    var isAgentUser = !window.hasCRMAccess() && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
     var agentKeywords = isAgentUser ? (window.getAgentKeywords ? window.getAgentKeywords(myCd) : []) : [];
 
     function matchesAgentBill(val) {
