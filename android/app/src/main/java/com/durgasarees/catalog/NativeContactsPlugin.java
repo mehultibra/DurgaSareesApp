@@ -34,8 +34,8 @@ import java.util.Set;
     }
 )
 public class NativeContactsPlugin extends Plugin {
-    public static final String ACCOUNT_TYPE = "vnd.sec.contact.phone";
-    public static final String ACCOUNT_NAME = "Phone";
+    public static final String ACCOUNT_TYPE = "com.durgasarees.catalog";
+    public static final String ACCOUNT_NAME = "Durga Sarees ERP";
     private static volatile boolean sGmailCleaned = false;
     private String mLastBatchError = null;
 
@@ -97,22 +97,16 @@ public class NativeContactsPlugin extends Plugin {
     }
 
     private AccountInfo ensureDurgaAccount() {
-        String targetName = "Phone";
-        String targetType = "vnd.sec.contact.phone";
+        String targetName = ACCOUNT_NAME;
+        String targetType = ACCOUNT_TYPE;
         try {
             AccountManager am = AccountManager.get(getContext());
-            Account[] secAccts = null;
             try {
-                secAccts = am.getAccountsByType("vnd.sec.contact.phone");
+                Account erpAccount = new Account(ACCOUNT_NAME, ACCOUNT_TYPE);
+                am.addAccountExplicitly(erpAccount, null, null);
+                android.content.ContentResolver.setIsSyncable(erpAccount, ContactsContract.AUTHORITY, 1);
+                android.content.ContentResolver.setSyncAutomatically(erpAccount, ContactsContract.AUTHORITY, false);
             } catch (Throwable ignored) {}
-
-            if (secAccts != null && secAccts.length > 0) {
-                targetType = "vnd.sec.contact.phone";
-                targetName = (secAccts[0].name != null && !secAccts[0].name.isEmpty()) ? secAccts[0].name : "Phone";
-            } else {
-                targetType = null;
-                targetName = null;
-            }
 
             // Both update and insert into ContactsContract.Settings
             if (targetType != null && targetName != null) {
@@ -147,10 +141,10 @@ public class NativeContactsPlugin extends Plugin {
             c = getContext().getContentResolver().query(
                 ContactsContract.RawContacts.CONTENT_URI,
                 new String[]{ ContactsContract.RawContacts._ID },
-                "(" + ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'com.durgasarees.catalog' OR (" +
-                ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'com.google' AND (" +
+                "((" + ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'vnd.sec.contact.phone' OR " +
+                ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'com.google') AND (" +
                 ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%[%' OR " +
-                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%(Ag:%)')))" +
+                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%(Ag:%)'))" +
                 " AND " + ContactsContract.RawContacts.DELETED + " = 0",
                 null,
                 null
@@ -294,8 +288,12 @@ public class NativeContactsPlugin extends Plugin {
                     int updatedCount = 0;
                     int pendingNewInBatch = 0;
 
-                    Uri rawUriWithSync = ContactsContract.RawContacts.CONTENT_URI;
-                    Uri dataUriWithSync = ContactsContract.Data.CONTENT_URI;
+                    Uri rawUriWithSync = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
+                        .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                        .build();
+                    Uri dataUriWithSync = ContactsContract.Data.CONTENT_URI.buildUpon()
+                        .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                        .build();
 
                     for (int i = 0; i < items.length(); i++) {
                         JSONObject item = items.optJSONObject(i);

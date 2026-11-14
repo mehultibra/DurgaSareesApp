@@ -545,6 +545,9 @@ let presenceTimeout = null;
 let lastPresencePush = 0;
 window.updateLivePresence = function (productId, force = false) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    // Strict guard: Admin / SuperAdmin / Staff / Order-On-Behalf actions must NEVER push to LiveSessions
+    if (Boolean(window.isSuperAdmin || window.isAdminMode || (typeof window.hasCRMAccess === 'function' && window.hasCRMAccess()))) return;
+    if (localStorage.getItem('ds_active_on_behalf') || localStorage.getItem('dsIsAdmin') === 'true' || localStorage.getItem('dsIsStaff') === 'true') return;
 
     let now = Date.now();
     if (!force && now - lastPresencePush < 15000) return;
@@ -1579,6 +1582,15 @@ async function checkAdminStatus(phone) {
         }
         localStorage.setItem('dsIsStaff', window.isStaff ? 'true' : 'false');
 
+        // Clean up any historical admin presence entry from LiveSessions
+        if (window.isSuperAdmin || window.isStaff) {
+            try {
+                if (typeof firebase !== 'undefined' && firebase.firestore && activeUser) {
+                    firebase.firestore().collection('LiveSessions').doc(activeUser).delete().catch(function () {});
+                }
+            } catch(e){}
+        }
+
         window.syncAdminUI();
 
         if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform()) {
@@ -1593,7 +1605,7 @@ async function checkAdminStatus(phone) {
             }
 
             // Automatic Contact Sync Migration once per session (12s after startup)
-            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v6') !== 'true') {
+            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v7') !== 'true') {
                 window._contactsMigrationScheduled = true;
                 setTimeout(function () {
                     try { localStorage.removeItem('ds_contact_sync_hashes_v2'); } catch(e){}
@@ -9501,33 +9513,17 @@ window.openLiveAdmin = function () {
                         }
                         return;
                     }
+                    // Live Customer only shows users who actually logged into the app (LiveSessions)
+                    // Do not inject offline users or admin-linked party docs into the live list
+                });
 
-                    // User is registered in the app, but not in recent LiveSessions (Offline)
-                    if (pKey) seenPhoneMap.add(pKey);
-                    let uCreatedTime = (u.createdAt && typeof u.createdAt.toDate === 'function')
-                        ? u.createdAt.toDate()
-                        : (u.createdAt ? new Date(u.createdAt) : new Date(0));
-
-                    sortedDocs.push({
-                        id: u.phone || u.docId,
-                        data: {
-                            user: u.phone || u.docId,
-                            customerName: u.name || "Registered User",
-                            customerStation: u.station || (u.state ? u.state : ""),
-                            isAdmin: !!u.isAdmin,
-                            role: u.isAdmin ? 'admin' : (u.role || 'customer'),
-                            approvalStatus: u.approvalStatus || (u.linkedAccount ? 'approved' : 'pending'),
-                            isApproved: u.isApproved !== undefined ? u.isApproved : !!u.linkedAccount,
-                            linkedAccount: u.linkedAccount || '',
-                            linkedAccountName: u.linkedAccountName || '',
-                            approvedByAdmin: u.approvedByAdmin || '',
-                            approvedAt: u.approvedAt || '',
-                            matchedAccounts: u.matchedAccounts || [],
-                            isOfflineUser: true,
-                            lastActive: null
-                        },
-                        time: uCreatedTime
-                    });
+                // Strictly filter out Admins and SuperAdmins from the Live Customer list
+                sortedDocs = sortedDocs.filter(function (item) {
+                    if (!item || !item.data) return false;
+                    var d = item.data;
+                    var uid = String(item.id || d.user || '');
+                    if (d.isAdmin || uid === '+919998232380' || uid === '+919425032549' || uid === '+919302632549' || uid.includes('9998232380') || uid.includes('9425032549') || uid.includes('9302632549')) return false;
+                    return true;
                 });
 
                 // Enrich all sortedDocs with partyLinksByPhone before sorting & counting
@@ -12931,7 +12927,7 @@ window.saveCustRepQuickNote = async function (disposition) {
 };
 
 // 6. Open Customer Detail Reports Modal
-window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
+window.openCustomerReportsModal = async function (partyCode, isCallTriggered, sisterAccountsList) {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
 
@@ -13010,6 +13006,23 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
     }
 
     window._currentReportingCustomer = cust;
+    if (sisterAccountsList && Array.isArray(sisterAccountsList) && sisterAccountsList.length > 1) {
+        window._currentReportingSisterAccounts = sisterAccountsList;
+    } else {
+        window._currentReportingSisterAccounts = null;
+        if (cust && cust.p) {
+            var p10 = String(cust.p).replace(/\D/g, '').slice(-10);
+            if (p10.length === 10) {
+                var sisters = list.filter(function(x) {
+                    var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+                    return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+                });
+                if (sisters.length > 1) {
+                    window._currentReportingSisterAccounts = sisters;
+                }
+            }
+        }
+    }
 
     // Reset In-Window Quick Party Search
     var qSearchInp = document.getElementById('custRepQuickPartySearch');
@@ -13023,13 +13036,32 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
     var acctWrapper = document.getElementById('custRepAccountSelectWrapper');
     var acctSelect = document.getElementById('custRepAccountSelect');
     if (acctWrapper && acctSelect) {
-        if (isAgentUser && agentCustomers.length > 1) {
+        if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
+            acctSelect.innerHTML = `
+                <option value="__MERGED__" selected>🌟 All Accounts Merged (${window._currentReportingSisterAccounts.length} sister firms)</option>
+                ${window._currentReportingSisterAccounts.map(s => {
+                    var sCode = s.c || s.code;
+                    var sName = s.n || s.name || sCode;
+                    return `<option value="${esc(sCode)}">${esc(sName)} [${esc(sCode)}]</option>`;
+                }).join('')}
+            `;
+            acctSelect.onchange = function () {
+                var val = this.value;
+                if (val !== '__MERGED__') {
+                    var found = (window._compiledCustomersList || []).find(x => x.c === val || x.n === val);
+                    if (found) window._currentReportingCustomer = found;
+                }
+                window.renderCustomerReportActiveTab();
+            };
+            acctWrapper.style.display = 'block';
+        } else if (isAgentUser && agentCustomers.length > 1) {
             acctSelect.innerHTML = agentCustomers.map(c => {
                 var cCode = c.c || c.code;
                 var cName = c.n || c.name || cCode;
                 var isSel = (cCode && String(cCode).trim().toUpperCase() === pCodeNorm) ? 'selected' : '';
                 return `<option value="${esc(cCode)}" ${isSel}>${esc(cName)} [${esc(cCode)}]</option>`;
             }).join('');
+            acctSelect.onchange = null;
             acctWrapper.style.display = 'block';
         } else if (allowedCodes.length > 1 && matches.length > 1) {
             acctSelect.innerHTML = matches.map(m => {
@@ -13038,6 +13070,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered) {
                 var isSel = (mCode && String(mCode).trim().toUpperCase() === pCodeNorm) ? 'selected' : '';
                 return `<option value="${esc(mCode)}" ${isSel}>${esc(mName)} [${esc(mCode)}]</option>`;
             }).join('');
+            acctSelect.onchange = null;
             acctWrapper.style.display = 'block';
         } else {
             acctWrapper.style.display = 'none';
@@ -13357,6 +13390,68 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     }
 
     var partyRep = window._accountingReportsCache[codeClean] || { finishSales: [], outstanding: [], ledger: [], bills: {} };
+
+    var acctSelEl = document.getElementById('custRepAccountSelect');
+    var isMergedView = Boolean(acctSelEl && acctSelEl.value === '__MERGED__' && window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1);
+
+    if (isMergedView) {
+        var token = await getCachedAuthToken(true);
+        var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        await Promise.all(window._currentReportingSisterAccounts.map(async function (sAcc) {
+            var sClean = window.sanitizeDocId ? window.sanitizeDocId(sAcc.c) : String(sAcc.c).replace(/[\/\.\s]/g, '_');
+            if (!window._accountingReportsCache[sClean]) {
+                try {
+                    var sUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + encodeURIComponent(sClean);
+                    var sRes = await (window.fetchWithRetry ? window.fetchWithRetry(sUrl, { headers: headers }, 1) : fetch(sUrl, { headers: headers }));
+                    if (sRes && sRes.ok) {
+                        var sDoc = await sRes.json();
+                        window._accountingReportsCache[sClean] = window.parseFirestoreReportDoc(sDoc);
+                    } else {
+                        window._accountingReportsCache[sClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
+                    }
+                } catch(e) {
+                    window._accountingReportsCache[sClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
+                }
+            }
+        }));
+
+        var mergedFs = [];
+        var mergedOs = [];
+        var mergedLedger = [];
+        var totDeb = 0;
+        window._currentReportingSisterAccounts.forEach(function (sAcc) {
+            var sClean = window.sanitizeDocId ? window.sanitizeDocId(sAcc.c) : String(sAcc.c).replace(/[\/\.\s]/g, '_');
+            var sRep = window._accountingReportsCache[sClean] || { finishSales: [], outstanding: [], ledger: [] };
+            (sRep.finishSales || []).forEach(function (r) {
+                var rowCopy = r.slice();
+                rowCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${sAcc.n}]`;
+                mergedFs.push(rowCopy);
+            });
+            (sRep.outstanding || []).forEach(function (r) {
+                var osCopy = Object.assign({}, r);
+                osCopy.party = (r.party ? r.party + ' ' : '') + `[${sAcc.n}]`;
+                mergedOs.push(osCopy);
+            });
+            (sRep.ledger || []).forEach(function (r) {
+                var lCopy = r.slice();
+                lCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${sAcc.n}]`;
+                mergedLedger.push(lCopy);
+            });
+            if (sAcc.b && (sAcc.d === 'Dr' || sAcc.b > 0)) totDeb += sAcc.b;
+        });
+
+        mergedFs.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
+        mergedLedger.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
+        partyRep = { finishSales: mergedFs, outstanding: mergedOs, ledger: mergedLedger, bills: {}, isMerged: true };
+
+        var balBadge = document.getElementById('custRepBalBadge');
+        if (balBadge) {
+            balBadge.innerText = (totDeb > 0) ? `Merged O/S: ₹ ${Math.round(totDeb).toLocaleString('en-IN')} Dr` : 'Merged O/S: Clear';
+            balBadge.style.color = (totDeb > 0) ? '#dc2626' : '#16a34a';
+            balBadge.style.background = (totDeb > 0) ? '#fee2e2' : '#dcfce7';
+        }
+    }
+
     window._currentActiveReport = partyRep;
     var activeTab = window._activeCustomerReportTab || 'sales';
 
@@ -14866,14 +14961,8 @@ document.addEventListener('click', function (e) {
     }
 });
 
-window.startOrderOnBehalf = function () {
-    var cust = window._currentReportingCustomer;
+window.selectPartyForOrder = function (cust) {
     if (!cust) return;
-
-    var partyCodeVal = cust.c || cust.n;
-    window._returnToReportPartyCode = partyCodeVal;
-    try { localStorage.setItem('ds_return_to_report_party', partyCodeVal); } catch(e){}
-
     var partyTransport = cust.tr || '';
     try {
         var rep = (window._accountingReportsCache && window._accountingReportsCache.reports) || {};
@@ -14885,16 +14974,17 @@ window.startOrderOnBehalf = function () {
 
     var partyState = cust.st || (typeof window.detectStateFromCustomer === 'function' ? window.detectStateFromCustomer(cust) : '') || '';
     var details = {
-        name: cust.n,
-        firm: cust.c || cust.n,
+        name: cust.n || cust.name || cust.c,
+        firm: cust.c || cust.code || cust.n,
         phone: cust.p || '',
-        station: cust.ct || '',
+        station: cust.ct || cust.station || '',
         state: partyState,
         address: cust.a || '',
-        agent: cust.ag || '',
-        gst: cust.g || '',
+        agent: cust.ag || cust.agent || '',
+        gst: cust.g || cust.gst || '',
         transport: partyTransport || localStorage.getItem('ds_preferred_transport') || '',
-        onBehalf: true
+        onBehalf: true,
+        role: cust.role || (cust.isAgent ? 'agent' : 'customer')
     };
     if (details.transport) localStorage.setItem('ds_preferred_transport', details.transport);
 
@@ -14902,7 +14992,22 @@ window.startOrderOnBehalf = function () {
     localStorage.setItem("ds_active_on_behalf", JSON.stringify(details));
     window.activeOrderOnBehalf = details;
 
-    window.updateOrderOnBehalfBanner();
+    if (typeof window.updateOrderOnBehalfBanner === 'function') {
+        window.updateOrderOnBehalfBanner();
+    }
+};
+
+window.startOrderOnBehalf = function (targetCust) {
+    var cust = targetCust || window._currentReportingCustomer;
+    if (!cust) return;
+
+    var partyCodeVal = cust.c || cust.n;
+    window._returnToReportPartyCode = partyCodeVal;
+    try { localStorage.setItem('ds_return_to_report_party', partyCodeVal); } catch(e){}
+
+    window.selectPartyForOrder(cust);
+    var details = window.activeOrderOnBehalf;
+
     window.closeCustomerReportsModal();
     var hubM = document.getElementById('customerHubModal');
     if (hubM) hubM.style.display = 'none';
@@ -15231,7 +15336,7 @@ window.startAutomaticContactSync = async function (isManual) {
         setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
     if (totalAdded > 0 || totalUpdated > 0) {
-        try { localStorage.setItem('ds_contacts_account_migrated_v6', 'true'); } catch(e){}
+        try { localStorage.setItem('ds_contacts_account_migrated_v7', 'true'); } catch(e){}
     }
     window._isSyncingContacts = false;
     if (isManual) {
@@ -15830,52 +15935,116 @@ window.handleDetectedNativeCall = async function (phoneOrName, direction, partyN
         } catch (e) { }
     }
 
-    var matched = null;
+    var allMatches = [];
     if (p10.length === 10) {
-        matched = list.find(function (c) {
+        allMatches = list.filter(function (c) {
             var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
             return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
         });
-        if (!matched && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
-            matched = window._customerDirectoryMaster.find(function (c) {
+        if (allMatches.length === 0 && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+            allMatches = window._customerDirectoryMaster.filter(function (c) {
                 var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
                 return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
             });
         }
     }
 
-    if (!matched && cleanNameSearch && cleanNameSearch !== p10) {
-        matched = list.find(function (c) {
+    if (allMatches.length === 0 && cleanNameSearch && cleanNameSearch !== p10) {
+        var nameMatch = list.find(function (c) {
             var cName = String(c.n || c.name || '').trim().toUpperCase();
             var cCode = String(c.c || c.code || '').trim().toUpperCase();
             return cName === cleanNameSearch || cCode === cleanNameSearch || (cleanNameSearch.length >= 4 && (cName.startsWith(cleanNameSearch) || cleanNameSearch.startsWith(cName)));
         });
-        if (!matched && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
-            matched = window._customerDirectoryMaster.find(function (c) {
-                var cName = String(c.n || c.name || '').trim().toUpperCase();
-                var cCode = String(c.c || c.code || '').trim().toUpperCase();
-                return cName === cleanNameSearch || cCode === cleanNameSearch || (cleanNameSearch.length >= 4 && (cName.startsWith(cleanNameSearch) || cleanNameSearch.startsWith(cName)));
-            });
-        }
+        if (nameMatch) allMatches.push(nameMatch);
     }
 
+    var agentMatch = allMatches.find(function (c) {
+        return Boolean(c.role === 'agent' || c.isAgent || (c.c && String(c.c).startsWith('AG')));
+    });
+
+    var matched = allMatches[0] || null;
     var targetCode = matched ? matched.c : (p10.length === 10 ? p10 : inputStr);
-    var dispName = matched ? (matched.n || matched.name) : (partyNameHint || cleanNameSearch || (p10.length === 10 ? ('+91 ' + p10) : inputStr));
     var matchedPhone = (matched && (matched.p || (Array.isArray(matched.cleanPhones) && matched.cleanPhones[0]) || (Array.isArray(matched.phones) && matched.phones[0]))) || '';
     var rawMatched10 = String(matchedPhone).replace(/\D/g, '').slice(-10);
     var dispPhone = (p10.length === 10) ? p10 : (rawMatched10.length === 10 ? rawMatched10 : '');
 
-    if (matched && matched.n) window._lastActiveCallName = matched.n;
+    if (agentMatch) {
+        var agName = agentMatch.n || agentMatch.name || agentMatch.c;
+        var agStation = agentMatch.ct || agentMatch.station || '';
+        var dispName = '🤝 Agent: ' + agName + (agStation ? ` (${agStation})` : '');
+        if (agentMatch.n) window._lastActiveCallName = agentMatch.n;
 
-    // Show popup banner with phone number prominently
-    window.showLiveCallFloatBanner(dispName, dispPhone, direction);
+        // Auto-select agent on main page select party
+        if (typeof window.selectPartyForOrder === 'function') {
+            window.selectPartyForOrder(agentMatch);
+        }
 
-    // Auto-open Customer Report Modal automatically
-    if (typeof window.openCustomerReportsModal === 'function') {
-        var curM = document.getElementById('customerDetailReportsModal');
-        var curCode = window._currentReportingCustomer ? window._currentReportingCustomer.c : null;
-        if (!curM || curM.style.display !== 'flex' || curCode !== targetCode) {
-            window.openCustomerReportsModal(targetCode, true);
+        window.showLiveCallFloatBanner(dispName, dispPhone, direction);
+
+        if (typeof window.openCustomerReportsModal === 'function') {
+            var curM = document.getElementById('customerDetailReportsModal');
+            var curCode = window._currentReportingCustomer ? window._currentReportingCustomer.c : null;
+            if (!curM || curM.style.display !== 'flex' || curCode !== agentMatch.c) {
+                window.openCustomerReportsModal(agentMatch.c, true);
+            }
+        }
+    } else if (allMatches.length > 1) {
+        // Customer with multiple accounts: find the account with the last billing
+        var accountWithLastBilling = allMatches[0];
+        var latestBillDate = '';
+        allMatches.forEach(function (acc) {
+            var accCode = window.sanitizeDocId ? window.sanitizeDocId(acc.c) : String(acc.c).replace(/[\/\.\s]/g, '_');
+            var rep = window._accountingReportsCache && window._accountingReportsCache[accCode];
+            var bDate = (rep && rep.finishSales && rep.finishSales.length > 0 && rep.finishSales[0][0]) || acc.lastBillDate || '';
+            if (bDate && (!latestBillDate || bDate > latestBillDate)) {
+                latestBillDate = bDate;
+                accountWithLastBilling = acc;
+            }
+        });
+
+        // Auto-select the one with last billing on main page
+        if (typeof window.selectPartyForOrder === 'function') {
+            window.selectPartyForOrder(accountWithLastBilling);
+        }
+
+        var dispName = (accountWithLastBilling.n || accountWithLastBilling.name) + ` (${allMatches.length} Accounts)`;
+        if (accountWithLastBilling.n) window._lastActiveCallName = accountWithLastBilling.n;
+
+        window.showLiveCallFloatBanner(dispName, dispPhone, direction);
+
+        // Open reports modal with all accounts merged
+        if (typeof window.openCustomerReportsModal === 'function') {
+            window.openCustomerReportsModal(accountWithLastBilling.c, true, allMatches);
+        }
+    } else if (allMatches.length === 1) {
+        var singleCust = allMatches[0];
+        // Auto-select calling customer on main page
+        if (typeof window.selectPartyForOrder === 'function') {
+            window.selectPartyForOrder(singleCust);
+        }
+
+        var dispName = singleCust.n || singleCust.name;
+        if (singleCust.n) window._lastActiveCallName = singleCust.n;
+
+        window.showLiveCallFloatBanner(dispName, dispPhone, direction);
+
+        if (typeof window.openCustomerReportsModal === 'function') {
+            var curM = document.getElementById('customerDetailReportsModal');
+            var curCode = window._currentReportingCustomer ? window._currentReportingCustomer.c : null;
+            if (!curM || curM.style.display !== 'flex' || curCode !== singleCust.c) {
+                window.openCustomerReportsModal(singleCust.c, true);
+            }
+        }
+    } else {
+        var dispName = partyNameHint || cleanNameSearch || (p10.length === 10 ? ('+91 ' + p10) : inputStr);
+        window.showLiveCallFloatBanner(dispName, dispPhone, direction);
+
+        if (typeof window.openCustomerReportsModal === 'function') {
+            var curM = document.getElementById('customerDetailReportsModal');
+            var curCode = window._currentReportingCustomer ? window._currentReportingCustomer.c : null;
+            if (!curM || curM.style.display !== 'flex' || curCode !== targetCode) {
+                window.openCustomerReportsModal(targetCode, true);
+            }
         }
     }
 };
