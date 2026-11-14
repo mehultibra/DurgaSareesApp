@@ -144,4 +144,14 @@ public class DurgaCallScreeningService extends CallScreeningService {
         } catch (Throwable ignored) {
         }
     }
+
+    public static void dismissCallNotification(Context context) {
+        if (context == null) return;
+        try {
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.cancel(NOTIFICATION_ID);
+            }
+        } catch (Throwable ignored) {}
+    }
 }

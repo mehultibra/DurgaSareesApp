@@ -1604,15 +1604,20 @@ async function checkAdminStatus(phone) {
                 }).catch(function () {});
             }
 
-            // Automatic Contact Sync Migration once per session (12s after startup)
-            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v7') !== 'true') {
+            // Ensure dedicated "Durga Sarees ERP" account exists in phonebook
+            if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeContacts && typeof window.Capacitor.Plugins.NativeContacts.ensureAccount === 'function') {
+                window.Capacitor.Plugins.NativeContacts.ensureAccount().catch(function(){});
+            }
+
+            // Automatic Contact Sync Migration once per session (3s after startup)
+            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v8') !== 'true') {
                 window._contactsMigrationScheduled = true;
                 setTimeout(function () {
                     try { localStorage.removeItem('ds_contact_sync_hashes_v2'); } catch(e){}
                     if (typeof window.startAutomaticContactSync === 'function') {
                         window.startAutomaticContactSync(true);
                     }
-                }, 12000);
+                }, 3000);
             }
         }
 
@@ -15336,7 +15341,7 @@ window.startAutomaticContactSync = async function (isManual) {
         setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
     if (totalAdded > 0 || totalUpdated > 0) {
-        try { localStorage.setItem('ds_contacts_account_migrated_v7', 'true'); } catch(e){}
+        try { localStorage.setItem('ds_contacts_account_migrated_v8', 'true'); } catch(e){}
     }
     window._isSyncingContacts = false;
     if (isManual) {
@@ -15846,6 +15851,19 @@ window.checkLiveCallOnResume = async function () {
     var curM = document.getElementById('customerDetailReportsModal');
     var isReportOpen = curM && curM.style.display === 'flex';
 
+    if (!isInCall) {
+        window.hideLiveCallFloatBanner();
+        window._lastActiveCallPhone = null;
+        window._lastActiveCallName = null;
+        try {
+            localStorage.removeItem('ds_active_tracked_call');
+            localStorage.removeItem('ds_last_active_call_phone');
+        } catch(e){}
+        var badge = document.getElementById('liveCallStatusBadge');
+        if (badge) badge.style.display = 'none';
+        return;
+    }
+
     // 1. Check native CallMonitor plugin for recently screened incoming/outgoing call (< 15 min)
     if (callInfo && callInfo.phone && callInfo.ageMs != null && callInfo.ageMs < 900000) {
         window._lastActiveCallPhone = callInfo.phone;
@@ -15873,41 +15891,35 @@ window.checkLiveCallOnResume = async function () {
     }
 
     // 3. Fallback: If live phone call audio is active on device
-    if (isInCall) {
-        var savedPhone = window._lastActiveCallPhone;
-        if (!savedPhone) {
-            try { savedPhone = localStorage.getItem('ds_last_active_call_phone'); } catch(e){}
-        }
+    var savedPhone = window._lastActiveCallPhone;
+    if (!savedPhone) {
+        try { savedPhone = localStorage.getItem('ds_last_active_call_phone'); } catch(e){}
+    }
 
-        if (savedPhone) {
-            if (!isReportOpen) {
-                window.handleDetectedNativeCall(savedPhone, 'active', window._lastActiveCallName || '');
-            } else {
-                window.showLiveCallFloatBanner(window._lastActiveCallName || '', savedPhone, 'active');
+    if (savedPhone) {
+        if (!isReportOpen) {
+            window.handleDetectedNativeCall(savedPhone, 'active', window._lastActiveCallName || '');
+        } else {
+            window.showLiveCallFloatBanner(window._lastActiveCallName || '', savedPhone, 'active');
+        }
+        return;
+    }
+
+    // Clipboard fallback if active phone wasn't already stored
+    try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            var clipText = await navigator.clipboard.readText();
+            var p10 = String(clipText || '').replace(/\D/g, '').slice(-10);
+            if (p10.length === 10) {
+                window.handleDetectedNativeCall(p10, 'active');
+                return;
             }
-            return;
         }
+    } catch (e) { }
 
-        // Clipboard fallback if active phone wasn't already stored
-        try {
-            if (navigator.clipboard && navigator.clipboard.readText) {
-                var clipText = await navigator.clipboard.readText();
-                var p10 = String(clipText || '').replace(/\D/g, '').slice(-10);
-                if (p10.length === 10) {
-                    window.handleDetectedNativeCall(p10, 'active');
-                    return;
-                }
-            }
-        } catch (e) { }
-
-        var curM2 = document.getElementById('customerDetailReportsModal');
-        if (!curM2 || curM2.style.display !== 'flex') {
-            window.showLiveCallFloatBanner(window._lastActiveCallName || 'Active Call', savedPhone || '', 'active');
-        }
-    } else {
-        if (!callInfo || !callInfo.phone || callInfo.ageMs >= 120000) {
-            window.hideLiveCallFloatBanner();
-        }
+    var curM2 = document.getElementById('customerDetailReportsModal');
+    if (!curM2 || curM2.style.display !== 'flex') {
+        window.showLiveCallFloatBanner(window._lastActiveCallName || 'Active Call', savedPhone || '', 'active');
     }
 };
 
@@ -16212,6 +16224,18 @@ function setupCRMCallReturnListener() {
         if (ev && ev.detail && (ev.detail.phone || ev.detail.name)) {
             window.handleDetectedNativeCall(ev.detail.phone, ev.detail.direction, ev.detail.name);
         }
+    });
+
+    window.addEventListener('dsNativeCallEnded', function () {
+        window.hideLiveCallFloatBanner();
+        window._lastActiveCallPhone = null;
+        window._lastActiveCallName = null;
+        try {
+            localStorage.removeItem('ds_active_tracked_call');
+            localStorage.removeItem('ds_last_active_call_phone');
+        } catch(e){}
+        var badge = document.getElementById('liveCallStatusBadge');
+        if (badge) badge.style.display = 'none';
     });
 
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {

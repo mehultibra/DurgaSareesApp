@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContactsAccountType xmlns:android="http://schemas.android.com/apk/res/android">
+    <EditSchema>
+        <DataKind kind="name" maxOccurs="1" supportsDisplayName="true" />
+        <DataKind kind="phone" maxOccurs="5" />
+        <DataKind kind="organization" maxOccurs="1" />
+    </EditSchema>
+</ContactsAccountType>

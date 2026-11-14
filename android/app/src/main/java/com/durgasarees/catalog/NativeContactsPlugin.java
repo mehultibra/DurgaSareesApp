@@ -39,6 +39,14 @@ public class NativeContactsPlugin extends Plugin {
     private static volatile boolean sGmailCleaned = false;
     private String mLastBatchError = null;
 
+    @Override
+    public void load() {
+        super.load();
+        try {
+            ensureDurgaAccount();
+        } catch (Throwable ignored) {}
+    }
+
     private int applyContactOpsSafely(ArrayList<ContentProviderOperation> ops, int newContactsInBatch) {
         if (ops == null || ops.isEmpty()) return 0;
         try {
@@ -105,7 +113,7 @@ public class NativeContactsPlugin extends Plugin {
                 Account erpAccount = new Account(ACCOUNT_NAME, ACCOUNT_TYPE);
                 am.addAccountExplicitly(erpAccount, null, null);
                 android.content.ContentResolver.setIsSyncable(erpAccount, ContactsContract.AUTHORITY, 1);
-                android.content.ContentResolver.setSyncAutomatically(erpAccount, ContactsContract.AUTHORITY, false);
+                android.content.ContentResolver.setSyncAutomatically(erpAccount, ContactsContract.AUTHORITY, true);
             } catch (Throwable ignored) {}
 
             // Both update and insert into ContactsContract.Settings
@@ -184,6 +192,19 @@ public class NativeContactsPlugin extends Plugin {
             }
         }
         return deleted;
+    }
+
+    @PluginMethod
+    public void ensureAccount(PluginCall call) {
+        try {
+            AccountInfo info = ensureDurgaAccount();
+            JSObject ret = new JSObject();
+            ret.put("name", info.accountName);
+            ret.put("type", info.accountType);
+            call.resolve(ret);
+        } catch (Throwable t) {
+            call.reject("ensureAccount error: " + t.getMessage());
+        }
     }
 
     @PluginMethod

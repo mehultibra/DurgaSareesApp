@@ -273,6 +273,29 @@ public class CallMonitorPlugin extends Plugin {
         } catch (Throwable ignored) {}
     }
 
+    public static void notifyCallDisconnected(Context context) {
+        try {
+            if (context != null) {
+                SharedPreferences sp = context.getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
+                sp.edit()
+                    .remove("last_call_phone")
+                    .remove("last_call_name")
+                    .remove("last_call_dir")
+                    .remove("last_call_time")
+                    .apply();
+            }
+
+            if (instance != null && instance.getBridge() != null && instance.getBridge().getWebView() != null) {
+                instance.getBridge().getWebView().post(() -> {
+                    try {
+                        String js = "window.dispatchEvent(new CustomEvent('dsNativeCallEnded'));";
+                        instance.getBridge().getWebView().evaluateJavascript(js, null);
+                    } catch (Throwable ignored) {}
+                });
+            }
+        } catch (Throwable ignored) {}
+    }
+
     public static boolean isMonitorEnabled() {
         return isEnabled;
     }

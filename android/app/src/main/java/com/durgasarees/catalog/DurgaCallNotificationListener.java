@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.database.Cursor;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.ContactsContract;
@@ -30,14 +31,44 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
         super.onDestroy();
     }
 
+    public static boolean isDialerPkg(String pkg) {
+        if (pkg == null) return false;
+        return pkg.equals("com.samsung.android.incallui") ||
+            pkg.equals("com.samsung.android.dialer") ||
+            pkg.equals("com.samsung.android.app.telephonyui") ||
+            pkg.equals("com.android.phone") ||
+            pkg.equals("com.google.android.dialer") ||
+            pkg.equals("com.android.incallui") ||
+            pkg.equals("com.android.dialer") ||
+            pkg.equals("com.android.server.telecom") ||
+            pkg.contains("incall") ||
+            pkg.contains("dialer") ||
+            pkg.contains("telephony");
+    }
+
     public static void scanActiveNotificationsNow(Context context) {
         try {
             DurgaCallNotificationListener listener = sInstance;
             if (listener == null) return;
             StatusBarNotification[] active = listener.getActiveNotifications();
+            boolean hasDialer = false;
             if (active != null) {
                 for (StatusBarNotification sbn : active) {
-                    listener.processNotification(sbn);
+                    if (sbn != null && isDialerPkg(sbn.getPackageName())) {
+                        hasDialer = true;
+                        listener.processNotification(sbn);
+                    }
+                }
+            }
+            if (!hasDialer && context != null) {
+                AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
+                boolean inCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION);
+                if (!inCall) {
+                    sLastProcessedKey = "";
+                    sLastProcessedTime = 0;
+                    CallMonitorPlugin.notifyCallDisconnected(context);
+                    DurgaCallScreeningService.dismissCallNotification(context);
                 }
             }
         } catch (Throwable ignored) {}
@@ -49,25 +80,45 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
         processNotification(sbn);
     }
 
+    @Override
+    public void onNotificationRemoved(StatusBarNotification sbn) {
+        super.onNotificationRemoved(sbn);
+        try {
+            if (sbn == null) return;
+            String pkg = sbn.getPackageName();
+            if (!isDialerPkg(pkg)) return;
+
+            boolean hasDialer = false;
+            try {
+                StatusBarNotification[] active = getActiveNotifications();
+                if (active != null) {
+                    for (StatusBarNotification a : active) {
+                        if (a != null && isDialerPkg(a.getPackageName())) {
+                            hasDialer = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
+            boolean inCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION);
+
+            if (!hasDialer || !inCall) {
+                sLastProcessedKey = "";
+                sLastProcessedTime = 0;
+                CallMonitorPlugin.notifyCallDisconnected(this);
+                DurgaCallScreeningService.dismissCallNotification(this);
+            }
+        } catch (Throwable ignored) {}
+    }
+
     private void processNotification(StatusBarNotification sbn) {
         try {
             if (sbn == null) return;
             String pkg = sbn.getPackageName();
-            if (pkg == null) return;
-
-            // Only phone dialer / in-call UI packages (including Samsung One UI telephonyui and com.android.phone)
-            boolean isDialerPkg = pkg.equals("com.samsung.android.incallui") ||
-                pkg.equals("com.samsung.android.dialer") ||
-                pkg.equals("com.samsung.android.app.telephonyui") ||
-                pkg.equals("com.android.phone") ||
-                pkg.equals("com.google.android.dialer") ||
-                pkg.equals("com.android.incallui") ||
-                pkg.equals("com.android.dialer") ||
-                pkg.equals("com.android.server.telecom") ||
-                pkg.contains("incall") ||
-                pkg.contains("dialer") ||
-                pkg.contains("telephony");
-            if (!isDialerPkg) {
+            if (!isDialerPkg(pkg)) {
                 return;
             }
 
