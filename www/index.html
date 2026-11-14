@@ -304,13 +304,21 @@
           <i class="fas fa-search" style="color:#2563eb;"></i> Search &amp; Select Party (Auto-Fills All Info):
         </label>
         <div style="position:relative;">
-          <input type="text" id="cdPartySearch" placeholder="Type party name, station or code..."
-            oninput="window.searchAndSelectParty(this.value)" autocomplete="off"
-            style="width:100%; box-sizing:border-box; padding:8px 10px; border:1.5px solid #3b82f6; border-radius:6px; font-size:13px; outline:none; background:#fff;">
+          <input type="text" id="cdPartySearch" placeholder="Type party name or code..."
+            oninput="window.handleCdPartySearchInput(this.value)" autocomplete="off"
+            style="width:100%; box-sizing:border-box; padding:8px 30px 8px 10px; border:1.5px solid #3b82f6; border-radius:6px; font-size:13px; outline:none; background:#fff;">
+          <i class="fas fa-times-circle" id="btnClearCdPartySearch" onclick="window.clearCdPartySearch()"
+            style="position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:14px; cursor:pointer; display:none;"></i>
           <div id="cdPartySearchResults"
             style="display:none; position:absolute; left:0; right:0; top:40px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 8px 20px rgba(0,0,0,0.15);">
           </div>
         </div>
+      </div>
+
+      <!-- Selected Party Report / Merged Report shortcut card inside modal -->
+      <div id="cdSelectedPartyReportRow" style="display:none; margin-bottom:12px; padding:8px 12px; background:#fdf2f8; border:1px solid #fbcfe8; border-radius:8px; align-items:center; justify-content:space-between;">
+        <div style="font-size:12px; font-weight:bold; color:#be185d;" id="cdSelectedPartyReportLabel">Party Report</div>
+        <button type="button" id="btnCdOpenPartyReport" onclick="window.openCurrentPartyDetailsReport()" style="background:var(--myntra-pink); color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"><i class="fas fa-chart-line"></i> View Report</button>
       </div>
 
       <div style="display:flex; flex-direction:column; gap:10px;">
@@ -878,20 +886,37 @@
 
       <!-- SECTION 1: ERP DIRECTORY -->
       <div id="customerHubSection_erp" style="display:flex; flex-direction:column; flex:1; overflow:hidden; min-height:0; margin-top:8px;">
-        <!-- Search Input -->
-        <div style="position:relative; margin-bottom:8px;">
+        <!-- 1. Customer Name Search Input with Cross to Clear -->
+        <div style="position:relative; margin-bottom:6px;">
           <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#9ca3af; font-size:13px;"></i>
-          <input type="text" id="custSearchInput" placeholder="Search customer by name, city, phone, GST..."
-            oninput="window.renderCustomerDirectoryUI()"
-            style="width:100%; box-sizing:border-box; padding:9px 12px 9px 34px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; outline:none;">
+          <input type="text" id="custSearchInput" placeholder="🔍 Search customer by name, city, GST..."
+            oninput="window.handleCustNameSearchInput(this.value)" autocomplete="off"
+            style="width:100%; box-sizing:border-box; padding:8px 32px 8px 34px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; outline:none;">
+          <i class="fas fa-times-circle" id="btnClearCustSearch" onclick="window.clearCustSearchInput()"
+            style="position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#9ca3af; font-size:14px; cursor:pointer; display:none;"></i>
         </div>
 
-        <!-- Station Filter -->
-        <div style="margin-bottom:8px;">
-          <select id="custStationFilter" onchange="window.renderCustomerDirectoryUI()"
-            style="width:100%; box-sizing:border-box; padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px; font-size:11px; background:#fff; color:#334155; outline:none;">
-            <option value="">All Stations</option>
-          </select>
+        <!-- 2. Caller Lookup Search Input (Phone Number Wise) -->
+        <div style="position:relative; margin-bottom:6px;">
+          <i class="fas fa-phone-alt" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#0284c7; font-size:11px;"></i>
+          <input type="tel" id="custHubPhoneLookupInput" placeholder="📞 Caller Lookup: Search phone number..."
+            oninput="window.handleCustHubPhoneLookup(this.value)" autocomplete="off"
+            style="width:100%; box-sizing:border-box; padding:7px 30px 7px 32px; border:1px solid #bae6fd; background:#f0f9ff; border-radius:8px; font-size:12px; color:#0369a1; outline:none;">
+          <i class="fas fa-times-circle" id="btnClearCustPhoneLookup" onclick="window.clearCustHubPhoneLookup()"
+            style="position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:14px; cursor:pointer; display:none;"></i>
+        </div>
+
+        <!-- 3. Agent Search Bar to filter parties & bills by Agent -->
+        <div style="position:relative; margin-bottom:8px;">
+          <i class="fas fa-user-tie" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#7c3aed; font-size:11px;"></i>
+          <input type="text" id="custAgentSearchInput" placeholder="🤝 Filter by Agent / Broker name..."
+            oninput="window.handleCustAgentSearchInput(this.value)" autocomplete="off"
+            style="width:100%; box-sizing:border-box; padding:7px 30px 7px 32px; border:1px solid #ddd6fe; background:#faf5ff; border-radius:8px; font-size:12px; color:#6b21a8; outline:none;">
+          <i class="fas fa-times-circle" id="btnClearCustAgentSearch" onclick="window.clearCustAgentSearch()"
+            style="position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:14px; cursor:pointer; display:none;"></i>
+          <div id="custAgentSearchResults"
+            style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.18); z-index:10060; max-height:180px; overflow-y:auto; margin-top:2px;">
+          </div>
         </div>
 
         <!-- Quick Filter Chips -->
@@ -1031,6 +1056,8 @@
             </div>
             <div id="custRepAgentRow" style="font-size:11px; color:#475569; font-weight:600; margin-top:2px; display:none;">
               <i class="fas fa-user-tie" style="color:#0284c7; font-size:10px;"></i> <span id="custRepAgentName">Agent</span>
+            </div>
+            <div id="custRepActiveAgentPill" style="display:none; align-items:center; gap:4px; font-size:10px; font-weight:bold; color:#7c3aed; background:#ede9fe; border:1px solid #ddd6fe; padding:2px 6px; border-radius:4px; margin-top:2px; width:fit-content;">
             </div>
           </div>
         </div>
