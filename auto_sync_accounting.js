@@ -270,28 +270,6 @@ async function syncAccountingData() {
         });
     });
 
-    // Running ledger balances
-    const ledgerBalances = new Map();
-    const totalDrByParty = new Map();
-    const totalCrByParty = new Map();
-
-    Object.keys(reportsByParty).forEach(code => {
-        const lList = reportsByParty[code].ledger;
-        lList.sort((a, b) => (a.d || '').localeCompare(b.d || ''));
-        let running = 0;
-        let totDr = 0;
-        let totCr = 0;
-        lList.forEach(entry => {
-            totDr += entry.dr;
-            totCr += entry.cr;
-            running += (entry.dr - entry.cr);
-            entry.bal = Math.round(running * 100) / 100;
-        });
-        ledgerBalances.set(code, running);
-        totalDrByParty.set(code, totDr);
-        totalCrByParty.set(code, totCr);
-    });
-
     // B. BLS (Transport & Sales Bills)
     bls.forEach(party => {
         const code = String(party.code || '').trim().toUpperCase();
@@ -311,6 +289,19 @@ async function syncAccountingData() {
                     if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
                     allAgentsByParty.get(code).add(billAgent);
                 }
+
+                let paidDays = null;
+                if (b.paid === 'Y') {
+                    if (b.PAYDET && b.DATE) {
+                        const d1 = new Date(b.DATE).getTime();
+                        const d2 = new Date(b.PAYDET).getTime();
+                        if (!isNaN(d1) && !isNaN(d2) && d2 >= d1) {
+                            paidDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+                        }
+                    }
+                    if (paidDays === null) paidDays = 0;
+                }
+                const dtStatus = (b.paid === 'Y') ? (paidDays !== null ? `paid:${paidDays}` : 'paid') : (b.DT || '');
 
                 const items = (b.IDE && detMap.get(b.IDE)) ? detMap.get(b.IDE) : [];
                 const itemRows = [];
@@ -364,7 +355,7 @@ async function syncAccountingData() {
                             rate,
                             amt,
                             parseFloat(b.BAMT || b.fnlamt || 0),
-                            b.DT || '',
+                            dtStatus,
                             b.TRNSP || '',
                             b.RRNO || '',
                             b.PLC || '',
@@ -397,7 +388,7 @@ async function syncAccountingData() {
                         0,
                         parseFloat(b.grsamt || b.BAMT) || 0,
                         parseFloat(b.BAMT || b.fnlamt || 0),
-                        b.DT || '',
+                        dtStatus,
                         b.TRNSP || '',
                         b.RRNO || '',
                         b.PLC || '',
@@ -442,7 +433,7 @@ async function syncAccountingData() {
                         parseFloat(b.VTAMT || 0),                  // 19: GST Amount
                         parseFloat(b.BAMT || b.fnlamt || 0),       // 20: Net Bill Amount
                         b.paid || 'N',                             // 21: Paid Status
-                        b.DT || 'Due',                             // 22: Due Info
+                        dtStatus,                                  // 22: Due Info (paid:X or Due)
                         itemRows                                   // 23: Item Lines
                     ];
                 }
@@ -520,6 +511,63 @@ async function syncAccountingData() {
         }
     });
 
+    // Add missing adjustment/discount entries for paid bills with AD_AMT > 0
+    bls.forEach(party => {
+        const code = String(party.code || '').trim().toUpperCase();
+        if (!code || !allowedPartyCodes.has(code)) return;
+        const p = getPartyReport(code);
+        if (Array.isArray(party.billDetails)) {
+            party.billDetails.forEach(b => {
+                const adAmt = parseFloat(b.AD_AMT) || 0;
+                if (b.paid === 'Y' && adAmt > 0) {
+                    const billNo = String(b.BILL || b.VNO || '').trim();
+                    const alreadyHas = p.ledger.some(e =>
+                        (e.v === billNo || (e.r && e.r.includes(billNo))) &&
+                        (e.r && e.r.toUpperCase().includes('DISCOUNT')) &&
+                        (Math.abs(e.dr - adAmt) < 0.01 || Math.abs(e.cr - adAmt) < 0.01)
+                    );
+                    if (!alreadyHas) {
+                        const bamt = parseFloat(b.BAMT || 0);
+                        const rcAmt = parseFloat(b.RC_AMT || b.fnlamt || 0);
+                        p.ledger.push({
+                            d: b.PAYDET || b.DATE || '',
+                            v: billNo,
+                            t: 'V1',
+                            r: 'DISCOUNT ON SALES (NON-GST)',
+                            dr: (rcAmt >= bamt) ? adAmt : 0,
+                            cr: (bamt > rcAmt) ? adAmt : 0,
+                            f: b.FRM || 'DS'
+                        });
+                    }
+                }
+            });
+        }
+    });
+
+    // Running ledger balances
+    const ledgerBalances = new Map();
+    const totalDrByParty = new Map();
+    const totalCrByParty = new Map();
+
+    Object.keys(reportsByParty).forEach(code => {
+        const lList = reportsByParty[code].ledger;
+        lList.sort((a, b) => (a.d || '').localeCompare(b.d || ''));
+        let running = 0;
+        let totDr = 0;
+        let totCr = 0;
+        lList.forEach(entry => {
+            totDr += entry.dr;
+            totCr += entry.cr;
+            running += (entry.dr - entry.cr);
+            if (Math.abs(running) < 0.01) running = 0;
+            entry.bal = Math.round(running * 100) / 100;
+        });
+        if (Math.abs(running) < 0.01) running = 0;
+        ledgerBalances.set(code, running);
+        totalDrByParty.set(code, totDr);
+        totalCrByParty.set(code, totCr);
+    });
+
     // Step 6: Load party links overrides (Fetch live from Firestore & merge into local cache)
     console.log('🔄 6. Fetching live PartyLinks from Firestore...');
     let localLinks = {};
@@ -590,8 +638,10 @@ async function syncAccountingData() {
             bal = 0;
             rep.outstanding.forEach(o => { bal += o.pamt; });
         }
+        if (Math.abs(bal) < 0.01) bal = 0;
+        if (rep.outstanding.length === 0 && Math.abs(bal) < 1) bal = 0;
         const absBal = Math.abs(bal || 0);
-        const drCr = (bal < 0) ? 'Cr' : (bal > 0 ? 'Dr' : '');
+        const drCr = (absBal < 0.01) ? '' : (bal < 0 ? 'Cr' : 'Dr');
 
         let primaryPhone = phoneMap.get(code) || '';
         let phonesSet = allPhonesByParty.get(code) || new Set();

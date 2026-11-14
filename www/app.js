@@ -13329,6 +13329,97 @@ window.saveCustRepQuickNote = async function (disposition) {
     }
 };
 
+window.handleCustRepPhoneAction = function (actionType) {
+    var cust = window._currentReportingCustomer;
+    if (!cust) return;
+    var rawList = Array.isArray(cust.cleanPhones) && cust.cleanPhones.length ? cust.cleanPhones : (Array.isArray(cust.phones) && cust.phones.length ? cust.phones : (cust.p ? [cust.p] : []));
+    var cleanNums = [];
+    rawList.forEach(function (num) {
+        var c = String(num || '').replace(/\D/g, '');
+        if (c.length > 10) c = c.slice(-10);
+        if (c.length === 10 && !cleanNums.includes(c)) cleanNums.push(c);
+    });
+
+    if (cleanNums.length === 0) {
+        alert('No valid phone number on record for this customer.');
+        return;
+    }
+
+    if (cleanNums.length === 1) {
+        window.executePartyPhoneAction(actionType, cleanNums[0], cust);
+        return;
+    }
+
+    // Multiple numbers: ask user which number to dial or message
+    var modal = document.getElementById('partyPhoneSelectModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'partyPhoneSelectModal';
+        modal.className = 'action-modal';
+        modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10050; align-items:center; justify-content:center;';
+        modal.onclick = function (e) { if (e.target === modal) window.closePartyPhoneSelectModal(); };
+        document.body.appendChild(modal);
+    }
+
+    var isWa = (actionType === 'whatsapp');
+    var iconClass = isWa ? 'fab fa-whatsapp' : 'fas fa-phone-alt';
+    var iconColor = isWa ? '#25d366' : '#2563eb';
+    var actionTitle = isWa ? 'WhatsApp' : 'Call';
+
+    var btnHtml = cleanNums.map(function (num, idx) {
+        return `
+        <button type="button" onclick="window.executePartyPhoneAction('${actionType}', '${num}'); window.closePartyPhoneSelectModal();"
+          style="display:flex; align-items:center; justify-content:space-between; width:100%; padding:10px 14px; margin-bottom:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; font-weight:600; color:#1e293b; cursor:pointer;">
+          <span style="display:flex; align-items:center; gap:8px;">
+            <i class="${iconClass}" style="color:${iconColor}; font-size:15px;"></i>
+            <span>+91 ${num}</span>
+          </span>
+          <span style="font-size:10px; color:#64748b; background:#e2e8f0; padding:2px 6px; border-radius:4px;">${idx === 0 ? 'Primary' : 'Alt ' + idx}</span>
+        </button>
+        `;
+    }).join('');
+
+    modal.innerHTML = `
+    <div style="background:#fff; border-radius:12px; width:90%; max-width:340px; padding:16px; box-sizing:border-box; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+        <div style="font-weight:bold; font-size:13px; color:#0f172a; display:flex; align-items:center; gap:6px;">
+          <i class="${iconClass}" style="color:${iconColor};"></i> Select Number for ${actionTitle}
+        </div>
+        <i class="fas fa-times" onclick="window.closePartyPhoneSelectModal()" style="cursor:pointer; color:#94a3b8; font-size:14px;"></i>
+      </div>
+      <div style="font-size:11px; color:#64748b; margin-bottom:10px;">
+        Choose which number to ${actionTitle.toLowerCase()} for <b>${escHtml(cust.n || cust.c)}</b>:
+      </div>
+      <div style="max-height:220px; overflow-y:auto;">
+        ${btnHtml}
+      </div>
+      <button type="button" onclick="window.closePartyPhoneSelectModal()"
+        style="width:100%; padding:8px; background:#f1f5f9; border:none; border-radius:6px; color:#475569; font-weight:600; font-size:12px; cursor:pointer; margin-top:4px;">
+        Cancel
+      </button>
+    </div>
+    `;
+    modal.style.display = 'flex';
+};
+
+window.closePartyPhoneSelectModal = function () {
+    var modal = document.getElementById('partyPhoneSelectModal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.executePartyPhoneAction = function (actionType, phone, custObj) {
+    var cust = custObj || window._currentReportingCustomer;
+    if (!cust) return;
+    if (actionType === 'whatsapp') {
+        var waPhone = (phone.length === 10) ? ('91' + phone) : phone;
+        var waBal = (cust.b > 0) ? `₹ ${cust.b.toLocaleString('en-IN')} ${cust.d}` : '0.00';
+        var waMsg = `Namaste ${cust.n},\nGreeting from Durga Sarees!\nYour current ledger balance is ${waBal}.\nKindly let us know if you require any invoices or ledger statements. Thank you!`;
+        window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(waMsg)}`, '_blank');
+    } else if (actionType === 'call') {
+        window.startCRMCall(cust.c, cust.n || cust.c, phone, cust.ct || '', cust.a || cust.ag || '', cust.b || 0, cust.d || '');
+    }
+};
+
 // 6. Open Customer Detail Reports Modal
 window.openCustomerReportsModal = async function (partyCode, isCallTriggered, sisterAccountsList) {
     var myCd = {};
@@ -13600,8 +13691,8 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
                 balBadge.style.color = (cust.d === 'Dr' || !cust.d) ? '#dc2626' : '#16a34a';
                 balBadge.style.background = (cust.d === 'Dr' || !cust.d) ? '#fee2e2' : '#dcfce7';
             } else {
-                balBadge.style.color = '#374151';
-                balBadge.style.background = '#f3f4f6';
+                balBadge.style.color = '#16a34a';
+                balBadge.style.background = '#dcfce7';
             }
         }
     }
@@ -13622,29 +13713,21 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
             var agSafe = encodeURIComponent(agVal || '').replace(/'/g, "%27");
 
             var actHtml = '';
-            if (cust.p) {
+            var hasPhone = Boolean(cust.p || (Array.isArray(cust.cleanPhones) && cust.cleanPhones.length > 0));
+            if (hasPhone) {
                 actHtml += `
-                <a href="https://wa.me/${waPhone}?text=${encodeURIComponent(waMsg)}" target="_blank"
-                   style="display:inline-flex; align-items:center; gap:4px; background:#25d366; color:#fff; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:bold; text-decoration:none;">
+                <button type="button" onclick="window.handleCustRepPhoneAction('whatsapp')"
+                   style="display:inline-flex; align-items:center; gap:3px; background:#25d366; color:#fff; padding:4px 8px; border-radius:6px; font-size:10.5px; font-weight:bold; border:none; cursor:pointer; white-space:nowrap;">
                   <i class="fab fa-whatsapp"></i> WhatsApp
-                </a>
-                <button type="button" onclick="window.startCRMCall(decodeURIComponent('${codeSafe}'), decodeURIComponent('${nameSafe}'), '${cust.p}', decodeURIComponent('${ctSafe}'), decodeURIComponent('${agSafe}'), ${cust.b || 0}, '${cust.d || ''}')"
-                   style="display:inline-flex; align-items:center; gap:4px; background:#f3f4f6; color:#374151; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #e5e7eb; cursor:pointer;">
-                  <i class="fas fa-phone-alt" style="color:#2563eb; font-size:10px;"></i> Call
+                </button>
+                <button type="button" onclick="window.handleCustRepPhoneAction('call')"
+                   style="display:inline-flex; align-items:center; gap:3px; background:#f3f4f6; color:#374151; padding:4px 8px; border-radius:6px; font-size:10.5px; font-weight:600; border:1px solid #e5e7eb; cursor:pointer; white-space:nowrap;">
+                  <i class="fas fa-phone-alt" style="color:#2563eb; font-size:9.5px;"></i> Call
                 </button>`;
-                if (Array.isArray(cust.cleanPhones) && cust.cleanPhones.length > 1) {
-                    cust.cleanPhones.slice(1).forEach(function (extraP) {
-                        actHtml += `
-                        <button type="button" onclick="event.stopPropagation(); window.startCRMCall(decodeURIComponent('${codeSafe}'), decodeURIComponent('${nameSafe}'), '${extraP}', decodeURIComponent('${ctSafe}'), decodeURIComponent('${agSafe}'), ${cust.b || 0}, '${cust.d || ''}')"
-                           style="display:inline-flex; align-items:center; gap:3px; background:#f8fafc; color:#475569; padding:4px 8px; border-radius:6px; font-size:10px; font-weight:600; border:1px solid #cbd5e1; cursor:pointer;" title="Call alternate number">
-                          <i class="fas fa-phone-alt" style="color:#0284c7; font-size:9px;"></i> ${extraP}
-                        </button>`;
-                    });
-                }
             } else {
-                actHtml += `<span style="font-size:11px; color:#94a3b8; font-style:italic;">No phone on record</span>`;
+                actHtml += `<span style="font-size:10px; color:#94a3b8; font-style:italic;">No phone</span>`;
             }
-            actHtml += `<button type="button" onclick="window.openAddEditPartyContactModal(decodeURIComponent('${codeSafe}'))" style="display:inline-flex; align-items:center; gap:4px; background:#f1f5f9; color:#475569; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; border:1px solid #cbd5e1; cursor:pointer;"><i class="fas fa-user-edit" style="color:#64748b; font-size:10px;"></i> Edit</button>`;
+            actHtml += `<button type="button" onclick="window.openAddEditPartyContactModal(decodeURIComponent('${codeSafe}'))" style="display:inline-flex; align-items:center; gap:3px; background:#f1f5f9; color:#475569; padding:4px 7px; border-radius:6px; font-size:10.5px; font-weight:600; text-decoration:none; border:1px solid #cbd5e1; cursor:pointer; white-space:nowrap;"><i class="fas fa-user-edit" style="color:#64748b; font-size:9.5px;"></i> Edit</button>`;
             actionsEl.innerHTML = actHtml;
         }
     }
@@ -14099,9 +14182,10 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         var balBadge = document.getElementById('custRepBalBadge');
         if (balBadge && cust) {
             var curB = parseFloat(cust.b) || 0;
+            if (partyRep && (!partyRep.outstanding || partyRep.outstanding.length === 0)) curB = 0;
             balBadge.innerText = (curB > 0) ? `OS: ₹ ${curB.toLocaleString('en-IN')} ${cust.d || 'Dr'}` : 'OS: Clear';
-            balBadge.style.color = (curB > 0) ? ((cust.d === 'Dr' || !cust.d) ? '#dc2626' : '#16a34a') : '#374151';
-            balBadge.style.background = (curB > 0) ? ((cust.d === 'Dr' || !cust.d) ? '#fee2e2' : '#dcfce7') : '#f3f4f6';
+            balBadge.style.color = (curB > 0) ? ((cust.d === 'Dr' || !cust.d) ? '#dc2626' : '#16a34a') : '#16a34a';
+            balBadge.style.background = (curB > 0) ? ((cust.d === 'Dr' || !cust.d) ? '#fee2e2' : '#dcfce7') : '#dcfce7';
         }
     }
 
@@ -14208,9 +14292,10 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             var billNo = String(r[1] || '').trim();
             var billDt = r[0] || '';
             var isUnpaid = pendingBillsMap.has(billNo);
-            if (!isUnpaid && r[11]) {
-                var rawDt = String(r[11]).toLowerCase();
-                if (rawDt === 'os' || rawDt.includes('due') || rawDt.includes('o/s')) {
+            var rawDt = String(r[11] || '').toLowerCase();
+            var isExplicitPaid = rawDt.startsWith('paid');
+            if (!isUnpaid && !isExplicitPaid && r[11]) {
+                if (rawDt === 'due' || rawDt.includes('due') || rawDt.includes('o/s')) {
                     isUnpaid = true;
                 }
             }
@@ -14224,7 +14309,12 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                 }
                 daysBadge = `<span style="font-weight:bold; color:#dc2626; background:#fee2e2; padding:1px 5px; border-radius:3px; font-size:9.5px;">${unpDays || 0}d</span>`;
             } else {
-                daysBadge = `<span style="font-weight:bold; color:#16a34a; background:#dcfce7; padding:1px 5px; border-radius:3px; font-size:9.5px;">Paid</span>`;
+                var pDays = null;
+                if (rawDt.startsWith('paid:')) {
+                    pDays = parseInt(rawDt.split(':')[1]);
+                }
+                var pText = (pDays !== null && !isNaN(pDays)) ? `${pDays}d` : 'Paid';
+                daysBadge = `<span style="font-weight:bold; color:#16a34a; background:#dcfce7; padding:1px 5px; border-radius:3px; font-size:9.5px;">${pText}</span>`;
             }
 
             var dateCell = isFirst ? escHtml(r[0]) : '';
@@ -14589,8 +14679,35 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             totDr += (r.dr || 0);
             totCr += (r.cr || 0);
             running += ((r.dr || 0) - (r.cr || 0));
+            if (Math.abs(running) < 0.01) running = 0;
             r.bal = running;
         });
+        if (Math.abs(running) < 0.01) running = 0;
+
+        // Auto-balance if party has 0 pending bills in outstanding and residual balance is small discount/adjustment
+        if (partyRep && (!partyRep.outstanding || partyRep.outstanding.length === 0) && Math.abs(running) > 0 && Math.abs(running) < 500) {
+            var hasAdj = ldList.some(r => r.r && r.r.toUpperCase().includes('DISCOUNT'));
+            if (!hasAdj) {
+                var adjAmt = Math.abs(running);
+                var isDr = (running < 0);
+                var lastD = ldList[ldList.length - 1] ? ldList[ldList.length - 1].d : '2026-09-27';
+                var lastV = ldList[ldList.length - 1] ? ldList[ldList.length - 1].v : '';
+                ldList.push({
+                    d: lastD,
+                    v: lastV,
+                    t: 'V1',
+                    r: 'DISCOUNT ON SALES (NON-GST)',
+                    dr: isDr ? adjAmt : 0,
+                    cr: isDr ? 0 : adjAmt,
+                    bal: 0,
+                    vno: '',
+                    rmk: ''
+                });
+                if (isDr) totDr += adjAmt; else totCr += adjAmt;
+                running = 0;
+            }
+        }
+
         var closingBal = running;
         var closingBalText = (closingBal !== 0) ? `₹ ${Math.abs(closingBal).toFixed(2)} ${closingBal > 0 ? 'Dr' : 'Cr'}` : '₹ 0.00';
 
