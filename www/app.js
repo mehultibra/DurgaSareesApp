@@ -13049,6 +13049,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
         }
     }
     if (!cust) {
+        if (isCallTriggered) return; // Number is not in the software database -> do not fetch or open reports
         var pDigits = pCodeNorm.replace(/\D/g, '').slice(-10);
         var fallbackName = (pDigits.length === 10 && window._lastActiveCallName) ? window._lastActiveCallName : partyCode;
         cust = {
@@ -16158,16 +16159,8 @@ window.handleDetectedNativeCall = async function (phoneOrName, direction, partyN
             }
         }
     } else {
-        var dispName = partyNameHint || cleanNameSearch || (p10.length === 10 ? ('+91 ' + p10) : inputStr);
-        window.showLiveCallFloatBanner(dispName, dispPhone, direction);
-
-        if (typeof window.openCustomerReportsModal === 'function') {
-            var curM = document.getElementById('customerDetailReportsModal');
-            var curCode = window._currentReportingCustomer ? window._currentReportingCustomer.c : null;
-            if (!curM || curM.style.display !== 'flex' || curCode !== targetCode) {
-                window.openCustomerReportsModal(targetCode, true);
-            }
-        }
+        // Number is not in the ERP software database: Do not fetch or open reports in the APK
+        return;
     }
 };
 
