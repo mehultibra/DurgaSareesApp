@@ -1464,8 +1464,8 @@ window.syncAdminUI = function () {
         if (document.getElementById('btnCheckLiveUpdate')) {
             document.getElementById('btnCheckLiveUpdate').style.display = window.isSuperAdmin ? 'inline-flex' : 'none';
         }
-        if (document.getElementById('btnEnableCallPopup')) {
-            document.getElementById('btnEnableCallPopup').style.display = window.isSuperAdmin ? 'inline-flex' : 'none';
+        if (document.getElementById('btnToggleCallPopup')) {
+            if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
         }
 
         // Customer / Agent Self-Service: "📊 My Reports"
@@ -5805,65 +5805,94 @@ var backButtonPressedOnce = false;
 var backButtonTimer = null;
 
 function handleHardwareBack() {
-    var hasActiveModal = false;
+    // 1. If Bill Invoice modal is open, close it
+    var billM = document.getElementById('billInvoiceModal');
+    if (billM && billM.style.display === 'flex') {
+        billM.style.display = 'none';
+        return;
+    }
 
-    var detailPanel = document.getElementById('detailPanel');
-    var cartPanel = document.getElementById('cartPanel');
+    // 2. If Customer Detail Reports modal is open, close it
+    var repM = document.getElementById('customerDetailReportsModal');
+    if (repM && repM.style.display === 'flex') {
+        if (typeof window.closeCustomerReportsModal === 'function') {
+            window.closeCustomerReportsModal();
+        } else {
+            repM.style.display = 'none';
+        }
+        return;
+    }
+
+    // 3. If Customer Directory / CRM Hub modal is open, close it
+    var crmM = document.getElementById('customerDirectoryModal');
+    if (crmM && crmM.style.display === 'flex') {
+        crmM.style.display = 'none';
+        return;
+    }
+
+    // 4. If Full Screen Image modal is open
     var fsModal = document.getElementById('fsModal');
-
     if (fsModal && fsModal.style.display === 'flex') {
-        hasActiveModal = true;
-    } else if (cartPanel && cartPanel.classList.contains('open')) {
-        hasActiveModal = true;
-    } else if (detailPanel && detailPanel.classList.contains('open')) {
-        hasActiveModal = true;
-    } else {
-        var actionModals = document.querySelectorAll('.action-modal');
-        for (var i = 0; i < actionModals.length; i++) {
-            if (actionModals[i].style.display === 'flex') {
-                hasActiveModal = true;
-                break;
-            }
+        fsModal.style.display = 'none';
+        return;
+    }
+
+    // 5. If Cart Panel is open
+    var cartPanel = document.getElementById('cartPanel');
+    if (cartPanel && cartPanel.classList.contains('open')) {
+        if (typeof toggleCart === 'function') toggleCart(false);
+        else cartPanel.classList.remove('open');
+        return;
+    }
+
+    // 6. If Detail Panel is open
+    var detailPanel = document.getElementById('detailPanel');
+    if (detailPanel && detailPanel.classList.contains('open')) {
+        if (typeof closeDetailPanel === 'function') closeDetailPanel();
+        else detailPanel.classList.remove('open');
+        return;
+    }
+
+    // 7. Check if returning from "Take Order" to Customer Report
+    var retParty = window._returnToReportPartyCode || localStorage.getItem('ds_return_to_report_party');
+    if (retParty) {
+        window._returnToReportPartyCode = null;
+        try { localStorage.removeItem('ds_return_to_report_party'); } catch(e){}
+        if (typeof window.openCustomerReportsModal === 'function') {
+            window.openCustomerReportsModal(retParty, false);
+            return;
         }
     }
 
-    if (hasActiveModal) {
-        history.back(); // Step back to previous modal or home
+    // 8. Any other visible modal
+    var openActionModals = Array.from(document.querySelectorAll('.action-modal')).filter(m => m.style.display === 'flex');
+    if (openActionModals.length > 0) {
+        openActionModals[openActionModals.length - 1].style.display = 'none';
+        return;
+    }
+
+    // We are on the main home screen
+    if (backButtonPressedOnce) {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+            window.Capacitor.Plugins.App.minimizeApp();
+        }
     } else {
-        // Check if returning from "Take Order" to Customer Report
-        var retParty = window._returnToReportPartyCode || localStorage.getItem('ds_return_to_report_party');
-        if (retParty) {
-            window._returnToReportPartyCode = null;
-            try { localStorage.removeItem('ds_return_to_report_party'); } catch(e){}
-            if (typeof window.openCustomerReportsModal === 'function') {
-                window.openCustomerReportsModal(retParty, false);
-                return;
+        backButtonPressedOnce = true;
+
+        // Show disappearing toast message
+        var toastId = 'exitToast_' + Date.now();
+        var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(40,40,40,0.95); color:#fff; padding:12px 24px; border-radius:30px; font-size:14px; box-shadow:0 4px 15px rgba(0,0,0,0.4); z-index:999999; text-align:center; transition: opacity 0.3s; pointer-events:none;">Press back again to exit</div>`;
+        document.body.insertAdjacentHTML('beforeend', toastHtml);
+
+        if (backButtonTimer) clearTimeout(backButtonTimer);
+        backButtonTimer = setTimeout(() => {
+            backButtonPressedOnce = false;
+            var t = document.getElementById(toastId);
+            if (t) {
+                t.style.opacity = '0';
+                setTimeout(() => t.remove(), 300);
             }
-        }
-
-        // We are on the main home screen
-        if (backButtonPressedOnce) {
-            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
-                window.Capacitor.Plugins.App.minimizeApp();
-            }
-        } else {
-            backButtonPressedOnce = true;
-
-            // Show disappearing toast message
-            var toastId = 'exitToast_' + Date.now();
-            var toastHtml = `<div id="${toastId}" style="position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(40,40,40,0.95); color:#fff; padding:12px 24px; border-radius:30px; font-size:14px; box-shadow:0 4px 15px rgba(0,0,0,0.4); z-index:999999; text-align:center; transition: opacity 0.3s; pointer-events:none;">Press back again to exit</div>`;
-            document.body.insertAdjacentHTML('beforeend', toastHtml);
-
-            if (backButtonTimer) clearTimeout(backButtonTimer);
-            backButtonTimer = setTimeout(() => {
-                backButtonPressedOnce = false;
-                var t = document.getElementById(toastId);
-                if (t) {
-                    t.style.opacity = '0';
-                    setTimeout(() => t.remove(), 300);
-                }
-            }, 2000);
-        }
+        }, 2000);
     }
 }
 
@@ -12134,6 +12163,7 @@ window.openUnifiedCustomerHub = function (section) {
     if (typeof window.expandCustHubHeader === 'function') window.expandCustHubHeader();
     window.switchCustomerHubSection(section || 'erp');
     if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
+    if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
 };
 
 window.openCustomerDirectoryModal = function () {
@@ -12333,6 +12363,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
                 window._compiledCustomersList = idbData.list;
                 window._accountingLastSyncedAt = idbData.syncedAt || null;
                 if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
+    if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
                 if (syncIcon) syncIcon.classList.remove('fa-spin');
                 window.renderCustomerDirectoryUI();
 
@@ -12341,6 +12372,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
                 if (meta && meta.lastSyncedAt) {
                     window._accountingLastSyncedAt = meta.lastSyncedAt;
                     if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
+    if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
                 }
                 var isFresh = false;
                 if (meta && meta.custMasterHash && idbData.custMasterHash && meta.custMasterHash === idbData.custMasterHash) {
@@ -12486,6 +12518,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
             }
             window._accountingLastSyncedAt = (meta && meta.lastSyncedAt) || window._accountingLastSyncedAt || null;
             if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
+    if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
 
             // Cache in IndexedDB for fast subsequent opens
             try {
@@ -12987,11 +13020,17 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
               <button type="button" onclick="event.stopPropagation(); window.openAddEditPartyContactModal(decodeURIComponent('${codeSafe}'))" style="display:inline-flex; align-items:center; gap:3px; background:#f1f5f9; color:#475569; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid #cbd5e1; cursor:pointer;" title="Edit Contact"><i class="fas fa-edit" style="color:#64748b; font-size:10px;"></i> Edit</button>
             </div>
 
-            <!-- Prominent View Reports Button -->
-            <button type="button" onclick="window.openCustomerReportsModal(decodeURIComponent('${codeSafe}'))"
-              style="background:var(--myntra-pink); color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
-              <i class="fas fa-chart-line"></i> ${sisterCount > 1 ? 'Merged Reports (' + sisterCount + ')' : 'View Reports'} <i class="fas fa-chevron-right" style="font-size:9px;"></i>
-            </button>
+            <!-- Prominent Take Order & View Reports Buttons -->
+            <div style="display:inline-flex; align-items:center; gap:6px;">
+              <button type="button" onclick="event.stopPropagation(); window.startOrderFromDirectory(decodeURIComponent('${codeSafe}'))"
+                style="background:#059669; color:#fff; border:none; padding:4px 9px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" title="Take Order for this customer">
+                <i class="fas fa-cart-plus"></i> Take Order
+              </button>
+              <button type="button" onclick="window.openCustomerReportsModal(decodeURIComponent('${codeSafe}'))"
+                style="background:var(--myntra-pink); color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                <i class="fas fa-chart-line"></i> ${sisterCount > 1 ? 'Merged Reports (' + sisterCount + ')' : 'View Reports'} <i class="fas fa-chevron-right" style="font-size:9px;"></i>
+              </button>
+            </div>
           </div>
 
         </div>`;
@@ -13078,6 +13117,23 @@ window.expandCustHubHeader = function () {
 window.showMoreCustDirCards = function () {
     window._custDirRenderLimit = (window._custDirRenderLimit || 60) + 60;
     window.renderCustomerDirectoryUI(true);
+};
+
+window.startOrderFromDirectory = function (partyCode) {
+    if (!partyCode) return;
+    var list = window._compiledCustomersList || [];
+    var cust = list.find(c => c.c === partyCode || c.n === partyCode) || (window._customerDirectoryMaster || []).find(c => c.c === partyCode || c.n === partyCode);
+    if (!cust) {
+        cust = { c: partyCode, n: partyCode };
+    }
+    if (typeof window.startOrderOnBehalf === 'function') {
+        window.startOrderOnBehalf(cust);
+    } else if (typeof window.selectPartyForOrder === 'function') {
+        window.selectPartyForOrder(cust);
+        var dirM = document.getElementById('customerDirectoryModal');
+        if (dirM) dirM.style.display = 'none';
+        if (typeof closeModals === 'function') closeModals(true);
+    }
 };
 
 // ==========================================
@@ -13303,7 +13359,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     }
 
     var isSelfService = !window.hasCRMAccess();
-    var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
+    var isAgentUser = !window.hasCRMAccess() && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
     var agentKeywords = isAgentUser ? (window.getAgentKeywords ? window.getAgentKeywords(myCd) : []) : [];
 
     var list = window._compiledCustomersList || [];
@@ -13367,6 +13423,9 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     }
 
     window._currentReportingCustomer = cust;
+    if (typeof window.selectPartyForOrder === 'function' && cust) {
+        window.selectPartyForOrder(cust);
+    }
     if (sisterAccountsList && Array.isArray(sisterAccountsList) && sisterAccountsList.length > 1) {
         window._currentReportingSisterAccounts = sisterAccountsList;
     } else {
@@ -13434,6 +13493,9 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
                     if (found) window._currentReportingCustomer = found;
                 } else if (isAgentTarget) {
                     window._currentReportingCustomer = cust;
+    if (typeof window.selectPartyForOrder === 'function' && cust) {
+        window.selectPartyForOrder(cust);
+    }
                 }
                 window.renderCustomerReportActiveTab();
             };
@@ -13525,12 +13587,18 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
             balBadge.innerText = 'OS: Calculating...';
             balBadge.style.color = '#64748b';
             balBadge.style.background = '#f1f5f9';
+        } else if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
+            var sumBal = window._currentReportingSisterAccounts.reduce((s, a) => s + (parseFloat(a.b) || 0), 0);
+            balBadge.innerText = (sumBal > 0) ? `OS: ₹ ${Math.round(sumBal).toLocaleString('en-IN')} Dr` : 'OS: Clear';
+            balBadge.style.color = (sumBal > 0) ? '#dc2626' : '#16a34a';
+            balBadge.style.background = (sumBal > 0) ? '#fee2e2' : '#dcfce7';
         } else {
-            var balText = (cust.b > 0) ? `OS: ₹ ${cust.b.toLocaleString('en-IN')} ${cust.d}` : 'OS: Clear';
+            var curB = parseFloat(cust.b) || 0;
+            var balText = (curB > 0) ? `OS: ₹ ${curB.toLocaleString('en-IN')} ${cust.d || 'Dr'}` : 'OS: Clear';
             balBadge.innerText = balText;
-            if (cust.b > 0) {
-                balBadge.style.color = (cust.d === 'Dr') ? '#dc2626' : '#16a34a';
-                balBadge.style.background = (cust.d === 'Dr') ? '#fee2e2' : '#dcfce7';
+            if (curB > 0) {
+                balBadge.style.color = (cust.d === 'Dr' || !cust.d) ? '#dc2626' : '#16a34a';
+                balBadge.style.background = (cust.d === 'Dr' || !cust.d) ? '#fee2e2' : '#dcfce7';
             } else {
                 balBadge.style.color = '#374151';
                 balBadge.style.background = '#f3f4f6';
@@ -14024,6 +14092,16 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             balBadge.innerText = (agTotPend > 0) ? `OS: ₹ ${Math.round(agTotPend).toLocaleString('en-IN')}` : 'OS: Clear';
             balBadge.style.color = (agTotPend > 0) ? '#dc2626' : '#16a34a';
             balBadge.style.background = (agTotPend > 0) ? '#fee2e2' : '#dcfce7';
+        }
+    } else if (partyRep && partyRep.isMerged) {
+        // Handled in merged accounts aggregation
+    } else {
+        var balBadge = document.getElementById('custRepBalBadge');
+        if (balBadge && cust) {
+            var curB = parseFloat(cust.b) || 0;
+            balBadge.innerText = (curB > 0) ? `OS: ₹ ${curB.toLocaleString('en-IN')} ${cust.d || 'Dr'}` : 'OS: Clear';
+            balBadge.style.color = (curB > 0) ? ((cust.d === 'Dr' || !cust.d) ? '#dc2626' : '#16a34a') : '#374151';
+            balBadge.style.background = (curB > 0) ? ((cust.d === 'Dr' || !cust.d) ? '#fee2e2' : '#dcfce7') : '#f3f4f6';
         }
     }
 
@@ -15628,6 +15706,8 @@ window.startOrderOnBehalf = function (targetCust) {
     window.closeCustomerReportsModal();
     var hubM = document.getElementById('customerHubModal');
     if (hubM) hubM.style.display = 'none';
+    var dirM = document.getElementById('customerDirectoryModal');
+    if (dirM) dirM.style.display = 'none';
     if (typeof closeModals === 'function') closeModals(true);
 
     // Non-blocking toast notification to guide user
@@ -16474,6 +16554,10 @@ window.toggleQuickNoteSpeech = async function () {
 
 window.checkLiveCallOnResume = async function () {
     if (typeof window.hasCRMAccess === 'function' && !window.hasCRMAccess()) return;
+    if (localStorage.getItem('ds_call_popup_enabled') === 'false') {
+        window.hideLiveCallFloatBanner();
+        return;
+    }
 
     var callInfo = null;
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getLastDetectedCall === 'function') {
@@ -16573,6 +16657,7 @@ window.checkLiveCallOnResume = async function () {
 
 window.handleDetectedNativeCall = async function (phoneOrName, direction, partyNameHint) {
     if (typeof window.hasCRMAccess === 'function' && !window.hasCRMAccess()) return;
+    if (localStorage.getItem('ds_call_popup_enabled') === 'false') return;
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getCallState === 'function') {
         try {
             var st = await window.Capacitor.Plugins.CallMonitor.getCallState();
@@ -16723,6 +16808,60 @@ window.checkLastDetectedCallOnResume = function () {
     }
 };
 
+window.isCallPopupEnabled = function () {
+    return localStorage.getItem('ds_call_popup_enabled') !== 'false';
+};
+
+window.updateCallPopupToggleUI = function () {
+    var btn = document.getElementById('btnToggleCallPopup');
+    var icon = document.getElementById('iconToggleCallPopup');
+    var text = document.getElementById('textToggleCallPopup');
+    if (!btn) return;
+    if (!window.isSuperAdmin) {
+        btn.style.display = 'none';
+        return;
+    }
+    btn.style.display = 'inline-flex';
+    var enabled = window.isCallPopupEnabled();
+    if (enabled) {
+        btn.style.background = '#f0fdf4';
+        btn.style.borderColor = '#16a34a';
+        btn.style.color = '#16a34a';
+        if (icon) icon.className = 'fas fa-toggle-on';
+        if (text) text.innerText = 'Popup: ON';
+    } else {
+        btn.style.background = '#fef2f2';
+        btn.style.borderColor = '#dc2626';
+        btn.style.color = '#dc2626';
+        if (icon) icon.className = 'fas fa-toggle-off';
+        if (text) text.innerText = 'Popup: OFF';
+    }
+};
+
+window.toggleCallPopupSetting = async function () {
+    if (!window.isSuperAdmin) {
+        alert("🔒 Admin privileges required.");
+        return;
+    }
+    var currentlyEnabled = window.isCallPopupEnabled();
+    var newState = !currentlyEnabled;
+    try {
+        localStorage.setItem('ds_call_popup_enabled', newState ? 'true' : 'false');
+    } catch(e) {}
+
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.setPopupEnabled === 'function') {
+        try {
+            await window.Capacitor.Plugins.CallMonitor.setPopupEnabled({ enabled: newState });
+        } catch(e) {
+            console.warn("CallMonitor.setPopupEnabled error:", e);
+        }
+    }
+
+    window.updateCallPopupToggleUI();
+    var msg = newState ? "✅ Call Popup ENABLED.\n\nParty reports will pop up when an ERP customer calls." : "⏸️ Call Popup DISABLED.\n\nNo automatic call popups will appear.";
+    alert(msg);
+};
+
 window.enableCallPopupSuperAdmin = async function () {
     if (!window.isSuperAdmin) {
         alert("🔒 Admin privileges required.");
@@ -16789,6 +16928,14 @@ function setupCRMCallReturnListener() {
                 var banner = document.getElementById('enableCallPopupBanner');
                 if (banner) {
                     banner.style.display = (!st || !st.held || !st.notificationListenerEnabled) ? 'flex' : 'none';
+                }
+            }).catch(function () {});
+        }
+        if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getPopupEnabled === 'function') {
+            window.Capacitor.Plugins.CallMonitor.getPopupEnabled().then(function (res) {
+                if (res && res.enabled !== undefined) {
+                    localStorage.setItem('ds_call_popup_enabled', res.enabled ? 'true' : 'false');
+                    if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
                 }
             }).catch(function () {});
         }

@@ -121,6 +121,11 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 return;
             }
 
+            SharedPreferences sp = getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
+            if (!sp.getBoolean("call_popup_enabled", true)) {
+                return;
+            }
+
             AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
             boolean inCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_RINGTONE);
@@ -145,7 +150,8 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
 
             // Check if title, text, or subtext contains a 10-digit phone number
             String combined = title + " " + text + " " + sub + " " + bigTitle + " " + bigText;
-            if (combined.toLowerCase().contains("missed")) return;
+            String lowerCombined = combined.toLowerCase();
+            if (lowerCombined.contains("missed") || lowerCombined.contains("record") || lowerCombined.contains("saving") || lowerCombined.contains("saved")) return;
             String p10 = null;
             Matcher m = PHONE_PATTERN.matcher(combined);
             if (m.find()) {
@@ -229,6 +235,11 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 partyName = p10;
             }
 
+            // Strict check: Only show notification/popup for numbers matching accounts in our app
+            if (!DurgaCallScreeningService.isDurgaSareesAccount(this, p10, partyName)) {
+                return;
+            }
+
             String dedupeKey = (p10.isEmpty() ? partyName : p10) + "|" + partyName;
             long now = System.currentTimeMillis();
             if (dedupeKey.equals(sLastProcessedKey) && (now - sLastProcessedTime < 60000)) {
@@ -255,6 +266,7 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
         String lower = s.trim().toLowerCase();
         if (lower.isEmpty()) return true;
         if (lower.matches("^\\d{1,2}:\\d{2}(?::\\d{2})?$")) return true;
+        if (lower.contains("record") || lower.contains("saving") || lower.contains("saved") || lower.contains("audio")) return true;
         return lower.contains("ongoing call") ||
                lower.contains("incoming call") ||
                lower.contains("active call") ||

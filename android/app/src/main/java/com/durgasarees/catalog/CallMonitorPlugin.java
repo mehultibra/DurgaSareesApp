@@ -60,6 +60,31 @@ public class CallMonitorPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void setPopupEnabled(PluginCall call) {
+        try {
+            boolean enabled = call.getBoolean("enabled", true);
+            SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
+            sp.edit().putBoolean("call_popup_enabled", enabled).apply();
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("setPopupEnabled error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void getPopupEnabled(PluginCall call) {
+        try {
+            SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
+            boolean enabled = sp.getBoolean("call_popup_enabled", true);
+            JSObject ret = new JSObject();
+            ret.put("enabled", enabled);
+            call.resolve(ret);
+        } catch (Throwable t) {
+            call.reject("getPopupEnabled error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
     public void getCallState(PluginCall call) {
         try {
             AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);

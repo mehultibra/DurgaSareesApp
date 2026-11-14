@@ -50,11 +50,20 @@ public class DurgaCallScreeningService extends CallScreeningService {
                 }
             }
 
+            SharedPreferences sp = getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
+            if (!sp.getBoolean("call_popup_enabled", true)) {
+                return;
+            }
+
             // Look up contact name if present in phone contacts
             String partyName = lookupContactName(p10);
 
+            // Strict check: Only show notification/popup for numbers matching accounts in our app
+            if (!isDurgaSareesAccount(this, p10, partyName)) {
+                return;
+            }
+
             long now = System.currentTimeMillis();
-            SharedPreferences sp = getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
             sp.edit()
                     .putString("last_call_phone", p10)
                     .putString("last_call_name", partyName != null ? partyName : "")
@@ -69,6 +78,51 @@ public class DurgaCallScreeningService extends CallScreeningService {
             showCallNotification(this, p10, partyName, direction);
         } catch (Throwable ignored) {
         }
+    }
+
+    public static boolean isDurgaSareesAccount(Context context, String p10, String partyName) {
+        if (partyName != null && !partyName.trim().isEmpty()) {
+            String pUpper = partyName.toUpperCase();
+            if (pUpper.contains("[") || pUpper.contains("(AG:")) {
+                return true;
+            }
+        }
+        if (p10 == null || p10.length() < 10 || context == null) return false;
+        Cursor cursor = null;
+        try {
+            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(p10));
+            cursor = context.getContentResolver().query(uri, new String[]{ ContactsContract.PhoneLookup.DISPLAY_NAME }, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int nameIdx = cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME);
+                if (nameIdx >= 0) {
+                    String name = cursor.getString(nameIdx);
+                    if (name != null && (name.contains("[") || name.toUpperCase().contains("(AG:"))) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (cursor != null) try { cursor.close(); } catch (Throwable ignored) {}
+        }
+
+        try {
+            cursor = context.getContentResolver().query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                new String[]{ ContactsContract.CommonDataKinds.Phone._ID },
+                ContactsContract.CommonDataKinds.Phone.NUMBER + " LIKE ? AND " +
+                ContactsContract.RawContacts.ACCOUNT_TYPE + " = ?",
+                new String[]{ "%" + p10, "com.durgasarees.catalog" },
+                null
+            );
+            if (cursor != null && cursor.getCount() > 0) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (cursor != null) try { cursor.close(); } catch (Throwable ignored) {}
+        }
+        return false;
     }
 
     private String lookupContactName(String p10) {
