@@ -54,40 +54,7 @@ public class NativeContactsPlugin extends Plugin {
             return newContactsInBatch;
         } catch (Throwable t1) {
             mLastBatchError = t1.getMessage();
-            try {
-                // Determine Samsung local phone account or device default (null/null)
-                AccountManager am = AccountManager.get(getContext());
-                Account[] secAccts = null;
-                try {
-                    secAccts = am.getAccountsByType("vnd.sec.contact.phone");
-                } catch (Throwable ignored) {}
-                String fbType = (secAccts != null && secAccts.length > 0) ? "vnd.sec.contact.phone" : null;
-                String fbName = (secAccts != null && secAccts.length > 0 && secAccts[0].name != null) ? secAccts[0].name : (fbType != null ? "Phone" : null);
-
-                ArrayList<ContentProviderOperation> fallbackOps = new ArrayList<>();
-                for (ContentProviderOperation op : ops) {
-                    if (op.toString().contains(ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)) {
-                        continue;
-                    }
-                    Uri uri = op.getUri();
-                    if (uri != null && uri.toString().contains("raw_contacts")) {
-                        ContentProviderOperation.Builder rawBuilder = ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI);
-                        if (fbType != null && fbName != null) {
-                            rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, fbType);
-                            rawBuilder.withValue(ContactsContract.RawContacts.ACCOUNT_NAME, fbName);
-                        }
-                        fallbackOps.add(rawBuilder.build());
-                    } else {
-                        fallbackOps.add(op);
-                    }
-                }
-                if (!fallbackOps.isEmpty()) {
-                    getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, fallbackOps);
-                    return newContactsInBatch;
-                }
-            } catch (Throwable t2) {
-                mLastBatchError = t2.getMessage();
-            }
+            android.util.Log.e("NativeContacts", "applyBatch failed on ERP account: " + t1.getMessage(), t1);
             return 0;
         }
     }
@@ -309,9 +276,13 @@ public class NativeContactsPlugin extends Plugin {
                     int updatedCount = 0;
                     int pendingNewInBatch = 0;
 
-                    Uri rawUriWithSync = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
-                        .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
-                        .build();
+                    Uri.Builder rawBuilderUri = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
+                        .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true");
+                    if (targetAccountName != null && targetAccountType != null) {
+                        rawBuilderUri.appendQueryParameter(ContactsContract.RawContacts.ACCOUNT_NAME, targetAccountName)
+                            .appendQueryParameter(ContactsContract.RawContacts.ACCOUNT_TYPE, targetAccountType);
+                    }
+                    Uri rawUriWithSync = rawBuilderUri.build();
                     Uri dataUriWithSync = ContactsContract.Data.CONTENT_URI.buildUpon()
                         .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
                         .build();

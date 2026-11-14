@@ -13020,12 +13020,16 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
         window._currentReportingSisterAccounts = sisterAccountsList;
     } else {
         window._currentReportingSisterAccounts = null;
-        if (cust && cust.p) {
-            var p10 = String(cust.p).replace(/\D/g, '').slice(-10);
-            if (p10.length === 10) {
+        if (cust) {
+            var custPhoneList = Array.isArray(cust.cleanPhones) && cust.cleanPhones.length ? cust.cleanPhones : (Array.isArray(cust.phones) && cust.phones.length ? cust.phones : (cust.p || cust.phone ? String(cust.p || cust.phone).split(/[,;/ ]+/) : []));
+            var custP10s = new Set(custPhoneList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(x) { return x.length === 10; }));
+            if (custP10s.size > 0) {
                 var sisters = list.filter(function(x) {
-                    var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
-                    return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+                    var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? String(x.p || x.phone).split(/[,;/ ]+/) : []));
+                    return rawList.some(function (num) {
+                        var n10 = String(num || '').replace(/\D/g, '').slice(-10);
+                        return n10.length === 10 && custP10s.has(n10);
+                    });
                 });
                 if (sisters.length > 1) {
                     window._currentReportingSisterAccounts = sisters;
@@ -13047,14 +13051,12 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     var acctSelect = document.getElementById('custRepAccountSelect');
     if (acctWrapper && acctSelect) {
         if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
-            var shouldDefaultMerge = Boolean(sisterAccountsList && sisterAccountsList.length > 1);
             acctSelect.innerHTML = `
-                <option value="__MERGED__" ${shouldDefaultMerge ? 'selected' : ''}>🌟 All Accounts Merged (${window._currentReportingSisterAccounts.length} sister firms)</option>
+                <option value="__MERGED__" selected>🌟 All Accounts Merged (${window._currentReportingSisterAccounts.length} sister firms)</option>
                 ${window._currentReportingSisterAccounts.map(s => {
                     var sCode = s.c || s.code;
                     var sName = s.n || s.name || sCode;
-                    var isThisParty = (!shouldDefaultMerge && (sCode === cust.c || sName === cust.n));
-                    return `<option value="${esc(sCode)}" ${isThisParty ? 'selected' : ''}>${esc(sName)} [${esc(sCode)}]</option>`;
+                    return `<option value="${esc(sCode)}">${esc(sName)} [${esc(sCode)}]</option>`;
                 }).join('')}
             `;
             acctSelect.onchange = function () {
@@ -13433,18 +13435,41 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         var token = await getCachedAuthToken();
         var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
         var toFetch = window._currentReportingSisterAccounts.filter(sAcc => {
-            var sClean = window.sanitizeDocId ? window.sanitizeDocId(sAcc.c) : String(sAcc.c).replace(/[\/\.\s]/g, '_');
-            return !window._accountingReportsCache[sClean];
+            var sCode = sAcc.c || sAcc.code || sAcc.n || sAcc.name || '';
+            var sClean = window.sanitizeDocId ? window.sanitizeDocId(sCode) : String(sCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
+            if (window._accountingReportsCache[sClean]) return false;
+            try {
+                var cRaw = localStorage.getItem("ds_rep_cache_" + sClean);
+                if (cRaw) {
+                    var p = JSON.parse(cRaw);
+                    if (p && p.data && (Date.now() - (p.cachedAt || 0) < TWO_HOURS)) {
+                        window._accountingReportsCache[sClean] = p.data;
+                        return false;
+                    }
+                }
+            } catch(e){}
+            return true;
         });
         if (toFetch.length > 0) {
+            area.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#6b7280; font-size:13px;">
+              <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
+              <div style="font-weight:600; color:#374151;">Merging Reports for ${window._currentReportingSisterAccounts.length} Sister Accounts...</div>
+              <div style="font-size:11px; margin-top:4px;">Retrieving on-demand ledger, sales bills, and transport...</div>
+            </div>`;
             await Promise.all(toFetch.map(async function (sAcc) {
-                var sClean = window.sanitizeDocId ? window.sanitizeDocId(sAcc.c) : String(sAcc.c).replace(/[\/\.\s]/g, '_');
+                var sCode = sAcc.c || sAcc.code || sAcc.n || sAcc.name || '';
+                var sClean = window.sanitizeDocId ? window.sanitizeDocId(sCode) : String(sCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
                 try {
                     var sUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + encodeURIComponent(sClean);
                     var sRes = await (window.fetchWithRetry ? window.fetchWithRetry(sUrl, { headers: headers }, 1) : fetch(sUrl, { headers: headers }));
                     if (sRes && sRes.ok) {
                         var sDoc = await sRes.json();
-                        window._accountingReportsCache[sClean] = window.parseFirestoreReportDoc(sDoc);
+                        var sParsed = window.parseFirestoreReportDoc(sDoc);
+                        window._accountingReportsCache[sClean] = sParsed;
+                        try {
+                            localStorage.setItem("ds_rep_cache_" + sClean, JSON.stringify({ data: sParsed, cachedAt: Date.now() }));
+                        } catch(e){}
                     } else {
                         window._accountingReportsCache[sClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
                     }
@@ -13459,21 +13484,23 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         var mergedLedger = [];
         var totDeb = 0;
         window._currentReportingSisterAccounts.forEach(function (sAcc) {
-            var sClean = window.sanitizeDocId ? window.sanitizeDocId(sAcc.c) : String(sAcc.c).replace(/[\/\.\s]/g, '_');
+            var sCode = sAcc.c || sAcc.code || sAcc.n || sAcc.name || '';
+            var sClean = window.sanitizeDocId ? window.sanitizeDocId(sCode) : String(sCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
             var sRep = window._accountingReportsCache[sClean] || { finishSales: [], outstanding: [], ledger: [] };
+            var pLabel = sAcc.n || sAcc.name || sAcc.c || sAcc.code || '';
             (sRep.finishSales || []).forEach(function (r) {
                 var rowCopy = r.slice();
-                rowCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${sAcc.n}]`;
+                rowCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${pLabel}]`;
                 mergedFs.push(rowCopy);
             });
             (sRep.outstanding || []).forEach(function (r) {
                 var osCopy = Object.assign({}, r);
-                osCopy.party = (r.party ? r.party + ' ' : '') + `[${sAcc.n}]`;
+                osCopy.party = (r.party ? r.party + ' ' : '') + `[${pLabel}]`;
                 mergedOs.push(osCopy);
             });
             (sRep.ledger || []).forEach(function (r) {
                 var lCopy = r.slice();
-                lCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${sAcc.n}]`;
+                lCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${pLabel}]`;
                 mergedLedger.push(lCopy);
             });
             if (sAcc.b && (sAcc.d === 'Dr' || sAcc.b > 0)) totDeb += sAcc.b;
@@ -13768,7 +13795,8 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                 pamt: parseFloat(r.pamt !== undefined ? r.pamt : (r.pending || r.bamt || 0)),
                 du: du,
                 ct: r.ct || r.city || r.dest || '',
-                ag: r.ag || r.agent || r.broker || ''
+                ag: r.ag || r.agent || r.broker || '',
+                party: r.party || ''
             };
         });
 
@@ -13834,11 +13862,12 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r.bno)}')"` ;
             var frmBadge = (r.f && r.f !== 'DS') ? `<span style="font-size:9px; background:#e2e8f0; color:#334155; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.f)}</span>` : '';
             var crBadge = (r.pamt < 0 || String(r.bno || '').includes('GR-')) ? `<span style="background:#fef08a; color:#854d0e; font-size:9px; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">CR NOTE</span>` : '';
+            var pBadge = r.party ? `<span style="font-size:9px; background:#eff6ff; color:#1d4ed8; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.party)}</span>` : '';
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.dt)}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
-                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:2px;"></i>${escHtml(r.bno)}${frmBadge}${crBadge}
+                <i class="fas fa-file-invoice" style="font-size:9px; margin-right:2px;"></i>${escHtml(r.bno)}${frmBadge}${crBadge}${pBadge}
               </td>
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r.bamt ? r.bamt.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.ret ? r.ret.toFixed(2) : '0.00'}</td>
@@ -16147,81 +16176,17 @@ window.enableNativeCallScreening = async function () {
     await window.enableCallPopupSuperAdmin();
 };
 
-window.showLiveCallFloatBanner = function (callerName, callerPhone, direction) {
-    var phone = callerPhone || window._lastActiveCallPhone || '';
-    if (!phone) {
-        try { phone = localStorage.getItem('ds_last_active_call_phone') || ''; } catch(e){}
-    }
-    var name = callerName || window._lastActiveCallName || '';
-    var dir = direction || 'active';
-
-    if (phone) {
-        window._lastActiveCallPhone = phone;
-        try { localStorage.setItem('ds_last_active_call_phone', phone); } catch(e){}
-    }
-    if (name) {
-        window._lastActiveCallName = name;
-    }
-
+window.showLiveCallFloatBanner = function () {
     var banner = document.getElementById('dsLiveCallFloatBanner');
-    var rawDigits = String(phone || '').replace(/\D/g, '').slice(-10);
-    var pDisp = (rawDigits.length === 10) ? ('+91 ' + rawDigits) : '';
-    var title = '';
-    if (pDisp && name && name !== phone && name !== rawDigits) {
-        title = `${pDisp} &bull; ${name}`;
-    } else if (pDisp) {
-        title = pDisp;
-    } else if (name) {
-        title = name;
-    } else {
-        title = 'Live Call';
-    }
-    var dirLabel = dir === 'outgoing' ? 'Outgoing Call' : (dir === 'incoming' ? 'Incoming Call' : 'Active Call');
-    var sub = `📞 ${dirLabel} &bull; Tap to open Customer Report`;
-
-    if (!banner) {
-        banner = document.createElement('div');
-        banner.id = 'dsLiveCallFloatBanner';
-        banner.style.cssText = 'position:fixed; top:12px; left:12px; right:12px; z-index:99999; background:linear-gradient(135deg, #15803d, #16a34a); color:#fff; border-radius:12px; padding:10px 14px; box-shadow:0 4px 16px rgba(0,0,0,0.25); display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer;';
-        document.body.appendChild(banner);
-    }
-    banner.onclick = function (e) {
-        if (e.target && e.target.closest && e.target.closest('.ds-banner-close-btn')) return;
-        if (phone && typeof window.handleDetectedNativeCall === 'function') {
-            window.handleDetectedNativeCall(phone, dir, name);
-        } else if (typeof window.openCustomerReportsModal === 'function' && window._currentReportingCustomer) {
-            window.openCustomerReportsModal(window._currentReportingCustomer.c, true);
-        }
-    };
-    var safePhoneArg = String(phone || '').replace(/'/g, "\\'");
-    var safeDirArg = String(dir || '').replace(/'/g, "\\'");
-    var safeNameArg = encodeURIComponent(name || '');
-    banner.innerHTML = `
-        <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
-            <div style="width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                <i class="fas fa-phone-volume fa-shake" style="color:#bbf7d0; font-size:16px;"></i>
-            </div>
-            <div style="overflow:hidden;">
-                <div style="font-size:13px; font-weight:bold; letter-spacing:0.3px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${title}</div>
-                <div style="font-size:11px; opacity:0.95; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${sub}</div>
-            </div>
-        </div>
-        <div style="display:flex; gap:6px; flex-shrink:0;">
-            <button type="button" onclick="event.stopPropagation(); window.handleDetectedNativeCall('${safePhoneArg}', '${safeDirArg}', decodeURIComponent('${safeNameArg}'))" style="background:#fff; color:#15803d; border:none; padding:6px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
-                <i class="fas fa-file-invoice"></i> Report
-            </button>
-            <button type="button" class="ds-banner-close-btn" onclick="event.stopPropagation(); window.hideLiveCallFloatBanner()" style="background:rgba(255,255,255,0.2); color:#fff; border:none; border-radius:6px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-    `;
-    banner.style.display = 'flex';
+    if (banner) banner.remove();
 };
 
 window.hideLiveCallFloatBanner = function () {
     var banner = document.getElementById('dsLiveCallFloatBanner');
-    if (banner) banner.style.display = 'none';
+    if (banner) banner.remove();
 };
+var _oldCallBanner = document.getElementById('dsLiveCallFloatBanner');
+if (_oldCallBanner) _oldCallBanner.remove();
 
 function setupCRMCallReturnListener() {
     if (window._crmReturnListenerAdded) return;
