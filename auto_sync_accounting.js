@@ -352,7 +352,7 @@ async function syncAccountingData() {
                             a: amt
                         });
 
-                        p.finishSales.push([
+                        const fsRow = [
                             b.DATE || '',
                             billNo,
                             qualName,
@@ -371,10 +371,21 @@ async function syncAccountingData() {
                             b.PRCL || b.CSNO || '1',
                             combinedAgentHaste,
                             itemIdx === 0
-                        ]);
+                        ];
+                        p.finishSales.push(fsRow);
+
+                        // Also aggregate bill into Agent's report if brokered
+                        if (billAgent && allowedPartyCodes.has(billAgent) && billAgent !== code) {
+                            const agRep = getPartyReport(billAgent);
+                            if (agRep) {
+                                const agRow = fsRow.slice();
+                                agRow[18] = m.partyname || m.NAME || code;
+                                agRep.finishSales.push(agRow);
+                            }
+                        }
                     });
                 } else {
-                    p.finishSales.push([
+                    const fsSingleRow = [
                         b.DATE || '',
                         billNo,
                         b.QUAL || '',
@@ -393,7 +404,17 @@ async function syncAccountingData() {
                         b.PRCL || b.CSNO || '1',
                         combinedAgentHaste,
                         true
-                    ]);
+                    ];
+                    p.finishSales.push(fsSingleRow);
+
+                    if (billAgent && allowedPartyCodes.has(billAgent) && billAgent !== code) {
+                        const agRep = getPartyReport(billAgent);
+                        if (agRep) {
+                            const agRow = fsSingleRow.slice();
+                            agRow[18] = m.partyname || m.NAME || code;
+                            agRep.finishSales.push(agRow);
+                        }
+                    }
                 }
 
                 // Full Bill Record for 1-Click Tax Invoice Viewer
@@ -470,7 +491,7 @@ async function syncAccountingData() {
                     if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
                     allAgentsByParty.get(code).add(bBroker);
                 }
-                p.outstanding.push({
+                const osItem = {
                     bno: b.BILL || b.VNO || b.BILLNO || '',
                     dt: billDt,
                     bamt: parseFloat(b.FAMT || b.GRSAMT || b.BILLAMT) || 0,
@@ -480,7 +501,18 @@ async function syncAccountingData() {
                     tr: b.TR || '',
                     du: parseInt(b.DUE_DAYS || osDays) || 0,
                     f: b.FRM || (b.CNO === '2' ? 'R.F' : (b.CNO === '1' ? 'DSPL' : 'DS'))
-                });
+                };
+                p.outstanding.push(osItem);
+
+                // Also aggregate outstanding bill into Agent's report if brokered
+                if (bBroker && allowedPartyCodes.has(bBroker) && bBroker !== code) {
+                    const mParty = mstPartyMap.get(code) || {};
+                    const agRep = getPartyReport(bBroker);
+                    if (agRep) {
+                        const agOs = Object.assign({}, osItem, { party: mParty.partyname || mParty.NAME || code });
+                        agRep.outstanding.push(agOs);
+                    }
+                }
                 if (bBroker && !agentByParty.has(code)) {
                     agentByParty.set(code, bBroker);
                 }

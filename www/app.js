@@ -13009,42 +13009,59 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         container.scrollTop = prevScroll;
     }
 
-    var lastCustScroll = container.scrollTop || 0;
+    var isHubCollapsed = false;
+    var isHubAnimating = false;
+    var hubScrollAnchor = container.scrollTop || 0;
+
     container.onscroll = function () {
         var st = container.scrollTop;
-        var col = document.getElementById('custHubCollapsibleHeader');
-        var bar = document.getElementById('custHubTabBar');
-        var mini = document.getElementById('custHubCollapsedMiniBar');
-        if (st > lastCustScroll && st > 35) {
-            // Scrolling down (swiping up): collapse headers & search bars
-            if (col) {
-                col.style.maxHeight = '0px';
-                col.style.opacity = '0';
-                col.style.marginBottom = '0px';
-                col.style.pointerEvents = 'none';
+        if (!isHubAnimating) {
+            var col = document.getElementById('custHubCollapsibleHeader');
+            var bar = document.getElementById('custHubTabBar');
+            var mini = document.getElementById('custHubCollapsedMiniBar');
+
+            if (!isHubCollapsed && st > 50 && (st - hubScrollAnchor > 35)) {
+                isHubAnimating = true;
+                isHubCollapsed = true;
+                if (col) {
+                    col.style.maxHeight = '0px';
+                    col.style.opacity = '0';
+                    col.style.marginBottom = '0px';
+                    col.style.pointerEvents = 'none';
+                }
+                if (bar) {
+                    bar.style.maxHeight = '0px';
+                    bar.style.opacity = '0';
+                    bar.style.pointerEvents = 'none';
+                }
+                if (mini) mini.style.display = 'flex';
+                setTimeout(function () {
+                    isHubAnimating = false;
+                    hubScrollAnchor = container.scrollTop;
+                }, 260);
+            } else if (isHubCollapsed && (st <= 15 || (hubScrollAnchor - st > 35))) {
+                isHubAnimating = true;
+                isHubCollapsed = false;
+                if (col) {
+                    col.style.maxHeight = '500px';
+                    col.style.opacity = '1';
+                    col.style.marginBottom = '';
+                    col.style.pointerEvents = 'auto';
+                }
+                if (bar) {
+                    bar.style.maxHeight = '50px';
+                    bar.style.opacity = '1';
+                    bar.style.pointerEvents = 'auto';
+                }
+                if (mini) mini.style.display = 'none';
+                setTimeout(function () {
+                    isHubAnimating = false;
+                    hubScrollAnchor = container.scrollTop;
+                }, 260);
+            } else if (!isHubCollapsed) {
+                hubScrollAnchor = st <= 0 ? 0 : st;
             }
-            if (bar) {
-                bar.style.maxHeight = '0px';
-                bar.style.opacity = '0';
-                bar.style.pointerEvents = 'none';
-            }
-            if (mini) mini.style.display = 'flex';
-        } else if (st < lastCustScroll - 10 || st <= 10) {
-            // Scrolling up (swiping down): restore headers & search bars
-            if (col) {
-                col.style.maxHeight = '500px';
-                col.style.opacity = '1';
-                col.style.marginBottom = '';
-                col.style.pointerEvents = 'auto';
-            }
-            if (bar) {
-                bar.style.maxHeight = '50px';
-                bar.style.opacity = '1';
-                bar.style.pointerEvents = 'auto';
-            }
-            if (mini) mini.style.display = 'none';
         }
-        lastCustScroll = st <= 0 ? 0 : st;
 
         if (container.scrollTop + container.clientHeight >= container.scrollHeight - 100) {
             if (window._custDirRenderedCount < (window._currentFilteredCustomers || []).length) {
@@ -13135,7 +13152,11 @@ window.openMyReportsSelfService = function () {
         var agentCusts = list.filter(function (c) {
             return window.customerMatchesAgent(c, agentKws);
         });
-        targetCode = (agentCusts[0] && (agentCusts[0].c || agentCusts[0].code)) || myCd.linkedAccount || (matches[0] && (matches[0].code || matches[0].c));
+        targetCode = myCd.linkedAccount || (matches[0] && (matches[0].code || matches[0].c)) || (agentCusts[0] && (agentCusts[0].c || agentCusts[0].code));
+        if (targetCode) {
+            window.openCustomerReportsModal(targetCode, false, agentCusts.length > 1 ? agentCusts : null);
+            return;
+        }
     } else {
         targetCode = myCd.linkedAccount || (matches[0] && (matches[0].code || matches[0].c));
     }
@@ -13365,7 +13386,23 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
         window._currentReportingSisterAccounts = sisterAccountsList;
     } else {
         window._currentReportingSisterAccounts = null;
-        if (cust) {
+        var isTargetAgent = Boolean(cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG'))));
+        if (isTargetAgent) {
+            var targetAgentKws = [cust.n, cust.name, cust.c, cust.code].filter(Boolean).map(x => String(x).trim().toUpperCase());
+            var agentParties = list.filter(function (c) {
+                if (c.c === cust.c) return false;
+                return window.customerMatchesAgent ? window.customerMatchesAgent(c, targetAgentKws) : false;
+            });
+            if (agentParties.length === 0 && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+                agentParties = window._customerDirectoryMaster.filter(function (c) {
+                    if (c.c === cust.c) return false;
+                    return window.customerMatchesAgent ? window.customerMatchesAgent(c, targetAgentKws) : false;
+                });
+            }
+            if (agentParties.length > 0) {
+                window._currentReportingSisterAccounts = agentParties;
+            }
+        } else if (cust) {
             var custPhoneList = Array.isArray(cust.cleanPhones) && cust.cleanPhones.length ? cust.cleanPhones : (Array.isArray(cust.phones) && cust.phones.length ? cust.phones : (cust.p || cust.phone ? String(cust.p || cust.phone).split(/[,;/ ]+/) : []));
             var custP10s = new Set(custPhoneList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(x) { return x.length === 10; }));
             if (custP10s.size > 0) {
@@ -13396,8 +13433,9 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     var acctSelect = document.getElementById('custRepAccountSelect');
     if (acctWrapper && acctSelect) {
         if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
+            var isAgentTarget = Boolean(cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG'))));
             acctSelect.innerHTML = `
-                <option value="__MERGED__" selected>🌟 All Accounts Merged (${window._currentReportingSisterAccounts.length} sister firms)</option>
+                <option value="__MERGED__" selected>🌟 ${isAgentTarget ? 'All Brokered Parties Merged' : 'All Accounts Merged'} (${window._currentReportingSisterAccounts.length} parties)</option>
                 ${window._currentReportingSisterAccounts.map(s => {
                     var sCode = s.c || s.code;
                     var sName = s.n || s.name || sCode;
@@ -13409,6 +13447,8 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
                 if (val !== '__MERGED__') {
                     var found = (window._compiledCustomersList || []).find(x => x.c === val || x.n === val);
                     if (found) window._currentReportingCustomer = found;
+                } else if (isAgentTarget) {
+                    window._currentReportingCustomer = cust;
                 }
                 window.renderCustomerReportActiveTab();
             };
@@ -13707,13 +13747,21 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     var area = document.getElementById('custReportContentArea');
     if (!area) return;
 
-    var lastRepScroll = area.scrollTop || 0;
+    var isRepCollapsed = false;
+    var isRepAnimating = false;
+    var repScrollAnchor = area.scrollTop || 0;
+
     area.onscroll = function () {
         var st = area.scrollTop;
+        if (isRepAnimating) return;
+
         var col = document.getElementById('custRepCollapsibleHeader');
         var mini = document.getElementById('custRepCollapsedMiniBar');
-        if (st > lastRepScroll && st > 35) {
-            // Scrolling down (swiping up): collapse headers & search bars
+
+        // Scroll DOWN: collapse header smoothly with zero flutter
+        if (!isRepCollapsed && st > 50 && (st - repScrollAnchor > 35)) {
+            isRepAnimating = true;
+            isRepCollapsed = true;
             if (col) {
                 col.style.maxHeight = '0px';
                 col.style.opacity = '0';
@@ -13721,8 +13769,17 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                 col.style.pointerEvents = 'none';
             }
             if (mini) mini.style.display = 'flex';
-        } else if (st < lastRepScroll - 10 || st <= 10) {
-            // Scrolling up (swiping down): restore headers & search bars
+            setTimeout(function () {
+                isRepAnimating = false;
+                repScrollAnchor = area.scrollTop;
+            }, 260);
+            return;
+        }
+
+        // Scroll UP or near top: restore header smoothly
+        if (isRepCollapsed && (st <= 15 || (repScrollAnchor - st > 35))) {
+            isRepAnimating = true;
+            isRepCollapsed = false;
             if (col) {
                 col.style.maxHeight = '650px';
                 col.style.opacity = '1';
@@ -13730,8 +13787,14 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                 col.style.pointerEvents = 'auto';
             }
             if (mini) mini.style.display = 'none';
+            setTimeout(function () {
+                isRepAnimating = false;
+                repScrollAnchor = area.scrollTop;
+            }, 260);
+            return;
         }
-        lastRepScroll = st <= 0 ? 0 : st;
+
+        if (!isRepCollapsed) repScrollAnchor = st <= 0 ? 0 : st;
     };
 
     var cust = window._currentReportingCustomer;
@@ -13877,22 +13940,24 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             (sRep.finishSales || []).forEach(function (r) {
                 if (Array.isArray(r)) {
                     var rowCopy = r.slice();
-                    rowCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${pLabel}]`;
+                    rowCopy[18] = pLabel;
+                    rowCopy.party = pLabel;
                     mergedFs.push(rowCopy);
                 } else if (r && typeof r === 'object') {
                     var rowCopy = Object.assign({}, r);
-                    rowCopy.item = (rowCopy.item ? rowCopy.item + ' ' : '') + `[${pLabel}]`;
+                    rowCopy.party = pLabel;
                     mergedFs.push(rowCopy);
                 }
             });
             (sRep.outstanding || []).forEach(function (r) {
                 if (r && typeof r === 'object') {
                     var osCopy = Object.assign({}, r);
-                    osCopy.party = (r.party ? r.party + ' ' : '') + `[${pLabel}]`;
+                    osCopy.party = pLabel;
                     mergedOs.push(osCopy);
                 } else if (Array.isArray(r)) {
                     var osCopy = r.slice();
                     osCopy[10] = pLabel;
+                    osCopy.party = pLabel;
                     mergedOs.push(osCopy);
                 }
             });
@@ -13970,16 +14035,18 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     }
 
     var isAgentUser = !window.hasCRMAccess() && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
-    var agentKeywords = isAgentUser ? (window.getAgentKeywords ? window.getAgentKeywords(myCd) : []) : [];
+    var isTargetAgent = Boolean(cust && (cust.role === 'agent' || cust.isAgent || (cust.atype === '12') || (cust.c && String(cust.c).startsWith('AG'))));
+    var isViewingAgent = isAgentUser || isTargetAgent;
+    var activeAgentKws = isAgentUser ? (window.getAgentKeywords ? window.getAgentKeywords(myCd) : []) : (isTargetAgent ? [cust.n, cust.name, cust.c, cust.code].filter(Boolean).map(x => String(x).trim().toUpperCase()) : []);
 
     function matchesAgentBill(val) {
-        if (!isAgentUser) return true;
-        if (!val || agentKeywords.length === 0) return false;
+        if (!isViewingAgent) return true;
+        if (!val || activeAgentKws.length === 0) return false;
         var normVal = String(val).trim().toUpperCase();
-        return agentKeywords.some(kw => normVal.includes(kw) || kw.includes(normVal));
+        return activeAgentKws.some(kw => normVal.includes(kw) || kw.includes(normVal));
     }
 
-    if (isAgentUser) {
+    if (isViewingAgent) {
         var rawOs = partyRep.outstanding || partyRep.os || [];
         var agTotPend = 0;
         rawOs.forEach(function (r) {
@@ -13991,7 +14058,8 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         });
         var balBadge = document.getElementById('custRepBalBadge');
         if (balBadge) {
-            balBadge.innerText = (agTotPend > 0) ? `Your O/S: ₹ ${Math.round(agTotPend).toLocaleString('en-IN')}` : 'Your O/S: Clear';
+            var badgePrefix = isAgentUser ? 'Your O/S' : 'Agent O/S';
+            balBadge.innerText = (agTotPend > 0) ? `${badgePrefix}: ₹ ${Math.round(agTotPend).toLocaleString('en-IN')}` : `${badgePrefix}: Clear`;
             balBadge.style.color = (agTotPend > 0) ? '#dc2626' : '#16a34a';
             balBadge.style.background = (agTotPend > 0) ? '#fee2e2' : '#dcfce7';
         }
@@ -14073,6 +14141,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                   <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">DAYS</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">TRANSPO</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">L/R NO.</th>
+                  ${partyRep.isMerged ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff;">CUSTOMER NAME</th>' : ''}
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DESTINATION</th>
                   <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">P/</th>
                   <th style="padding:4px 6px;">HASTE</th>
@@ -14144,6 +14213,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
               <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9;">${daysCell}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${trnCell}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9;">${lrCell}</td>
+              ${partyRep.isMerged ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc;">${isFirst ? escHtml(r[18] || r.party || '') : ''}</td>` : ''}
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#64748b;">${destCell}</td>
               <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9;">${prclCell}</td>
               <td style="padding:4px 6px; color:#64748b;">${hasteCell}</td>
@@ -14283,6 +14353,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                   <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">PAID AMT.</th>
                   <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0; background:#fee2e2; color:#991b1b;">PEND. AMT.</th>
                   <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">DA</th>
+                  ${partyRep.isMerged ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff;">CUSTOMER NAME</th>' : ''}
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DESTINATION</th>
                   <th style="padding:4px 6px;">BROKER</th>
                 </tr>
@@ -14294,7 +14365,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r.bno)}')"` ;
             var frmBadge = (r.f && r.f !== 'DS') ? `<span style="font-size:9px; background:#e2e8f0; color:#334155; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.f)}</span>` : '';
             var crBadge = (r.pamt < 0 || String(r.bno || '').includes('GR-')) ? `<span style="background:#fef08a; color:#854d0e; font-size:9px; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">CR NOTE</span>` : '';
-            var pBadge = r.party ? `<span style="font-size:9px; background:#eff6ff; color:#1d4ed8; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.party)}</span>` : '';
+            var pBadge = (r.party && !partyRep.isMerged) ? `<span style="font-size:9px; background:#eff6ff; color:#1d4ed8; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.party)}</span>` : '';
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.dt)}</td>
@@ -14307,6 +14378,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; color:#16a34a;">${r.paid ? r.paid.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#dc2626; background:#fff1f2;">${r.pamt ? r.pamt.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:#b91c1c;">${r.du || 0}</td>
+              ${partyRep.isMerged ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc;">${escHtml(r.party || '')}</td>` : ''}
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.ct)}</td>
               <td style="padding:4px 6px; color:#64748b;">${escHtml(r.ag)}</td>
             </tr>`;
@@ -14324,7 +14396,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                   <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">${totPaid ? ('-₹ ' + Math.abs(totPaid).toFixed(2)) : '0.00'}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #fecaca; font-size:11px; color:#dc2626; font-weight:bold;">₹ ${totPend.toFixed(2)}</td>
                   <td style="padding:6px; text-align:center; border-right:1px solid #fecaca;">${avgDays}</td>
-                  <td colspan="2"></td>
+                  <td colspan="${partyRep.isMerged ? 3 : 2}"></td>
                 </tr>
               </tfoot>
             </table>
