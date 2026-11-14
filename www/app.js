@@ -1609,15 +1609,10 @@ async function checkAdminStatus(phone) {
                 window.Capacitor.Plugins.NativeContacts.ensureAccount().catch(function(){});
             }
 
-            // Automatic Contact Sync Migration once per session (3s after startup)
-            if (!window._contactsMigrationScheduled && localStorage.getItem('ds_contacts_account_migrated_v8') !== 'true') {
+            // Mark migration complete to prevent background contact sync on every startup
+            if (!window._contactsMigrationScheduled) {
                 window._contactsMigrationScheduled = true;
-                setTimeout(function () {
-                    try { localStorage.removeItem('ds_contact_sync_hashes_v2'); } catch(e){}
-                    if (typeof window.startAutomaticContactSync === 'function') {
-                        window.startAutomaticContactSync(true);
-                    }
-                }, 3000);
+                try { localStorage.setItem('ds_contacts_account_migrated_v8', 'true'); } catch(e){}
             }
         }
 
@@ -9583,12 +9578,12 @@ window.openLiveAdmin = function () {
                 function getEffectiveTimeMs(item) {
                     if (!item) return 0;
                     let d = item.data || {};
+                    // Strictly evaluate latest view and user activity timestamps only (exclude admin approval / update times)
                     let candidates = [
-                        item.time,
                         d.lastActive,
-                        d.updatedAt,
-                        d.approvedAt,
-                        d.createdAt,
+                        item.time,
+                        d.lastView,
+                        d.lastSeen,
                         d.time
                     ];
                     let maxMs = 0;
@@ -12284,6 +12279,8 @@ window.loadAccountingDashboardMeta = async function (forceRefresh = false) {
                 if (doc.fields.totalCustomers) d.totalCustomers = parseInt(doc.fields.totalCustomers.integerValue || 0);
                 if (doc.fields.totalAgents) d.totalAgents = parseInt(doc.fields.totalAgents.integerValue || 0);
                 if (doc.fields.lastSyncedAt) d.lastSyncedAt = doc.fields.lastSyncedAt.stringValue;
+                if (doc.fields.custMasterHash) d.custMasterHash = doc.fields.custMasterHash.stringValue;
+                if (doc.fields.dirChunkCount) d.dirChunkCount = parseInt(doc.fields.dirChunkCount.integerValue || 0);
                 if (doc.fields.states && doc.fields.states.arrayValue && doc.fields.states.arrayValue.values) {
                     d.states = doc.fields.states.arrayValue.values.map(v => v.stringValue).filter(Boolean);
                 }
@@ -12339,13 +12336,21 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
                 if (syncIcon) syncIcon.classList.remove('fa-spin');
                 window.renderCustomerDirectoryUI();
 
-                // Check AccountingMeta/dashboard in background to see if cloud data changed
+                // Check AccountingMeta/dashboard in background to see if master data changed
                 var meta = await window.loadAccountingDashboardMeta();
                 if (meta && meta.lastSyncedAt) {
                     window._accountingLastSyncedAt = meta.lastSyncedAt;
                     if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
                 }
-                if (meta && meta.lastSyncedAt && meta.lastSyncedAt === idbData.syncedAt) {
+                var isFresh = false;
+                if (meta && meta.custMasterHash && idbData.custMasterHash && meta.custMasterHash === idbData.custMasterHash) {
+                    isFresh = true;
+                } else if (meta && meta.lastSyncedAt && idbData.syncedAt && meta.lastSyncedAt === idbData.syncedAt) {
+                    isFresh = true;
+                } else if (idbData.list && idbData.list.length > 0 && !meta) {
+                    isFresh = true;
+                }
+                if (isFresh) {
                     return; // Cache is completely fresh! Zero cloud re-download required.
                 }
             }
@@ -12488,7 +12493,8 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
                 var tx = db.transaction(storeName, "readwrite");
                 tx.objectStore(storeName).put({
                     list: window._compiledCustomersList,
-                    syncedAt: window._accountingLastSyncedAt
+                    syncedAt: window._accountingLastSyncedAt,
+                    custMasterHash: (meta && meta.custMasterHash) || null
                 }, "accounting_customers_cache");
             } catch(e){}
 
@@ -13009,58 +13015,36 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         container.scrollTop = prevScroll;
     }
 
-    var isHubCollapsed = false;
-    var isHubAnimating = false;
-    var hubScrollAnchor = container.scrollTop || 0;
+    function collapseHubHeader() {
+        if (window._isHubCollapsed) return;
+        window._isHubCollapsed = true;
+        var col = document.getElementById('custHubCollapsibleHeader');
+        var bar = document.getElementById('custHubTabBar');
+        var mini = document.getElementById('custHubCollapsedMiniBar');
+        if (col) {
+            col.style.maxHeight = '0px';
+            col.style.opacity = '0';
+            col.style.marginBottom = '0px';
+            col.style.pointerEvents = 'none';
+        }
+        if (bar) {
+            bar.style.maxHeight = '0px';
+            bar.style.opacity = '0';
+            bar.style.pointerEvents = 'none';
+        }
+        if (mini) mini.style.display = 'flex';
+    }
+
+    container.onpointerdown = function () {
+        if (!window._isHubCollapsed && container.scrollTop > 5) {
+            collapseHubHeader();
+        }
+    };
 
     container.onscroll = function () {
         var st = container.scrollTop;
-        if (!isHubAnimating) {
-            var col = document.getElementById('custHubCollapsibleHeader');
-            var bar = document.getElementById('custHubTabBar');
-            var mini = document.getElementById('custHubCollapsedMiniBar');
-
-            if (!isHubCollapsed && st > 50 && (st - hubScrollAnchor > 35)) {
-                isHubAnimating = true;
-                isHubCollapsed = true;
-                if (col) {
-                    col.style.maxHeight = '0px';
-                    col.style.opacity = '0';
-                    col.style.marginBottom = '0px';
-                    col.style.pointerEvents = 'none';
-                }
-                if (bar) {
-                    bar.style.maxHeight = '0px';
-                    bar.style.opacity = '0';
-                    bar.style.pointerEvents = 'none';
-                }
-                if (mini) mini.style.display = 'flex';
-                setTimeout(function () {
-                    isHubAnimating = false;
-                    hubScrollAnchor = container.scrollTop;
-                }, 260);
-            } else if (isHubCollapsed && (st <= 15 || (hubScrollAnchor - st > 35))) {
-                isHubAnimating = true;
-                isHubCollapsed = false;
-                if (col) {
-                    col.style.maxHeight = '500px';
-                    col.style.opacity = '1';
-                    col.style.marginBottom = '';
-                    col.style.pointerEvents = 'auto';
-                }
-                if (bar) {
-                    bar.style.maxHeight = '50px';
-                    bar.style.opacity = '1';
-                    bar.style.pointerEvents = 'auto';
-                }
-                if (mini) mini.style.display = 'none';
-                setTimeout(function () {
-                    isHubAnimating = false;
-                    hubScrollAnchor = container.scrollTop;
-                }, 260);
-            } else if (!isHubCollapsed) {
-                hubScrollAnchor = st <= 0 ? 0 : st;
-            }
+        if (!window._isHubCollapsed && st > 5) {
+            collapseHubHeader();
         }
 
         if (container.scrollTop + container.clientHeight >= container.scrollHeight - 100) {
@@ -13073,6 +13057,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
 };
 
 window.expandCustHubHeader = function () {
+    window._isHubCollapsed = false;
     var col = document.getElementById('custHubCollapsibleHeader');
     var bar = document.getElementById('custHubTabBar');
     var mini = document.getElementById('custHubCollapsedMiniBar');
@@ -13507,14 +13492,14 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
 
     var cityEl = document.getElementById('custRepCity');
     if (cityEl) {
-        cityEl.innerHTML = cust.ct ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${escHtml(cust.ct)}` : '';
-        cityEl.style.display = cust.ct ? 'inline' : 'none';
+        cityEl.innerHTML = cust.ct ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:9px;"></i> ${escHtml(cust.ct)}` : '';
+        cityEl.style.display = cust.ct ? 'inline-flex' : 'none';
     }
 
     var gstEl = document.getElementById('custRepGst');
     if (gstEl) {
         gstEl.innerText = cust.g ? `GST: ${cust.g}` : '';
-        gstEl.style.display = cust.g ? 'inline' : 'none';
+        gstEl.style.display = cust.g ? 'inline-flex' : 'none';
     }
 
     var agRow = document.getElementById('custRepAgentRow');
@@ -13523,7 +13508,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     if (agRow && agNameEl) {
         if (agVal) {
             agNameEl.innerText = agVal;
-            agRow.style.display = 'block';
+            agRow.style.display = 'inline-flex';
         } else {
             agRow.style.display = 'none';
         }
@@ -13537,11 +13522,11 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     var balBadge = document.getElementById('custRepBalBadge');
     if (balBadge) {
         if (isAgentUser) {
-            balBadge.innerText = 'Calculating O/S...';
+            balBadge.innerText = 'OS: Calculating...';
             balBadge.style.color = '#64748b';
             balBadge.style.background = '#f1f5f9';
         } else {
-            var balText = (cust.b > 0) ? `₹ ${cust.b.toLocaleString('en-IN')} ${cust.d}` : 'Clear';
+            var balText = (cust.b > 0) ? `OS: ₹ ${cust.b.toLocaleString('en-IN')} ${cust.d}` : 'OS: Clear';
             balBadge.innerText = balText;
             if (cust.b > 0) {
                 balBadge.style.color = (cust.d === 'Dr') ? '#dc2626' : '#16a34a';
@@ -13725,6 +13710,7 @@ window.setReportDatePreset = function (preset) {
 };
 
 window.expandCustRepHeader = function () {
+    window._isRepCollapsed = false;
     var col = document.getElementById('custRepCollapsibleHeader');
     var mini = document.getElementById('custRepCollapsedMiniBar');
     if (col) {
@@ -13747,54 +13733,31 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     var area = document.getElementById('custReportContentArea');
     if (!area) return;
 
-    var isRepCollapsed = false;
-    var isRepAnimating = false;
-    var repScrollAnchor = area.scrollTop || 0;
+    function collapseRepHeader() {
+        if (window._isRepCollapsed) return;
+        window._isRepCollapsed = true;
+        var col = document.getElementById('custRepCollapsibleHeader');
+        var mini = document.getElementById('custRepCollapsedMiniBar');
+        if (col) {
+            col.style.maxHeight = '0px';
+            col.style.opacity = '0';
+            col.style.marginBottom = '0px';
+            col.style.pointerEvents = 'none';
+        }
+        if (mini) mini.style.display = 'flex';
+    }
+
+    area.onpointerdown = function () {
+        if (!window._isRepCollapsed && area.scrollTop > 5) {
+            collapseRepHeader();
+        }
+    };
 
     area.onscroll = function () {
         var st = area.scrollTop;
-        if (isRepAnimating) return;
-
-        var col = document.getElementById('custRepCollapsibleHeader');
-        var mini = document.getElementById('custRepCollapsedMiniBar');
-
-        // Scroll DOWN: collapse header smoothly with zero flutter
-        if (!isRepCollapsed && st > 50 && (st - repScrollAnchor > 35)) {
-            isRepAnimating = true;
-            isRepCollapsed = true;
-            if (col) {
-                col.style.maxHeight = '0px';
-                col.style.opacity = '0';
-                col.style.marginBottom = '0px';
-                col.style.pointerEvents = 'none';
-            }
-            if (mini) mini.style.display = 'flex';
-            setTimeout(function () {
-                isRepAnimating = false;
-                repScrollAnchor = area.scrollTop;
-            }, 260);
-            return;
+        if (!window._isRepCollapsed && st > 5) {
+            collapseRepHeader();
         }
-
-        // Scroll UP or near top: restore header smoothly
-        if (isRepCollapsed && (st <= 15 || (repScrollAnchor - st > 35))) {
-            isRepAnimating = true;
-            isRepCollapsed = false;
-            if (col) {
-                col.style.maxHeight = '650px';
-                col.style.opacity = '1';
-                col.style.marginBottom = '';
-                col.style.pointerEvents = 'auto';
-            }
-            if (mini) mini.style.display = 'none';
-            setTimeout(function () {
-                isRepAnimating = false;
-                repScrollAnchor = area.scrollTop;
-            }, 260);
-            return;
-        }
-
-        if (!isRepCollapsed) repScrollAnchor = st <= 0 ? 0 : st;
     };
 
     var cust = window._currentReportingCustomer;
@@ -13989,7 +13952,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
 
         var balBadge = document.getElementById('custRepBalBadge');
         if (balBadge) {
-            balBadge.innerText = (totDeb > 0) ? `Merged O/S: ₹ ${Math.round(totDeb).toLocaleString('en-IN')} Dr` : 'Merged O/S: Clear';
+            balBadge.innerText = (totDeb > 0) ? `OS: ₹ ${Math.round(totDeb).toLocaleString('en-IN')} Dr` : 'OS: Clear';
             balBadge.style.color = (totDeb > 0) ? '#dc2626' : '#16a34a';
             balBadge.style.background = (totDeb > 0) ? '#fee2e2' : '#dcfce7';
         }
@@ -14058,8 +14021,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         });
         var balBadge = document.getElementById('custRepBalBadge');
         if (balBadge) {
-            var badgePrefix = isAgentUser ? 'Your O/S' : 'Agent O/S';
-            balBadge.innerText = (agTotPend > 0) ? `${badgePrefix}: ₹ ${Math.round(agTotPend).toLocaleString('en-IN')}` : `${badgePrefix}: Clear`;
+            balBadge.innerText = (agTotPend > 0) ? `OS: ₹ ${Math.round(agTotPend).toLocaleString('en-IN')}` : 'OS: Clear';
             balBadge.style.color = (agTotPend > 0) ? '#dc2626' : '#16a34a';
             balBadge.style.background = (agTotPend > 0) ? '#fee2e2' : '#dcfce7';
         }
@@ -14120,15 +14082,18 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             ? `--- FROM DATE:${fmtDate(fromDate || '2026-04-01')} TO DATE:${fmtDate(toDate || '2027-03-31')}`
             : `--- FINANCIAL YEAR 2026-2027`;
 
+        var showAgentPartyCol = isViewingAgent && (partyRep.isMerged || fsList.some(r => r[18] || r.party));
+
         var html = `
         <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:10px; color:#1e293b; width:100%;">
           <!-- Table Container with Horizontal Scroll -->
           <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05); -webkit-overflow-scrolling:touch;">
-            <table style="width:100%; border-collapse:collapse; font-size:10px; text-align:left; white-space:nowrap;">
+            <table style="min-width:100%; width:max-content; border-collapse:collapse; font-size:10px; text-align:left; white-space:nowrap; table-layout:auto;">
               <thead>
                 <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:9.5px;">
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DATE</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">BILL</th>
+                  ${showAgentPartyCol ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff; white-space:nowrap;">PARTY NAME</th>' : ''}
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">SCREEN NAME</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">COLOUR</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">PACI</th>
@@ -14141,7 +14106,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                   <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">DAYS</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">TRANSPO</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">L/R NO.</th>
-                  ${partyRep.isMerged ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff;">CUSTOMER NAME</th>' : ''}
+                  ${(!showAgentPartyCol && partyRep.isMerged) ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff; white-space:nowrap;">CUSTOMER NAME</th>' : ''}
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DESTINATION</th>
                   <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">P/</th>
                   <th style="padding:4px 6px;">HASTE</th>
@@ -14201,6 +14166,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${dateCell}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9;">${billCell}</td>
+              ${showAgentPartyCol ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:600; color:#1e40af; white-space:nowrap;">${isFirst ? escHtml(r[18] || r.party || '') : ''}</td>` : ''}
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:600; color:#1e293b;">${escHtml(r[2])}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#64748b;">${escHtml(r[3])}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r[4])}</td>
@@ -14213,7 +14179,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
               <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9;">${daysCell}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${trnCell}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9;">${lrCell}</td>
-              ${partyRep.isMerged ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc;">${isFirst ? escHtml(r[18] || r.party || '') : ''}</td>` : ''}
+              ${(!showAgentPartyCol && partyRep.isMerged) ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc; white-space:nowrap;">${isFirst ? escHtml(r[18] || r.party || '') : ''}</td>` : ''}
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#64748b;">${destCell}</td>
               <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9;">${prclCell}</td>
               <td style="padding:4px 6px; color:#64748b;">${hasteCell}</td>
@@ -14225,13 +14191,13 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
               </tbody>
               <tfoot>
                 <tr style="background:#dbeafe; font-weight:bold; border-top:2px solid #93c5fd; color:#1e3a8a;">
-                  <td colspan="6" style="padding:6px; border-right:1px solid #bfdbfe; font-weight:bold; text-align:center;">GRAND TOTAL</td>
+                  <td colspan="${showAgentPartyCol ? 7 : 6}" style="padding:6px; border-right:1px solid #bfdbfe; font-weight:bold; text-align:center;">GRAND TOTAL</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">${totPcs.toLocaleString('en-IN')}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">${totMtr.toFixed(2)}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">${avgRate.toFixed(2)}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totGross).toLocaleString('en-IN')}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totBill).toLocaleString('en-IN')}</td>
-                  <td colspan="4" style="padding:6px; border-right:1px solid #bfdbfe;"></td>
+                  <td colspan="${(!showAgentPartyCol && partyRep.isMerged) ? 5 : 4}" style="padding:6px; border-right:1px solid #bfdbfe;"></td>
                   <td style="padding:6px; text-align:center; border-right:1px solid #bfdbfe;">${totParcels}</td>
                   <td></td>
                 </tr>
@@ -14338,22 +14304,25 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             ? `&nbsp;&nbsp; <b>DATES:</b> ${fmtDate(fromDate || '2026-04-01')} TO ${fmtDate(toDate || '2027-03-31')}`
             : '';
 
+        var showAgentOsPartyCol = isViewingAgent && (partyRep.isMerged || osList.some(r => r.party));
+
         var html = `
         <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:10px; color:#1e293b; width:100%;">
           <!-- Table Container with Horizontal Scroll -->
           <div style="overflow-x:auto; border:1px solid #cbd5e1; border-radius:6px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.05); -webkit-overflow-scrolling:touch;">
-            <table style="width:100%; border-collapse:collapse; font-size:10px; text-align:left; white-space:nowrap;">
+            <table style="min-width:100%; width:max-content; border-collapse:collapse; font-size:10px; text-align:left; white-space:nowrap; table-layout:auto;">
               <thead>
                 <tr style="background:#f1f5f9; color:#334155; border-bottom:1.5px solid #cbd5e1; font-weight:bold; font-size:9.5px;">
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">BILL DATE</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">BILL NO.</th>
+                  ${showAgentOsPartyCol ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff; white-space:nowrap;">PARTY NAME</th>' : ''}
                   <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">NET BILL AMT</th>
                   <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">GOODS RET.</th>
                   <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">GR PEND</th>
                   <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">PAID AMT.</th>
                   <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0; background:#fee2e2; color:#991b1b;">PEND. AMT.</th>
                   <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">DA</th>
-                  ${partyRep.isMerged ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff;">CUSTOMER NAME</th>' : ''}
+                  ${(!showAgentOsPartyCol && partyRep.isMerged) ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff; white-space:nowrap;">CUSTOMER NAME</th>' : ''}
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DESTINATION</th>
                   <th style="padding:4px 6px;">BROKER</th>
                 </tr>
@@ -14365,20 +14334,21 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r.bno)}')"` ;
             var frmBadge = (r.f && r.f !== 'DS') ? `<span style="font-size:9px; background:#e2e8f0; color:#334155; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.f)}</span>` : '';
             var crBadge = (r.pamt < 0 || String(r.bno || '').includes('GR-')) ? `<span style="background:#fef08a; color:#854d0e; font-size:9px; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">CR NOTE</span>` : '';
-            var pBadge = (r.party && !partyRep.isMerged) ? `<span style="font-size:9px; background:#eff6ff; color:#1d4ed8; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.party)}</span>` : '';
+            var pBadge = (r.party && !partyRep.isMerged && !showAgentOsPartyCol) ? `<span style="font-size:9px; background:#eff6ff; color:#1d4ed8; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.party)}</span>` : '';
             html += `
             <tr style="border-bottom:1px solid #f1f5f9; background:${idx % 2 === 0 ? '#fff' : '#f8fafc'};">
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.dt)}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#0284c7; cursor:pointer;" ${billClick} title="Click to view Tax Invoice">
                 <i class="fas fa-file-invoice" style="font-size:9px; margin-right:2px;"></i>${escHtml(r.bno)}${frmBadge}${crBadge}${pBadge}
               </td>
+              ${showAgentOsPartyCol ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:600; color:#1e40af; white-space:nowrap;">${escHtml(r.party || '')}</td>` : ''}
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:600;">${r.bamt ? r.bamt.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.ret ? r.ret.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; color:#64748b;">${r.grpend ? r.grpend.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; color:#16a34a;">${r.paid ? r.paid.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#dc2626; background:#fff1f2;">${r.pamt ? r.pamt.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:#b91c1c;">${r.du || 0}</td>
-              ${partyRep.isMerged ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc;">${escHtml(r.party || '')}</td>` : ''}
+              ${(!showAgentOsPartyCol && partyRep.isMerged) ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc; white-space:nowrap;">${escHtml(r.party || '')}</td>` : ''}
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.ct)}</td>
               <td style="padding:4px 6px; color:#64748b;">${escHtml(r.ag)}</td>
             </tr>`;
@@ -14389,14 +14359,14 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
               </tbody>
               <tfoot>
                 <tr style="background:#fee2e2; font-weight:bold; border-top:2px solid #fca5a5; color:#991b1b;">
-                  <td colspan="2" style="padding:6px; border-right:1px solid #fecaca; text-align:center;">GRAND TOTAL</td>
+                  <td colspan="${showAgentOsPartyCol ? 3 : 2}" style="padding:6px; border-right:1px solid #fecaca; text-align:center;">GRAND TOTAL</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">₹ ${totNet.toFixed(2)}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">${totRet ? ('-₹ ' + Math.abs(totRet).toFixed(2)) : '0.00'}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">0.00</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">${totPaid ? ('-₹ ' + Math.abs(totPaid).toFixed(2)) : '0.00'}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #fecaca; font-size:11px; color:#dc2626; font-weight:bold;">₹ ${totPend.toFixed(2)}</td>
                   <td style="padding:6px; text-align:center; border-right:1px solid #fecaca;">${avgDays}</td>
-                  <td colspan="${partyRep.isMerged ? 3 : 2}"></td>
+                  <td colspan="${(!showAgentOsPartyCol && partyRep.isMerged) ? 3 : 2}"></td>
                 </tr>
               </tfoot>
             </table>

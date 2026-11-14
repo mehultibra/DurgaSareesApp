@@ -744,6 +744,7 @@ async function syncAccountingData() {
     // Step 8: Dashboard Meta Document & Compact Directory Chunks
     const CHUNK_SIZE = 800;
     const totalChunks = Math.ceil(customers.length / CHUNK_SIZE);
+    const custMasterHash = crypto.createHash('md5').update(JSON.stringify(customers.map(c => [c.code, c.name, c.cleanPhones, c.station, c.netBalance]))).digest('hex');
 
     const dashboardDoc = {
         totalCustomers: customers.filter(c => c.role === 'customer').length,
@@ -752,6 +753,7 @@ async function syncAccountingData() {
         agents: Array.from(uniqueAgents).filter(Boolean).sort(),
         dirChunkCount: totalChunks,
         totalRecords: customers.length,
+        custMasterHash: custMasterHash,
         lastSyncedAt: nowIso
     };
 
@@ -778,9 +780,10 @@ async function syncAccountingData() {
     const pendingWrites = [];
 
     function computeHash(obj) {
-        // Strip updatedAt from hash check so stable data never re-triggers sync
+        // Strip updatedAt and lastSyncedAt from hash check so stable data never re-triggers sync
         const copy = Object.assign({}, obj);
         delete copy.updatedAt;
+        delete copy.lastSyncedAt;
         return crypto.createHash('md5').update(JSON.stringify(copy)).digest('hex');
     }
 
