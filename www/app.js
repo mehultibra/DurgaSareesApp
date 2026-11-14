@@ -12531,7 +12531,8 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
     var container = document.getElementById('customerListContainer');
     if (!container) return;
 
-    var query = (document.getElementById('custSearchInput') ? document.getElementById('custSearchInput').value : "").toLowerCase().trim();
+    var rawQuery = (document.getElementById('custSearchInput') ? document.getElementById('custSearchInput').value : "").toLowerCase().trim();
+    var query = rawQuery.replace(/\./g, '');
     var filterType = window._currentCustDirFilter || 'all';
     var list = window._compiledCustomersList || [];
     var tokens = query ? query.split(/\s+/).filter(Boolean) : [];
@@ -12554,51 +12555,93 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
             return;
         }
 
-        var filtered = list.filter(c => {
-            if (selStation && (c.ct || '').trim() !== selStation) return false;
-            if (selAgent && (c.ag || '').trim() !== selAgent) return false;
+        var isSearchActive = Boolean(tokens.length > 0 || filterType !== 'all' || selStation || selAgent);
+        var filtered = [];
 
-            if (tokens.length > 0) {
-                var digitsQuery = query.replace(/\D/g, '');
-                var isPhoneMatch = digitsQuery.length >= 3 && (
-                    (c.p && String(c.p).includes(digitsQuery)) ||
-                    (Array.isArray(c.cleanPhones) && c.cleanPhones.some(n => n.includes(digitsQuery))) ||
-                    (Array.isArray(c.phones) && c.phones.some(n => n.includes(digitsQuery)))
-                );
-                if (!isPhoneMatch) {
-                    var searchStr = [
-                        c.n,
-                        c.c,
-                        c.p,
-                        (Array.isArray(c.cleanPhones) ? c.cleanPhones.join(' ') : ''),
-                        (Array.isArray(c.phones) ? c.phones.join(' ') : ''),
-                        c.ct,
-                        c.st,
-                        c.ag,
-                        c.tr,
-                        c.a,
-                        c.g
-                    ].join(' ').toLowerCase();
-                    var matchesAll = tokens.every(t => searchStr.includes(t));
-                    if (!matchesAll) return false;
+        if (!isSearchActive) {
+            // Default to party selected on the main page when opening (no list dump)
+            var activeParty = window.activeOrderOnBehalf;
+            if (!activeParty) {
+                try { activeParty = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+            }
+            if (!activeParty) {
+                try { activeParty = JSON.parse(localStorage.getItem('dsCustomerDetails') || 'null'); } catch(e){}
+            }
+            if (activeParty && (activeParty.firm || activeParty.name)) {
+                var pCode = String(activeParty.firm || activeParty.c || activeParty.code || '').trim().toUpperCase();
+                var pName = String(activeParty.name || activeParty.n || '').trim().toUpperCase();
+                var mainParty = list.find(c => {
+                    var cCode = String(c.c || c.code || '').trim().toUpperCase();
+                    var cName = String(c.n || c.name || '').trim().toUpperCase();
+                    return (pCode && cCode === pCode) || (pName && cName === pName);
+                });
+                if (!mainParty && (activeParty.name || activeParty.firm)) {
+                    mainParty = {
+                        c: activeParty.firm || activeParty.code || activeParty.name,
+                        n: activeParty.name || activeParty.firm,
+                        ct: activeParty.station || '',
+                        st: activeParty.state || '',
+                        ag: activeParty.agent || '',
+                        p: activeParty.phone || '',
+                        cleanPhones: activeParty.phone ? [activeParty.phone] : [],
+                        phones: activeParty.phone ? [activeParty.phone] : [],
+                        b: 0,
+                        d: '',
+                        pb: 0
+                    };
+                }
+                if (mainParty) {
+                    mainParty._isSelectedMainPage = true;
+                    filtered = [mainParty];
                 }
             }
-            if (filterType === 'debit') return c.d === 'Dr' && c.b > 0;
-            if (filterType === 'bills') return (c.pb || 0) > 0;
-            if (filterType === 'os') return c.ho === true || (c.pb || 0) > 0 || (c.d === 'Dr' && c.b > 0);
-            if (filterType === 'finishsales') return c.hs === true || (c.sbills || 0) > 0;
-            if (filterType === 'reports') return c.hl || c.hs || c.ht || c.ho || c.b > 0;
-            return true;
-        });
+        } else {
+            filtered = list.filter(c => {
+                if (selStation && (c.ct || '').trim() !== selStation) return false;
+                if (selAgent && (c.ag || '').trim() !== selAgent) return false;
+
+                if (tokens.length > 0) {
+                    var digitsQuery = query.replace(/\D/g, '');
+                    var isPhoneMatch = digitsQuery.length >= 3 && (
+                        (c.p && String(c.p).includes(digitsQuery)) ||
+                        (Array.isArray(c.cleanPhones) && c.cleanPhones.some(n => n.includes(digitsQuery))) ||
+                        (Array.isArray(c.phones) && c.phones.some(n => n.includes(digitsQuery)))
+                    );
+                    if (!isPhoneMatch) {
+                        var searchStr = [
+                            c.n,
+                            c.c,
+                            c.p,
+                            (Array.isArray(c.cleanPhones) ? c.cleanPhones.join(' ') : ''),
+                            (Array.isArray(c.phones) ? c.phones.join(' ') : ''),
+                            c.ct,
+                            c.st,
+                            c.ag,
+                            c.tr,
+                            c.a,
+                            c.g
+                        ].join(' ').toLowerCase().replace(/\./g, '');
+                        var matchesAll = tokens.every(t => searchStr.includes(t));
+                        if (!matchesAll) return false;
+                    }
+                }
+                if (filterType === 'debit') return c.d === 'Dr' && c.b > 0;
+                if (filterType === 'bills') return (c.pb || 0) > 0;
+                if (filterType === 'os') return c.ho === true || (c.pb || 0) > 0 || (c.d === 'Dr' && c.b > 0);
+                if (filterType === 'finishsales') return c.hs === true || (c.sbills || 0) > 0;
+                if (filterType === 'reports') return c.hl || c.hs || c.ht || c.ho || c.b > 0;
+                return true;
+            });
+        }
 
         // Contact-style smart ranking: Name prefix > Name substring > City prefix > City substring
         if (tokens.length > 0) {
             var firstTok = tokens[0];
             filtered.sort((a, b) => {
-                var aN = (a.n || '').toLowerCase();
-                var bN = (b.n || '').toLowerCase();
-                var aCt = (a.ct || '').toLowerCase();
-                var bCt = (b.ct || '').toLowerCase();
+                var aN = (a.n || '').toLowerCase().replace(/\./g, '');
+                var bN = (b.n || '').toLowerCase().replace(/\./g, '');
+                var aCt = (a.ct || '').toLowerCase().replace(/\./g, '');
+                var bCt = (b.ct || '').toLowerCase().replace(/\./g, '');
                 var aScore = (aN.startsWith(firstTok) ? 100 : (aN.includes(' ' + firstTok) ? 80 : (aN.includes(firstTok) ? 50 : 0))) +
                              (aCt.startsWith(firstTok) ? 60 : (aCt.includes(firstTok) ? 30 : 0));
                 var bScore = (bN.startsWith(firstTok) ? 100 : (bN.includes(' ' + firstTok) ? 80 : (bN.includes(firstTok) ? 50 : 0))) +
@@ -12690,7 +12733,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         var isSearchingCloud = query.length >= 2;
         container.innerHTML = `
         <div style="text-align:center; padding:35px 20px; color:#6b7280; font-size:13px;">
-          ${isSearchingCloud ? '<i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:8px;"></i><div>Searching cloud database for "' + escHtml(query) + '"...</div>' : '<i class="fas fa-search" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i><div>No customers match your search criteria.</div>'}
+          ${tokens.length > 0 ? (isSearchingCloud ? '<i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:8px;"></i><div>Searching cloud database for "' + escHtml(rawQuery) + '"...</div>' : '<i class="fas fa-search" style="font-size:24px; color:#d1d5db; margin-bottom:8px;"></i><div>No customers match your search criteria.</div>') : '<i class="fas fa-search" style="font-size:28px; color:#cbd5e1; margin-bottom:8px;"></i><div style="font-weight:600; color:#334155;">Type to search customer accounts</div><div style="font-size:11px; margin-top:4px; color:#94a3b8;">Enter party name, phone, city, or GST above to view reports.</div>'}
         </div>`;
         return;
     }
@@ -12722,6 +12765,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                 ${nameDisplay}
               </div>
               <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
+                ${c._isSelectedMainPage ? `<span style="font-size:10px; font-weight:700; color:#be185d; background:#fdf2f8; border:1px solid #fbcfe8; padding:1px 6px; border-radius:3px;"><i class="fas fa-check-circle"></i> Selected on Main Page</span>` : ''}
                 ${locDisplay ? `<span style="font-size:11px; color:#64748b;"><i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${locDisplay}</span>` : ''}
                 ${c.ag ? `<span style="font-size:10px; font-weight:600; color:#475569; background:#f1f5f9; padding:1px 5px; border-radius:3px;"><i class="fas fa-user-tie"></i> ${escHtml(c.ag)}</span>` : ''}
                 ${c.g ? `<span style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 5px; border-radius:3px;">GST: ${escHtml(c.g)}</span>` : ''}
@@ -12767,7 +12811,13 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         </div>`;
     });
 
-    if (window._custDirRenderedCount < filteredList.length) {
+    if (tokens.length === 0 && filteredList.length === 1 && filteredList[0]._isSelectedMainPage) {
+        html += `
+        <div style="text-align:center; padding:18px 10px; color:#64748b; font-size:12px;">
+          <i class="fas fa-search" style="font-size:16px; margin-bottom:4px; color:#cbd5e1;"></i>
+          <div>Showing party selected on main page. Type above to search all accounts.</div>
+        </div>`;
+    } else if (window._custDirRenderedCount < filteredList.length) {
         html += `
         <div style="text-align:center; padding:12px; color:#64748b; font-size:12px; font-weight:600;">
           Showing ${toRender.length} of ${filteredList.length.toLocaleString('en-IN')} accounts (scroll down for more)
@@ -12987,6 +13037,19 @@ window.saveCustRepQuickNote = async function (disposition) {
 window.openCustomerReportsModal = async function (partyCode, isCallTriggered, sisterAccountsList) {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+
+    if (!partyCode) {
+        var actParty = window.activeOrderOnBehalf;
+        if (!actParty) {
+            try { actParty = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+        }
+        if (!actParty) {
+            try { actParty = JSON.parse(localStorage.getItem('dsCustomerDetails') || 'null'); } catch(e){}
+        }
+        if (actParty && (actParty.firm || actParty.code || actParty.name)) {
+            partyCode = actParty.firm || actParty.code || actParty.name;
+        }
+    }
 
     if (!window.hasCRMAccess()) {
         if (myCd.isApproved !== true || myCd.approvalStatus !== 'approved') {
@@ -14187,7 +14250,7 @@ window.resetCustomerReportZoom = function () {
 };
 
 window.handleCustRepQuickSearch = function (query) {
-    var q = String(query || '').trim().toLowerCase();
+    var q = String(query || '').trim().toLowerCase().replace(/\./g, '');
     var drop = document.getElementById('custRepQuickSearchResults');
     var clrBtn = document.getElementById('btnCustRepClearSearch');
     if (clrBtn) clrBtn.style.display = q ? 'inline' : 'none';
@@ -14202,7 +14265,7 @@ window.handleCustRepQuickSearch = function (query) {
     var matches = [];
     for (var i = 0; i < list.length; i++) {
         var c = list[i];
-        var haystack = ((c.n || '') + ' ' + (c.c || '') + ' ' + (c.ct || '') + ' ' + (c.p || '') + ' ' + (c.ag || '')).toLowerCase();
+        var haystack = ((c.n || '') + ' ' + (c.c || '') + ' ' + (c.ct || '') + ' ' + (c.p || '') + ' ' + (c.ag || '')).toLowerCase().replace(/\./g, '');
         var matchAll = tokens.every(t => haystack.includes(t));
         if (matchAll) {
             matches.push(c);
@@ -14737,7 +14800,13 @@ function highlightContactMatch(text, tokens) {
     if (!text) return '';
     var escaped = esc(String(text));
     if (!tokens || tokens.length === 0) return escaped;
-    var sorted = tokens.filter(Boolean).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).sort((a,b) => b.length - a.length);
+    var sorted = tokens.filter(Boolean).map(t => {
+        var cleanT = t.replace(/\./g, '');
+        if (!cleanT) return '';
+        return cleanT.split('').map(function (ch) {
+            return /[a-z0-9]/i.test(ch) ? (ch + '\\.?\\s*') : ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }).join('');
+    }).filter(Boolean).sort((a,b) => b.length - a.length);
     if (sorted.length === 0) return escaped;
     var regex = new RegExp('(' + sorted.join('|') + ')', 'gi');
     return escaped.replace(regex, '<mark style="background:#fef08a; color:#854d0e; font-weight:bold; padding:0 2px; border-radius:2px;">$1</mark>');
@@ -14842,7 +14911,7 @@ window.searchAndSelectParty = function (query) {
     if (!Boolean(window.isSuperAdmin || window.isAdminMode)) return;
     var resEl = document.getElementById('cdPartySearchResults');
     if (!resEl) return;
-    var q = (query || '').trim().toLowerCase();
+    var q = (query || '').trim().toLowerCase().replace(/\./g, '');
     if (q.length < 1) {
         resEl.innerHTML = '';
         resEl.style.display = 'none';
@@ -14867,11 +14936,11 @@ window.searchAndSelectParty = function (query) {
     var scored = [];
     for (var i = 0; i < list.length; i++) {
         var c = list[i];
-        var n = (c.n || '').toLowerCase();
-        var ct = (c.ct || '').toLowerCase();
-        var st = (c.st || '').toLowerCase();
-        var code = (c.c || '').toLowerCase();
-        var ag = (c.ag || '').toLowerCase();
+        var n = (c.n || '').toLowerCase().replace(/\./g, '');
+        var ct = (c.ct || '').toLowerCase().replace(/\./g, '');
+        var st = (c.st || '').toLowerCase().replace(/\./g, '');
+        var code = (c.c || '').toLowerCase().replace(/\./g, '');
+        var ag = (c.ag || '').toLowerCase().replace(/\./g, '');
         var p = (c.p || '').toLowerCase();
 
         var allTokensMatch = true;
@@ -15064,6 +15133,8 @@ window.pickPartyForOrder = function (code) {
             inp.style.background = origBg;
         }, 500);
     });
+
+    window.selectPartyForOrder(cust);
 };
 
 // Close search dropdown on click outside
@@ -15092,7 +15163,7 @@ window.selectPartyForOrder = function (cust) {
     var details = {
         name: cust.n || cust.name || cust.c,
         firm: cust.c || cust.code || cust.n,
-        phone: cust.p || '',
+        phone: cust.p || (Array.isArray(cust.cleanPhones) && cust.cleanPhones[0]) || (Array.isArray(cust.phones) && cust.phones[0]) || '',
         station: cust.ct || cust.station || '',
         state: partyState,
         address: cust.a || '',
@@ -15107,6 +15178,28 @@ window.selectPartyForOrder = function (cust) {
     localStorage.setItem("dsCustomerDetails", JSON.stringify(details));
     localStorage.setItem("ds_active_on_behalf", JSON.stringify(details));
     window.activeOrderOnBehalf = details;
+
+    // Sync to main page party inputs
+    var sInp = document.getElementById('cdPartySearch');
+    if (sInp) sInp.value = details.name;
+    var nEl = document.getElementById('cdName');
+    if (nEl) nEl.value = details.name;
+    var fEl = document.getElementById('cdFirm');
+    if (fEl) fEl.value = details.firm;
+    var stEl = document.getElementById('cdStation');
+    if (stEl) stEl.value = details.station;
+    var agEl = document.getElementById('cdAgent');
+    if (agEl) agEl.value = details.agent;
+    var trEl = document.getElementById('cdTransport');
+    if (trEl) trEl.value = details.transport;
+    var gstEl = document.getElementById('cdGst');
+    if (gstEl) gstEl.value = details.gst;
+    var pEl = document.getElementById('cdPhone');
+    if (pEl) pEl.value = details.phone;
+    var stateEl = document.getElementById('cdState');
+    if (stateEl) stateEl.value = details.state;
+    var addrEl = document.getElementById('cdAddress');
+    if (addrEl) addrEl.value = details.address;
 
     if (typeof window.updateOrderOnBehalfBanner === 'function') {
         window.updateOrderOnBehalfBanner();
@@ -15750,6 +15843,9 @@ window.saveAddEditPartyContact = async function () {
         }
 
         window.closeAddEditPartyContactModal();
+        if (typeof window.selectPartyForOrder === 'function') {
+            window.selectPartyForOrder(localEntry);
+        }
         alert('✓ Contact "' + name + '" saved and synced successfully!');
 
     } catch (e) {
@@ -16534,10 +16630,67 @@ window.pasteAndLookupCaller = async function () {
         var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
         return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
     });
-    if (matched.length === 1 && typeof window.openCustomerReportsModal === 'function') {
-        setTimeout(function () {
-            window.openCustomerReportsModal(matched[0].c || matched[0].code || matched[0].n);
-        }, 150);
+
+    if (matched.length === 0 && typeof window.findAccountsByPhone === 'function') {
+        try {
+            var cloudAccts = await window.findAccountsByPhone(p10);
+            if (cloudAccts && cloudAccts.length > 0) {
+                cloudAccts.forEach(function (first) {
+                    var m = list.find(c => (c.c === first.code || c.n === first.name));
+                    if (!m) {
+                        m = {
+                            c: first.code,
+                            n: first.name,
+                            ct: first.station || '',
+                            st: first.state || '',
+                            p: p10,
+                            cleanPhones: [p10],
+                            phones: [p10],
+                            ag: first.agent || '',
+                            tr: first.transport || '',
+                            g: first.gst || '',
+                            b: 0,
+                            d: '',
+                            role: first.role || 'customer'
+                        };
+                        list.push(m);
+                    }
+                    matched.push(m);
+                });
+            }
+        } catch(e){}
+    }
+
+    if (matched.length > 1) {
+        var lastBillingAcc = matched[0];
+        var latestDate = '';
+        matched.forEach(function (acc) {
+            var accCode = window.sanitizeDocId ? window.sanitizeDocId(acc.c) : String(acc.c).replace(/[\/\.\s]/g, '_');
+            var rep = window._accountingReportsCache && window._accountingReportsCache[accCode];
+            var bDate = (rep && rep.finishSales && rep.finishSales.length > 0 && rep.finishSales[0][0]) || acc.lastBillDate || '';
+            if (bDate && (!latestDate || bDate > latestDate)) {
+                latestDate = bDate;
+                lastBillingAcc = acc;
+            }
+        });
+
+        if (typeof window.selectPartyForOrder === 'function') {
+            window.selectPartyForOrder(lastBillingAcc);
+        }
+        if (typeof window.openCustomerReportsModal === 'function') {
+            setTimeout(function () {
+                window.openCustomerReportsModal(lastBillingAcc.c || lastBillingAcc.code || lastBillingAcc.n, false, matched);
+            }, 150);
+        }
+    } else if (matched.length === 1) {
+        if (typeof window.selectPartyForOrder === 'function') {
+            window.selectPartyForOrder(matched[0]);
+        }
+        if (typeof window.openCustomerReportsModal === 'function') {
+            setTimeout(function () {
+                window.openCustomerReportsModal(matched[0].c || matched[0].code || matched[0].n, false);
+            }, 150);
+        }
     }
 };
 
@@ -17125,6 +17278,24 @@ window.renderIncomingLookup360Card = async function (matchOrCode) {
         : matchOrCode;
     if (!match) return;
 
+    // Auto-select on main page
+    if (typeof window.selectPartyForOrder === 'function') {
+        window.selectPartyForOrder(match);
+    }
+
+    // Detect sister accounts sharing phone numbers
+    var matchPhones = Array.isArray(match.cleanPhones) && match.cleanPhones.length ? match.cleanPhones : (Array.isArray(match.phones) && match.phones.length ? match.phones : (match.p ? [match.p] : []));
+    var p10Set = new Set(matchPhones.map(p => String(p).replace(/\D/g, '').slice(-10)).filter(p => p.length === 10));
+    var sisterAccounts = [];
+    if (p10Set.size > 0) {
+        sisterAccounts = list.filter(function(x) {
+            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p ? [x.p] : []));
+            return rawList.some(function (num) { return p10Set.has(String(num).replace(/\D/g, '').slice(-10)); });
+        });
+    }
+    var hasSisterAccounts = Boolean(sisterAccounts && sisterAccounts.length > 1);
+    window._lastLookupSisterAccounts = hasSisterAccounts ? sisterAccounts : null;
+
     var safeCode = encodeURIComponent(match.c || match.code || match.n);
     var balText = (match.b > 0) ? ('₹ ' + Number(match.b).toLocaleString('en-IN') + ' ' + (match.d || '')) : 'Clear';
     var balColor = match.d === 'Dr' ? '#dc2626' : '#16a34a';
@@ -17157,8 +17328,9 @@ window.renderIncomingLookup360Card = async function (matchOrCode) {
             ${match.ct ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${escHtml(match.ct)} | ` : ''}
             Phone: +91${match.p || ''}
           </div>
-          <div style="font-size:10px; color:#475569; margin-top:2px;">
-            Agent: <b>${escHtml(match.ag || 'DIRECT')}</b> | Trans: ${escHtml(match.tr || 'N/A')}
+          <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
+            <span style="font-size:10px; color:#475569;">Agent: <b>${escHtml(match.ag || 'DIRECT')}</b></span>
+            ${hasSisterAccounts ? `<span style="font-size:10px; font-weight:bold; color:#7c3aed; background:#ede9fe; padding:2px 6px; border-radius:4px;"><i class="fas fa-layer-group"></i> ${sisterAccounts.length} Merged Accounts</span>` : ''}
           </div>
         </div>
         <div style="text-align:right;">
@@ -17169,6 +17341,10 @@ window.renderIncomingLookup360Card = async function (matchOrCode) {
 
       <!-- Action Buttons -->
       <div style="display:flex; gap:6px; margin-top:10px; padding-top:8px; border-top:1px dashed #f1f5f9; flex-wrap:wrap;">
+        <button type="button" onclick="window.closeIncomingCallerLookupModal();"
+          style="background:#059669; color:#fff; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+          <i class="fas fa-check-circle"></i> Party Selected
+        </button>
         <button type="button" onclick="window.closeIncomingCallerLookupModal(); window.openPostCallCRMModal({ code: '${safeCode}', name: '${escHtml(match.n)}', phone: '${match.p}', station: '${escHtml(match.ct)}', agent: '${escHtml(match.ag)}', balance: ${match.b || 0}, drCr: '${match.d || ''}' })"
           style="flex:1; background:var(--myntra-pink); color:#fff; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:4px;">
           <i class="fas fa-plus"></i> Log Call Note
@@ -17182,9 +17358,9 @@ window.renderIncomingLookup360Card = async function (matchOrCode) {
           style="background:#25d366; color:#fff; text-decoration:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:bold; display:inline-flex; align-items:center;">
           <i class="fab fa-whatsapp"></i>
         </a>` : ''}
-        <button type="button" onclick="window.closeIncomingCallerLookupModal(); window.openCustomerReportsModal('${safeCode}')"
+        <button type="button" onclick="window.closeIncomingCallerLookupModal(); window.openCustomerReportsModal(decodeURIComponent('${safeCode}'), false, window._lastLookupSisterAccounts)"
           style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
-          <i class="fas fa-file-invoice"></i> Ledger
+          <i class="fas fa-file-invoice"></i> ${hasSisterAccounts ? 'Merged Reports (' + sisterAccounts.length + ')' : 'Ledger'}
         </button>
       </div>
 
@@ -17215,7 +17391,7 @@ window.renderIncomingLookup360Card = async function (matchOrCode) {
 window.handleIncomingLookupSearch = async function (val) {
     var card = document.getElementById('incomingCallerDetailsCard');
     if (!card) return;
-    var query = String(val || '').trim().toLowerCase();
+    var query = String(val || '').trim().toLowerCase().replace(/\./g, '');
     if (query.length < 2) {
         card.innerHTML = '<div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px;"><i class="fas fa-search" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i><div>Type any 3 to 10 digits to identify incoming party</div></div>';
         return;
@@ -17237,7 +17413,7 @@ window.handleIncomingLookupSearch = async function (val) {
             var nums = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (c.p ? [c.p] : []);
             if (nums.some(n => n.includes(digitsOnly))) return true;
         }
-        var searchStr = [c.n, c.c, c.ct, c.st, c.ag, c.g].join(' ').toLowerCase();
+        var searchStr = [c.n, c.c, c.ct, c.st, c.ag, c.g].join(' ').toLowerCase().replace(/\./g, '');
         return searchStr.includes(query);
     });
 
@@ -17406,7 +17582,7 @@ window.renderCustomerCRMTab = async function (partyCode, partyName, station, pho
 window.handleCRMQuickSearch = function (val) {
     var resDiv = document.getElementById('crmHubSearchResults');
     if (!resDiv) return;
-    var q = String(val || '').trim().toLowerCase();
+    var q = String(val || '').trim().toLowerCase().replace(/\./g, '');
     if (q.length < 2) {
         resDiv.innerHTML = '';
         resDiv.style.display = 'none';
@@ -17425,7 +17601,7 @@ window.handleCRMQuickSearch = function (val) {
             var nums = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (c.p ? [c.p] : []);
             if (nums.some(n => n.includes(digitsOnly))) return true;
         }
-        var searchStr = [c.n, c.c, c.ct, c.st, c.ag, c.g].join(' ').toLowerCase();
+        var searchStr = [c.n, c.c, c.ct, c.st, c.ag, c.g].join(' ').toLowerCase().replace(/\./g, '');
         return searchStr.includes(q);
     }).slice(0, 25);
 
