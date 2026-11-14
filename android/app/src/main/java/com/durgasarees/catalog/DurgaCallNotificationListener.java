@@ -134,6 +134,21 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             Notification n = sbn.getNotification();
             if (n == null || n.extras == null) return;
 
+            // Ignore non-ongoing notifications (like post-call recordings, missed calls, etc.)
+            if ((n.flags & Notification.FLAG_ONGOING_EVENT) == 0) {
+                return;
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                String chId = n.getChannelId();
+                if (chId != null) {
+                    String lowerCh = chId.toLowerCase();
+                    if (lowerCh.contains("record") || lowerCh.contains("audio") || lowerCh.contains("saving") || lowerCh.contains("saved") || lowerCh.contains("voice") || lowerCh.contains("missed")) {
+                        return;
+                    }
+                }
+            }
+
             Bundle extras = n.extras;
             CharSequence titleCs = extras.getCharSequence(Notification.EXTRA_TITLE);
             CharSequence textCs = extras.getCharSequence(Notification.EXTRA_TEXT);
@@ -146,12 +161,16 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             String sub = subCs != null ? subCs.toString().trim() : "";
             String bigTitle = bigTitleCs != null ? bigTitleCs.toString().trim() : "";
             String bigText = bigTextCs != null ? bigTextCs.toString().trim() : "";
+            String ticker = n.tickerText != null ? n.tickerText.toString().trim() : "";
             if (title.isEmpty() && text.isEmpty() && sub.isEmpty()) return;
 
             // Check if title, text, or subtext contains a 10-digit phone number
-            String combined = title + " " + text + " " + sub + " " + bigTitle + " " + bigText;
+            String combined = title + " " + text + " " + sub + " " + bigTitle + " " + bigText + " " + ticker;
             String lowerCombined = combined.toLowerCase();
-            if (lowerCombined.contains("missed") || lowerCombined.contains("record") || lowerCombined.contains("saving") || lowerCombined.contains("saved")) return;
+            if (lowerCombined.contains("missed") || lowerCombined.contains("record") || lowerCombined.contains("saving") ||
+                lowerCombined.contains("saved") || lowerCombined.contains("audio") || lowerCombined.contains("voice") ||
+                lowerCombined.contains("player") || lowerCombined.contains(".m4a") || lowerCombined.contains(".mp3") ||
+                lowerCombined.contains(".wav") || lowerCombined.contains(".amr")) return;
             String p10 = null;
             Matcher m = PHONE_PATTERN.matcher(combined);
             if (m.find()) {
@@ -218,7 +237,10 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                     candidateName = sub;
                 }
 
-                if (!candidateName.isEmpty() && (candidateName.contains("[") || candidateName.length() >= 4)) {
+                String cUpper = candidateName.toUpperCase();
+                boolean isNoise = cUpper.contains("[SIM") || cUpper.contains("[JIO") || cUpper.contains("[AIRTEL") || cUpper.contains("[UNKNOWN") ||
+                    cUpper.contains("RECORD") || cUpper.contains("AUDIO") || cUpper.contains("SAVED") || cUpper.contains("VOICE");
+                if (!candidateName.isEmpty() && !isNoise && ((cUpper.contains("[") && cUpper.contains("]")) || cUpper.contains("(AG:"))) {
                     p10 = "";
                     partyName = candidateName;
                 } else {
@@ -266,7 +288,9 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
         String lower = s.trim().toLowerCase();
         if (lower.isEmpty()) return true;
         if (lower.matches("^\\d{1,2}:\\d{2}(?::\\d{2})?$")) return true;
-        if (lower.contains("record") || lower.contains("saving") || lower.contains("saved") || lower.contains("audio")) return true;
+        if (lower.contains("record") || lower.contains("saving") || lower.contains("saved") || lower.contains("audio") ||
+            lower.contains("voice") || lower.contains("player") || lower.contains(".m4a") || lower.contains(".mp3") ||
+            lower.contains(".wav") || lower.contains(".amr")) return true;
         return lower.contains("ongoing call") ||
                lower.contains("incoming call") ||
                lower.contains("active call") ||
@@ -281,6 +305,11 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                lower.contains("missed call") ||
                lower.contains("sim 1") ||
                lower.contains("sim 2") ||
+               lower.contains("sim1") ||
+               lower.contains("sim2") ||
+               lower.contains("jio") ||
+               lower.contains("airtel") ||
+               lower.contains("carrier") ||
                lower.contains("hd+") ||
                lower.contains("hd") ||
                lower.contains("volte") ||

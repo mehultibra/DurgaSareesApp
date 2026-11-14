@@ -16658,6 +16658,13 @@ window.checkLiveCallOnResume = async function () {
 window.handleDetectedNativeCall = async function (phoneOrName, direction, partyNameHint) {
     if (typeof window.hasCRMAccess === 'function' && !window.hasCRMAccess()) return;
     if (localStorage.getItem('ds_call_popup_enabled') === 'false') return;
+
+    var rawCheck = String((partyNameHint || '') + ' ' + (phoneOrName || '')).toUpperCase();
+    if (rawCheck.includes('RECORD') || rawCheck.includes('AUDIO') || rawCheck.includes('VOICE') ||
+        rawCheck.includes('SAVED') || rawCheck.includes('SAVING') || rawCheck.includes('.M4A') ||
+        rawCheck.includes('.MP3') || rawCheck.includes('.WAV') || rawCheck.includes('.AMR')) {
+        return;
+    }
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getCallState === 'function') {
         try {
             var st = await window.Capacitor.Plugins.CallMonitor.getCallState();
@@ -17001,19 +17008,28 @@ window.openPostCallCRMModal = function (ctx, name, phone, station, agent, callTy
     var modal = document.getElementById('postCallCRMModal');
     if (!modal) return;
 
-    document.getElementById('crmPartyCode').value = ctx.code || '';
-    document.getElementById('crmPartyName').value = ctx.name || '';
+    var rawCode = ctx.code || '';
+    try { rawCode = decodeURIComponent(rawCode); } catch(e){}
+    var rawName = ctx.name || '';
+    try { rawName = decodeURIComponent(rawName); } catch(e){}
+    var rawStation = ctx.station || '';
+    try { rawStation = decodeURIComponent(rawStation); } catch(e){}
+    var rawAgent = ctx.agent || '';
+    try { rawAgent = decodeURIComponent(rawAgent); } catch(e){}
+
+    document.getElementById('crmPartyCode').value = rawCode;
+    document.getElementById('crmPartyName').value = rawName;
     document.getElementById('crmPartyPhone').value = ctx.phone || '';
-    document.getElementById('crmPartyStation').value = ctx.station || '';
-    document.getElementById('crmPartyAgent').value = ctx.agent || '';
+    document.getElementById('crmPartyStation').value = rawStation;
+    document.getElementById('crmPartyAgent').value = rawAgent;
 
     var subEl = document.getElementById('crmModalPartySubtitle');
-    if (subEl) subEl.innerText = ctx.name + (ctx.station ? ' (' + ctx.station + ')' : '');
+    if (subEl) subEl.innerText = rawName + (rawStation ? ' (' + rawStation + ')' : '');
 
     var metaEl = document.getElementById('crmModalPartyMeta');
     if (metaEl) {
         var balText = ctx.balance ? ('₹ ' + Number(ctx.balance).toLocaleString('en-IN') + ' ' + (ctx.drCr || '')) : 'Clear';
-        metaEl.innerText = 'Phone: +91' + ctx.phone + ' | Bal: ' + balText + ' | Agent: ' + (ctx.agent || 'DIRECT');
+        metaEl.innerText = 'Phone: +91' + (ctx.phone || '') + ' | Bal: ' + balText + ' | Agent: ' + (rawAgent || 'DIRECT');
     }
 
     var durLabel = document.getElementById('crmCallDurationLabel');
@@ -17296,8 +17312,14 @@ window.savePostCallCRM = async function () {
     var errEl = document.getElementById('crmErr');
     if (errEl) errEl.innerText = '';
 
-    var code = document.getElementById('crmPartyCode').value.trim();
-    var name = document.getElementById('crmPartyName').value.trim();
+    var rawC = document.getElementById('crmPartyCode').value || '';
+    try { rawC = decodeURIComponent(rawC); } catch(e){}
+    var code = rawC.trim();
+
+    var rawN = document.getElementById('crmPartyName').value || '';
+    try { rawN = decodeURIComponent(rawN); } catch(e){}
+    var name = rawN.trim();
+
     var phone = document.getElementById('crmPartyPhone').value.trim();
     var station = document.getElementById('crmPartyStation').value.trim();
     var agent = document.getElementById('crmPartyAgent').value.trim();
@@ -17372,7 +17394,8 @@ window.savePostCallCRM = async function () {
         });
 
         // 2. Upsert PartyCRM/{safeCode}
-        var safeCode = (window.sanitizeDocId ? window.sanitizeDocId(code) : code.replace(/[\/\.#\?\[\]\s]/g, '_'));
+        var primaryKey = code || name;
+        var safeCode = (window.sanitizeDocId ? window.sanitizeDocId(primaryKey) : primaryKey.replace(/[\/\.#\?\[\]\s]/g, '_'));
         var getRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, {
             headers: headers
         });
@@ -17392,7 +17415,7 @@ window.savePostCallCRM = async function () {
 
         var partyCrmBody = {
             fields: {
-                partyCode: { stringValue: code },
+                partyCode: { stringValue: code || name },
                 partyName: { stringValue: name },
                 phone: { stringValue: phone },
                 station: { stringValue: station },
@@ -17410,18 +17433,25 @@ window.savePostCallCRM = async function () {
             }
         };
 
-        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, {
+        var pRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, {
             method: 'PATCH',
             headers: headers,
             body: JSON.stringify(partyCrmBody)
         });
+        if (!pRes.ok) {
+            var errD = await pRes.json().catch(function(){});
+            throw new Error((errD && errD.error && errD.error.message) || ("Save PartyCRM error HTTP " + pRes.status));
+        }
 
         window.closePostCallCRMModal();
         alert('✓ Call note & follow-up saved successfully!');
 
         // Refresh CRM tab if open
-        if (window._activeCustomerReportTab === 'crm' && typeof window.renderCustomerCRMTab === 'function') {
-            window.renderCustomerCRMTab(code, name, station, phone, agent);
+        if (typeof window.renderCustomerCRMTab === 'function') {
+            window.renderCustomerCRMTab(code || name, name, station, phone, agent);
+        }
+        if (typeof window.loadCRMHubFollowups === 'function') {
+            window.loadCRMHubFollowups();
         }
         if (document.getElementById('crmHubModal') && document.getElementById('crmHubModal').style.display === 'flex') {
             window.refreshCRMData();
@@ -17509,8 +17539,10 @@ window.loadCRMHubFollowups = async function () {
 
         var followups = docs.map(function (d) {
             var f = d.fields || {};
+            var docId = d.name ? d.name.split('/').pop() : '';
             return {
-                code: f.partyCode ? f.partyCode.stringValue : '',
+                docId: docId,
+                code: f.partyCode ? f.partyCode.stringValue : docId,
                 name: f.partyName ? f.partyName.stringValue : '',
                 phone: f.phone ? f.phone.stringValue : '',
                 station: f.station ? f.station.stringValue : '',
@@ -17556,8 +17588,9 @@ window.loadCRMHubFollowups = async function () {
             ) : '';
 
             var safeCode = encodeURIComponent(fu.code);
+            var safeDocId = encodeURIComponent(fu.docId || fu.code);
             html += `
-            <div style="border:1px solid #e2e8f0; border-radius:10px; background:#fff; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div class="crm-followup-card" style="border:1px solid #e2e8f0; border-radius:10px; background:#fff; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
                 <div>
                   <div style="font-weight:bold; font-size:14px; color:#0f172a;">${escHtml(fu.name)}</div>
@@ -17597,7 +17630,7 @@ window.loadCRMHubFollowups = async function () {
                     <i class="fas fa-file-invoice"></i> Ledger
                   </button>
                 </div>
-                <button type="button" onclick="window.markCRMFollowUpDone('${safeCode}')"
+                <button type="button" onclick="window.markCRMFollowUpDone('${safeDocId}', this)"
                   style="background:#f0fdf4; border:1px solid #bbf7d0; color:#16a34a; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
                   <i class="fas fa-check"></i> Mark Done
                 </button>
@@ -17612,21 +17645,55 @@ window.loadCRMHubFollowups = async function () {
     }
 };
 
-window.markCRMFollowUpDone = async function (partyCode) {
+window.markCRMFollowUpDone = async function (docId, btnEl) {
+    if (!docId) return;
+    var realDocId = decodeURIComponent(docId);
+    if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Done';
+    }
     try {
         var token = await getCachedAuthToken(true);
         var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
-        var safeCode = (window.sanitizeDocId ? window.sanitizeDocId(partyCode) : partyCode.replace(/[\/\.#\?\[\]\s]/g, '_'));
 
-        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode + "?updateMask.fieldPaths=status", {
+        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + realDocId + "?updateMask.fieldPaths=status", {
             method: 'PATCH',
             headers: headers,
             body: JSON.stringify({ fields: { status: { stringValue: 'done' } } })
         });
 
-        window.loadCRMHubFollowups();
+        if (!res.ok) {
+            var errD = await res.json().catch(function(){});
+            throw new Error((errD && errD.error && errD.error.message) || ("HTTP " + res.status));
+        }
+
+        if (btnEl) {
+            var card = btnEl.closest('.crm-followup-card') || btnEl.parentElement.parentElement;
+            if (card) {
+                card.style.transition = 'all 0.25s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'scale(0.95)';
+                setTimeout(function () {
+                    card.remove();
+                    var area = document.getElementById('crmHubContentArea');
+                    if (area && area.querySelectorAll('.crm-followup-card').length === 0) {
+                        area.innerHTML = `
+                        <div style="text-align:center; padding:40px 20px; color:#64748b;">
+                          <i class="fas fa-check-circle" style="font-size:32px; color:#10b981; margin-bottom:8px;"></i>
+                          <div style="font-size:14px; font-weight:bold; color:#1e293b;">All caught up!</div>
+                          <div style="font-size:12px; margin-top:4px;">No pending customer follow-ups scheduled for today.</div>
+                        </div>`;
+                    }
+                }, 250);
+            }
+        }
+        setTimeout(function() { window.loadCRMHubFollowups(); }, 600);
     } catch (e) {
         alert("Could not update status: " + e.message);
+        if (btnEl) {
+            btnEl.disabled = false;
+            btnEl.innerHTML = '<i class="fas fa-check"></i> Mark Done';
+        }
     }
 };
 
@@ -18112,20 +18179,42 @@ window.renderCustomerCRMTab = async function (partyCode, partyName, station, pho
     if (!area) return;
     area.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading CRM conversation timeline...</div>';
 
-    var codeStr = partyCode || (window._currentReportingCustomer && window._currentReportingCustomer.c) || '';
-    var nameStr = partyName || (window._currentReportingCustomer && window._currentReportingCustomer.n) || codeStr;
+    var rawCode = partyCode || (window._currentReportingCustomer && window._currentReportingCustomer.c) || '';
+    try { rawCode = decodeURIComponent(rawCode); } catch(e){}
+    var rawName = partyName || (window._currentReportingCustomer && window._currentReportingCustomer.n) || rawCode;
+    try { rawName = decodeURIComponent(rawName); } catch(e){}
     var stStr = station || (window._currentReportingCustomer && window._currentReportingCustomer.ct) || '';
+    try { stStr = decodeURIComponent(stStr); } catch(e){}
     var phStr = phone || (window._currentReportingCustomer && window._currentReportingCustomer.p) || '';
     var agStr = agent || (window._currentReportingCustomer && window._currentReportingCustomer.ag) || '';
+    try { agStr = decodeURIComponent(agStr); } catch(e){}
 
     try {
         var token = await getCachedAuthToken(true);
         var headers = Object.assign({}, token ? { 'Authorization': 'Bearer ' + token } : {});
-        var safeCode = window.sanitizeDocId ? window.sanitizeDocId(codeStr) : codeStr.replace(/[\/\.#\?\[\]\s]/g, '_');
+
+        var primaryKey = rawCode || rawName;
+        var safeCode = window.sanitizeDocId ? window.sanitizeDocId(primaryKey) : primaryKey.replace(/[\/\.#\?\[\]\s]/g, '_');
 
         var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, {
             headers: headers
         });
+
+        // Fallbacks: If not found, try rawName or raw/alt code
+        if (!res.ok && rawName && rawName !== rawCode) {
+            var safeName = window.sanitizeDocId ? window.sanitizeDocId(rawName) : rawName.replace(/[\/\.#\?\[\]\s]/g, '_');
+            var res2 = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeName, {
+                headers: headers
+            });
+            if (res2.ok) res = res2;
+        }
+        if (!res.ok && partyCode && partyCode !== safeCode) {
+            var altCode = encodeURIComponent(partyCode);
+            var res3 = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + altCode, {
+                headers: headers
+            });
+            if (res3.ok) res = res3;
+        }
 
         var partyCrm = null;
         if (res.ok) {
@@ -18151,7 +18240,7 @@ window.renderCustomerCRMTab = async function (partyCode, partyName, station, pho
                 Status: ${partyCrm && partyCrm.lastDisposition ? escHtml(partyCrm.lastDisposition.stringValue) : 'No past call'}
               </div>
             </div>
-            <button type="button" onclick="window.openPostCallCRMModal({ code: '${encodeURIComponent(codeStr)}', name: '${escHtml(nameStr)}', phone: '${phStr}', station: '${escHtml(stStr)}', agent: '${escHtml(agStr)}', balance: (window._currentReportingCustomer && window._currentReportingCustomer.b) || 0, drCr: (window._currentReportingCustomer && window._currentReportingCustomer.d) || '' })"
+            <button type="button" onclick="window.openPostCallCRMModal({ code: decodeURIComponent('${encodeURIComponent(rawCode)}'), name: decodeURIComponent('${encodeURIComponent(rawName)}'), phone: '${phStr}', station: decodeURIComponent('${encodeURIComponent(stStr)}'), agent: decodeURIComponent('${encodeURIComponent(agStr)}'), balance: (window._currentReportingCustomer && window._currentReportingCustomer.b) || 0, drCr: (window._currentReportingCustomer && window._currentReportingCustomer.d) || '' })"
               style="background:var(--myntra-pink); color:#fff; border:none; padding:7px 12px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 2px 4px rgba(255,63,108,0.2);">
               <i class="fas fa-plus"></i> Add Call Note
             </button>

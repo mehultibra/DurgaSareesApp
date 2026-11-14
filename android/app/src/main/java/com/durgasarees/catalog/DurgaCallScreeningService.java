@@ -83,40 +83,37 @@ public class DurgaCallScreeningService extends CallScreeningService {
     public static boolean isDurgaSareesAccount(Context context, String p10, String partyName) {
         if (partyName != null && !partyName.trim().isEmpty()) {
             String pUpper = partyName.toUpperCase();
-            if (pUpper.contains("[") || pUpper.contains("(AG:")) {
-                return true;
+            boolean isNoise = pUpper.contains("RECORD") || pUpper.contains("SAVING") || pUpper.contains("SAVED") ||
+                pUpper.contains("AUDIO") || pUpper.contains("VOICE") || pUpper.contains("PLAYER") ||
+                pUpper.contains("[SIM") || pUpper.contains("[JIO") || pUpper.contains("[AIRTEL") ||
+                pUpper.contains("[UNKNOWN") || pUpper.contains(".M4A") || pUpper.contains(".MP3") || pUpper.contains(".AMR");
+            if (!isNoise) {
+                if ((pUpper.contains("[") && pUpper.contains("]")) || pUpper.contains("(AG:")) {
+                    return true;
+                }
             }
         }
         if (p10 == null || p10.length() < 10 || context == null) return false;
+        String clean10 = p10.replaceAll("\\D", "");
+        if (clean10.length() >= 10) clean10 = clean10.substring(clean10.length() - 10);
+
         Cursor cursor = null;
         try {
-            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(p10));
+            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(clean10));
             cursor = context.getContentResolver().query(uri, new String[]{ ContactsContract.PhoneLookup.DISPLAY_NAME }, null, null, null);
-            if (cursor != null && cursor.moveToFirst()) {
-                int nameIdx = cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME);
-                if (nameIdx >= 0) {
-                    String name = cursor.getString(nameIdx);
-                    if (name != null && (name.contains("[") || name.toUpperCase().contains("(AG:"))) {
-                        return true;
+            if (cursor != null) {
+                while (cursor.moveToNext()) {
+                    int nameIdx = cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME);
+                    if (nameIdx >= 0) {
+                        String name = cursor.getString(nameIdx);
+                        if (name != null) {
+                            String nUpper = name.toUpperCase();
+                            if ((nUpper.contains("[") && nUpper.contains("]")) || nUpper.contains("(AG:")) {
+                                return true;
+                            }
+                        }
                     }
                 }
-            }
-        } catch (Throwable ignored) {
-        } finally {
-            if (cursor != null) try { cursor.close(); } catch (Throwable ignored) {}
-        }
-
-        try {
-            cursor = context.getContentResolver().query(
-                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                new String[]{ ContactsContract.CommonDataKinds.Phone._ID },
-                ContactsContract.CommonDataKinds.Phone.NUMBER + " LIKE ? AND " +
-                ContactsContract.RawContacts.ACCOUNT_TYPE + " = ?",
-                new String[]{ "%" + p10, "com.durgasarees.catalog" },
-                null
-            );
-            if (cursor != null && cursor.getCount() > 0) {
-                return true;
             }
         } catch (Throwable ignored) {
         } finally {
