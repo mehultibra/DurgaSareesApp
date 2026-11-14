@@ -48,27 +48,26 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
 
     public static void scanActiveNotificationsNow(Context context) {
         try {
-            DurgaCallNotificationListener listener = sInstance;
-            if (listener == null) return;
-            StatusBarNotification[] active = listener.getActiveNotifications();
-            boolean hasDialer = false;
-            if (active != null) {
-                for (StatusBarNotification sbn : active) {
-                    if (sbn != null && isDialerPkg(sbn.getPackageName())) {
-                        hasDialer = true;
-                        listener.processNotification(sbn);
-                    }
-                }
-            }
-            if (!hasDialer && context != null) {
+            if (context != null) {
                 AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
                 int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
-                boolean inCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION);
+                boolean inCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_RINGTONE);
                 if (!inCall) {
                     sLastProcessedKey = "";
                     sLastProcessedTime = 0;
                     CallMonitorPlugin.notifyCallDisconnected(context);
                     DurgaCallScreeningService.dismissCallNotification(context);
+                    return;
+                }
+            }
+            DurgaCallNotificationListener listener = sInstance;
+            if (listener == null) return;
+            StatusBarNotification[] active = listener.getActiveNotifications();
+            if (active != null) {
+                for (StatusBarNotification sbn : active) {
+                    if (sbn != null && isDialerPkg(sbn.getPackageName())) {
+                        listener.processNotification(sbn);
+                    }
                 }
             }
         } catch (Throwable ignored) {}
@@ -122,6 +121,11 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 return;
             }
 
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
+            boolean inCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_RINGTONE);
+            if (!inCall) return;
+
             Notification n = sbn.getNotification();
             if (n == null || n.extras == null) return;
 
@@ -141,6 +145,7 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
 
             // Check if title, text, or subtext contains a 10-digit phone number
             String combined = title + " " + text + " " + sub + " " + bigTitle + " " + bigText;
+            if (combined.toLowerCase().contains("missed")) return;
             String p10 = null;
             Matcher m = PHONE_PATTERN.matcher(combined);
             if (m.find()) {

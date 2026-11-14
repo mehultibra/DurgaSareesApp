@@ -185,17 +185,6 @@
     </div>
 
     <div id="gridWrapper" onpointerdown="if(document.activeElement) document.activeElement.blur();">
-      <!-- SuperAdmin Live Call Auto-Popup Promo Banner -->
-      <div id="enableCallPopupBanner" style="display:none; background:linear-gradient(135deg, #15803d, #16a34a); color:#fff; padding:7px 14px; font-size:12px; font-weight:bold; align-items:center; justify-content:space-between; box-shadow:0 2px 5px rgba(0,0,0,0.15); z-index:90; cursor:pointer;" onclick="window.enableCallPopupSuperAdmin()">
-        <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
-          <i class="fas fa-phone-volume fa-shake" style="font-size:13px; color:#bbf7d0;"></i>
-          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📞 Tap here to enable Live Call Auto-Popup for Customer Calls</span>
-        </div>
-        <button type="button" onclick="event.stopPropagation(); window.enableCallPopupSuperAdmin()" style="background:#fff; color:#15803d; border:none; padding:3px 9px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;">
-          Enable
-        </button>
-      </div>
-
       <!-- Admin Order on Behalf Notification Banner -->
       <!-- Admin Active Party Banner (Shows Party Name and Station) -->
       <div id="orderOnBehalfBanner" style="display:none; background:#be185d; color:#fff; padding:7px 14px; font-size:12px; font-weight:bold; align-items:center; justify-content:space-between; box-shadow:0 2px 5px rgba(0,0,0,0.15); z-index:90; cursor:pointer;" onclick="openCustomerDetailsModal()">
@@ -856,10 +845,6 @@
             style="display:none; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:bold; cursor:pointer; align-items:center; gap:4px;" title="Enable Live Call Popup when phone rings">
             <i class="fas fa-phone-volume"></i> Enable Call Popup
           </button>
-          <button type="button" onclick="window.pasteAndLookupCaller()"
-            style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:4px;" title="Paste clipboard number and look up caller">
-            <i class="fas fa-clipboard"></i> Paste / Lookup
-          </button>
           <button type="button" onclick="window.startAutomaticContactSync(true)"
             style="background:#f1f5f9; color:#0f172a; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:4px;">
             <i class="fas fa-sync-alt" style="color:var(--myntra-pink);"></i> Sync Phone
@@ -868,8 +853,8 @@
         </div>
       </div>
 
-      <!-- Unified 3-Tab Bar -->
-      <div style="display:flex; border-bottom:2px solid #e2e8f0; margin-top:6px; gap:4px; flex-shrink:0;">
+      <!-- Unified 2-Tab Bar (ERP Directory & CRM Hub) -->
+      <div id="custHubTabBar" style="display:flex; border-bottom:2px solid #e2e8f0; margin-top:6px; gap:4px; flex-shrink:0; transition:max-height 0.25s ease, opacity 0.2s ease, margin 0.25s ease; overflow:hidden;">
         <button type="button" id="hubTabBtn_erp" onclick="window.switchCustomerHubSection('erp')"
           style="flex:1; padding:7px 6px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:var(--myntra-pink); border-bottom:2px solid var(--myntra-pink); margin-bottom:-2px; text-align:center;">
           <i class="fas fa-address-book"></i> ERP Directory
@@ -878,14 +863,12 @@
           style="flex:1; padding:7px 6px; font-size:12px; font-weight:600; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; text-align:center;">
           <i class="fas fa-headset"></i> CRM Hub
         </button>
-        <button type="button" id="hubTabBtn_lookup" onclick="window.switchCustomerHubSection('lookup')"
-          style="flex:1; padding:7px 6px; font-size:12px; font-weight:600; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; text-align:center;">
-          <i class="fas fa-phone-volume"></i> Caller Lookup
-        </button>
       </div>
 
       <!-- SECTION 1: ERP DIRECTORY -->
       <div id="customerHubSection_erp" style="display:flex; flex-direction:column; flex:1; overflow:hidden; min-height:0; margin-top:8px;">
+        <!-- Collapsible Container for Search Controls & Filter Chips (collapses when scrolling customer list) -->
+        <div id="custHubCollapsibleHeader" style="transition:max-height 0.25s ease, opacity 0.2s ease, margin 0.25s ease; overflow:hidden;">
         <!-- 1. Customer Name Search Input with Cross to Clear -->
         <div style="position:relative; margin-bottom:6px;">
           <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#9ca3af; font-size:13px;"></i>
@@ -942,6 +925,14 @@
             Has Invoices
           </button>
         </div>
+      </div>
+
+      <!-- Mini indicator shown when search header is collapsed -->
+      <div id="custHubCollapsedMiniBar" onclick="window.expandCustHubHeader()"
+        style="display:none; padding:4px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; margin-top:4px; margin-bottom:6px; font-size:11px; color:#64748b; align-items:center; justify-content:space-between; cursor:pointer;">
+        <span><i class="fas fa-search" style="color:var(--myntra-pink); margin-right:4px;"></i> Tap to search / restore filters</span>
+        <i class="fas fa-chevron-down" style="font-size:10px;"></i>
+      </div>
 
         <!-- Contact Sync Status & Progress Banner (Admin Only) -->
         <div id="contactSyncBanner" style="display:none; margin-bottom:8px; font-size:11px; padding:6px 10px; border-radius:6px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; align-items:center; justify-content:space-between;">
@@ -1012,26 +1003,6 @@
         <div id="crmHubContentArea" style="flex:1; overflow-y:auto; padding:10px 0;"></div>
       </div>
 
-      <!-- SECTION 3: CALLER 360° LOOKUP -->
-      <div id="customerHubSection_lookup" style="display:none; flex-direction:column; flex:1; overflow:hidden; min-height:0; margin-top:8px;">
-        <div>
-          <div style="position:relative;">
-            <input type="text" id="incomingCallerInput" placeholder="Enter 4-10 digits phone number, party name, or city..."
-              oninput="window.handleIncomingLookupSearch(this.value)"
-              style="width:100%; box-sizing:border-box; padding:9px 32px 9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; background:#f8fafc;">
-            <i class="fas fa-times" onclick="document.getElementById('incomingCallerInput').value=''; window.handleIncomingLookupSearch('');"
-              style="position:absolute; right:10px; top:12px; color:#94a3b8; cursor:pointer; font-size:13px;"></i>
-          </div>
-        </div>
-
-        <div id="incomingCallerDetailsCard" style="margin-top:10px; flex:1; overflow-y:auto;">
-          <div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px;">
-            <i class="fas fa-search" style="font-size:24px; color:#cbd5e1; margin-bottom:6px;"></i>
-            <div>Type any 3 to 10 digits, party name, or city to look up 360° profile</div>
-          </div>
-        </div>
-      </div>
-
     </div>
   </div>
 
@@ -1070,8 +1041,10 @@
         </div>
       </div>
 
-      <!-- In-Window Quick Party Search (Search any customer directly from this window) -->
-      <div id="custRepSearchContainer" style="position:relative; margin-top:6px;">
+      <!-- Collapsible Container for Search, Controls, Actions, Dates & Tabs (collapses when scrolling report) -->
+      <div id="custRepCollapsibleHeader" style="transition:max-height 0.25s ease, opacity 0.2s ease, margin 0.25s ease; overflow:hidden;">
+        <!-- In-Window Quick Party Search (Search any customer directly from this window) -->
+        <div id="custRepSearchContainer" style="position:relative; margin-top:6px;">
         <div style="display:flex; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:3px 8px; gap:6px;">
           <i class="fas fa-search" style="color:#64748b; font-size:11px;"></i>
           <input type="text" id="custRepQuickPartySearch" placeholder="🔍 Switch party: type name, city, phone..."
@@ -1213,6 +1186,14 @@
           style="padding:8px 12px; font-size:12px; font-weight:bold; border:none; background:none; cursor:pointer; color:#64748b; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap;">
           <i class="fas fa-comments" style="color:#0284c7;"></i> 💬 CRM Notes &amp; History
         </button>
+      </div>
+      </div>
+
+      <!-- Mini indicator shown when reports header is collapsed -->
+      <div id="custRepCollapsedMiniBar" onclick="window.expandCustRepHeader()"
+        style="display:none; padding:3px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; margin-top:2px; margin-bottom:4px; font-size:10px; color:#64748b; align-items:center; justify-content:space-between; cursor:pointer;">
+        <span><i class="fas fa-filter" style="color:var(--myntra-pink); margin-right:4px;"></i> Tap to show tabs &amp; filters</span>
+        <i class="fas fa-chevron-down" style="font-size:9px;"></i>
       </div>
 
       <!-- Tab Content Area (Styled like authentic ERP reports) -->

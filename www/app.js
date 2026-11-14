@@ -12136,6 +12136,7 @@ window.openUnifiedCustomerHub = function (section) {
     if (typeof closeModals === 'function') closeModals();
     var modal = document.getElementById('customerDirectoryModal');
     if (modal) modal.style.display = 'flex';
+    if (typeof window.expandCustHubHeader === 'function') window.expandCustHubHeader();
     window.switchCustomerHubSection(section || 'erp');
     if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
 };
@@ -13008,7 +13009,43 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         container.scrollTop = prevScroll;
     }
 
+    var lastCustScroll = container.scrollTop || 0;
     container.onscroll = function () {
+        var st = container.scrollTop;
+        var col = document.getElementById('custHubCollapsibleHeader');
+        var bar = document.getElementById('custHubTabBar');
+        var mini = document.getElementById('custHubCollapsedMiniBar');
+        if (st > lastCustScroll && st > 35) {
+            // Scrolling down (swiping up): collapse headers & search bars
+            if (col) {
+                col.style.maxHeight = '0px';
+                col.style.opacity = '0';
+                col.style.marginBottom = '0px';
+                col.style.pointerEvents = 'none';
+            }
+            if (bar) {
+                bar.style.maxHeight = '0px';
+                bar.style.opacity = '0';
+                bar.style.pointerEvents = 'none';
+            }
+            if (mini) mini.style.display = 'flex';
+        } else if (st < lastCustScroll - 10 || st <= 10) {
+            // Scrolling up (swiping down): restore headers & search bars
+            if (col) {
+                col.style.maxHeight = '500px';
+                col.style.opacity = '1';
+                col.style.marginBottom = '';
+                col.style.pointerEvents = 'auto';
+            }
+            if (bar) {
+                bar.style.maxHeight = '50px';
+                bar.style.opacity = '1';
+                bar.style.pointerEvents = 'auto';
+            }
+            if (mini) mini.style.display = 'none';
+        }
+        lastCustScroll = st <= 0 ? 0 : st;
+
         if (container.scrollTop + container.clientHeight >= container.scrollHeight - 100) {
             if (window._custDirRenderedCount < (window._currentFilteredCustomers || []).length) {
                 window._custDirRenderedCount += 40;
@@ -13016,6 +13053,24 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
             }
         }
     };
+};
+
+window.expandCustHubHeader = function () {
+    var col = document.getElementById('custHubCollapsibleHeader');
+    var bar = document.getElementById('custHubTabBar');
+    var mini = document.getElementById('custHubCollapsedMiniBar');
+    if (col) {
+        col.style.maxHeight = '500px';
+        col.style.opacity = '1';
+        col.style.marginBottom = '';
+        col.style.pointerEvents = 'auto';
+    }
+    if (bar) {
+        bar.style.maxHeight = '50px';
+        bar.style.opacity = '1';
+        bar.style.pointerEvents = 'auto';
+    }
+    if (mini) mini.style.display = 'none';
 };
 
 window.showMoreCustDirCards = function () {
@@ -13533,12 +13588,14 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     // Open Modal
     var modal = document.getElementById('customerDetailReportsModal');
     if (modal) modal.style.display = 'flex';
+    if (typeof window.expandCustRepHeader === 'function') window.expandCustRepHeader();
 
-    // Set Default Date Range (Default to Financial Year 2026-2027)
+    // Set Default Date Range (Default to Last 3 Months as requested)
     var fromEl = document.getElementById('repFromDate');
     var toEl = document.getElementById('repToDate');
     var todayStr = new Date().toISOString().slice(0, 10);
-    if (fromEl) fromEl.value = '2026-04-01';
+    var dPast3m = new Date(Date.now() - (90 * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+    if (fromEl) fromEl.value = dPast3m;
     if (toEl) toEl.value = todayStr;
 
     // Default firm to Durga Sarees (DS)
@@ -13627,6 +13684,18 @@ window.setReportDatePreset = function (preset) {
     window.applyReportDateFilter();
 };
 
+window.expandCustRepHeader = function () {
+    var col = document.getElementById('custRepCollapsibleHeader');
+    var mini = document.getElementById('custRepCollapsedMiniBar');
+    if (col) {
+        col.style.maxHeight = '650px';
+        col.style.opacity = '1';
+        col.style.marginBottom = '';
+        col.style.pointerEvents = 'auto';
+    }
+    if (mini) mini.style.display = 'none';
+};
+
 // 9. Render Active Report Tab (Exact layouts matching user ERP software)
 window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     var myCd = {};
@@ -13637,6 +13706,33 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
 
     var area = document.getElementById('custReportContentArea');
     if (!area) return;
+
+    var lastRepScroll = area.scrollTop || 0;
+    area.onscroll = function () {
+        var st = area.scrollTop;
+        var col = document.getElementById('custRepCollapsibleHeader');
+        var mini = document.getElementById('custRepCollapsedMiniBar');
+        if (st > lastRepScroll && st > 35) {
+            // Scrolling down (swiping up): collapse headers & search bars
+            if (col) {
+                col.style.maxHeight = '0px';
+                col.style.opacity = '0';
+                col.style.marginBottom = '0px';
+                col.style.pointerEvents = 'none';
+            }
+            if (mini) mini.style.display = 'flex';
+        } else if (st < lastRepScroll - 10 || st <= 10) {
+            // Scrolling up (swiping down): restore headers & search bars
+            if (col) {
+                col.style.maxHeight = '650px';
+                col.style.opacity = '1';
+                col.style.marginBottom = '';
+                col.style.pointerEvents = 'auto';
+            }
+            if (mini) mini.style.display = 'none';
+        }
+        lastRepScroll = st <= 0 ? 0 : st;
+    };
 
     var cust = window._currentReportingCustomer;
     if (!cust) return;
@@ -13779,25 +13875,51 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             var sRep = window._accountingReportsCache[sClean] || { finishSales: [], outstanding: [], ledger: [] };
             var pLabel = sAcc.n || sAcc.name || sAcc.c || sAcc.code || '';
             (sRep.finishSales || []).forEach(function (r) {
-                var rowCopy = r.slice();
-                rowCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${pLabel}]`;
-                mergedFs.push(rowCopy);
+                if (Array.isArray(r)) {
+                    var rowCopy = r.slice();
+                    rowCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${pLabel}]`;
+                    mergedFs.push(rowCopy);
+                } else if (r && typeof r === 'object') {
+                    var rowCopy = Object.assign({}, r);
+                    rowCopy.item = (rowCopy.item ? rowCopy.item + ' ' : '') + `[${pLabel}]`;
+                    mergedFs.push(rowCopy);
+                }
             });
             (sRep.outstanding || []).forEach(function (r) {
-                var osCopy = Object.assign({}, r);
-                osCopy.party = (r.party ? r.party + ' ' : '') + `[${pLabel}]`;
-                mergedOs.push(osCopy);
+                if (r && typeof r === 'object') {
+                    var osCopy = Object.assign({}, r);
+                    osCopy.party = (r.party ? r.party + ' ' : '') + `[${pLabel}]`;
+                    mergedOs.push(osCopy);
+                } else if (Array.isArray(r)) {
+                    var osCopy = r.slice();
+                    osCopy[10] = pLabel;
+                    mergedOs.push(osCopy);
+                }
             });
             (sRep.ledger || []).forEach(function (r) {
-                var lCopy = r.slice();
-                lCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${pLabel}]`;
-                mergedLedger.push(lCopy);
+                if (Array.isArray(r)) {
+                    var lCopy = r.slice();
+                    lCopy[2] = (r[2] ? r[2] + ' ' : '') + `[${pLabel}]`;
+                    mergedLedger.push(lCopy);
+                } else if (r && typeof r === 'object') {
+                    var lCopy = Object.assign({}, r);
+                    lCopy.t = (lCopy.t ? lCopy.t + ' ' : '') + `[${pLabel}]`;
+                    mergedLedger.push(lCopy);
+                }
             });
             if (sAcc.b && (sAcc.d === 'Dr' || sAcc.b > 0)) totDeb += sAcc.b;
         });
 
-        mergedFs.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
-        mergedLedger.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
+        mergedFs.sort((a, b) => {
+            var da = Array.isArray(a) ? (a[0] || '') : (a.date || a.d || '');
+            var db = Array.isArray(b) ? (b[0] || '') : (b.date || b.d || '');
+            return String(db).localeCompare(String(da));
+        });
+        mergedLedger.sort((a, b) => {
+            var da = Array.isArray(a) ? (a[0] || '') : (a.d || a.date || '');
+            var db = Array.isArray(b) ? (b[0] || '') : (b.d || b.date || '');
+            return String(da).localeCompare(String(db));
+        });
         partyRep = { finishSales: mergedFs, outstanding: mergedOs, ledger: mergedLedger, bills: {}, isMerged: true };
 
         var balBadge = document.getElementById('custRepBalBadge');
@@ -16409,6 +16531,14 @@ window.checkLiveCallOnResume = async function () {
 
 window.handleDetectedNativeCall = async function (phoneOrName, direction, partyNameHint) {
     if (typeof window.hasCRMAccess === 'function' && !window.hasCRMAccess()) return;
+    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getCallState === 'function') {
+        try {
+            var st = await window.Capacitor.Plugins.CallMonitor.getCallState();
+            if (st && !st.isInCall && direction !== 'incoming') {
+                return;
+            }
+        } catch (e) { }
+    }
     var inputStr = String(phoneOrName || '').trim();
     if (!inputStr) return;
 

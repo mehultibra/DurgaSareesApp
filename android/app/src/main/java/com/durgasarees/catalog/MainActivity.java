@@ -103,6 +103,7 @@ public class MainActivity extends BridgeActivity {
         if ((phone != null && !phone.trim().isEmpty()) || (name != null && !name.trim().isEmpty())) {
             intent.removeExtra("live_call_phone");
             intent.removeExtra("live_call_name");
+            setIntent(new android.content.Intent(this, MainActivity.class));
             try {
                 String safePhone = phone != null ? phone.trim() : "";
                 String safeName = name != null ? name.replace("\\", "\\\\").replace("'", "\\'") : "";

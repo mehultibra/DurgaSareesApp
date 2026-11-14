@@ -64,7 +64,7 @@ public class CallMonitorPlugin extends Plugin {
         try {
             AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
             int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
-            boolean isInCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION);
+            boolean isInCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_RINGTONE);
             JSObject ret = new JSObject();
             ret.put("isInCall", isInCall);
             ret.put("mode", mode);
