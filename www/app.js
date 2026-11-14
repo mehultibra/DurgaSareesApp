@@ -12104,6 +12104,7 @@ window.openUnifiedCustomerHub = function (section) {
     var modal = document.getElementById('customerDirectoryModal');
     if (modal) modal.style.display = 'flex';
     window.switchCustomerHubSection(section || 'erp');
+    if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
 };
 
 window.openCustomerDirectoryModal = function () {
@@ -12203,10 +12204,42 @@ window.parseFirestoreReportDoc = function (d) {
     };
 };
 
-window.loadAccountingDashboardMeta = async function () {
-    if (window._accountingMetaDashboard) return window._accountingMetaDashboard;
+window.formatErpSyncTime = function (isoStr) {
+    if (!isoStr) return '--';
     try {
-        var token = await getCachedAuthToken(true);
+        var d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ', ' +
+               d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch(e) {
+        return isoStr;
+    }
+};
+
+window.updateCustomerHubSyncBadge = async function () {
+    var txtEl = document.getElementById('custDirLastSyncText');
+    var footEl = document.getElementById('custDirFooterSyncText');
+    var rawSync = (window._accountingMetaDashboard && window._accountingMetaDashboard.lastSyncedAt) || window._accountingLastSyncedAt;
+    if (rawSync) {
+        var disp = window.formatErpSyncTime(rawSync);
+        if (txtEl) txtEl.innerText = disp;
+        if (footEl) footEl.innerText = disp;
+    }
+    try {
+        var meta = await window.loadAccountingDashboardMeta();
+        if (meta && meta.lastSyncedAt) {
+            window._accountingLastSyncedAt = meta.lastSyncedAt;
+            var disp = window.formatErpSyncTime(meta.lastSyncedAt);
+            if (txtEl) txtEl.innerText = disp;
+            if (footEl) footEl.innerText = disp;
+        }
+    } catch(e){}
+};
+
+window.loadAccountingDashboardMeta = async function (forceRefresh = false) {
+    if (!forceRefresh && window._accountingMetaDashboard) return window._accountingMetaDashboard;
+    try {
+        var token = await getCachedAuthToken();
         var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
         var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingMeta/dashboard";
         var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
@@ -12225,6 +12258,14 @@ window.loadAccountingDashboardMeta = async function () {
                 }
             }
             window._accountingMetaDashboard = d;
+            if (d.lastSyncedAt) {
+                window._accountingLastSyncedAt = d.lastSyncedAt;
+                var txtEl = document.getElementById('custDirLastSyncText');
+                var footEl = document.getElementById('custDirFooterSyncText');
+                var disp = window.formatErpSyncTime(d.lastSyncedAt);
+                if (txtEl) txtEl.innerText = disp;
+                if (footEl) footEl.innerText = disp;
+            }
             return d;
         }
     } catch(e) {
@@ -12260,12 +12301,17 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
             if (idbData && Array.isArray(idbData.list) && idbData.list.length > 0) {
                 window._compiledCustomersList = idbData.list;
                 window._accountingLastSyncedAt = idbData.syncedAt || null;
+                if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
                 if (syncIcon) syncIcon.classList.remove('fa-spin');
                 window.renderCustomerDirectoryUI();
 
                 // Check AccountingMeta/dashboard in background to see if cloud data changed
                 var meta = await window.loadAccountingDashboardMeta();
-                if (meta && meta.lastSyncedAt && meta.lastSyncedAt === window._accountingLastSyncedAt) {
+                if (meta && meta.lastSyncedAt) {
+                    window._accountingLastSyncedAt = meta.lastSyncedAt;
+                    if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
+                }
+                if (meta && meta.lastSyncedAt && meta.lastSyncedAt === idbData.syncedAt) {
                     return; // Cache is completely fresh! Zero cloud re-download required.
                 }
             }
@@ -12285,7 +12331,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
     var meta = await window.loadAccountingDashboardMeta();
 
     try {
-        var token = await getCachedAuthToken(true);
+        var token = await getCachedAuthToken();
         var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
         var loadedList = [];
 
@@ -12399,7 +12445,8 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
             if (typeof window.mergeFirebasePartyLinks === 'function') {
                 window.mergeFirebasePartyLinks(window._compiledCustomersList);
             }
-            window._accountingLastSyncedAt = (meta && meta.lastSyncedAt) || new Date().toISOString();
+            window._accountingLastSyncedAt = (meta && meta.lastSyncedAt) || window._accountingLastSyncedAt || null;
+            if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
 
             // Cache in IndexedDB for fast subsequent opens
             try {
@@ -12568,7 +12615,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
             clearTimeout(window._erpDirSearchDebounce);
             window._erpDirSearchDebounce = setTimeout(async function () {
                 try {
-                    var token = await getCachedAuthToken(true);
+                    var token = await getCachedAuthToken();
                     var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
                     var uQ = (tokens[0] || query).toUpperCase();
 
