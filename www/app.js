@@ -13574,6 +13574,24 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
         }
     }
 
+    if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
+        var isTargetAgentCheck = Boolean(cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG'))));
+        if (!isTargetAgentCheck) {
+            var topSister = window._currentReportingSisterAccounts.slice().sort(function (a, b) {
+                var cntA = parseInt(a.salesBillsCount || a.pb || 0) || 0;
+                var cntB = parseInt(b.salesBillsCount || b.pb || 0) || 0;
+                if (cntB !== cntA) return cntB - cntA;
+                var debA = parseFloat(a.totalDebit || a.b || 0) || 0;
+                var debB = parseFloat(b.totalDebit || b.b || 0) || 0;
+                return debB - debA;
+            })[0];
+            if (topSister) {
+                cust = topSister;
+                window._currentReportingCustomer = cust;
+            }
+        }
+    }
+
     // Reset In-Window Quick Party Search
     var qSearchInp = document.getElementById('custRepQuickPartySearch');
     if (qSearchInp) qSearchInp.value = '';
@@ -14065,12 +14083,15 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         var mergedOs = [];
         var mergedLedger = [];
         var totDeb = 0;
+        var sisterDispatchMap = new Map();
         window._currentReportingSisterAccounts.forEach(function (sAcc) {
             var sCode = sAcc.c || sAcc.code || sAcc.n || sAcc.name || '';
             var sClean = window.sanitizeDocId ? window.sanitizeDocId(sCode) : String(sCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
             var sRep = window._accountingReportsCache[sClean] || { finishSales: [], outstanding: [], ledger: [] };
             var pLabel = sAcc.n || sAcc.name || sAcc.c || sAcc.code || '';
             var isAccAgent = Boolean(sAcc.role === 'agent' || sAcc.isAgent || sAcc.atype === '12' || (sAcc.c && String(sAcc.c).startsWith('AG')));
+            var sDispatchAmt = 0;
+            var sDispatchPcs = 0;
             (sRep.finishSales || []).forEach(function (r) {
                 if (Array.isArray(r)) {
                     var rowCopy = r.slice();
@@ -14079,14 +14100,19 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                     }
                     rowCopy.party = rowCopy[18] || pLabel;
                     mergedFs.push(rowCopy);
+                    sDispatchAmt += (parseFloat(r[10]) || parseFloat(r[9]) || 0);
+                    sDispatchPcs += (parseInt(r[6]) || 0);
                 } else if (r && typeof r === 'object') {
                     var rowCopy = Object.assign({}, r);
                     if (!rowCopy.party && !isAccAgent) {
                         rowCopy.party = pLabel;
                     }
                     mergedFs.push(rowCopy);
+                    sDispatchAmt += (parseFloat(r.amt || r.net || r.bamt) || 0);
+                    sDispatchPcs += (parseInt(r.pcs || r.tpcs) || 0);
                 }
             });
+            sisterDispatchMap.set(sCode, { amt: sDispatchAmt, pcs: sDispatchPcs, count: (sRep.finishSales || []).length, acc: sAcc });
             (sRep.outstanding || []).forEach(function (r) {
                 if (r && typeof r === 'object') {
                     var osCopy = Object.assign({}, r);
@@ -14123,6 +14149,42 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             var db = Array.isArray(b) ? (b[0] || '') : (b.d || b.date || '');
             return String(da).localeCompare(String(db));
         });
+
+        var isTargetAgentRep = Boolean(cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG'))));
+        if (!isTargetAgentRep && sisterDispatchMap.size > 0) {
+            var highestSisterObj = Array.from(sisterDispatchMap.values()).sort(function (a, b) {
+                if (b.amt !== a.amt) return b.amt - a.amt;
+                if (b.pcs !== a.pcs) return b.pcs - a.pcs;
+                return b.count - a.count;
+            })[0];
+            if (highestSisterObj && highestSisterObj.acc) {
+                cust = highestSisterObj.acc;
+                window._currentReportingCustomer = cust;
+                var nameEl = document.getElementById('custRepName');
+                if (nameEl) nameEl.innerText = cust.n || cust.c;
+                var cityEl = document.getElementById('custRepCity');
+                if (cityEl) {
+                    cityEl.innerHTML = cust.ct ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:9px;"></i> ${escHtml(cust.ct)}` : '';
+                    cityEl.style.display = cust.ct ? 'inline-flex' : 'none';
+                }
+                var gstEl = document.getElementById('custRepGst');
+                if (gstEl) {
+                    gstEl.innerText = cust.g ? `GST: ${cust.g}` : '';
+                    gstEl.style.display = cust.g ? 'inline-flex' : 'none';
+                }
+                var agRow = document.getElementById('custRepAgentRow');
+                var agNameEl = document.getElementById('custRepAgentName');
+                var agVal = cust.ag || cust.agent || (Array.isArray(cust.agents) && cust.agents.length > 0 ? cust.agents.join(', ') : '');
+                if (agRow && agNameEl) {
+                    if (agVal) {
+                        agNameEl.innerText = agVal;
+                        agRow.style.display = 'inline-flex';
+                    } else {
+                        agRow.style.display = 'none';
+                    }
+                }
+            }
+        }
         partyRep = { finishSales: mergedFs, outstanding: mergedOs, ledger: mergedLedger, bills: {}, isMerged: true };
 
         var balBadge = document.getElementById('custRepBalBadge');
@@ -14268,7 +14330,10 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             ? `--- FROM DATE:${fmtDate(fromDate || '2026-04-01')} TO DATE:${fmtDate(toDate || '2027-03-31')}`
             : `--- FINANCIAL YEAR 2026-2027`;
 
-        var showAgentPartyCol = isViewingAgent && (partyRep.isMerged || fsList.some(r => r[18] || r.party));
+        var fsPartyNames = new Set(fsList.map(r => String((Array.isArray(r) ? r[18] : (r.party || r[18])) || '').trim()).filter(Boolean));
+        var hasMultipleParties = fsPartyNames.size > 1;
+        var showAgentPartyCol = isViewingAgent && hasMultipleParties;
+        var showMergedPartyCol = !showAgentPartyCol && partyRep.isMerged && hasMultipleParties;
 
         var html = `
         <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:10px; color:#1e293b; width:100%;">
@@ -14292,7 +14357,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                   <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">DAYS</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">TRANSPO</th>
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">L/R NO.</th>
-                  ${(!showAgentPartyCol && partyRep.isMerged) ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff; white-space:nowrap;">CUSTOMER NAME</th>' : ''}
+                  ${showMergedPartyCol ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff; white-space:nowrap;">CUSTOMER NAME</th>' : ''}
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DESTINATION</th>
                   <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">P/</th>
                   <th style="padding:4px 6px;">HASTE</th>
@@ -14371,7 +14436,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
               <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9;">${daysCell}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${trnCell}</td>
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9;">${lrCell}</td>
-              ${(!showAgentPartyCol && partyRep.isMerged) ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc; white-space:nowrap;">${isFirst ? escHtml(r[18] || r.party || '') : ''}</td>` : ''}
+              ${showMergedPartyCol ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc; white-space:nowrap;">${isFirst ? escHtml(r[18] || r.party || '') : ''}</td>` : ''}
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#64748b;">${destCell}</td>
               <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9;">${prclCell}</td>
               <td style="padding:4px 6px; color:#64748b;">${hasteCell}</td>
@@ -14389,7 +14454,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                   <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">${avgRate.toFixed(2)}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totGross).toLocaleString('en-IN')}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #bfdbfe;">₹ ${Math.round(totBill).toLocaleString('en-IN')}</td>
-                  <td colspan="${(!showAgentPartyCol && partyRep.isMerged) ? 5 : 4}" style="padding:6px; border-right:1px solid #bfdbfe;"></td>
+                  <td colspan="${showMergedPartyCol ? 5 : 4}" style="padding:6px; border-right:1px solid #bfdbfe;"></td>
                   <td style="padding:6px; text-align:center; border-right:1px solid #bfdbfe;">${totParcels}</td>
                   <td></td>
                 </tr>
@@ -14496,7 +14561,10 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             ? `&nbsp;&nbsp; <b>DATES:</b> ${fmtDate(fromDate || '2026-04-01')} TO ${fmtDate(toDate || '2027-03-31')}`
             : '';
 
-        var showAgentOsPartyCol = isViewingAgent && (partyRep.isMerged || osList.some(r => r.party));
+        var osPartyNames = new Set(osList.map(r => String(r.party || (Array.isArray(r) ? r[10] : '') || '').trim()).filter(Boolean));
+        var hasMultipleOsParties = osPartyNames.size > 1;
+        var showAgentOsPartyCol = isViewingAgent && hasMultipleOsParties;
+        var showMergedOsPartyCol = !showAgentOsPartyCol && partyRep.isMerged && hasMultipleOsParties;
 
         var html = `
         <div id="erpReportPrintWrapper" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:10px; color:#1e293b; width:100%;">
@@ -14514,7 +14582,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                   <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0;">PAID AMT.</th>
                   <th style="padding:4px 6px; text-align:right; border-right:1px solid #e2e8f0; background:#fee2e2; color:#991b1b;">PEND. AMT.</th>
                   <th style="padding:4px 6px; text-align:center; border-right:1px solid #e2e8f0;">DA</th>
-                  ${(!showAgentOsPartyCol && partyRep.isMerged) ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff; white-space:nowrap;">CUSTOMER NAME</th>' : ''}
+                  ${showMergedOsPartyCol ? '<th style="padding:4px 6px; border-right:1px solid #e2e8f0; color:#1e40af; background:#eff6ff; white-space:nowrap;">CUSTOMER NAME</th>' : ''}
                   <th style="padding:4px 6px; border-right:1px solid #e2e8f0;">DESTINATION</th>
                   <th style="padding:4px 6px;">BROKER</th>
                 </tr>
@@ -14540,7 +14608,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; color:#16a34a;">${r.paid ? r.paid.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:right; border-right:1px solid #f1f5f9; font-weight:bold; color:#dc2626; background:#fff1f2;">${r.pamt ? r.pamt.toFixed(2) : '0.00'}</td>
               <td style="padding:4px 6px; text-align:center; border-right:1px solid #f1f5f9; font-weight:bold; color:#b91c1c;">${r.du || 0}</td>
-              ${(!showAgentOsPartyCol && partyRep.isMerged) ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc; white-space:nowrap;">${escHtml(r.party || '')}</td>` : ''}
+              ${showMergedOsPartyCol ? `<td style="padding:4px 6px; border-right:1px solid #f1f5f9; font-weight:bold; color:#1e40af; background:#f8fafc; white-space:nowrap;">${escHtml(r.party || '')}</td>` : ''}
               <td style="padding:4px 6px; border-right:1px solid #f1f5f9; color:#475569;">${escHtml(r.ct)}</td>
               <td style="padding:4px 6px; color:#64748b;">${escHtml(r.ag)}</td>
             </tr>`;
@@ -14558,7 +14626,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                   <td style="padding:6px; text-align:right; border-right:1px solid #fecaca;">${totPaid ? ('-₹ ' + Math.abs(totPaid).toFixed(2)) : '0.00'}</td>
                   <td style="padding:6px; text-align:right; border-right:1px solid #fecaca; font-size:11px; color:#dc2626; font-weight:bold;">₹ ${totPend.toFixed(2)}</td>
                   <td style="padding:6px; text-align:center; border-right:1px solid #fecaca;">${avgDays}</td>
-                  <td colspan="${(!showAgentOsPartyCol && partyRep.isMerged) ? 3 : 2}"></td>
+                  <td colspan="${showMergedOsPartyCol ? 3 : 2}"></td>
                 </tr>
               </tfoot>
             </table>
@@ -17771,6 +17839,20 @@ window.loadCRMHubFollowups = async function () {
                 }
             }
 
+            var recentLogs = [];
+            if (f.recentLogsJson && f.recentLogsJson.stringValue) {
+                try { recentLogs = JSON.parse(f.recentLogsJson.stringValue); } catch(e){}
+            }
+            if (recentLogs.length === 0 && (f.lastNote || f.lastDisp)) {
+                recentLogs = [{
+                    createdAt: f.lastCallAt ? f.lastCallAt.timestampValue : '',
+                    disposition: f.lastDisposition ? f.lastDisposition.stringValue : '',
+                    note: f.lastNote ? f.lastNote.stringValue : '',
+                    staffName: f.lastStaffName ? f.lastStaffName.stringValue : '',
+                    promisedAmount: f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0
+                }];
+            }
+
             return {
                 docId: docId,
                 code: cleanCode,
@@ -17784,7 +17866,8 @@ window.loadCRMHubFollowups = async function () {
                 lastNote: f.lastNote ? f.lastNote.stringValue : '',
                 followUpDate: f.nextFollowUpDate ? f.nextFollowUpDate.stringValue : '',
                 promisedAmt: f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0,
-                status: f.status ? f.status.stringValue : 'pending'
+                status: f.status ? f.status.stringValue : 'pending',
+                recentLogs: recentLogs
             };
         }).filter(function (x) {
             return x.status !== 'done';
@@ -17809,7 +17892,7 @@ window.loadCRMHubFollowups = async function () {
         }
 
         var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
-        followups.forEach(function (fu) {
+        followups.forEach(function (fu, idx) {
             var isOverdue = fu.followUpDate && fu.followUpDate < todayStr;
             var isToday = fu.followUpDate === todayStr;
             var dateBadge = fu.followUpDate ? (
@@ -17825,28 +17908,52 @@ window.loadCRMHubFollowups = async function () {
             var safeAgent = encodeURIComponent(fu.agent || '').replace(/'/g, "%27");
             html += `
             <div class="crm-followup-card" style="border:1px solid #e2e8f0; border-radius:10px; background:#fff; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-                <div>
-                  <div style="font-weight:bold; font-size:14px; color:#0f172a;">${escHtml(fu.name)}</div>
-                  <div style="font-size:11px; color:#64748b; margin-top:2px;">
-                    ${fu.station ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${escHtml(fu.station)} | ` : ''}
-                    Agent: ${escHtml(fu.agent || 'DIRECT')}
+              <div onclick="window.toggleCRMFollowupHistory(${idx})" style="cursor:pointer;" title="Click to view all past conversations">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                  <div>
+                    <div style="font-weight:bold; font-size:14px; color:#0f172a;">${escHtml(fu.name)}</div>
+                    <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                      ${fu.station ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:10px;"></i> ${escHtml(fu.station)} | ` : ''}
+                      Agent: ${escHtml(fu.agent || 'DIRECT')}
+                    </div>
                   </div>
+                  <div>${dateBadge}</div>
                 </div>
-                <div>${dateBadge}</div>
+
+                ${fu.lastDisp ? `
+                <div style="margin-top:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                  <span style="font-size:11px; font-weight:600; color:#0f172a; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${escHtml(fu.lastDisp)}</span>
+                  ${fu.promisedAmt > 0 ? `<span style="font-size:11px; font-weight:bold; color:#16a34a; background:#dcfce7; padding:2px 6px; border-radius:4px;">Promise: ₹ ${fu.promisedAmt.toLocaleString('en-IN')}</span>` : ''}
+                  ${fu.lastStaff ? `<span style="font-size:10px; color:#64748b;">by ${escHtml(fu.lastStaff)}</span>` : ''}
+                </div>` : ''}
+
+                ${fu.lastNote ? `
+                <div style="font-size:12px; color:#475569; background:#f8fafc; border-left:3px solid #0284c7; padding:6px 8px; margin-top:6px; border-radius:0 4px 4px 0; line-height:1.3;">
+                  ${escHtml(fu.lastNote)}
+                </div>` : ''}
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:11px; color:#0284c7; font-weight:600;">
+                  <span><i class="fas fa-history"></i> ${fu.recentLogs.length > 0 ? fu.recentLogs.length + ' Conversation' + (fu.recentLogs.length > 1 ? 's' : '') + ' Logged (Click to view)' : 'No previous conversations'}</span>
+                  <i class="fas fa-chevron-down" id="fu_icon_${idx}" style="font-size:10px; transition:transform 0.2s;"></i>
+                </div>
               </div>
 
-              ${fu.lastDisp ? `
-              <div style="margin-top:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                <span style="font-size:11px; font-weight:600; color:#0f172a; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${escHtml(fu.lastDisp)}</span>
-                ${fu.promisedAmt > 0 ? `<span style="font-size:11px; font-weight:bold; color:#16a34a; background:#dcfce7; padding:2px 6px; border-radius:4px;">Promise: ₹ ${fu.promisedAmt.toLocaleString('en-IN')}</span>` : ''}
-                ${fu.lastStaff ? `<span style="font-size:10px; color:#64748b;">by ${escHtml(fu.lastStaff)}</span>` : ''}
-              </div>` : ''}
-
-              ${fu.lastNote ? `
-              <div style="font-size:12px; color:#475569; background:#f8fafc; border-left:3px solid #0284c7; padding:6px 8px; margin-top:6px; border-radius:0 4px 4px 0; line-height:1.3;">
-                ${escHtml(fu.lastNote)}
-              </div>` : ''}
+              <div id="fu_history_${idx}" style="display:none; margin-top:8px; padding-top:8px; border-top:1px dashed #cbd5e1; max-height:220px; overflow-y:auto;">
+                <div style="font-size:11px; font-weight:bold; color:#334155; margin-bottom:6px;"><i class="fas fa-comments"></i> Previous Conversation History:</div>
+                ${fu.recentLogs.length > 0 ? fu.recentLogs.map(function(log) {
+                    var logDate = log.createdAt ? (new Date(log.createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }) + ' ' + new Date(log.createdAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })) : 'Earlier';
+                    return `
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-left:3px solid #0284c7; border-radius:4px; padding:6px 8px; margin-bottom:6px; font-size:11px;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                        <span style="font-weight:bold; color:#0f172a;">${escHtml(log.disposition || 'Note')}</span>
+                        <span style="font-size:9.5px; color:#64748b;">${escHtml(logDate)}</span>
+                      </div>
+                      ${log.staffName ? `<div style="font-size:9.5px; color:#64748b; margin-bottom:2px;">Staff: <b>${escHtml(log.staffName)}</b></div>` : ''}
+                      ${log.note ? `<div style="color:#334155; line-height:1.3; margin-top:2px;">${escHtml(log.note)}</div>` : ''}
+                      ${log.promisedAmount ? `<div style="color:#16a34a; font-weight:bold; font-size:10px; margin-top:2px;">Promise: ₹ ${Number(log.promisedAmount).toLocaleString('en-IN')}</div>` : ''}
+                    </div>`;
+                }).join('') : '<div style="font-size:10.5px; color:#94a3b8; font-style:italic;">No recorded notes found.</div>'}
+              </div>
 
               <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px dashed #f1f5f9;">
                 <div style="display:flex; gap:6px;">
@@ -17876,6 +17983,19 @@ window.loadCRMHubFollowups = async function () {
 
     } catch (e) {
         area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Error loading follow-ups: ' + e.message + '</div>';
+    }
+};
+
+window.toggleCRMFollowupHistory = function (idx) {
+    var el = document.getElementById('fu_history_' + idx);
+    var icon = document.getElementById('fu_icon_' + idx);
+    if (!el) return;
+    if (el.style.display === 'none') {
+        el.style.display = 'block';
+        if (icon) icon.style.transform = 'rotate(180deg)';
+    } else {
+        el.style.display = 'none';
+        if (icon) icon.style.transform = 'rotate(0deg)';
     }
 };
 
