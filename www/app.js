@@ -13222,35 +13222,156 @@ window.switchCustomerReportsAccount = function (newCode) {
     }
 };
 
+window.fetchPartyCRMLogs = async function (cust) {
+    if (!cust) return { allLogs: [], latestField: null };
+    try {
+        var token = await getCachedAuthToken(true);
+        var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+
+        var candidateKeys = new Set();
+        var addKey = function (v) {
+            if (!v) return;
+            var s = String(v).trim();
+            if (!s) return;
+            if (window.sanitizeDocId) candidateKeys.add(window.sanitizeDocId(s));
+            candidateKeys.add(s.replace(/[\/\.#\?\[\]\s]/g, '_'));
+            candidateKeys.add(encodeURIComponent(s));
+            var p10 = s.replace(/\D/g, '').slice(-10);
+            if (p10.length === 10) {
+                candidateKeys.add(p10);
+                candidateKeys.add('91' + p10);
+                candidateKeys.add('+91' + p10);
+                candidateKeys.add('%2091' + p10);
+                candidateKeys.add(' 91' + p10);
+            }
+        };
+
+        addKey(cust.c);
+        addKey(cust.n);
+        addKey(cust.p);
+        (cust.cleanPhones || []).forEach(addKey);
+        (cust.phones || []).forEach(addKey);
+
+        if (window._currentReportingSisterAccounts && Array.isArray(window._currentReportingSisterAccounts)) {
+            window._currentReportingSisterAccounts.forEach(function (s) {
+                addKey(s.c || s.code);
+                addKey(s.n || s.name);
+                addKey(s.p || s.phone);
+                (s.cleanPhones || []).forEach(addKey);
+            });
+        }
+
+        var keyList = Array.from(candidateKeys).filter(Boolean);
+        var fetchPromises = keyList.map(function (k) {
+            return fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + k, { headers: headers })
+                .then(function (r) { return r && r.ok ? r.json() : null; })
+                .catch(function () { return null; });
+        });
+
+        var results = await Promise.all(fetchPromises);
+        var validDocs = results.filter(function (d) { return d && d.fields; });
+
+        var allLogs = [];
+        var seenLogIds = new Set();
+        var latestField = null;
+
+        validDocs.forEach(function (doc) {
+            var f = doc.fields;
+            if (!latestField && (f.lastNote || f.lastDisposition || f.lastCallAt)) {
+                latestField = f;
+            }
+            if (f.recentLogsJson && f.recentLogsJson.stringValue) {
+                try {
+                    var parsed = JSON.parse(f.recentLogsJson.stringValue);
+                    if (Array.isArray(parsed)) {
+                        parsed.forEach(function (log) {
+                            var logKey = log.id || (String(log.createdAt || '') + '_' + String(log.note || ''));
+                            if (!seenLogIds.has(logKey)) {
+                                seenLogIds.add(logKey);
+                                allLogs.push(log);
+                            }
+                        });
+                    }
+                } catch(e){}
+            }
+            if (allLogs.length === 0 && (f.lastNote || f.lastDisposition)) {
+                var singleKey = (f.lastCallAt ? f.lastCallAt.timestampValue : '') + '_' + (f.lastNote ? f.lastNote.stringValue : '');
+                if (!seenLogIds.has(singleKey)) {
+                    seenLogIds.add(singleKey);
+                    allLogs.push({
+                        disposition: f.lastDisposition ? f.lastDisposition.stringValue : '',
+                        note: f.lastNote ? f.lastNote.stringValue : '',
+                        promisedAmount: f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0,
+                        promisedDate: f.promisedDate ? f.promisedDate.stringValue : '',
+                        staffName: f.lastStaffName ? f.lastStaffName.stringValue : '',
+                        createdAt: f.lastCallAt ? (f.lastCallAt.timestampValue || f.lastCallAt.stringValue) : ''
+                    });
+                }
+            }
+        });
+
+        allLogs.sort(function (a, b) {
+            return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+        });
+
+        return { allLogs: allLogs, latestField: latestField || (allLogs[0] ? {
+            lastDisposition: { stringValue: allLogs[0].disposition || '' },
+            lastNote: { stringValue: allLogs[0].note || '' },
+            promisedAmount: { doubleValue: allLogs[0].promisedAmount || 0 },
+            promisedDate: { stringValue: allLogs[0].promisedDate || '' },
+            lastCallAt: { timestampValue: allLogs[0].createdAt || '' }
+        } : null) };
+    } catch (e) {
+        return { allLogs: [], latestField: null };
+    }
+};
+
 window.loadCustRepLastTalkBanner = async function (partyCode) {
     var lastTalkBanner = document.getElementById('custRepLastTalkBanner');
     if (!lastTalkBanner) return;
     try {
-        var token = await getCachedAuthToken(true);
-        var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-        var safeC = window.sanitizeDocId ? window.sanitizeDocId(partyCode) : String(partyCode || '').replace(/[\/\.\s]/g, '_');
-        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeC, { headers: headers });
-        if (res && res.ok) {
-            var crmDoc = await res.json();
-            var f = crmDoc && crmDoc.fields;
-            if (f && (f.lastNote || f.lastDisposition || f.lastCallAt)) {
-                var disp = f.lastDisposition ? f.lastDisposition.stringValue : '';
-                var note = f.lastNote ? f.lastNote.stringValue : '';
-                var promised = f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.stringValue || f.promisedAmount.integerValue || '') : '';
-                var promisedDate = f.promisedDate ? f.promisedDate.stringValue : '';
-                var callTime = f.lastCallAt ? new Date(f.lastCallAt.timestampValue || f.lastCallAt.stringValue).toLocaleDateString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
+        var cust = window._currentReportingCustomer || { c: partyCode };
+        var res = await window.fetchPartyCRMLogs(cust);
+        var allLogs = res.allLogs || [];
+        var f = res.latestField;
+        if (f && (f.lastNote || f.lastDisposition || f.lastCallAt || allLogs.length > 0)) {
+            var disp = f.lastDisposition ? f.lastDisposition.stringValue : (allLogs[0] ? allLogs[0].disposition : '');
+            var note = f.lastNote ? f.lastNote.stringValue : (allLogs[0] ? allLogs[0].note : '');
+            var promised = f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.stringValue || f.promisedAmount.integerValue || '') : (allLogs[0] ? allLogs[0].promisedAmount : '');
+            var promisedDate = f.promisedDate ? f.promisedDate.stringValue : (allLogs[0] ? allLogs[0].promisedDate : '');
+            var callTime = f.lastCallAt ? new Date(f.lastCallAt.timestampValue || f.lastCallAt.stringValue).toLocaleDateString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : (allLogs[0] && allLogs[0].createdAt ? new Date(allLogs[0].createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : 'Recent');
 
-                lastTalkBanner.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
-                        <span style="font-weight:bold; color:#0369a1;"><i class="fas fa-comments"></i> Last Conversation (${callTime || 'Recent'}):</span>
-                        ${disp ? `<span style="background:#e0f2fe; color:#0369a1; padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">${escHtml(disp)}</span>` : ''}
+            lastTalkBanner.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                    <span style="font-weight:bold; color:#0369a1;"><i class="fas fa-comments"></i> Latest Conversation (${callTime || 'Recent'}):</span>
+                    ${disp ? `<span style="background:#e0f2fe; color:#0369a1; padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">${escHtml(disp)}</span>` : ''}
+                </div>
+                <div style="color:#334155; font-size:11px;"><b>Note:</b> ${escHtml(note || 'Call discussion recorded')}</div>
+                ${promised ? `<div style="color:#92400e; font-weight:bold; font-size:10px; margin-top:2px;">💰 Promised: ₹ ${promised} ${promisedDate ? ('by ' + promisedDate) : ''}</div>` : ''}
+                ${allLogs.length > 1 ? `
+                <div style="margin-top:5px; border-top:1px dashed #bae6fd; padding-top:4px;">
+                    <div onclick="var el=document.getElementById('rep_all_crm_history'); if(el){el.style.display=el.style.display==='none'?'block':'none';}" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-size:10.5px; color:#0284c7; font-weight:bold;">
+                        <span><i class="fas fa-history"></i> View All ${allLogs.length} Conversations</span>
+                        <i class="fas fa-chevron-down"></i>
                     </div>
-                    <div style="color:#334155; font-size:11px;"><b>Note:</b> ${escHtml(note || 'Call discussion recorded')}</div>
-                    ${promised ? `<div style="color:#92400e; font-weight:bold; font-size:10px; margin-top:2px;">💰 Promised: ₹ ${promised} ${promisedDate ? ('by ' + promisedDate) : ''}</div>` : ''}
-                `;
-                lastTalkBanner.style.display = 'block';
-                return;
-            }
+                    <div id="rep_all_crm_history" style="display:none; max-height:160px; overflow-y:auto; margin-top:6px; display:flex; flex-direction:column; gap:4px;">
+                        ${allLogs.map(function(l) {
+                            var dt = l.createdAt ? new Date(l.createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) + ' ' + new Date(l.createdAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }) : '';
+                            return `
+                            <div style="background:#fff; border:1px solid #e0f2fe; border-left:3px solid #0284c7; border-radius:4px; padding:4px 6px; font-size:10.5px;">
+                                <div style="display:flex; justify-content:space-between; font-weight:600; color:#0f172a;">
+                                    <span>${escHtml(l.disposition || 'Note')} ${l.staffName ? `<span style="font-weight:normal; color:#64748b;">(by ${escHtml(l.staffName)})</span>` : ''}</span>
+                                    <span style="font-size:9.5px; color:#64748b;">${dt}</span>
+                                </div>
+                                ${l.note ? `<div style="color:#334155; margin-top:2px;">${escHtml(l.note)}</div>` : ''}
+                                ${l.promisedAmount ? `<div style="color:#16a34a; font-weight:bold; font-size:9.5px; margin-top:1px;">Promise: ₹ ${Number(l.promisedAmount).toLocaleString('en-IN')}</div>` : ''}
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>` : ''}
+            `;
+            lastTalkBanner.style.display = 'block';
+            return;
         }
         lastTalkBanner.style.display = 'none';
     } catch(e) {
@@ -13297,6 +13418,38 @@ window.saveCustRepQuickNote = async function (disposition) {
         var safeC = window.sanitizeDocId ? window.sanitizeDocId(cust.c) : String(cust.c || '').replace(/[\/\.\s]/g, '_');
         var nowIso = new Date().toISOString();
 
+        var existingLogs = [];
+        try {
+            var gRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeC, { headers: headers });
+            if (gRes && gRes.ok) {
+                var gd = await gRes.json();
+                if (gd && gd.fields && gd.fields.recentLogsJson) {
+                    existingLogs = JSON.parse(gd.fields.recentLogsJson.stringValue || '[]');
+                }
+            }
+        } catch(e){}
+
+        var staffProfile = null;
+        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+        var staffName = (staffProfile && staffProfile.name) || 'Admin';
+
+        existingLogs.unshift({
+            id: 'quick_' + Date.now(),
+            partyCode: cust.c || '',
+            partyName: cust.n || cust.c || '',
+            phone: cust.p || '',
+            station: cust.ct || '',
+            agent: cust.ag || '',
+            staffName: staffName,
+            callType: 'outgoing',
+            disposition: disposition,
+            note: noteVal,
+            promisedAmount: promisedAmt,
+            followUpDate: promisedDt,
+            createdAt: nowIso
+        });
+        if (existingLogs.length > 25) existingLogs = existingLogs.slice(0, 25);
+
         var body = {
             fields: {
                 partyCode: { stringValue: cust.c || '' },
@@ -13309,11 +13462,12 @@ window.saveCustRepQuickNote = async function (disposition) {
                 promisedAmount: { doubleValue: promisedAmt },
                 promisedDate: { stringValue: promisedDt },
                 status: { stringValue: disposition === 'Promised to Pay' ? 'promised' : 'contacted' },
+                recentLogsJson: { stringValue: JSON.stringify(existingLogs) },
                 updatedAt: { timestampValue: nowIso }
             }
         };
 
-        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeC + "?updateMask.fieldPaths=lastCallAt&updateMask.fieldPaths=lastDisposition&updateMask.fieldPaths=lastNote&updateMask.fieldPaths=promisedAmount&updateMask.fieldPaths=promisedDate&updateMask.fieldPaths=status&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=partyCode&updateMask.fieldPaths=partyName&updateMask.fieldPaths=phone&updateMask.fieldPaths=station", {
+        await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeC + "?updateMask.fieldPaths=lastCallAt&updateMask.fieldPaths=lastDisposition&updateMask.fieldPaths=lastNote&updateMask.fieldPaths=promisedAmount&updateMask.fieldPaths=promisedDate&updateMask.fieldPaths=status&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=partyCode&updateMask.fieldPaths=partyName&updateMask.fieldPaths=phone&updateMask.fieldPaths=station&updateMask.fieldPaths=recentLogsJson", {
             method: 'PATCH',
             headers: headers,
             body: JSON.stringify(body)
@@ -15541,6 +15695,7 @@ window.mergeFirebasePartyLinks = async function (list) {
         // Add any Firebase parties not yet in local ERP list so all contacts are searchable
         var existingCodes = new Set(list.map(c => (c.c || c.n || '').trim().toUpperCase()));
         linksMap.forEach(function (l, code) {
+            if (/^\+?\d{10,13}$/.test(code)) return; // Strictly skip phone index keys
             if (!existingCodes.has(code)) {
                 var cleanP = l.phone ? String(l.phone).replace(/\D/g, '').slice(-10) : '';
                 var newCust = {
@@ -16235,6 +16390,22 @@ window.startAutomaticContactSync = async function (isManual) {
         return Array.isArray(c.cleanPhones) && c.cleanPhones.length > 0;
     });
 
+    // Ensure Agents (role === 'agent', isAgent, atype === '12') are sorted FIRST
+    candidateList.sort(function (a, b) {
+        var isAgA = Boolean(a.role === 'agent' || a.isAgent || a.atype === '12');
+        var isAgB = Boolean(b.role === 'agent' || b.isAgent || b.atype === '12');
+        if (isAgA && !isAgB) return -1;
+        if (!isAgA && isAgB) return 1;
+        return 0;
+    });
+
+    var agentPhones = new Set();
+    candidateList.forEach(function (c) {
+        if (c.role === 'agent' || c.isAgent || c.atype === '12') {
+            (c.cleanPhones || []).forEach(p => agentPhones.add(p));
+        }
+    });
+
     if (candidateList.length === 0) {
         if (banner) banner.style.display = 'none';
         if (isManual) alert("No customer contacts with valid phone numbers to sync.");
@@ -16257,14 +16428,21 @@ window.startAutomaticContactSync = async function (isManual) {
     for (var b = 0; b < candidateList.length; b += BATCH_SIZE) {
         var chunk = candidateList.slice(b, b + BATCH_SIZE);
         var batchPayload = chunk.map(function (c) {
+            var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12');
             var pName = (c.n || c.name || c.firm || '').trim();
             var pStation = (c.ct || c.station || '').trim();
             var pAgent = (c.ag || c.agent || '').trim();
-            var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
+            var displayName = (isAg ? '★ Agent: ' : '') + pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent && !isAg ? ' (Ag: ' + pAgent + ')' : '');
+            var cPhones = c.cleanPhones || [];
+            if (!isAg && cPhones.length > 1) {
+                var nonAgPhones = cPhones.filter(p => !agentPhones.has(p));
+                if (nonAgPhones.length > 0) cPhones = nonAgPhones;
+            }
             return {
                 name: displayName,
-                org: (c.firm || c.n || c.name || '').trim(),
-                phones: c.cleanPhones
+                org: isAg ? 'Agent / Broker' : (c.firm || c.n || c.name || '').trim(),
+                phones: cPhones,
+                isAgent: isAg
             };
         });
 
@@ -16327,17 +16505,19 @@ window.syncSingleContactNative = async function (party) {
     });
     if (clean10.length === 0) return null;
 
+    var isAg = Boolean(party.role === 'agent' || party.isAgent || party.atype === '12');
     var pName = (party.name || party.n || party.firm || '').trim();
     var pStation = (party.station || party.ct || party.city || '').trim();
     var pAgent = (party.agent || party.ag || '').trim();
-    var displayName = pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent ? ' (Ag: ' + pAgent + ')' : '');
+    var displayName = (isAg ? '★ Agent: ' : '') + pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent && !isAg ? ' (Ag: ' + pAgent + ')' : '');
 
     try {
         var res = await nativePlugin.syncBatch({
             contacts: [{
                 name: displayName,
-                org: (party.firm || party.name || party.n || '').trim(),
-                phones: clean10
+                org: isAg ? 'Agent / Broker' : (party.firm || party.name || party.n || '').trim(),
+                phones: clean10,
+                isAgent: isAg
             }]
         });
         return res;
@@ -18504,15 +18684,9 @@ window.renderIncomingLookup360Card = async function (matchOrCode) {
     // Fetch past CRM notes for this party
     var crmNotes = [];
     try {
-        var token = await getCachedAuthToken(true);
-        var headers = Object.assign({}, token ? { 'Authorization': 'Bearer ' + token } : {});
-        var cleanCodeKey = window.sanitizeDocId ? window.sanitizeDocId(match.c || match.n) : String(match.c || match.n).replace(/[/\.#\?\[\]\s]/g, '_');
-        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + cleanCodeKey, { headers: headers });
-        if (res.ok) {
-            var data = await res.json();
-            if (data && data.fields && data.fields.recentLogsJson) {
-                crmNotes = JSON.parse(data.fields.recentLogsJson.stringValue || '[]').slice(0, 5);
-            }
+        if (typeof window.fetchPartyCRMLogs === 'function') {
+            var crmRes = await window.fetchPartyCRMLogs(match);
+            crmNotes = (crmRes && crmRes.allLogs) ? crmRes.allLogs.slice(0, 5) : [];
         }
     } catch(e){}
 
@@ -18699,41 +18873,30 @@ window.renderCustomerCRMTab = async function (partyCode, partyName, station, pho
     try { agStr = decodeURIComponent(agStr); } catch(e){}
 
     try {
-        var token = await getCachedAuthToken(true);
-        var headers = Object.assign({}, token ? { 'Authorization': 'Bearer ' + token } : {});
-
-        var primaryKey = rawCode || rawName;
-        var safeCode = window.sanitizeDocId ? window.sanitizeDocId(primaryKey) : primaryKey.replace(/[\/\.#\?\[\]\s]/g, '_');
-
-        var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, {
-            headers: headers
+        var custObj = Object.assign({}, window._currentReportingCustomer || {}, {
+            c: rawCode,
+            n: rawName,
+            ct: stStr,
+            p: phStr,
+            ag: agStr
         });
+        var crmData = await (window.fetchPartyCRMLogs ? window.fetchPartyCRMLogs(custObj) : Promise.resolve({ allLogs: [], latestField: null }));
+        var recentLogs = crmData.allLogs || [];
+        var partyCrm = crmData.latestField || null;
 
-        // Fallbacks: If not found, try rawName or raw/alt code
-        if (!res.ok && rawName && rawName !== rawCode) {
-            var safeName = window.sanitizeDocId ? window.sanitizeDocId(rawName) : rawName.replace(/[\/\.#\?\[\]\s]/g, '_');
-            var res2 = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeName, {
-                headers: headers
-            });
-            if (res2.ok) res = res2;
-        }
-        if (!res.ok && partyCode && partyCode !== safeCode) {
-            var altCode = encodeURIComponent(partyCode);
-            var res3 = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + altCode, {
-                headers: headers
-            });
-            if (res3.ok) res = res3;
+        var lastCallTimeStr = 'Never';
+        if (partyCrm && partyCrm.lastCallAt) {
+            var rawTime = partyCrm.lastCallAt.timestampValue || partyCrm.lastCallAt.stringValue;
+            if (rawTime) lastCallTimeStr = new Date(rawTime).toLocaleDateString('en-IN');
+        } else if (recentLogs.length > 0 && recentLogs[0].createdAt) {
+            lastCallTimeStr = new Date(recentLogs[0].createdAt).toLocaleDateString('en-IN');
         }
 
-        var partyCrm = null;
-        if (res.ok) {
-            var data = await res.json();
-            if (data && data.fields) partyCrm = data.fields;
-        }
-
-        var recentLogs = [];
-        if (partyCrm && partyCrm.recentLogsJson) {
-            try { recentLogs = JSON.parse(partyCrm.recentLogsJson.stringValue || '[]'); } catch(e){}
+        var lastDispStr = 'No past call';
+        if (partyCrm && partyCrm.lastDisposition && partyCrm.lastDisposition.stringValue) {
+            lastDispStr = partyCrm.lastDisposition.stringValue;
+        } else if (recentLogs.length > 0 && recentLogs[0].disposition) {
+            lastDispStr = recentLogs[0].disposition;
         }
 
         var html = `
@@ -18743,10 +18906,10 @@ window.renderCustomerCRMTab = async function (partyCode, partyName, station, pho
           <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
             <div>
               <div style="font-size:11px; color:#64748b;">
-                Last Interaction: ${partyCrm && partyCrm.lastCallAt ? new Date(partyCrm.lastCallAt.timestampValue).toLocaleDateString('en-IN') : 'Never'}
+                Last Interaction: ${lastCallTimeStr}
               </div>
               <div style="font-size:12px; font-weight:bold; color:#0f172a; margin-top:2px;">
-                Status: ${partyCrm && partyCrm.lastDisposition ? escHtml(partyCrm.lastDisposition.stringValue) : 'No past call'}
+                Status: ${escHtml(lastDispStr)}
               </div>
             </div>
             <button type="button" onclick="window.openPostCallCRMModal({ code: decodeURIComponent('${encodeURIComponent(rawCode)}'), name: decodeURIComponent('${encodeURIComponent(rawName)}'), phone: '${phStr}', station: decodeURIComponent('${encodeURIComponent(stStr)}'), agent: decodeURIComponent('${encodeURIComponent(agStr)}'), balance: (window._currentReportingCustomer && window._currentReportingCustomer.b) || 0, drCr: (window._currentReportingCustomer && window._currentReportingCustomer.d) || '' })"
@@ -18757,7 +18920,7 @@ window.renderCustomerCRMTab = async function (partyCode, partyName, station, pho
 
           <!-- Timeline -->
           <div style="font-size:12px; font-weight:bold; color:#334155; margin-top:4px;">
-            Conversation History (${recentLogs.length} interactions recorded)
+            Conversation History (${recentLogs.length} interaction${recentLogs.length === 1 ? '' : 's'} recorded)
           </div>`;
 
         if (recentLogs.length === 0) {

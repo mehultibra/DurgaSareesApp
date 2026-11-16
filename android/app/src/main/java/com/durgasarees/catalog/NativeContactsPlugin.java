@@ -337,6 +337,17 @@ public class NativeContactsPlugin extends Plugin {
                                 rawIdToExistingNumbers.put(matchedRawId, existingNumbers);
                             }
                             boolean updatedAny = false;
+
+                            // If this is an agent, ensure contact display name reflects the agent
+                            if (item.optBoolean("isAgent", false) && name != null && !name.trim().isEmpty()) {
+                                ops.add(ContentProviderOperation.newUpdate(dataUriWithSync)
+                                    .withSelection(ContactsContract.Data.RAW_CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?",
+                                        new String[]{ String.valueOf(matchedRawId), ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE })
+                                    .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
+                                    .build());
+                                updatedAny = true;
+                            }
+
                             for (String p10 : cleanPhones) {
                                 if (!existingNumbers.contains(p10)) {
                                     ops.add(ContentProviderOperation.newInsert(dataUriWithSync)
