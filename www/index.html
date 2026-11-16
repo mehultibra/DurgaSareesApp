@@ -446,6 +446,25 @@
       </div>
     </div>
 
+    <!-- Customer Image Share Multi-Select Bar -->
+    <div id="custShareBar"
+      style="display:none; padding: 10px 14px; background: #0f172a; color: #fff; border-bottom: 1px solid #334155; justify-content: space-between; align-items: center; z-index: 100;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <i class="fas fa-times" onclick="window.exitCustShareSelectMode()" style="cursor:pointer; font-size:16px; color:#cbd5e1; padding:4px;" title="Exit Selection"></i>
+        <span id="custShareSelectedCount" style="font-size:13px; font-weight:bold; color:#fff;">0 Selected</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <label style="font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; cursor:pointer; color:#e2e8f0; margin:0;">
+          <input type="checkbox" id="custShareCheckAll" onchange="window.toggleAllCustShareCheckboxes(this.checked)"
+            style="transform: scale(1.3); cursor:pointer;"> Select All
+        </label>
+        <button type="button" onclick="window.shareSelectedProductImages()"
+          style="background:#25d366; color:#fff; border:none; padding:7px 14px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 6px rgba(37,211,102,0.4);">
+          <i class="fab fa-whatsapp" style="font-size:14px;"></i> Share
+        </button>
+      </div>
+    </div>
+
     <div class="sl-body">
       <div class="swipe-deck-wrapper" id="dtDesigns"></div>
     </div>

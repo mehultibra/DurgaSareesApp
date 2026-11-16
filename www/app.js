@@ -3055,6 +3055,10 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         fabPaste.style.display = 'none';
     }
 
+    if (typeof window.exitCustShareSelectMode === 'function') {
+        window.exitCustShareSelectMode();
+    }
+
     if (!skipShow) {
         cameFromDetail = false;
 
@@ -3394,6 +3398,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
             </div>`;
             setTimeout(updateBottomQtyFromActiveDesign, 50);
             updateLiveDetailHeader();
+            if (typeof window.initCustShareLongPress === 'function') window.initCustShareLongPress();
             var imgEl = document.getElementById("design_img_" + p.id + "_DIRECT");
             if (imgEl && fallbackZoomUrl) {
                 var curStockCover = p.stock && p.stock['Cover'] !== undefined ? p.stock['Cover'] : 999;
@@ -3662,6 +3667,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
 
         setTimeout(updateBottomQtyFromActiveDesign, 50);
         updateLiveDetailHeader();
+        if (typeof window.initCustShareLongPress === 'function') window.initCustShareLongPress();
     }
 
 }
@@ -3826,7 +3832,285 @@ function updateLiveDetailHeader() {
     }
 }
 
+// ====================================
+// CUSTOMER MULTI-SELECT IMAGE SHARE (LONG-PRESS & SHARE PACKED PRODUCTS)
+// ====================================
+window._isCustShareSelectMode = false;
+window._suppressCardClick = false;
+
+window.initCustShareLongPress = function () {
+    var deck = document.getElementById('dtDesigns');
+    if (!deck || deck._hasCustShareLpBound) return;
+    deck._hasCustShareLpBound = true;
+
+    var lpTimer = null;
+    var startX = 0, startY = 0;
+    var targetCard = null;
+
+    function clearLp() {
+        if (lpTimer) {
+            clearTimeout(lpTimer);
+            lpTimer = null;
+        }
+        targetCard = null;
+    }
+
+    deck.addEventListener('touchstart', function (e) {
+        if (e.touches.length !== 1) { clearLp(); return; }
+        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.qty-clean') || e.target.closest('.fav-btn-inline') || e.target.closest('video')) {
+            clearLp();
+            return;
+        }
+        targetCard = e.target.closest('.swipe-card');
+        if (!targetCard) return;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+
+        lpTimer = setTimeout(function () {
+            if (!targetCard) return;
+            window._suppressCardClick = true;
+            setTimeout(function () { window._suppressCardClick = false; }, 400);
+            if (navigator.vibrate) try { navigator.vibrate(50); } catch(err){}
+            window.enterCustShareSelectMode(targetCard);
+            clearLp();
+        }, 450);
+    }, { passive: true });
+
+    deck.addEventListener('touchmove', function (e) {
+        if (!lpTimer) return;
+        var moveX = Math.abs(e.touches[0].clientX - startX);
+        var moveY = Math.abs(e.touches[0].clientY - startY);
+        if (moveX > 10 || moveY > 10) {
+            clearLp();
+        }
+    }, { passive: true });
+
+    deck.addEventListener('touchend', function () {
+        clearLp();
+    }, { passive: true });
+
+    deck.addEventListener('touchcancel', function () {
+        clearLp();
+    }, { passive: true });
+
+    // Desktop mouse support for long-press & context menu
+    deck.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.qty-clean') || e.target.closest('.fav-btn-inline') || e.target.closest('video')) return;
+        targetCard = e.target.closest('.swipe-card');
+        if (!targetCard) return;
+        startX = e.clientX;
+        startY = e.clientY;
+        lpTimer = setTimeout(function () {
+            if (!targetCard) return;
+            window._suppressCardClick = true;
+            setTimeout(function () { window._suppressCardClick = false; }, 400);
+            window.enterCustShareSelectMode(targetCard);
+            clearLp();
+        }, 500);
+    });
+
+    deck.addEventListener('mousemove', function (e) {
+        if (!lpTimer) return;
+        if (Math.abs(e.clientX - startX) > 10 || Math.abs(e.clientY - startY) > 10) {
+            clearLp();
+        }
+    });
+
+    deck.addEventListener('mouseup', function () {
+        clearLp();
+    });
+
+    deck.addEventListener('contextmenu', function (e) {
+        var card = e.target.closest('.swipe-card');
+        if (card) {
+            e.preventDefault();
+            window._suppressCardClick = true;
+            setTimeout(function () { window._suppressCardClick = false; }, 400);
+            window.enterCustShareSelectMode(card);
+        }
+    });
+};
+
+window.enterCustShareSelectMode = function (initialCard) {
+    window._isCustShareSelectMode = true;
+    var bar = document.getElementById('custShareBar');
+    if (bar) bar.style.display = 'flex';
+
+    var deck = document.getElementById('dtDesigns');
+    if (deck) {
+        deck.classList.add('share-select-mode');
+        var cards = deck.querySelectorAll('.swipe-card');
+        cards.forEach(function (card) {
+            var checkEl = card.querySelector('.cust-share-check');
+            if (!checkEl) {
+                checkEl = document.createElement('div');
+                checkEl.className = 'cust-share-check';
+                checkEl.innerHTML = '<i class="fas fa-check" style="display:none; color:#fff; font-size:13px;"></i>';
+                checkEl.setAttribute('style', 'position:absolute; top:8px; left:8px; width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,0.92); border:2px solid #94a3b8; display:flex; align-items:center; justify-content:center; z-index:20; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.3); transition:all 0.15s ease;');
+                checkEl.onclick = function (ev) {
+                    ev.stopPropagation();
+                    window.toggleCustShareCard(card);
+                };
+                card.appendChild(checkEl);
+            } else {
+                checkEl.style.display = 'flex';
+            }
+        });
+    }
+
+    if (initialCard) {
+        window.toggleCustShareCard(initialCard, true);
+    } else {
+        window.updateCustShareCount();
+    }
+};
+
+window.toggleCustShareCard = function (card, forceState) {
+    if (!card) return;
+    var isSel = (typeof forceState === 'boolean') ? forceState : !card.classList.contains('cust-share-selected');
+    var checkEl = card.querySelector('.cust-share-check');
+    var icon = checkEl ? checkEl.querySelector('i') : null;
+
+    if (isSel) {
+        card.classList.add('cust-share-selected');
+        card.style.outline = '3px solid #25d366';
+        card.style.outlineOffset = '-3px';
+        if (checkEl) {
+            checkEl.style.background = '#25d366';
+            checkEl.style.borderColor = '#ffffff';
+        }
+        if (icon) icon.style.display = 'block';
+    } else {
+        card.classList.remove('cust-share-selected');
+        card.style.outline = 'none';
+        card.style.outlineOffset = '0';
+        if (checkEl) {
+            checkEl.style.background = 'rgba(255,255,255,0.92)';
+            checkEl.style.borderColor = '#94a3b8';
+        }
+        if (icon) icon.style.display = 'none';
+    }
+    window.updateCustShareCount();
+};
+
+window.toggleAllCustShareCheckboxes = function (checked) {
+    var deck = document.getElementById('dtDesigns');
+    if (!deck) return;
+    var cards = deck.querySelectorAll('.swipe-card');
+    cards.forEach(function (card) {
+        window.toggleCustShareCard(card, checked);
+    });
+};
+
+window.updateCustShareCount = function () {
+    var deck = document.getElementById('dtDesigns');
+    if (!deck) return;
+    var allCards = Array.from(deck.querySelectorAll('.swipe-card'));
+    var selCards = deck.querySelectorAll('.swipe-card.cust-share-selected');
+    var count = selCards.length;
+
+    var countEl = document.getElementById('custShareSelectedCount');
+    if (countEl) countEl.innerText = count + ' Selected';
+
+    var checkAll = document.getElementById('custShareCheckAll');
+    if (checkAll) {
+        checkAll.checked = (allCards.length > 0 && count === allCards.length);
+    }
+};
+
+window.exitCustShareSelectMode = function () {
+    window._isCustShareSelectMode = false;
+    var bar = document.getElementById('custShareBar');
+    if (bar) bar.style.display = 'none';
+
+    var deck = document.getElementById('dtDesigns');
+    if (deck) {
+        deck.classList.remove('share-select-mode');
+        var cards = deck.querySelectorAll('.swipe-card');
+        cards.forEach(function (card) {
+            card.classList.remove('cust-share-selected');
+            card.style.outline = 'none';
+            card.style.outlineOffset = '0';
+            var checkEl = card.querySelector('.cust-share-check');
+            if (checkEl) {
+                checkEl.style.display = 'none';
+                checkEl.style.background = 'rgba(255,255,255,0.92)';
+                checkEl.style.borderColor = '#94a3b8';
+                var icon = checkEl.querySelector('i');
+                if (icon) icon.style.display = 'none';
+            }
+        });
+    }
+
+    var checkAll = document.getElementById('custShareCheckAll');
+    if (checkAll) checkAll.checked = false;
+};
+
+window.shareSelectedProductImages = async function () {
+    var prod = (typeof curProduct !== 'undefined' && curProduct) ? curProduct : null;
+    if (!prod) {
+        alert("Please select a product first.");
+        return;
+    }
+
+    var deck = document.getElementById('dtDesigns');
+    if (!deck) return;
+    var selCards = Array.from(deck.querySelectorAll('.swipe-card.cust-share-selected'));
+    if (selCards.length === 0) {
+        alert("Please select at least one image to share.");
+        return;
+    }
+
+    var highResUrls = [];
+    for (var i = 0; i < selCards.length; i++) {
+        var card = selCards[i];
+        var dName = card.getAttribute('data-design') || '';
+        var imgEl = card.querySelector('img');
+        var resolved = "";
+
+        if (typeof window.resolveCorrectUrl === 'function') {
+            try {
+                resolved = await window.resolveCorrectUrl(prod, dName);
+            } catch(e){}
+        }
+        if (!resolved && imgEl) {
+            resolved = imgEl.getAttribute('data-zoom-url') || imgEl.src;
+        }
+        if (resolved && !resolved.startsWith('data:') && !highResUrls.includes(resolved)) {
+            highResUrls.push(resolved);
+        }
+    }
+
+    if (highResUrls.length === 0) {
+        alert("Could not load image URLs for sharing. Please check your internet connection.");
+        return;
+    }
+
+    var deepLink = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(prod.docId || prod.id);
+
+    if (typeof window.shareNativeImages === 'function') {
+        await window.shareNativeImages(prod.name, prod.price, highResUrls, deepLink);
+    } else {
+        if (typeof navigator !== 'undefined' && navigator.share) {
+            try {
+                await navigator.share({
+                    title: prod.name + (prod.price ? " — ₹" + prod.price : ""),
+                    text: (typeof window.generateShareMessage === 'function') ? window.generateShareMessage(prod) : ("*Durga Sarees* - " + prod.name + "\n" + deepLink)
+                });
+                return;
+            } catch(e){}
+        }
+        var msg = (typeof window.generateShareMessage === 'function') ? window.generateShareMessage(prod) : ("*Durga Sarees* - " + prod.name + "\n" + deepLink);
+        window.open("https://wa.me/?text=" + encodeURIComponent(msg), '_blank');
+    }
+};
+
 function closeDetail(fromHistory) {
+    if (typeof window.exitCustShareSelectMode === 'function') {
+        window.exitCustShareSelectMode();
+    }
+
     var fabPaste = document.getElementById('fabPasteImages');
     if (fabPaste) fabPaste.style.display = 'none';
 
@@ -4135,6 +4419,21 @@ function setupFsGestures() {
 }
 
 function openFs(arg1, arg2, arg3, arg4) {
+    if (window._suppressCardClick) return;
+    if (window._isCustShareSelectMode) {
+        var card = null;
+        if (typeof arg3 === 'string' && arg3) {
+            card = document.querySelector('.swipe-card[data-design="' + arg3 + '"]');
+        }
+        if (!card && typeof arg2 === 'number') {
+            var allCards = document.querySelectorAll('#dtDesigns .swipe-card');
+            card = allCards[arg2];
+        }
+        if (card && typeof window.toggleCustShareCard === 'function') {
+            window.toggleCustShareCard(card);
+        }
+        return;
+    }
     var pId, index, dId, cartImgSrc;
     if (arguments.length === 1 && typeof arg1 === 'number') {
         if (!curProduct) return;
