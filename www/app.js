@@ -13547,10 +13547,13 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
                 window._currentReportingSisterAccounts = agentParties;
             }
         } else if (cust) {
+            var isCustAgent = Boolean(cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG')));
             var custPhoneList = Array.isArray(cust.cleanPhones) && cust.cleanPhones.length ? cust.cleanPhones : (Array.isArray(cust.phones) && cust.phones.length ? cust.phones : (cust.p || cust.phone ? String(cust.p || cust.phone).split(/[,;/ ]+/) : []));
             var custP10s = new Set(custPhoneList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(x) { return x.length === 10; }));
             if (custP10s.size > 0) {
                 var sisters = list.filter(function(x) {
+                    var isXAgent = Boolean(x.role === 'agent' || x.isAgent || x.atype === '12' || (x.c && String(x.c).startsWith('AG')));
+                    if (isCustAgent !== isXAgent) return false;
                     var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? String(x.p || x.phone).split(/[,;/ ]+/) : []));
                     return rawList.some(function (num) {
                         var n10 = String(num || '').replace(/\D/g, '').slice(-10);
@@ -14060,27 +14063,32 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             var sClean = window.sanitizeDocId ? window.sanitizeDocId(sCode) : String(sCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
             var sRep = window._accountingReportsCache[sClean] || { finishSales: [], outstanding: [], ledger: [] };
             var pLabel = sAcc.n || sAcc.name || sAcc.c || sAcc.code || '';
+            var isAccAgent = Boolean(sAcc.role === 'agent' || sAcc.isAgent || sAcc.atype === '12' || (sAcc.c && String(sAcc.c).startsWith('AG')));
             (sRep.finishSales || []).forEach(function (r) {
                 if (Array.isArray(r)) {
                     var rowCopy = r.slice();
-                    rowCopy[18] = pLabel;
-                    rowCopy.party = pLabel;
+                    if (!isAccAgent) {
+                        rowCopy[18] = pLabel;
+                    }
+                    rowCopy.party = rowCopy[18] || pLabel;
                     mergedFs.push(rowCopy);
                 } else if (r && typeof r === 'object') {
                     var rowCopy = Object.assign({}, r);
-                    rowCopy.party = pLabel;
+                    if (!rowCopy.party && !isAccAgent) {
+                        rowCopy.party = pLabel;
+                    }
                     mergedFs.push(rowCopy);
                 }
             });
             (sRep.outstanding || []).forEach(function (r) {
                 if (r && typeof r === 'object') {
                     var osCopy = Object.assign({}, r);
-                    osCopy.party = pLabel;
+                    if (!osCopy.party && !isAccAgent) osCopy.party = pLabel;
                     mergedOs.push(osCopy);
                 } else if (Array.isArray(r)) {
                     var osCopy = r.slice();
-                    osCopy[10] = pLabel;
-                    osCopy.party = pLabel;
+                    if (!osCopy[10] && !isAccAgent) osCopy[10] = pLabel;
+                    if (!osCopy.party && !isAccAgent) osCopy.party = osCopy[10] || pLabel;
                     mergedOs.push(osCopy);
                 }
             });
@@ -17696,11 +17704,21 @@ window.loadCRMHubFollowups = async function () {
                 }
                 if (!matchedCust && cleanPhone10.length === 10) {
                     matchedCust = list.find(function (x) {
+                        var isAg = Boolean(x.role === 'agent' || x.isAgent || x.atype === '12' || (x.c && String(x.c).startsWith('AG')));
+                        if (isAg) return false;
                         var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
                         return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
                     });
                     if (!matchedCust && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
                         matchedCust = window._customerDirectoryMaster.find(function (x) {
+                            var isAg = Boolean(x.role === 'agent' || x.isAgent || x.atype === '12' || (x.c && String(x.c).startsWith('AG')));
+                            if (isAg) return false;
+                            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+                            return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
+                        });
+                    }
+                    if (!matchedCust) {
+                        matchedCust = list.find(function (x) {
                             var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
                             return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
                         });
@@ -17829,21 +17847,44 @@ window.openCRMReportForParty = function (partyCodeSafe, phone10) {
     }
     var p10 = String(phone10 || '').replace(/\D/g, '').slice(-10);
     var list = window._compiledCustomersList || [];
-    var sisters = [];
-    if (p10.length === 10) {
-        sisters = list.filter(function(x) {
-            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
-            return rawList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+    var targetCust = null;
+    if (code) {
+        var cUpper = code.toUpperCase();
+        targetCust = list.find(function(c) { return String(c.c || '').trim().toUpperCase() === cUpper || String(c.n || '').trim().toUpperCase() === cUpper; });
+        if (!targetCust && window._customerDirectoryMaster) {
+            targetCust = window._customerDirectoryMaster.find(function(c) { return String(c.c || '').trim().toUpperCase() === cUpper || String(c.n || '').trim().toUpperCase() === cUpper; });
+        }
+    }
+    if (!targetCust && p10.length === 10) {
+        targetCust = list.find(function(c) {
+            var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12' || (c.c && String(c.c).startsWith('AG')));
+            if (isAg) return false;
+            var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+            return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
         });
-        if (sisters.length === 0 && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
-            sisters = window._customerDirectoryMaster.filter(function(x) {
-                var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
-                return rawList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+        if (!targetCust && window._customerDirectoryMaster) {
+            targetCust = window._customerDirectoryMaster.find(function(c) {
+                var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12' || (c.c && String(c.c).startsWith('AG')));
+                if (isAg) return false;
+                var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+                return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
             });
         }
     }
+
+    var isTargetAgent = Boolean(targetCust && (targetCust.role === 'agent' || targetCust.isAgent || targetCust.atype === '12' || (targetCust.c && String(targetCust.c).startsWith('AG'))));
+    var sisters = [];
+    if (p10.length === 10) {
+        var sourceList = (list && list.length > 0) ? list : (window._customerDirectoryMaster || []);
+        sisters = sourceList.filter(function(x) {
+            var isXAgent = Boolean(x.role === 'agent' || x.isAgent || x.atype === '12' || (x.c && String(x.c).startsWith('AG')));
+            if (isTargetAgent !== isXAgent) return false;
+            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+            return rawList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+        });
+    }
     if (typeof window.openCustomerReportsModal === 'function') {
-        window.openCustomerReportsModal(code, false, sisters.length > 1 ? sisters : null);
+        window.openCustomerReportsModal(targetCust ? (targetCust.c || targetCust.code || code) : code, false, sisters.length > 1 ? sisters : null);
     }
 };
 
@@ -17934,7 +17975,10 @@ window.loadCRMTeamFeed = async function () {
         var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
         logs.forEach(function (f) {
             var partyName = f.partyName ? f.partyName.stringValue : '';
+            var partyCode = f.partyCode ? f.partyCode.stringValue : '';
+            var phone = f.phone ? f.phone.stringValue : '';
             var station = f.station ? f.station.stringValue : '';
+            var rawAgent = f.agent ? f.agent.stringValue : '';
             var staffName = f.staffName ? f.staffName.stringValue : 'Staff';
             var disp = f.disposition ? f.disposition.stringValue : '';
             var note = f.note ? f.note.stringValue : '';
@@ -17942,15 +17986,63 @@ window.loadCRMTeamFeed = async function () {
             var promisedAmt = f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0;
             var createdDate = f.createdAt ? new Date(f.createdAt.timestampValue).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
+            var cleanPhone10 = String(phone || '').replace(/\D/g, '').slice(-10);
+            var cleanCode = String(partyCode || '').trim();
+            while (cleanCode.includes('%')) {
+                try { var nc = decodeURIComponent(cleanCode); if (nc === cleanCode) break; cleanCode = nc; } catch(e){ break; }
+            }
+            while (partyName.includes('%')) {
+                try { var nn = decodeURIComponent(partyName); if (nn === partyName) break; partyName = nn; } catch(e){ break; }
+            }
+
+            // Fallback resolution from master list if agent, station, or code missing
+            var list = window._compiledCustomersList || [];
+            var targetCust = null;
+            if (cleanCode && cleanCode !== cleanPhone10) {
+                var cUpper = cleanCode.toUpperCase();
+                targetCust = list.find(x => String(x.c || '').trim().toUpperCase() === cUpper || String(x.n || '').trim().toUpperCase() === cUpper);
+            }
+            if (!targetCust && cleanPhone10.length === 10) {
+                targetCust = list.find(function(c) {
+                    var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12' || (c.c && String(c.c).startsWith('AG')));
+                    if (isAg) return false;
+                    var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+                    return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
+                });
+                if (!targetCust && window._customerDirectoryMaster) {
+                    targetCust = window._customerDirectoryMaster.find(function(c) {
+                        var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12' || (c.c && String(c.c).startsWith('AG')));
+                        if (isAg) return false;
+                        var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+                        return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
+                    });
+                }
+            }
+            if (!targetCust && partyName) {
+                var pUpper = partyName.toUpperCase();
+                targetCust = list.find(x => String(x.n || '').trim().toUpperCase() === pUpper);
+            }
+
+            if (targetCust) {
+                if (!partyName) partyName = targetCust.n || targetCust.name || '';
+                if (!cleanCode) cleanCode = targetCust.c || targetCust.code || '';
+                if (!station) station = targetCust.ct || targetCust.station || '';
+                if (!rawAgent) rawAgent = targetCust.ag || targetCust.agent || '';
+            }
+
+            var safeCode = encodeURIComponent(cleanCode || partyName || cleanPhone10).replace(/'/g, "%27");
             var iconClass = callType === 'whatsapp' ? 'fab fa-whatsapp' : (callType === 'incoming' ? 'fas fa-phone-incoming' : 'fas fa-phone-alt');
             var iconColor = callType === 'whatsapp' ? '#25d366' : (callType === 'incoming' ? '#0284c7' : '#be185d');
 
             html += `
-            <div style="border:1px solid #e2e8f0; border-radius:8px; background:#fff; padding:10px;">
+            <div onclick="window.openCRMReportForParty('${safeCode}', '${cleanPhone10}')"
+                 style="border:1px solid #e2e8f0; border-radius:8px; background:#fff; padding:10px; cursor:pointer; transition:background 0.15s ease;"
+                 onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'"
+                 title="Click to open Merged Report for ${escHtml(partyName || cleanCode)}">
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap:6px;">
                   <i class="${iconClass}" style="color:${iconColor}; font-size:12px;"></i>
-                  <span style="font-weight:bold; font-size:13px; color:#1e293b;">${escHtml(partyName)}</span>
+                  <span style="font-weight:bold; font-size:13px; color:#1e293b;">${escHtml(partyName || cleanCode || 'Party')}</span>
                   ${station ? `<span style="font-size:11px; color:#64748b;">(${escHtml(station)})</span>` : ''}
                 </div>
                 <span style="font-size:10px; color:#94a3b8;">${createdDate}</span>
@@ -17958,6 +18050,7 @@ window.loadCRMTeamFeed = async function () {
 
               <div style="display:flex; align-items:center; gap:6px; margin-top:4px; flex-wrap:wrap;">
                 <span style="font-size:10px; font-weight:600; color:#0f172a; background:#f1f5f9; padding:1px 5px; border-radius:3px;">${escHtml(disp || 'Interaction')}</span>
+                <span style="font-size:10px; font-weight:600; color:#4338ca; background:#e0e7ff; padding:1px 5px; border-radius:3px;"><i class="fas fa-user-tie" style="font-size:9px; margin-right:3px;"></i>Agent: <b>${escHtml(rawAgent || 'DIRECT')}</b></span>
                 ${promisedAmt > 0 ? `<span style="font-size:10px; font-weight:bold; color:#16a34a; background:#dcfce7; padding:1px 5px; border-radius:3px;">₹ ${promisedAmt.toLocaleString('en-IN')} Promised</span>` : ''}
                 <span style="font-size:10px; color:#64748b; margin-left:auto;">Logged by <b>${escHtml(staffName)}</b></span>
               </div>
