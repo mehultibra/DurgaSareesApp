@@ -13469,7 +13469,16 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
         });
     }
 
-    var pCodeNorm = decodeURIComponent(String(partyCode || '')).trim().toUpperCase();
+    var cleanPartyCode = String(partyCode || '').trim();
+    while (cleanPartyCode.includes('%')) {
+        try {
+            var nextDec = decodeURIComponent(cleanPartyCode);
+            if (nextDec === cleanPartyCode) break;
+            cleanPartyCode = nextDec;
+        } catch(e) { break; }
+    }
+    partyCode = cleanPartyCode;
+    var pCodeNorm = cleanPartyCode.toUpperCase();
 
     if (isSelfService) {
         var isAllowed = allowedCodes.includes(pCodeNorm) || allowedCodes.some(c => c && pCodeNorm.includes(c));
@@ -16794,12 +16803,14 @@ window.handleDetectedNativeCall = async function (phoneOrName, direction, partyN
     if (!inputStr) return;
 
     var p10 = inputStr.replace(/\D/g, '').slice(-10);
-    var cleanNameSearch = (partyNameHint || inputStr).replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim().toUpperCase();
 
-    if (p10.length === 10) {
-        window._lastActiveCallPhone = p10;
-        try { localStorage.setItem('ds_last_active_call_phone', p10); } catch(e){}
+    // Strictly require a valid 10-digit phone number. Do not match calls by similar or fuzzy name!
+    if (p10.length !== 10) {
+        return;
     }
+
+    window._lastActiveCallPhone = p10;
+    try { localStorage.setItem('ds_last_active_call_phone', p10); } catch(e){}
     if (partyNameHint) {
         window._lastActiveCallName = partyNameHint;
     }
@@ -16812,27 +16823,20 @@ window.handleDetectedNativeCall = async function (phoneOrName, direction, partyN
         } catch (e) { }
     }
 
-    var allMatches = [];
-    if (p10.length === 10) {
-        allMatches = list.filter(function (c) {
+    var allMatches = list.filter(function (c) {
+        var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
+        return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+    });
+    if (allMatches.length === 0 && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+        allMatches = window._customerDirectoryMaster.filter(function (c) {
             var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
             return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
         });
-        if (allMatches.length === 0 && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
-            allMatches = window._customerDirectoryMaster.filter(function (c) {
-                var rawList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-                return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
-            });
-        }
     }
 
-    if (allMatches.length === 0 && cleanNameSearch && cleanNameSearch !== p10) {
-        var nameMatch = list.find(function (c) {
-            var cName = String(c.n || c.name || '').trim().toUpperCase();
-            var cCode = String(c.c || c.code || '').trim().toUpperCase();
-            return cName === cleanNameSearch || cCode === cleanNameSearch || (cleanNameSearch.length >= 4 && (cName.startsWith(cleanNameSearch) || cleanNameSearch.startsWith(cName)));
-        });
-        if (nameMatch) allMatches.push(nameMatch);
+    // STRICT: Only search and give report by phone number. If no Durga Sarees account matches phone, return immediately!
+    if (allMatches.length === 0) {
+        return;
     }
 
     var agentMatch = allMatches.find(function (c) {
@@ -17125,14 +17129,22 @@ window.openPostCallCRMModal = function (ctx, name, phone, station, agent, callTy
     var modal = document.getElementById('postCallCRMModal');
     if (!modal) return;
 
-    var rawCode = ctx.code || '';
-    try { rawCode = decodeURIComponent(rawCode); } catch(e){}
-    var rawName = ctx.name || '';
-    try { rawName = decodeURIComponent(rawName); } catch(e){}
-    var rawStation = ctx.station || '';
-    try { rawStation = decodeURIComponent(rawStation); } catch(e){}
-    var rawAgent = ctx.agent || '';
-    try { rawAgent = decodeURIComponent(rawAgent); } catch(e){}
+    var rawCode = String(ctx.code || '').trim();
+    while (rawCode.includes('%')) {
+        try { var nc = decodeURIComponent(rawCode); if (nc === rawCode) break; rawCode = nc; } catch(e){ break; }
+    }
+    var rawName = String(ctx.name || '').trim();
+    while (rawName.includes('%')) {
+        try { var nn = decodeURIComponent(rawName); if (nn === rawName) break; rawName = nn; } catch(e){ break; }
+    }
+    var rawStation = String(ctx.station || '').trim();
+    while (rawStation.includes('%')) {
+        try { var ns = decodeURIComponent(rawStation); if (ns === rawStation) break; rawStation = ns; } catch(e){ break; }
+    }
+    var rawAgent = String(ctx.agent || '').trim();
+    while (rawAgent.includes('%')) {
+        try { var na = decodeURIComponent(rawAgent); if (na === rawAgent) break; rawAgent = na; } catch(e){ break; }
+    }
 
     document.getElementById('crmPartyCode').value = rawCode;
     document.getElementById('crmPartyName').value = rawName;
@@ -17654,16 +17666,61 @@ window.loadCRMHubFollowups = async function () {
         var docs = data.documents || [];
         var todayStr = new Date().toISOString().slice(0, 10);
 
+        var list = window._compiledCustomersList || [];
         var followups = docs.map(function (d) {
             var f = d.fields || {};
             var docId = d.name ? d.name.split('/').pop() : '';
+            var rawCode = f.partyCode ? f.partyCode.stringValue : docId;
+            var rawName = f.partyName ? f.partyName.stringValue : '';
+            var rawPhone = f.phone ? f.phone.stringValue : '';
+            var rawStation = f.station ? f.station.stringValue : '';
+            var rawAgent = f.agent ? f.agent.stringValue : '';
+
+            var cleanCode = String(rawCode || '').trim();
+            while (cleanCode.includes('%')) {
+                try { var nc = decodeURIComponent(cleanCode); if (nc === cleanCode) break; cleanCode = nc; } catch(e){ break; }
+            }
+            var cleanName = String(rawName || '').trim();
+            while (cleanName.includes('%')) {
+                try { var nn = decodeURIComponent(cleanName); if (nn === cleanName) break; cleanName = nn; } catch(e){ break; }
+            }
+            var cleanPhone10 = String(rawPhone || '').replace(/\D/g, '').slice(-10);
+
+            // If name is missing or is just a phone number, resolve from customer directory
+            var isPhoneName = !cleanName || cleanName === rawPhone || cleanName === cleanPhone10 || /^\+?\d{10,12}$/.test(cleanName.replace(/[\s-]/g, ''));
+            if (isPhoneName || !cleanCode || cleanCode === cleanPhone10) {
+                var matchedCust = null;
+                if (cleanCode && cleanCode !== cleanPhone10) {
+                    var cUpper = cleanCode.toUpperCase();
+                    matchedCust = list.find(x => String(x.c || '').trim().toUpperCase() === cUpper || String(x.n || '').trim().toUpperCase() === cUpper);
+                }
+                if (!matchedCust && cleanPhone10.length === 10) {
+                    matchedCust = list.find(function (x) {
+                        var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+                        return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
+                    });
+                    if (!matchedCust && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+                        matchedCust = window._customerDirectoryMaster.find(function (x) {
+                            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+                            return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
+                        });
+                    }
+                }
+                if (matchedCust) {
+                    cleanName = matchedCust.n || matchedCust.name || cleanName;
+                    cleanCode = matchedCust.c || matchedCust.code || cleanCode;
+                    if (!rawStation) rawStation = matchedCust.ct || matchedCust.station || '';
+                    if (!rawAgent) rawAgent = matchedCust.ag || matchedCust.agent || '';
+                }
+            }
+
             return {
                 docId: docId,
-                code: f.partyCode ? f.partyCode.stringValue : docId,
-                name: f.partyName ? f.partyName.stringValue : '',
-                phone: f.phone ? f.phone.stringValue : '',
-                station: f.station ? f.station.stringValue : '',
-                agent: f.agent ? f.agent.stringValue : '',
+                code: cleanCode,
+                name: cleanName || cleanCode || rawPhone,
+                phone: cleanPhone10 || rawPhone,
+                station: rawStation,
+                agent: rawAgent,
                 lastCallAt: f.lastCallAt ? f.lastCallAt.timestampValue : '',
                 lastStaff: f.lastStaffName ? f.lastStaffName.stringValue : '',
                 lastDisp: f.lastDisposition ? f.lastDisposition.stringValue : '',
@@ -17704,8 +17761,11 @@ window.loadCRMHubFollowups = async function () {
                 `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px;"><i class="fas fa-clock"></i> ${fu.followUpDate}</span>`)
             ) : '';
 
-            var safeCode = encodeURIComponent(fu.code);
-            var safeDocId = encodeURIComponent(fu.docId || fu.code);
+            var safeCode = encodeURIComponent(fu.code).replace(/'/g, "%27");
+            var safeDocId = encodeURIComponent(fu.docId || fu.code).replace(/'/g, "%27");
+            var safeName = encodeURIComponent(fu.name).replace(/'/g, "%27");
+            var safeStation = encodeURIComponent(fu.station || '').replace(/'/g, "%27");
+            var safeAgent = encodeURIComponent(fu.agent || '').replace(/'/g, "%27");
             html += `
             <div class="crm-followup-card" style="border:1px solid #e2e8f0; border-radius:10px; background:#fff; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
@@ -17734,7 +17794,7 @@ window.loadCRMHubFollowups = async function () {
               <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px dashed #f1f5f9;">
                 <div style="display:flex; gap:6px;">
                   ${fu.phone ? `
-                  <button type="button" onclick="window.startCRMCall('${safeCode}', '${escHtml(fu.name)}', '${fu.phone}', '${escHtml(fu.station)}', '${escHtml(fu.agent)}', 0, '')"
+                  <button type="button" onclick="window.startCRMCall('${safeCode}', decodeURIComponent('${safeName}'), '${fu.phone}', decodeURIComponent('${safeStation}'), decodeURIComponent('${safeAgent}'), 0, '')"
                     style="background:#0284c7; color:#fff; border:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
                     <i class="fas fa-phone-alt"></i> Call
                   </button>
@@ -17742,9 +17802,9 @@ window.loadCRMHubFollowups = async function () {
                     style="background:#25d366; color:#fff; text-decoration:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold; display:inline-flex; align-items:center; gap:4px;">
                     <i class="fab fa-whatsapp"></i> Chat
                   </a>` : ''}
-                  <button type="button" onclick="window.openCustomerReportsModal('${safeCode}')"
-                    style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
-                    <i class="fas fa-file-invoice"></i> Ledger
+                  <button type="button" onclick="window.openCRMReportForParty('${safeCode}', '${fu.phone}')"
+                    style="background:#f1f5f9; border:1px solid #cbd5e1; color:#0369a1; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                    <i class="fas fa-layer-group"></i> Merged Report
                   </button>
                 </div>
                 <button type="button" onclick="window.markCRMFollowUpDone('${safeDocId}', this)"
@@ -17759,6 +17819,31 @@ window.loadCRMHubFollowups = async function () {
 
     } catch (e) {
         area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Error loading follow-ups: ' + e.message + '</div>';
+    }
+};
+
+window.openCRMReportForParty = function (partyCodeSafe, phone10) {
+    var code = decodeURIComponent(partyCodeSafe || '');
+    while (code.includes('%')) {
+        try { var nextC = decodeURIComponent(code); if (nextC === code) break; code = nextC; } catch(e){ break; }
+    }
+    var p10 = String(phone10 || '').replace(/\D/g, '').slice(-10);
+    var list = window._compiledCustomersList || [];
+    var sisters = [];
+    if (p10.length === 10) {
+        sisters = list.filter(function(x) {
+            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+            return rawList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+        });
+        if (sisters.length === 0 && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+            sisters = window._customerDirectoryMaster.filter(function(x) {
+                var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+                return rawList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+            });
+        }
+    }
+    if (typeof window.openCustomerReportsModal === 'function') {
+        window.openCustomerReportsModal(code, false, sisters.length > 1 ? sisters : null);
     }
 };
 
@@ -18442,10 +18527,17 @@ window.handleCRMQuickSearch = function (val) {
 
     var html = '';
     matches.forEach(function (m) {
-        var safeCode = encodeURIComponent(m.c || m.n);
+        var cleanC = String(m.c || m.n || '').trim();
+        while (cleanC.includes('%')) {
+            try { var nc = decodeURIComponent(cleanC); if (nc === cleanC) break; cleanC = nc; } catch(e){ break; }
+        }
+        var safeCode = encodeURIComponent(cleanC).replace(/'/g, "%27");
+        var safeName = encodeURIComponent(m.n || cleanC).replace(/'/g, "%27");
+        var safeCt = encodeURIComponent(m.ct || '').replace(/'/g, "%27");
+        var safeAg = encodeURIComponent(m.ag || '').replace(/'/g, "%27");
         html += `
         <div style="padding:8px 10px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; justify-content:space-between; align-items:center;"
-             onclick="document.getElementById('crmHubSearchResults').style.display='none'; window.openPostCallCRMModal({ code: '${safeCode}', name: '${escHtml(m.n)}', phone: '${m.p}', station: '${escHtml(m.ct)}', agent: '${escHtml(m.ag)}', balance: ${m.b || 0}, drCr: '${m.d || ''}' });">
+             onclick="document.getElementById('crmHubSearchResults').style.display='none'; window.openPostCallCRMModal({ code: decodeURIComponent('${safeCode}'), name: decodeURIComponent('${safeName}'), phone: '${m.p}', station: decodeURIComponent('${safeCt}'), agent: decodeURIComponent('${safeAg}'), balance: ${m.b || 0}, drCr: '${m.d || ''}' });">
           <div>
             <div style="font-weight:bold; font-size:12px; color:#1e293b;">${escHtml(m.n)}</div>
             <div style="font-size:10px; color:#64748b;">${m.ct ? escHtml(m.ct) + ' | ' : ''}Phone: +91${m.p || ''}</div>

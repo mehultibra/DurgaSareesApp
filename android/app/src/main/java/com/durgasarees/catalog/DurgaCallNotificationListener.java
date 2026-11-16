@@ -219,33 +219,9 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 }
             }
 
-            // CRITICAL: Even if p10 is null (for example, if the contact was not synced to device phonebook yet,
-            // or READ_CONTACTS wasn't granted yet, but title/text is a non-generic caller name like "RADHIKA SAREES [SURAT]"),
-            // if !isGenericDialerStatus and title/text contains [ or length >= 4, do NOT abort!
-            // Pass p10 = "" and partyName = candidateName to CallMonitorPlugin.notifyLiveCall and showCallNotification!
+            // Strict phone-only: Only process incoming calls matching a valid 10-digit Durga Sarees phone number
             if (p10 == null || p10.length() != 10) {
-                String candidateName = "";
-                if (!isGenericDialerStatus(title)) {
-                    candidateName = title;
-                } else if (!isGenericDialerStatus(bigTitle)) {
-                    candidateName = bigTitle;
-                } else if (!isGenericDialerStatus(text)) {
-                    candidateName = text;
-                } else if (!isGenericDialerStatus(bigText)) {
-                    candidateName = bigText;
-                } else if (!isGenericDialerStatus(sub)) {
-                    candidateName = sub;
-                }
-
-                String cUpper = candidateName.toUpperCase();
-                boolean isNoise = cUpper.contains("[SIM") || cUpper.contains("[JIO") || cUpper.contains("[AIRTEL") || cUpper.contains("[UNKNOWN") ||
-                    cUpper.contains("RECORD") || cUpper.contains("AUDIO") || cUpper.contains("SAVED") || cUpper.contains("VOICE");
-                if (!candidateName.isEmpty() && !isNoise && ((cUpper.contains("[") && cUpper.contains("]")) || cUpper.contains("(AG:"))) {
-                    p10 = "";
-                    partyName = candidateName;
-                } else {
-                    return;
-                }
+                return;
             }
 
             if (partyName == null || isGenericDialerStatus(partyName)) {

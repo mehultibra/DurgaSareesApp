@@ -81,21 +81,10 @@ public class DurgaCallScreeningService extends CallScreeningService {
     }
 
     public static boolean isDurgaSareesAccount(Context context, String p10, String partyName) {
-        if (partyName != null && !partyName.trim().isEmpty()) {
-            String pUpper = partyName.toUpperCase();
-            boolean isNoise = pUpper.contains("RECORD") || pUpper.contains("SAVING") || pUpper.contains("SAVED") ||
-                pUpper.contains("AUDIO") || pUpper.contains("VOICE") || pUpper.contains("PLAYER") ||
-                pUpper.contains("[SIM") || pUpper.contains("[JIO") || pUpper.contains("[AIRTEL") ||
-                pUpper.contains("[UNKNOWN") || pUpper.contains(".M4A") || pUpper.contains(".MP3") || pUpper.contains(".AMR");
-            if (!isNoise) {
-                if ((pUpper.contains("[") && pUpper.contains("]")) || pUpper.contains("(AG:")) {
-                    return true;
-                }
-            }
-        }
-        if (p10 == null || p10.length() < 10 || context == null) return false;
+        if (p10 == null || context == null) return false;
         String clean10 = p10.replaceAll("\\D", "");
-        if (clean10.length() >= 10) clean10 = clean10.substring(clean10.length() - 10);
+        if (clean10.length() < 10) return false;
+        clean10 = clean10.substring(clean10.length() - 10);
 
         Cursor cursor = null;
         try {
