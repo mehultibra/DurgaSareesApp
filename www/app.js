@@ -10084,8 +10084,15 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
 
     var adminName = "Admin";
     try {
-        var myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}');
-        adminName = myCd.name ? `${myCd.name} (${activeUser || ''})` : (activeUser || "Admin");
+        var ownCd = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || 'null');
+        var myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || 'null');
+        if (ownCd && ownCd.name && !ownCd.onBehalf) {
+            adminName = `${ownCd.name} (${activeUser || ''})`.trim();
+        } else if (myCd && myCd.name && !myCd.onBehalf) {
+            adminName = `${myCd.name} (${activeUser || ''})`.trim();
+        } else {
+            adminName = activeUser ? `Admin (${activeUser})` : "Admin";
+        }
     } catch(e){}
 
     if (!confirm(`Approve and permanently link account for:\n\nPhone: ${docId}\nAccount: ${selectedName || selectedCode} [${selectedRole.toUpperCase()}]\n\nApproving Admin: ${adminName}`)) {
@@ -15407,8 +15414,10 @@ window.mergeFirebasePartyLinks = async function (list) {
             if (!doc.fields) return;
             var f = doc.fields;
             var code = (f.partyCode && f.partyCode.stringValue) ? f.partyCode.stringValue.trim().toUpperCase() : doc.name.split('/').pop().toUpperCase();
+            var pName = (f.partyName && f.partyName.stringValue) ? f.partyName.stringValue.trim().toUpperCase() : '';
             var info = {
                 code: code,
+                name: pName || code,
                 phone: f.phone ? f.phone.stringValue : '',
                 station: f.station ? f.station.stringValue : '',
                 state: f.state ? f.state.stringValue : '',
@@ -15419,12 +15428,24 @@ window.mergeFirebasePartyLinks = async function (list) {
                 isApproved: f.isApproved ? f.isApproved.booleanValue : true
             };
             linksMap.set(code, info);
+            if (pName && pName !== code) linksMap.set(pName, info);
+            var p10 = String(info.phone || '').replace(/\D/g, '').slice(-10);
+            if (p10.length === 10) {
+                linksMap.set(p10, info);
+                linksMap.set('+91' + p10, info);
+            }
         });
 
         list.forEach(c => {
-            var k = (c.c || c.n || '').trim().toUpperCase();
-            if (linksMap.has(k)) {
-                var l = linksMap.get(k);
+            var kCode = (c.c || '').trim().toUpperCase();
+            var kName = (c.n || '').trim().toUpperCase();
+            var l = linksMap.get(kCode) || (kName ? linksMap.get(kName) : null);
+            if (!l && Array.isArray(c.cleanPhones)) {
+                for (var p of c.cleanPhones) {
+                    if (linksMap.get(p)) { l = linksMap.get(p); break; }
+                }
+            }
+            if (l) {
                 if (l.phone) {
                     if (!c.p) c.p = l.phone;
                     var lp10 = String(l.phone).replace(/\D/g, '').slice(-10);
@@ -15440,6 +15461,10 @@ window.mergeFirebasePartyLinks = async function (list) {
                 if (l.agent && !c.ag) c.ag = l.agent;
                 if (l.transport && !c.tr) c.tr = l.transport;
                 if (l.gst && !c.g) c.g = l.gst;
+                if (l.role) {
+                    c.role = l.role;
+                    if (l.role === 'agent') { c.isAgent = true; c.atype = '12'; }
+                }
                 c.isLinked = true;
                 c.isApproved = l.isApproved;
             }
@@ -15768,6 +15793,15 @@ window.selectPartyForOrder = function (cust) {
         role: cust.role || (cust.isAgent ? 'agent' : 'customer')
     };
     if (details.transport) localStorage.setItem('ds_preferred_transport', details.transport);
+
+    var hasAdminPriv = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
+    if (hasAdminPriv) {
+        var curProf = null;
+        try { curProf = JSON.parse(localStorage.getItem("dsCustomerDetails") || "null"); } catch(e){}
+        if (curProf && !curProf.onBehalf) {
+            localStorage.setItem("dsAdminOwnProfile", JSON.stringify(curProf));
+        }
+    }
 
     localStorage.setItem("dsCustomerDetails", JSON.stringify(details));
     localStorage.setItem("ds_active_on_behalf", JSON.stringify(details));
@@ -17703,32 +17737,37 @@ window.loadCRMHubFollowups = async function () {
                     matchedCust = list.find(x => String(x.c || '').trim().toUpperCase() === cUpper || String(x.n || '').trim().toUpperCase() === cUpper);
                 }
                 if (!matchedCust && cleanPhone10.length === 10) {
-                    matchedCust = list.find(function (x) {
-                        var isAg = Boolean(x.role === 'agent' || x.isAgent || x.atype === '12' || (x.c && String(x.c).startsWith('AG')));
-                        if (isAg) return false;
+                    var localLinks = {};
+                    try { localLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}'); } catch(e){}
+                    var linkMatch = localLinks[cleanPhone10] || localLinks['+91' + cleanPhone10];
+                    if (linkMatch && (linkMatch.code || linkMatch.partyCode || linkMatch.name || linkMatch.partyName)) {
+                        var lTarget = (linkMatch.partyCode || linkMatch.code || linkMatch.partyName || linkMatch.name || '').trim().toUpperCase();
+                        matchedCust = list.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+                    }
+                }
+                if (!matchedCust && cleanPhone10.length === 10) {
+                    var allMatches = list.filter(function (x) {
                         var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
                         return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
                     });
-                    if (!matchedCust && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
-                        matchedCust = window._customerDirectoryMaster.find(function (x) {
-                            var isAg = Boolean(x.role === 'agent' || x.isAgent || x.atype === '12' || (x.c && String(x.c).startsWith('AG')));
-                            if (isAg) return false;
+                    if (allMatches.length === 0 && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
+                        allMatches = window._customerDirectoryMaster.filter(function (x) {
                             var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
                             return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
                         });
                     }
-                    if (!matchedCust) {
-                        matchedCust = list.find(function (x) {
-                            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
-                            return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
-                        });
+                    if (allMatches.length > 0) {
+                        matchedCust = allMatches.find(c => c.isLinked) || allMatches.find(c => c.role === 'agent' || c.isAgent || c.atype === '12') || allMatches[0];
                     }
                 }
                 if (matchedCust) {
                     cleanName = matchedCust.n || matchedCust.name || cleanName;
                     cleanCode = matchedCust.c || matchedCust.code || cleanCode;
                     if (!rawStation) rawStation = matchedCust.ct || matchedCust.station || '';
-                    if (!rawAgent) rawAgent = matchedCust.ag || matchedCust.agent || '';
+                    if (!rawAgent) {
+                        var isAgC = Boolean(matchedCust.role === 'agent' || matchedCust.isAgent || matchedCust.atype === '12');
+                        rawAgent = matchedCust.ag || matchedCust.agent || (isAgC ? (matchedCust.n || matchedCust.name) : '');
+                    }
                 }
             }
 
@@ -17845,30 +17884,57 @@ window.openCRMReportForParty = function (partyCodeSafe, phone10) {
     while (code.includes('%')) {
         try { var nextC = decodeURIComponent(code); if (nextC === code) break; code = nextC; } catch(e){ break; }
     }
-    var p10 = String(phone10 || '').replace(/\D/g, '').slice(-10);
+    var p10 = String(phone10 || code || '').replace(/\D/g, '').slice(-10);
     var list = window._compiledCustomersList || [];
     var targetCust = null;
-    if (code) {
+
+    var isCodePhone = !code || code === p10 || /^\+?\d{10,12}$/.test(code.replace(/[\s-]/g, ''));
+    if (!isCodePhone) {
         var cUpper = code.toUpperCase();
         targetCust = list.find(function(c) { return String(c.c || '').trim().toUpperCase() === cUpper || String(c.n || '').trim().toUpperCase() === cUpper; });
         if (!targetCust && window._customerDirectoryMaster) {
             targetCust = window._customerDirectoryMaster.find(function(c) { return String(c.c || '').trim().toUpperCase() === cUpper || String(c.n || '').trim().toUpperCase() === cUpper; });
         }
     }
+
+    // Check live party links from Firebase / backup first (ground truth)
     if (!targetCust && p10.length === 10) {
-        targetCust = list.find(function(c) {
-            var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12' || (c.c && String(c.c).startsWith('AG')));
-            if (isAg) return false;
+        var localLinks = {};
+        try { localLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}'); } catch(e){}
+        var linkMatch = localLinks[p10] || localLinks['+91' + p10];
+        if (linkMatch && (linkMatch.code || linkMatch.partyCode || linkMatch.name || linkMatch.partyName)) {
+            var lTarget = (linkMatch.partyCode || linkMatch.code || linkMatch.partyName || linkMatch.name || '').trim().toUpperCase();
+            targetCust = list.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+            if (!targetCust && window._customerDirectoryMaster) {
+                targetCust = window._customerDirectoryMaster.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+            }
+            if (!targetCust) {
+                targetCust = {
+                    c: linkMatch.partyCode || linkMatch.code || linkMatch.partyName || linkMatch.name,
+                    n: linkMatch.partyName || linkMatch.name || linkMatch.code,
+                    role: linkMatch.role || 'customer',
+                    isAgent: linkMatch.role === 'agent',
+                    atype: linkMatch.role === 'agent' ? '12' : '1',
+                    cleanPhones: [p10],
+                    phones: [p10]
+                };
+            }
+        }
+    }
+
+    if (!targetCust && p10.length === 10) {
+        var allMatches = list.filter(function(c) {
             var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
             return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
         });
-        if (!targetCust && window._customerDirectoryMaster) {
-            targetCust = window._customerDirectoryMaster.find(function(c) {
-                var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12' || (c.c && String(c.c).startsWith('AG')));
-                if (isAg) return false;
+        if (allMatches.length === 0 && window._customerDirectoryMaster) {
+            allMatches = window._customerDirectoryMaster.filter(function(c) {
                 var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
                 return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
             });
+        }
+        if (allMatches.length > 0) {
+            targetCust = allMatches.find(c => c.isLinked) || allMatches.find(c => c.role === 'agent' || c.isAgent || c.atype === '12') || allMatches[0];
         }
     }
 
@@ -17884,7 +17950,7 @@ window.openCRMReportForParty = function (partyCodeSafe, phone10) {
         });
     }
     if (typeof window.openCustomerReportsModal === 'function') {
-        window.openCustomerReportsModal(targetCust ? (targetCust.c || targetCust.code || code) : code, false, sisters.length > 1 ? sisters : null);
+        window.openCustomerReportsModal(targetCust ? (targetCust.c || targetCust.code || targetCust.n || code) : code, false, sisters.length > 1 ? sisters : null);
     }
 };
 
@@ -17995,39 +18061,67 @@ window.loadCRMTeamFeed = async function () {
                 try { var nn = decodeURIComponent(partyName); if (nn === partyName) break; partyName = nn; } catch(e){ break; }
             }
 
+            var isPhoneName = !partyName || partyName === phone || partyName === cleanPhone10 || /^\+?\d{10,12}$/.test(partyName.replace(/[\s-]/g, ''));
+            var isCodePhone = !cleanCode || cleanCode === phone || cleanCode === cleanPhone10 || /^\+?\d{10,12}$/.test(cleanCode.replace(/[\s-]/g, ''));
+
             // Fallback resolution from master list if agent, station, or code missing
             var list = window._compiledCustomersList || [];
             var targetCust = null;
-            if (cleanCode && cleanCode !== cleanPhone10) {
+            if (!isCodePhone) {
                 var cUpper = cleanCode.toUpperCase();
                 targetCust = list.find(x => String(x.c || '').trim().toUpperCase() === cUpper || String(x.n || '').trim().toUpperCase() === cUpper);
             }
             if (!targetCust && cleanPhone10.length === 10) {
-                targetCust = list.find(function(c) {
-                    var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12' || (c.c && String(c.c).startsWith('AG')));
-                    if (isAg) return false;
+                var localLinks = {};
+                try { localLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}'); } catch(e){}
+                var linkMatch = localLinks[cleanPhone10] || localLinks['+91' + cleanPhone10];
+                if (linkMatch && (linkMatch.code || linkMatch.partyCode || linkMatch.name || linkMatch.partyName)) {
+                    var lTarget = (linkMatch.partyCode || linkMatch.code || linkMatch.partyName || linkMatch.name || '').trim().toUpperCase();
+                    targetCust = list.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+                    if (!targetCust && window._customerDirectoryMaster) {
+                        targetCust = window._customerDirectoryMaster.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+                    }
+                    if (!targetCust) {
+                        targetCust = {
+                            c: linkMatch.partyCode || linkMatch.code || linkMatch.partyName || linkMatch.name,
+                            n: linkMatch.partyName || linkMatch.name || linkMatch.code,
+                            role: linkMatch.role || 'customer',
+                            isAgent: linkMatch.role === 'agent',
+                            atype: linkMatch.role === 'agent' ? '12' : '1',
+                            cleanPhones: [cleanPhone10],
+                            phones: [cleanPhone10]
+                        };
+                    }
+                }
+            }
+            if (!targetCust && cleanPhone10.length === 10) {
+                var allMatches = list.filter(function(c) {
                     var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
                     return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
                 });
-                if (!targetCust && window._customerDirectoryMaster) {
-                    targetCust = window._customerDirectoryMaster.find(function(c) {
-                        var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12' || (c.c && String(c.c).startsWith('AG')));
-                        if (isAg) return false;
+                if (allMatches.length === 0 && window._customerDirectoryMaster) {
+                    allMatches = window._customerDirectoryMaster.filter(function(c) {
                         var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
                         return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
                     });
                 }
+                if (allMatches.length > 0) {
+                    targetCust = allMatches.find(c => c.isLinked) || allMatches.find(c => c.role === 'agent' || c.isAgent || c.atype === '12') || allMatches[0];
+                }
             }
-            if (!targetCust && partyName) {
+            if (!targetCust && partyName && !isPhoneName) {
                 var pUpper = partyName.toUpperCase();
                 targetCust = list.find(x => String(x.n || '').trim().toUpperCase() === pUpper);
             }
 
             if (targetCust) {
-                if (!partyName) partyName = targetCust.n || targetCust.name || '';
-                if (!cleanCode) cleanCode = targetCust.c || targetCust.code || '';
+                if (!partyName || isPhoneName) partyName = targetCust.n || targetCust.name || partyName;
+                if (!cleanCode || isCodePhone) cleanCode = targetCust.c || targetCust.code || cleanCode;
                 if (!station) station = targetCust.ct || targetCust.station || '';
-                if (!rawAgent) rawAgent = targetCust.ag || targetCust.agent || '';
+                if (!rawAgent) {
+                    var isAgCust = Boolean(targetCust.role === 'agent' || targetCust.isAgent || targetCust.atype === '12');
+                    rawAgent = targetCust.ag || targetCust.agent || (isAgCust ? (targetCust.n || targetCust.name) : '');
+                }
             }
 
             var safeCode = encodeURIComponent(cleanCode || partyName || cleanPhone10).replace(/'/g, "%27");

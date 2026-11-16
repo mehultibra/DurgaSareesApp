@@ -646,7 +646,7 @@ async function syncAccountingData() {
         let primaryPhone = phoneMap.get(code) || '';
         let phonesSet = allPhonesByParty.get(code) || new Set();
 
-        let linkData = localLinks[code] || localLinks[code.toUpperCase()] || null;
+        let linkData = localLinks[code] || localLinks[code.toUpperCase()] || (m.partyname && localLinks[String(m.partyname).trim().toUpperCase()]) || null;
         if (linkData && linkData.phone) {
             extractMasterPhones(linkData.phone).forEach(pClean => {
                 if (!primaryPhone) primaryPhone = pClean;
