@@ -1919,20 +1919,8 @@ window.triggerShare = async function (action) {
         }
     } else {
         if (shareType === 'ready') {
-            var isCurPacked = (curProduct.totalStock === 0) || (curProduct.stock && curProduct.stock['FULLY_PACKED'] === 1);
-            if (isCurPacked) {
-                // Auto-fallback to all designs so packed product images can be shared seamlessly
-                dArr = await getActualDesignsForProduct(curProduct, 'full', action);
-                if (dArr.length > 0) {
-                    for (var j = 0; j < dArr.length; j++) {
-                        var dUrl = await resolveCorrectUrl(curProduct, dArr[j]);
-                        if (dUrl && !highResUrls.includes(dUrl)) highResUrls.push(dUrl);
-                    }
-                }
-            } else {
-                alert("No ready designs currently in stock for this product.");
-                return;
-            }
+            alert("No ready designs currently in stock for this product.");
+            return;
         }
         // Cover mode: Use curProduct.coverDesignId first, then dsFallbackMap, then ready designs, then DIRECT
         var dsFallbackMap = JSON.parse(localStorage.getItem("dsFallbackMap") || "{}");
