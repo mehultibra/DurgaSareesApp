@@ -14027,24 +14027,6 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
         }
     }
 
-    if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
-        var isTargetAgentCheck = Boolean(cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG'))));
-        if (!isTargetAgentCheck) {
-            var topSister = window._currentReportingSisterAccounts.slice().sort(function (a, b) {
-                var cntA = parseInt(a.salesBillsCount || a.pb || 0) || 0;
-                var cntB = parseInt(b.salesBillsCount || b.pb || 0) || 0;
-                if (cntB !== cntA) return cntB - cntA;
-                var debA = parseFloat(a.totalDebit || a.b || 0) || 0;
-                var debB = parseFloat(b.totalDebit || b.b || 0) || 0;
-                return debB - debA;
-            })[0];
-            if (topSister) {
-                cust = topSister;
-                window._currentReportingCustomer = cust;
-            }
-        }
-    }
-
     // Reset In-Window Quick Party Search
     var qSearchInp = document.getElementById('custRepQuickPartySearch');
     if (qSearchInp) qSearchInp.value = '';
@@ -14059,24 +14041,30 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     if (acctWrapper && acctSelect) {
         if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
             var isAgentTarget = Boolean(cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG'))));
+            var isMergedDefault = Boolean(sisterAccountsList && sisterAccountsList.length > 1);
+            var optMatchesCust = false;
+            var sisterOptionsHtml = window._currentReportingSisterAccounts.map(s => {
+                var sCode = s.c || s.code;
+                var sName = s.n || s.name || sCode;
+                var isThisCust = !isMergedDefault && ((sCode && String(sCode).trim().toUpperCase() === pCodeNorm) || (sName && String(sName).trim().toUpperCase() === pCodeNorm));
+                if (isThisCust) optMatchesCust = true;
+                return `<option value="${esc(sCode)}" ${isThisCust ? 'selected' : ''}>${esc(sName)} [${esc(sCode)}]</option>`;
+            }).join('');
+
             acctSelect.innerHTML = `
-                <option value="__MERGED__" selected>🌟 ${isAgentTarget ? 'All Brokered Parties Merged' : 'All Accounts Merged'} (${window._currentReportingSisterAccounts.length} parties)</option>
-                ${window._currentReportingSisterAccounts.map(s => {
-                    var sCode = s.c || s.code;
-                    var sName = s.n || s.name || sCode;
-                    return `<option value="${esc(sCode)}">${esc(sName)} [${esc(sCode)}]</option>`;
-                }).join('')}
+                <option value="__MERGED__" ${(!optMatchesCust || isMergedDefault) ? 'selected' : ''}>🌟 ${isAgentTarget ? 'All Brokered Parties Merged' : 'All Accounts Merged'} (${window._currentReportingSisterAccounts.length} parties)</option>
+                ${sisterOptionsHtml}
             `;
             acctSelect.onchange = function () {
                 var val = this.value;
                 if (val !== '__MERGED__') {
                     var found = (window._compiledCustomersList || []).find(x => x.c === val || x.n === val);
                     if (found) window._currentReportingCustomer = found;
-                } else if (isAgentTarget) {
+                } else {
                     window._currentReportingCustomer = cust;
-    if (typeof window.selectPartyForOrder === 'function' && cust) {
-        window.selectPartyForOrder(cust);
-    }
+                    if (typeof window.selectPartyForOrder === 'function' && cust) {
+                        window.selectPartyForOrder(cust);
+                    }
                 }
                 window.renderCustomerReportActiveTab();
             };
@@ -14101,6 +14089,8 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
             acctWrapper.style.display = 'block';
         } else {
             acctWrapper.style.display = 'none';
+            acctSelect.innerHTML = '';
+            acctSelect.value = '';
         }
     }
 
@@ -14276,6 +14266,14 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
 window.closeCustomerReportsModal = function () {
     var modal = document.getElementById('customerDetailReportsModal');
     if (modal) modal.style.display = 'none';
+    var acctWrapper = document.getElementById('custRepAccountSelectWrapper');
+    if (acctWrapper) acctWrapper.style.display = 'none';
+    var acctSelect = document.getElementById('custRepAccountSelect');
+    if (acctSelect) {
+        acctSelect.innerHTML = '';
+        acctSelect.value = '';
+    }
+    window._currentReportingSisterAccounts = null;
 };
 
 // 8. Tab Switcher
@@ -14405,7 +14403,9 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     if (!cust) return;
 
     var acctSelEl = document.getElementById('custRepAccountSelect');
-    var selectedAcctCode = (acctSelEl && acctSelEl.value && acctSelEl.value !== '__MERGED__') ? acctSelEl.value : null;
+    var acctWrapEl = document.getElementById('custRepAccountSelectWrapper');
+    var isSelectVisible = Boolean(acctWrapEl && acctWrapEl.style.display !== 'none');
+    var selectedAcctCode = (isSelectVisible && acctSelEl && acctSelEl.value && acctSelEl.value !== '__MERGED__') ? acctSelEl.value : null;
     if (selectedAcctCode) {
         var matchedCust = (window._compiledCustomersList || []).find(x => x.c === selectedAcctCode || x.n === selectedAcctCode);
         if (matchedCust) cust = matchedCust;
@@ -14482,7 +14482,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
 
     var partyRep = window._accountingReportsCache[codeClean] || { finishSales: [], outstanding: [], ledger: [], bills: {} };
 
-    var isMergedView = Boolean(acctSelEl && acctSelEl.value === '__MERGED__' && window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1);
+    var isMergedView = Boolean(isSelectVisible && acctSelEl && acctSelEl.value === '__MERGED__' && window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1);
 
     if (isMergedView) {
         var token = await getCachedAuthToken();
@@ -14611,23 +14611,22 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                 return b.count - a.count;
             })[0];
             if (highestSisterObj && highestSisterObj.acc) {
-                cust = highestSisterObj.acc;
-                window._currentReportingCustomer = cust;
+                var topAcc = highestSisterObj.acc;
                 var nameEl = document.getElementById('custRepName');
-                if (nameEl) nameEl.innerText = cust.n || cust.c;
+                if (nameEl) nameEl.innerText = topAcc.n || topAcc.c;
                 var cityEl = document.getElementById('custRepCity');
                 if (cityEl) {
-                    cityEl.innerHTML = cust.ct ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:9px;"></i> ${escHtml(cust.ct)}` : '';
-                    cityEl.style.display = cust.ct ? 'inline-flex' : 'none';
+                    cityEl.innerHTML = topAcc.ct ? `<i class="fas fa-map-marker-alt" style="color:#ef4444; font-size:9px;"></i> ${escHtml(topAcc.ct)}` : '';
+                    cityEl.style.display = topAcc.ct ? 'inline-flex' : 'none';
                 }
                 var gstEl = document.getElementById('custRepGst');
                 if (gstEl) {
-                    gstEl.innerText = cust.g ? `GST: ${cust.g}` : '';
-                    gstEl.style.display = cust.g ? 'inline-flex' : 'none';
+                    gstEl.innerText = topAcc.g ? `GST: ${topAcc.g}` : '';
+                    gstEl.style.display = topAcc.g ? 'inline-flex' : 'none';
                 }
                 var agRow = document.getElementById('custRepAgentRow');
                 var agNameEl = document.getElementById('custRepAgentName');
-                var agVal = cust.ag || cust.agent || (Array.isArray(cust.agents) && cust.agents.length > 0 ? cust.agents.join(', ') : '');
+                var agVal = topAcc.ag || topAcc.agent || (Array.isArray(topAcc.agents) && topAcc.agents.length > 0 ? topAcc.agents.join(', ') : '');
                 if (agRow && agNameEl) {
                     if (agVal) {
                         agNameEl.innerText = agVal;
