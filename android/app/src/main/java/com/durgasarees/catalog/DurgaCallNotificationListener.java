@@ -246,7 +246,6 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             sLastProcessedKey = dedupeKey;
             sLastProcessedTime = now;
 
-            SharedPreferences sp = getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
             sp.edit()
                 .putString("last_call_phone", p10)
                 .putString("last_call_name", partyName)
