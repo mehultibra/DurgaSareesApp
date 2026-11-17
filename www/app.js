@@ -13988,6 +13988,16 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     }
     if (sisterAccountsList && Array.isArray(sisterAccountsList) && sisterAccountsList.length > 1) {
         window._currentReportingSisterAccounts = sisterAccountsList;
+        var cachedTop = null, maxDisAmt = -1;
+        sisterAccountsList.forEach(function(s) {
+            var sc = window.sanitizeDocId ? window.sanitizeDocId(s.c) : String(s.c).replace(/[\/\.\s]/g, '_');
+            var r = window._accountingReportsCache && window._accountingReportsCache[sc];
+            if (r && r.finishSales && r.finishSales.length) {
+                var amt = r.finishSales.reduce(function(tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
+                if (amt > maxDisAmt) { maxDisAmt = amt; cachedTop = s; }
+            }
+        });
+        if (cachedTop) { cust = cachedTop; window._currentReportingCustomer = cust; }
     } else {
         window._currentReportingSisterAccounts = null;
         var isTargetAgent = Boolean(cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG'))));
@@ -14022,6 +14032,16 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
                 });
                 if (sisters.length > 1) {
                     window._currentReportingSisterAccounts = sisters;
+                    var cachedTop = null, maxDisAmt = -1;
+                    sisters.forEach(function(s) {
+                        var sc = window.sanitizeDocId ? window.sanitizeDocId(s.c) : String(s.c).replace(/[\/\.\s]/g, '_');
+                        var r = window._accountingReportsCache && window._accountingReportsCache[sc];
+                        if (r && r.finishSales && r.finishSales.length) {
+                            var amt = r.finishSales.reduce(function(tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
+                            if (amt > maxDisAmt) { maxDisAmt = amt; cachedTop = s; }
+                        }
+                    });
+                    if (cachedTop) { cust = cachedTop; window._currentReportingCustomer = cust; }
                 }
             }
         }
@@ -14635,6 +14655,12 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
                         agRow.style.display = 'none';
                     }
                 }
+                var liveBadge = document.getElementById('liveCallStatusBadge');
+                if (liveBadge && liveBadge.style.display !== 'none') {
+                    var livePhone = topAcc.p || cust.p || (window._lastActiveCallPhone || '');
+                    liveBadge.innerHTML = `<span><i class="fas fa-phone-volume fa-shake" style="color:#16a34a; margin-right:5px;"></i> 📞 LIVE CALL: ${escHtml(topAcc.n || topAcc.c)}${livePhone ? (' (' + escHtml(livePhone) + ')') : ''}</span><span style="font-size:10px; color:#15803d;">Dispatches &amp; Orders Ready</span>`;
+                }
+                window._lastActiveCallName = topAcc.n || topAcc.c;
             }
         }
         partyRep = { finishSales: mergedFs, outstanding: mergedOs, ledger: mergedLedger, bills: {}, isMerged: true };
@@ -17461,13 +17487,22 @@ window.handleDetectedNativeCall = async function (phoneOrName, direction, partyN
         // Customer with multiple accounts: find the account with the last billing
         var accountWithLastBilling = allMatches[0];
         var latestBillDate = '';
+        var maxDisAmt = -1;
         allMatches.forEach(function (acc) {
             var accCode = window.sanitizeDocId ? window.sanitizeDocId(acc.c) : String(acc.c).replace(/[\/\.\s]/g, '_');
             var rep = window._accountingReportsCache && window._accountingReportsCache[accCode];
-            var bDate = (rep && rep.finishSales && rep.finishSales.length > 0 && rep.finishSales[0][0]) || acc.lastBillDate || '';
-            if (bDate && (!latestBillDate || bDate > latestBillDate)) {
-                latestBillDate = bDate;
-                accountWithLastBilling = acc;
+            if (rep && rep.finishSales && rep.finishSales.length > 0) {
+                var amt = rep.finishSales.reduce(function(tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
+                if (amt > maxDisAmt) {
+                    maxDisAmt = amt;
+                    accountWithLastBilling = acc;
+                }
+            } else if (maxDisAmt <= 0) {
+                var bDate = acc.lastBillDate || '';
+                if (bDate && (!latestBillDate || bDate > latestBillDate)) {
+                    latestBillDate = bDate;
+                    accountWithLastBilling = acc;
+                }
             }
         });
 
