@@ -260,6 +260,60 @@ var activeUser = null;
 window.livePresenceHistory = [];
 
 // ==========================================
+// 🏷️ B2B & SUPER B2B PRICING ENGINE (COL AB & AC)
+// ==========================================
+window.activePricingTier = localStorage.getItem('ds_active_pricing_tier') || 'retail';
+
+window.getProductEffectivePrice = function (p, explicitTier) {
+    if (!p) return 0;
+    var tier = explicitTier || window.activePricingTier || 'retail';
+    var regularPrice = Number(p.price) || 0;
+    var b2b = Number(p.b2bPrice) || 0;
+    var superB2b = Number(p.superB2bPrice) || 0;
+
+    if (tier === 'super_b2b') {
+        if (superB2b > 0) return superB2b;
+        if (b2b > 0) return b2b;
+        return regularPrice;
+    }
+    if (tier === 'b2b') {
+        if (b2b > 0) return b2b;
+        return regularPrice;
+    }
+    return regularPrice;
+};
+
+window.setPricingTier = function (tier, fromCustomerLink) {
+    var validTier = (tier === 'super_b2b' || tier === 'b2b') ? tier : 'retail';
+    window.activePricingTier = validTier;
+    try { localStorage.setItem('ds_active_pricing_tier', validTier); } catch (e) { }
+
+    var sel = document.getElementById('superAdminPricingSelect');
+    if (sel && sel.value !== validTier) sel.value = validTier;
+
+    if (typeof renderProductGrid === 'function' && Array.isArray(window.displayList)) {
+        renderProductGrid(window.displayList);
+    }
+    if (typeof curProduct !== 'undefined' && curProduct) {
+        var dtPrice = document.getElementById('dtPriceBot');
+        if (dtPrice) dtPrice.innerText = window.getProductEffectivePrice(curProduct);
+    }
+    if (fromCustomerLink) {
+        var lbl = validTier === 'super_b2b' ? 'Super B2B (Col AC)' : (validTier === 'b2b' ? 'B2B (Col AB)' : 'Retail (Col J)');
+        var toastId = 'pToast_' + Date.now();
+        var tHtml = `<div id="${toastId}" style="position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:8px 16px; border-radius:20px; font-size:12px; font-weight:bold; box-shadow:0 4px 15px rgba(0,0,0,0.3); z-index:999999; text-align:center; display:flex; align-items:center; gap:6px; pointer-events:none; transition:opacity 0.4s;">
+            <i class="fas fa-tags" style="color:#38bdf8;"></i>
+            <span>Active Rate: ${lbl}</span>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', tHtml);
+        setTimeout(() => {
+            var el = document.getElementById(toastId);
+            if (el) { el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }
+        }, 2500);
+    }
+};
+
+// ==========================================
 // 🚀 MYNTRA-STYLE MULTI-SECTION REGISTRY
 // ==========================================
 window.DEFAULT_SECTIONS = [
@@ -550,8 +604,10 @@ window.updateLivePresence = function (productId, force = false) {
     if (localStorage.getItem('ds_active_on_behalf') || localStorage.getItem('dsIsAdmin') === 'true' || localStorage.getItem('dsIsStaff') === 'true') return;
 
     let now = Date.now();
-    if (!force && now - lastPresencePush < 15000) return;
+    let isNewProduct = Boolean(productId && productId !== window._lastPresenceProductId);
+    if (!force && !isNewProduct && now - lastPresencePush < 15000) return;
     lastPresencePush = now;
+    if (productId) window._lastPresenceProductId = productId;
 
     try {
         if (typeof firebase === 'undefined' || !firebase.firestore) return;
@@ -563,7 +619,7 @@ window.updateLivePresence = function (productId, force = false) {
         for (let k in cart) {
             if (cart[k] && cart[k].qty > 0) {
                 totalQty += Number(cart[k].qty);
-                let rate = (cart[k].p && cart[k].p.price) ? Number(cart[k].p.price) : 0;
+                let rate = (cart[k].p && cart[k].p.price) ? Number(window.getProductEffectivePrice ? window.getProductEffectivePrice(cart[k].p) : cart[k].p.price) : 0;
                 totalVal += Number(cart[k].qty) * rate;
                 cartSummary.push(`${cart[k].p ? cart[k].p.name : 'Saree'} (${cart[k].design}): ${cart[k].qty} pcs`);
             }
@@ -582,6 +638,8 @@ window.updateLivePresence = function (productId, force = false) {
 
         let historyMap = {};
         try { historyMap = JSON.parse(localStorage.getItem('dsLiveHistory') || "{}"); } catch (e) { }
+        let recentSurfing = [];
+        try { recentSurfing = JSON.parse(localStorage.getItem('dsRecentSurfing') || "[]"); } catch (e) { }
 
         const payload = {
             user: uid,
@@ -589,6 +647,7 @@ window.updateLivePresence = function (productId, force = false) {
             customerName: customerName,
             customerStation: customerStation,
             historyMap: historyMap,
+            recentSurfing: recentSurfing,
             cartCount: totalQty,
             cartValue: totalVal,
             cartSummary: cartSummary,
@@ -596,6 +655,7 @@ window.updateLivePresence = function (productId, force = false) {
             isApproved: cd.isApproved !== undefined ? cd.isApproved : !!cd.linkedAccount,
             linkedAccount: cd.linkedAccount || cd.accountCode || null,
             linkedAccountName: cd.linkedAccountName || cd.name || null,
+            pricingTier: cd.pricingTier || window.activePricingTier || 'retail',
             approvedByAdmin: cd.approvedByAdmin || null,
             approvedAt: cd.approvedAt || null,
             role: cd.role || (cd.isAgent ? 'agent' : 'customer'),
@@ -721,6 +781,11 @@ window.addEventListener('DOMContentLoaded', function () {
                     if (menuLiveAdmin) menuLiveAdmin.style.display = (window.isSuperAdmin || window.isAdminMode) ? 'flex' : 'none';
                     var btnTopLive = document.getElementById('btnTopLiveAdmin');
                     if (btnTopLive) btnTopLive.style.display = (window.isSuperAdmin || window.isAdminMode) ? 'block' : 'none';
+                    var prSelect = document.getElementById('superAdminPricingSelect');
+                    if (prSelect) {
+                        prSelect.style.display = (window.isSuperAdmin || window.isAdminMode) ? 'inline-block' : 'none';
+                        prSelect.value = window.activePricingTier || 'retail';
+                    }
                     if (typeof window.renderSectionTabBar === 'function') window.renderSectionTabBar();
                     alert("Admin Mode: " + (window.isAdminMode ? "ON" : "OFF"));
                     if (typeof window.updateOrderOnBehalfBanner === 'function') window.updateOrderOnBehalfBanner();
@@ -1450,6 +1515,10 @@ window.syncAdminUI = function () {
         if (document.getElementById('btnTopLiveAdmin')) {
             document.getElementById('btnTopLiveAdmin').style.display = hasCRM ? 'inline-block' : 'none';
         }
+        if (document.getElementById('superAdminPricingSelect')) {
+            document.getElementById('superAdminPricingSelect').style.display = hasCRM ? 'inline-block' : 'none';
+            document.getElementById('superAdminPricingSelect').value = window.activePricingTier || 'retail';
+        }
         if (document.getElementById('menuManageSections')) {
             document.getElementById('menuManageSections').style.display = showAdminUI ? 'flex' : 'none';
         }
@@ -1651,6 +1720,10 @@ function initApp() {
         if (window.isSuperAdmin) {
             if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
             if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
+            if (document.getElementById('superAdminPricingSelect')) {
+                document.getElementById('superAdminPricingSelect').style.display = 'inline-block';
+                document.getElementById('superAdminPricingSelect').value = window.activePricingTier || 'retail';
+            }
             if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
         }
     } catch (e) {
@@ -1677,6 +1750,8 @@ function initApp() {
 
             if (name && name.toLowerCase() !== "temp" && name.toLowerCase() !== "unnamed" && !isWix) {
                 var finalPrice = d.price !== undefined ? d.price : (f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0);
+                var finalB2bPrice = d.b2bPrice !== undefined ? Number(d.b2bPrice) || 0 : (f.b2bPrice ? (f.b2bPrice.doubleValue || f.b2bPrice.integerValue || parseFloat(f.b2bPrice.stringValue) || 0) : 0);
+                var finalSuperB2bPrice = d.superB2bPrice !== undefined ? Number(d.superB2bPrice) || 0 : (f.superB2bPrice ? (f.superB2bPrice.doubleValue || f.superB2bPrice.integerValue || parseFloat(f.superB2bPrice.stringValue) || 0) : 0);
                 var finalPacking = d.packing !== undefined ? d.packing : (f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1");
 
                 // --- ADMIN & INVENTORY PARSING ---
@@ -1777,6 +1852,8 @@ function initApp() {
                     if ((!existingP.zoomUrl || existingP.zoomUrl.endsWith('/')) && d.zoomUrl && !d.zoomUrl.endsWith('/')) {
                         existingP.zoomUrl = d.zoomUrl;
                     }
+                    if (!existingP.b2bPrice && finalB2bPrice) existingP.b2bPrice = finalB2bPrice;
+                    if (!existingP.superB2bPrice && finalSuperB2bPrice) existingP.superB2bPrice = finalSuperB2bPrice;
                     // 3. Recalculate merged total stock
                     if (existingP.stock['FULLY_PACKED'] === 1 && !Object.keys(existingP.stock).some(k => k !== 'DIRECT' && k !== 'FULLY_PACKED' && !k.toLowerCase().startsWith('cover') && existingP.stock[k] > 0)) {
                         existingP.totalStock = 0;
@@ -1800,6 +1877,8 @@ function initApp() {
                     name: name,
                     sku: d.sku !== undefined ? d.sku : (f.sku ? f.sku.stringValue : ""),
                     price: finalPrice,
+                    b2bPrice: finalB2bPrice,
+                    superB2bPrice: finalSuperB2bPrice,
                     cat: d.cat !== undefined ? d.cat : (f.cat ? f.cat.stringValue : "Uncategorized"),
                     gridUrl: d.gridUrl !== undefined ? d.gridUrl : (f.gridUrl ? f.gridUrl.stringValue : ""),
                     zoomUrl: d.zoomUrl !== undefined ? d.zoomUrl : (f.zoomUrl ? f.zoomUrl.stringValue : ""),
@@ -2552,10 +2631,18 @@ function buildCardDetails(p) {
     var coverKey = p.id + '_DIRECT';
     var coverQty = cart[coverKey] ? parseInt(cart[coverKey].qty) || 0 : 0;
 
-    var parsedPrice = parseInt(p.price) || 0;
+    var effPrice = window.getProductEffectivePrice ? window.getProductEffectivePrice(p) : (parseInt(p.price) || 0);
+    var parsedPrice = parseInt(effPrice) || 0;
     var displayMrp = parseInt(p.mrp) || Math.round(parsedPrice / 0.70);
     var offPercent = displayMrp > parsedPrice ? Math.round(((displayMrp - parsedPrice) / displayMrp) * 100) : 30;
     var favClass = (favorites[p.id] || (p.docId && favorites[p.docId])) ? "fas fa-heart fav-active" : "far fa-heart fav-inactive";
+
+    var tierBadge = '';
+    if (window.activePricingTier === 'super_b2b' && (p.superB2bPrice > 0 || p.b2bPrice > 0)) {
+        tierBadge = '<span style="font-size:9px; background:#fef3c7; color:#92400e; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:3px;">SUPER</span>';
+    } else if (window.activePricingTier === 'b2b' && p.b2bPrice > 0) {
+        tierBadge = '<span style="font-size:9px; background:#dbeafe; color:#1e40af; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:3px;">B2B</span>';
+    }
 
     var h = [];
     h.push('<div style="display:flex; align-items:center; width:100%; gap:4px; overflow:hidden;">');
@@ -2572,7 +2659,7 @@ function buildCardDetails(p) {
 
     // Left side: Price, MRP, OFF
     h.push('<div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; overflow:hidden; white-space:nowrap;">');
-    h.push('<span style="font-weight:700; font-size:14px; color:#282c3f;">₹' + parsedPrice + '</span>');
+    h.push('<span style="font-weight:700; font-size:14px; color:#282c3f;">₹' + parsedPrice + tierBadge + '</span>');
     if (displayMrp > 0) h.push('<span style="font-size:10px; color:#94969f; text-decoration:line-through; flex-shrink:1; text-overflow:ellipsis; overflow:hidden;">₹' + displayMrp + '</span>');
     if (offPercent > 0) h.push('<span style="font-size:10px; color:#ff905a; font-weight:700; flex-shrink:0;">' + offPercent + '% OFF</span>');
     h.push('</div>');
@@ -3136,12 +3223,24 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         window.recordTimeSpent();
     }
 
-    window.updateLivePresence(productId);
-
     var p = allProducts.find(x => x.id === productId || x.docId === productId);
     if (!p) return;
     curProduct = p;
     window.viewStartTime = Date.now();
+
+    // Log to recent surfing list immediately so Live Customer admin sees every product
+    try {
+        var surfList = JSON.parse(localStorage.getItem('dsRecentSurfing') || '[]');
+        if (!surfList.length || surfList[0].name !== p.name) {
+            surfList.unshift({ name: p.name, time: Date.now(), id: p.id });
+            if (surfList.length > 25) surfList = surfList.slice(0, 25);
+            localStorage.setItem('dsRecentSurfing', JSON.stringify(surfList));
+        }
+    } catch (e) { }
+
+    if (typeof window.updateLivePresence === 'function') {
+        window.updateLivePresence(productId, true);
+    }
 
     // Sync Active Section Theme on Deep Link / openDetail (Audit Fix 6)
     var pSec = p.section || 'sarees';
@@ -3168,7 +3267,7 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
     }
 
     document.getElementById('dtNameTop').innerText = p.name;
-    document.getElementById('dtPriceBot').innerText = p.price || '0';
+    document.getElementById('dtPriceBot').innerText = (window.getProductEffectivePrice ? window.getProductEffectivePrice(p) : p.price) || '0';
     document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
     if (typeof window.syncAdminEditableFields === 'function') window.syncAdminEditableFields();
 
@@ -3189,13 +3288,15 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
                     var livePrice = f.price ? (f.price.doubleValue || f.price.integerValue || 0) : 0;
                     var livePacking = f.packing ? (f.packing.stringValue || (f.packing.integerValue !== undefined ? String(f.packing.integerValue) : "") || (f.packing.doubleValue !== undefined ? String(f.packing.doubleValue) : "") || "1") : "1";
                     var liveIgLinks = f.igLinks ? f.igLinks.stringValue : "[]";
+                    if (f.b2bPrice) p.b2bPrice = f.b2bPrice.doubleValue || f.b2bPrice.integerValue || parseFloat(f.b2bPrice.stringValue) || 0;
+                    if (f.superB2bPrice) p.superB2bPrice = f.superB2bPrice.doubleValue || f.superB2bPrice.integerValue || parseFloat(f.superB2bPrice.stringValue) || 0;
 
                     p.price = livePrice;
                     p.packing = livePacking;
                     p.igLinks = liveIgLinks;
 
                     if (curProduct && curProduct.id === p.id) {
-                        document.getElementById('dtPriceBot').innerText = p.price || '0';
+                        document.getElementById('dtPriceBot').innerText = (window.getProductEffectivePrice ? window.getProductEffectivePrice(p) : p.price) || '0';
                         document.getElementById('dtPackBot').innerText = (p.packing && p.packing !== "") ? p.packing : "-";
                         if (dtIgBtn) {
                             var hasLiveLinks = p.igLinks && p.igLinks !== "[]" && p.igLinks.trim() !== "";
@@ -5983,11 +6084,17 @@ function saveProductEdit(p) {
         if (p && p.docId) {
             showDevLog("Syncing Page: " + p.name + " -> Rate: " + p.price + " Pack: " + p.packing, false);
 
-            var fbUpdateUrlPrice = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=price";
+            var fbUpdateUrlPrice = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=b2bPrice&updateMask.fieldPaths=superB2bPrice";
             window.fetchWithRetry(fbUpdateUrlPrice, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields: { price: { doubleValue: Number(p.price) } } })
+                body: JSON.stringify({
+                    fields: {
+                        price: { doubleValue: Number(p.price) || 0 },
+                        b2bPrice: { doubleValue: Number(p.b2bPrice) || 0 },
+                        superB2bPrice: { doubleValue: Number(p.superB2bPrice) || 0 }
+                    }
+                })
             }, 1).then(res => {
                 if (res.ok) showDevLog("✅ Firebase Price Updated: " + p.name, false);
                 else showDevLog("❌ FB Err " + res.status + " - No Admin Perms for Price?", true);
@@ -6011,6 +6118,8 @@ function saveProductEdit(p) {
                         action: 'updateProductDetails',
                         productName: p.name,
                         price: p.price,
+                        b2bPrice: p.b2bPrice || 0,
+                        superB2bPrice: p.superB2bPrice || 0,
                         packing: p.packing,
                         section: p.section || 'sarees'
                     })
@@ -7275,6 +7384,8 @@ function saveCartInlineEdit(productId, closeEdit = true) {
                         action: 'updateProductDetails',
                         productName: matchP.name,
                         price: newRate,
+                        b2bPrice: matchP.b2bPrice || 0,
+                        superB2bPrice: matchP.superB2bPrice || 0,
                         packing: newPacking,
                         section: matchP.section || 'sarees'
                     })
@@ -9710,7 +9821,8 @@ window.openLiveAdmin = function () {
                             isApproved: pf.isApproved ? pf.isApproved.booleanValue : true,
                             approvalStatus: (pf.approvalStatus && pf.approvalStatus.stringValue) ? pf.approvalStatus.stringValue : 'approved',
                             approvedByAdmin: pf.approvedByAdmin ? pf.approvedByAdmin.stringValue : 'Admin',
-                            approvedAt: pf.approvedAt ? (pf.approvedAt.timestampValue || pf.approvedAt.stringValue) : ''
+                            approvedAt: pf.approvedAt ? (pf.approvedAt.timestampValue || pf.approvedAt.stringValue) : '',
+                            pricingTier: pf.pricingTier ? pf.pricingTier.stringValue : 'b2b'
                         });
                     }
                 });
@@ -9906,6 +10018,7 @@ window.openLiveAdmin = function () {
                         if (pl.approvedByAdmin) item.data.approvedByAdmin = pl.approvedByAdmin;
                         if (pl.approvedAt) item.data.approvedAt = pl.approvedAt;
                         if (pl.role) item.data.role = pl.role;
+                        if (pl.pricingTier) item.data.pricingTier = pl.pricingTier;
                     }
                 });
 
@@ -9958,7 +10071,18 @@ window.openLiveAdmin = function () {
 
                 let countsEl = document.getElementById('adminLiveCounts');
                 if (countsEl) {
-                    countsEl.innerHTML = `<span style="color:#10b981; font-weight:bold;">🟢 ${liveCount} Live</span> &bull; <span style="color:#d97706; font-weight:bold;">⏳ ${pendingCount} Pending</span> &bull; <span style="color:#475569;">📱 ${sortedDocs.length} Total</span>`;
+                    let curF = window._activeLiveFilter || 'all';
+                    let pill = (filterName, bgActive, textActive, bgIdle, textIdle, label) => {
+                        let isAct = curF === filterName;
+                        return `<span onclick="window.setLiveStatusFilter('${filterName}')" style="border-radius:12px; padding:3px 9px; cursor:pointer; font-weight:bold; font-size:11px; background:${isAct ? bgActive : bgIdle}; color:${isAct ? textActive : textIdle}; border:1px solid ${isAct ? bgActive : '#cbd5e1'}; box-shadow:${isAct ? '0 1px 3px rgba(0,0,0,0.15)' : 'none'}; transition:all 0.2s;">${label}</span>`;
+                    };
+                    countsEl.innerHTML = `
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            ${pill('live', '#10b981', '#fff', '#ecfdf5', '#047857', '🟢 ' + liveCount + ' Live')}
+                            ${pill('pending', '#d97706', '#fff', '#fffbeb', '#b45309', '⏳ ' + pendingCount + ' Pending')}
+                            ${pill('all', '#475569', '#fff', '#f1f5f9', '#475569', '📱 ' + sortedDocs.length + ' Total')}
+                        </div>
+                    `;
                 }
 
                 sortedDocs.forEach(item => {
@@ -9986,9 +10110,10 @@ window.openLiveAdmin = function () {
 
                     let actionsHtml = isGuest
                         ? `<span style="background:#e0e0e0; color:#555; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold;">Guest Visitor</span>`
-                        : `<div style="display:flex; gap:8px;">
-                             <button type="button" onclick="window.initiateTrackedCall('${docId}', '${docId}', '${docId}', '', '')" style="background:#2563eb; color:white; padding:6px 12px; border-radius:4px; border:none; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:5px; cursor:pointer;"><i class="fas fa-phone"></i> Call</button>
-                             <a href="https://wa.me/${docId.replace(/\D/g, '')}" target="_blank" style="background:#16a34a; color:white; padding:6px 12px; border-radius:4px; text-decoration:none; font-size:13px; font-weight:bold; display:inline-flex; align-items:center; gap:5px;"><i class="fab fa-whatsapp"></i> WA</a>
+                        : `<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                             <button type="button" onclick="window.selectPartyFromLive('${docId}')" style="background:#0284c7; color:white; padding:5px 9px; border-radius:4px; border:none; font-size:12px; font-weight:bold; display:inline-flex; align-items:center; gap:4px; cursor:pointer;" title="Select this party for order with their pricing tier"><i class="fas fa-shopping-cart"></i> Order</button>
+                             <button type="button" onclick="window.initiateTrackedCall('${docId}', '${docId}', '${docId}', '', '')" style="background:#2563eb; color:white; padding:5px 9px; border-radius:4px; border:none; text-decoration:none; font-size:12px; font-weight:bold; display:inline-flex; align-items:center; gap:4px; cursor:pointer;"><i class="fas fa-phone"></i> Call</button>
+                             <a href="https://wa.me/${docId.replace(/\D/g, '')}" target="_blank" style="background:#16a34a; color:white; padding:5px 9px; border-radius:4px; text-decoration:none; font-size:12px; font-weight:bold; display:inline-flex; align-items:center; gap:4px;"><i class="fab fa-whatsapp"></i> WA</a>
                            </div>`;
 
                     let viewingHtml = '';
@@ -10002,6 +10127,24 @@ window.openLiveAdmin = function () {
                     }
 
                     let historyHtml = '';
+                    if (d.recentSurfing && d.recentSurfing.length > 0) {
+                        let surfPills = d.recentSurfing.slice(0, 10).map((s, idx) => {
+                            let timeAgo = '';
+                            if (s.time) {
+                                let secAgo = Math.max(0, Math.round((Date.now() - s.time) / 1000));
+                                if (secAgo < 60) timeAgo = `${secAgo}s ago`;
+                                else if (secAgo < 3600) timeAgo = `${Math.floor(secAgo / 60)}m ago`;
+                                else timeAgo = `${Math.floor(secAgo / 3600)}h ago`;
+                            }
+                            return `<span style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px; font-size:11px; color:#1e293b; display:inline-flex; align-items:center; gap:3px;">
+                                <b>${esc(s.name || s)}</b> ${timeAgo ? `<span style="color:#64748b; font-size:9.5px;">(${timeAgo})</span>` : ''}
+                            </span>`;
+                        }).join(' ');
+                        historyHtml += `<div style="font-size:11px; color:#475569; margin-top:6px; display:flex; flex-direction:column; gap:3px;">
+                            <span style="font-weight:bold; color:#0f172a;"><i class="fas fa-fire" style="color:#ef4444;"></i> Surfed Live (${d.recentSurfing.length}):</span>
+                            <div style="display:flex; flex-wrap:wrap; gap:4px;">${surfPills}</div>
+                        </div>`;
+                    }
                     if (d.historyMap && Object.keys(d.historyMap).length > 0) {
                         let sortedDates = Object.keys(d.historyMap).sort().reverse();
                         let visibleHtml = '';
@@ -10133,8 +10276,9 @@ window.openLiveAdmin = function () {
                     }
 
                     let searchHaystack = esc((dispName + ' ' + docId + ' ' + (d.customerStation || '') + ' ' + (d.role || '') + ' ' + (d.linkedAccountName || '') + ' ' + (d.linkedAccount || '')).toLowerCase());
+                    let isPendingCard = !isGuest && !isAdminUser && (d.approvalStatus === 'pending' || !d.isApproved);
 
-                    let html = `<div class="admin-live-card" data-search="${searchHaystack}" style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${borderColor};">
+                    let html = `<div class="admin-live-card" data-search="${searchHaystack}" data-pending="${isPendingCard ? '1' : '0'}" data-live="${isLiveNow ? '1' : '0'}" style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${borderColor};">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                             <div style="display:flex; flex-direction:column; gap:4px;">
                                 <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -10181,13 +10325,41 @@ window.openLiveAdmin = function () {
         let visible = 0;
         cards.forEach(function (card) {
             let str = card.getAttribute('data-search') || card.innerText.toLowerCase();
-            if (!query || str.includes(query)) {
+            let matchesQuery = !query || str.includes(query);
+            let matchesStatus = true;
+            if (window._activeLiveFilter === 'pending') {
+                matchesStatus = card.getAttribute('data-pending') === '1';
+            } else if (window._activeLiveFilter === 'live') {
+                matchesStatus = card.getAttribute('data-live') === '1';
+            }
+            if (matchesQuery && matchesStatus) {
                 card.style.display = 'block';
                 visible++;
             } else {
                 card.style.display = 'none';
             }
         });
+    };
+
+    window.setLiveStatusFilter = function (f) {
+        if (window._activeLiveFilter === f && f !== 'all') {
+            window._activeLiveFilter = 'all';
+        } else {
+            window._activeLiveFilter = f;
+        }
+        let searchInp = document.getElementById('adminLiveSearchInput');
+        window.filterLiveUsers(searchInp ? searchInp.value : '');
+        let curF = window._activeLiveFilter || 'all';
+        let countsEl = document.getElementById('adminLiveCounts');
+        if (countsEl) {
+            let spans = countsEl.querySelectorAll('span[onclick^="window.setLiveStatusFilter"]');
+            spans.forEach(sp => {
+                let onclickStr = sp.getAttribute('onclick') || '';
+                let isAct = onclickStr.includes(`'${curF}'`);
+                sp.style.opacity = isAct ? '1' : '0.65';
+                sp.style.boxShadow = isAct ? '0 1px 3px rgba(0,0,0,0.2)' : 'none';
+            });
+        }
     };
 
     fetchLiveData();
@@ -10219,6 +10391,84 @@ window.refreshLiveApprovalBoxes = function () {
     });
 };
 
+window.selectPartyFromLive = function (docId) {
+    var pKey = getPhoneKey(docId) || docId;
+    var uData = (window.adminCustomerCache && (window.adminCustomerCache[docId] || window.adminCustomerCache[pKey])) || null;
+    var accCode = uData ? (uData.linkedAccount || uData.linkedAccountName) : null;
+    var cust = null;
+    if (accCode && window._compiledCustomersList) {
+        var codeUpper = String(accCode).trim().toUpperCase();
+        cust = window._compiledCustomersList.find(x => String(x.c || '').trim().toUpperCase() === codeUpper || String(x.n || '').trim().toUpperCase() === codeUpper);
+    }
+    if (!cust && window._compiledCustomersList) {
+        var p10 = String(docId).replace(/\D/g, '').slice(-10);
+        cust = window._compiledCustomersList.find(x => {
+            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? String(x.p || x.phone).split(/[,;/ ]+/) : []));
+            return rawList.some(num => String(num || '').replace(/\D/g, '').slice(-10) === p10);
+        });
+    }
+    if (cust) {
+        if (uData && uData.pricingTier) cust.pricingTier = uData.pricingTier;
+        window.closeLiveAdmin();
+        window.selectPartyForOrder(cust);
+    } else {
+        alert("Account is not yet linked to an ERP customer. Please approve & link first.");
+    }
+};
+
+window.updateCustomerPricingTier = async function (docId, partyCode, newTier) {
+    try {
+        var validTier = (newTier === 'super_b2b' || newTier === 'b2b') ? newTier : 'retail';
+        var pKey = getPhoneKey(docId) || docId;
+        if (!window.adminCustomerCache) window.adminCustomerCache = {};
+        if (window.adminCustomerCache[docId]) window.adminCustomerCache[docId].pricingTier = validTier;
+        if (pKey && window.adminCustomerCache[pKey]) window.adminCustomerCache[pKey].pricingTier = validTier;
+
+        // 1. Update PartyLinks
+        if (partyCode) {
+            var safeCode = encodeURIComponent(String(partyCode).trim().toUpperCase().replace(/[\/\.]/g, '_'));
+            var partyPatchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyLinks/" + safeCode + "?updateMask.fieldPaths=pricingTier";
+            await fetch(partyPatchUrl, {
+                method: "PATCH",
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fields: { pricingTier: { stringValue: validTier } } })
+            }).catch(e => console.warn("PartyLinks tier update err:", e));
+
+            try {
+                var localBackup = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}');
+                var cUpper = String(partyCode).trim().toUpperCase();
+                if (!localBackup[cUpper]) localBackup[cUpper] = {};
+                localBackup[cUpper].pricingTier = validTier;
+                localStorage.setItem('ds_party_links_backup', JSON.stringify(localBackup));
+            } catch (e) { }
+        }
+
+        // 2. Update LiveSessions
+        if (docId) {
+            var lpUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(docId) + "?updateMask.fieldPaths=pricingTier";
+            await fetch(lpUrl, {
+                method: "PATCH",
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fields: { pricingTier: { stringValue: validTier } } })
+            }).catch(e => console.warn("LiveSessions tier update err:", e));
+        }
+
+        // 3. If currently on-behalf of this party, sync active tier immediately
+        var activeOnBehalf = null;
+        try { activeOnBehalf = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch (e) { }
+        if (activeOnBehalf && (activeOnBehalf.firm === partyCode || activeOnBehalf.phone === docId)) {
+            activeOnBehalf.pricingTier = validTier;
+            localStorage.setItem('ds_active_on_behalf', JSON.stringify(activeOnBehalf));
+            window.setPricingTier(validTier, true);
+        }
+
+        var tierName = validTier === 'super_b2b' ? 'Super B2B (Col AC)' : (validTier === 'b2b' ? 'B2B (Col AB)' : 'Retail (Col J)');
+        alert(`✅ Pricing Tier for ${partyCode || docId} updated to: ${tierName}`);
+    } catch (err) {
+        console.error("updateCustomerPricingTier error:", err);
+    }
+};
+
 // 📋 Render Account Approval & Linking Card
 window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
     if (!uData || uData.isAdmin || uData.role === 'admin') return '';
@@ -10228,17 +10478,28 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
     if (isApproved) {
         var approvedDate = uData.approvedAt ? new Date(uData.approvedAt).toLocaleDateString('en-IN') : 'Approved';
         var accLabel = uData.linkedAccountName ? `${uData.linkedAccountName} (${uData.linkedAccount})` : (uData.linkedAccount || 'Account Verified');
+        var custTier = uData.pricingTier || 'b2b';
         return `
-            <div style="font-size:11px; color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0; padding:6px 10px; border-radius:6px; margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <i class="fas fa-check-circle" style="color:#059669;"></i> <b>Linked Permanently:</b> ${esc(accLabel)}
-                    <div style="font-size:10px; color:#047857; margin-top:2px;">
-                        Approved by: <b>${esc(uData.approvedByAdmin || 'Admin')}</b> on ${approvedDate}
+            <div style="font-size:11px; color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0; padding:6px 10px; border-radius:6px; margin-top:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <i class="fas fa-check-circle" style="color:#059669;"></i> <b>Linked Permanently:</b> ${esc(accLabel)}
+                        <div style="font-size:10px; color:#047857; margin-top:2px;">
+                            Approved by: <b>${esc(uData.approvedByAdmin || 'Admin')}</b> on ${approvedDate}
+                        </div>
                     </div>
+                    <span style="background:${isAgent ? '#7c3aed' : '#059669'}; color:#fff; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:4px;">
+                        ${isAgent ? 'AGENT APPROVED' : 'APPROVED'}
+                    </span>
                 </div>
-                <span style="background:${isAgent ? '#7c3aed' : '#059669'}; color:#fff; font-size:10px; font-weight:bold; padding:2px 7px; border-radius:4px;">
-                    ${isAgent ? 'AGENT APPROVED' : 'APPROVED'}
-                </span>
+                <div style="display:flex; align-items:center; gap:6px; margin-top:6px; padding-top:6px; border-top:1px dashed #a7f3d0;">
+                    <span style="font-size:10.5px; font-weight:bold; color:#065f46;">Pricing Tier:</span>
+                    <select onchange="window.updateCustomerPricingTier('${docId}', '${esc(uData.linkedAccount)}', this.value)" style="font-size:10.5px; font-weight:bold; padding:2px 6px; border-radius:4px; border:1px solid #a7f3d0; background:#fff; color:#065f46; cursor:pointer;">
+                        <option value="b2b" ${custTier === 'b2b' ? 'selected' : ''}>B2B (Col AB)</option>
+                        <option value="super_b2b" ${custTier === 'super_b2b' ? 'selected' : ''}>Super B2B (Col AC)</option>
+                        <option value="retail" ${custTier === 'retail' ? 'selected' : ''}>Retail (Col J)</option>
+                    </select>
+                </div>
             </div>
         `;
     }
@@ -10427,19 +10688,20 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
                 approvedAt: { timestampValue: nowIso },
                 linkedAccount: { stringValue: selectedCode },
                 linkedAccountName: { stringValue: selectedName },
-                role: { stringValue: selectedRole }
+                role: { stringValue: selectedRole },
+                pricingTier: { stringValue: "b2b" }
             }
         };
 
         for (var pId of possibleIds) {
             try {
                 var pUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(pId) +
-                    "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role";
+                    "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role&updateMask.fieldPaths=pricingTier";
                 await fetch(pUrl, { method: "PATCH", headers: headers, body: JSON.stringify(patchBody) });
             } catch(e) {}
             try {
                 var lpUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(pId) +
-                    "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role";
+                    "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role&updateMask.fieldPaths=pricingTier";
                 await fetch(lpUrl, { method: "PATCH", headers: headers, body: JSON.stringify(patchBody) });
             } catch(e) {}
         }
@@ -10449,7 +10711,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
             try {
                 var partyDocId = encodeURIComponent(String(selectedCode).trim().toUpperCase().replace(/[\/\.]/g, '_'));
                 var partyPatchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyLinks/" + partyDocId +
-                    "?updateMask.fieldPaths=partyCode&updateMask.fieldPaths=partyName&updateMask.fieldPaths=phone&updateMask.fieldPaths=role&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=updatedAt";
+                    "?updateMask.fieldPaths=partyCode&updateMask.fieldPaths=partyName&updateMask.fieldPaths=phone&updateMask.fieldPaths=role&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=pricingTier";
                 var partyPatchBody = {
                     fields: {
                         partyCode: { stringValue: String(selectedCode) },
@@ -10460,7 +10722,8 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
                         approvalStatus: { stringValue: "approved" },
                         approvedByAdmin: { stringValue: adminName },
                         approvedAt: { timestampValue: nowIso },
-                        updatedAt: { timestampValue: nowIso }
+                        updatedAt: { timestampValue: nowIso },
+                        pricingTier: { stringValue: "b2b" }
                     }
                 };
                 await fetch(partyPatchUrl, {
@@ -10482,7 +10745,8 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
                     isApproved: true,
                     approvalStatus: 'approved',
                     approvedByAdmin: adminName,
-                    approvedAt: nowIso
+                    approvedAt: nowIso,
+                    pricingTier: 'b2b'
                 };
                 localPartyLinks[String(selectedCode).trim().toUpperCase()] = approvedLinkObj;
                 if (clean10 && clean10.length === 10) {
@@ -10502,7 +10766,8 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
             linkedAccountName: selectedName,
             approvedByAdmin: adminName,
             approvedAt: nowIso,
-            role: selectedRole
+            role: selectedRole,
+            pricingTier: 'b2b'
         };
         for (var pId of possibleIds) {
             window.adminCustomerCache[pId] = updatedCacheItem;
@@ -10551,6 +10816,10 @@ window.openProductDetailsModal = function (pid, event) {
         document.getElementById('editProdCat').value = p.cat || '';
         document.getElementById('editProdName').value = p.name || '';
         document.getElementById('editProdPrice').value = p.price || '';
+        var b2bInp = document.getElementById('editProdB2bPrice');
+        if (b2bInp) b2bInp.value = p.b2bPrice || '';
+        var sb2bInp = document.getElementById('editProdSuperB2bPrice');
+        if (sb2bInp) sb2bInp.value = p.superB2bPrice || '';
         document.getElementById('editProdSku').value = p.sku || '';
         document.getElementById('editProdPacking').value = p.packing || '';
         document.getElementById('editProdMult').value = p.mult || 1;
@@ -10579,6 +10848,11 @@ window.openProductDetailsModal = function (pid, event) {
             { label: 'Colours Matching', val: p.mult ? (p.mult + (p.mult > 1 ? ' Colours Set' : ' Colour')) : '' },
             { label: 'SKU', val: p.sku }
         ];
+        if (window.activePricingTier === 'super_b2b' && (p.superB2bPrice > 0 || p.b2bPrice > 0)) {
+            fields.unshift({ label: 'Super B2B Rate (Col AC)', val: '₹' + (p.superB2bPrice || p.b2bPrice) });
+        } else if (window.activePricingTier === 'b2b' && p.b2bPrice > 0) {
+            fields.unshift({ label: 'B2B Rate (Col AB)', val: '₹' + p.b2bPrice });
+        }
 
         var html = '';
         fields.forEach(f => {
@@ -10613,6 +10887,8 @@ window.saveProductDetails = async function () {
     var catVal = catInput ? catInput.value.trim() : (p.cat || '');
 
     var price = document.getElementById('editProdPrice').value.trim();
+    var b2bVal = parseFloat(document.getElementById('editProdB2bPrice') ? document.getElementById('editProdB2bPrice').value : 0) || 0;
+    var superB2bVal = parseFloat(document.getElementById('editProdSuperB2bPrice') ? document.getElementById('editProdSuperB2bPrice').value : 0) || 0;
     var sku = document.getElementById('editProdSku').value.trim();
     var packing = document.getElementById('editProdPacking').value.trim();
     var mult = document.getElementById('editProdMult').value.trim();
@@ -10629,6 +10905,8 @@ window.saveProductDetails = async function () {
             section: { stringValue: sectionVal },
             cat: { stringValue: catVal },
             price: { doubleValue: Number(price || 0) },
+            b2bPrice: { doubleValue: Number(b2bVal) },
+            superB2bPrice: { doubleValue: Number(superB2bVal) },
             sku: { stringValue: sku },
             packing: { stringValue: packing },
             mult: { doubleValue: Number(mult || 1) },
@@ -10642,7 +10920,7 @@ window.saveProductDetails = async function () {
         }
     };
 
-    var updateMask = "?updateMask.fieldPaths=section&updateMask.fieldPaths=cat&updateMask.fieldPaths=price&updateMask.fieldPaths=sku&updateMask.fieldPaths=packing&updateMask.fieldPaths=mult&updateMask.fieldPaths=fabric&updateMask.fieldPaths=work&updateMask.fieldPaths=jari&updateMask.fieldPaths=pallu&updateMask.fieldPaths=border&updateMask.fieldPaths=blouse&updateMask.fieldPaths=cut";
+    var updateMask = "?updateMask.fieldPaths=section&updateMask.fieldPaths=cat&updateMask.fieldPaths=price&updateMask.fieldPaths=b2bPrice&updateMask.fieldPaths=superB2bPrice&updateMask.fieldPaths=sku&updateMask.fieldPaths=packing&updateMask.fieldPaths=mult&updateMask.fieldPaths=fabric&updateMask.fieldPaths=work&updateMask.fieldPaths=jari&updateMask.fieldPaths=pallu&updateMask.fieldPaths=border&updateMask.fieldPaths=blouse&updateMask.fieldPaths=cut";
 
     var url = "https://firestore.googleapis.com/v1/projects/" + firebaseConfig.projectId + "/databases/(default)/documents/Products/" + p.docId + updateMask;
 
@@ -10662,6 +10940,8 @@ window.saveProductDetails = async function () {
         p.section = sectionVal;
         p.cat = catVal;
         p.price = parseFloat(price) || 0;
+        p.b2bPrice = b2bVal;
+        p.superB2bPrice = superB2bVal;
         p.sku = sku;
         p.packing = packing;
         p.mult = parseFloat(mult) || 1;
@@ -10690,6 +10970,8 @@ window.saveProductDetails = async function () {
                     section: p.section,
                     category: p.cat,
                     price: p.price,
+                    b2bPrice: p.b2bPrice,
+                    superB2bPrice: p.superB2bPrice,
                     sku: p.sku,
                     packing: p.packing,
                     mult: p.mult,
@@ -15980,6 +16262,7 @@ window.mergeFirebasePartyLinks = async function (list) {
                 transport: f.transport ? f.transport.stringValue : '',
                 gst: f.gst ? f.gst.stringValue : '',
                 role: f.role ? f.role.stringValue : 'customer',
+                pricingTier: f.pricingTier ? f.pricingTier.stringValue : 'b2b',
                 isApproved: f.isApproved ? f.isApproved.booleanValue : true
             };
             linksMap.set(code, info);
@@ -16015,6 +16298,7 @@ window.mergeFirebasePartyLinks = async function (list) {
                 if (l.station && (!c.ct || c.ct === 'Unknown')) c.ct = l.station;
                 if (l.agent && !c.ag) c.ag = l.agent;
                 if (l.transport && !c.tr) c.tr = l.transport;
+                if (l.pricingTier) c.pricingTier = l.pricingTier;
                 if (l.gst && !c.g) c.g = l.gst;
                 if (l.role) {
                     c.role = l.role;
@@ -16349,6 +16633,28 @@ window.selectPartyForOrder = function (cust) {
         role: cust.role || (cust.isAgent ? 'agent' : 'customer')
     };
     if (details.transport) localStorage.setItem('ds_preferred_transport', details.transport);
+
+    // Auto-detect customer's linked pricing tier
+    var partyTier = cust.pricingTier || cust.tier;
+    if (!partyTier) {
+        var cleanCode = String(cust.c || cust.code || cust.n || '').trim().toUpperCase();
+        var p10 = String(cust.p || (Array.isArray(cust.cleanPhones) && cust.cleanPhones[0]) || (Array.isArray(cust.phones) && cust.phones[0]) || '').replace(/\D/g, '').slice(-10);
+        if (window.adminCustomerCache && window.adminCustomerCache[p10] && window.adminCustomerCache[p10].pricingTier) {
+            partyTier = window.adminCustomerCache[p10].pricingTier;
+        } else {
+            try {
+                var pLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}');
+                var link = pLinks[cleanCode] || (p10 ? pLinks[p10] : null);
+                if (link && link.pricingTier) partyTier = link.pricingTier;
+            } catch(e){}
+        }
+    }
+    if (!partyTier) partyTier = 'b2b';
+    details.pricingTier = partyTier;
+
+    if (typeof window.setPricingTier === 'function') {
+        window.setPricingTier(partyTier, true);
+    }
 
     var hasAdminPriv = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
     if (hasAdminPriv) {

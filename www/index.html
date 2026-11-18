@@ -141,6 +141,11 @@
         <i id="btnTopMyReports" class="fas fa-file-invoice-dollar" onclick="window.openMyReportsSelfService()" style="display:none; cursor:pointer; color:#0284c7; margin-left:8px; margin-right:3px; font-size:16px;" title="My Reports (Bills, LR &amp; Ledger)"></i>
         <i id="btnTopCustomerHub" class="fas fa-address-book" onclick="window.openUnifiedCustomerHub()" style="display:none; cursor:pointer; color:var(--myntra-pink); margin-left:8px; margin-right:3px; font-size:16px;" title="Customer Hub (ERP, CRM & Lookup)"></i>
         <i id="btnTopLiveAdmin" class="fas fa-users" onclick="window.openLiveAdmin()" style="display:none; cursor:pointer; color:#4caf50; margin-left:8px; margin-right:5px; font-size:16px;" title="Live Customers"></i>
+        <select id="superAdminPricingSelect" onchange="window.setPricingTier(this.value)" style="display:none; background:#fff; border:1px solid #cbd5e1; border-radius:12px; padding:2px 6px; font-size:11px; font-weight:bold; color:#0f172a; outline:none; cursor:pointer; height:24px;" title="Pricing Tier Mode">
+          <option value="retail">Retail (Col J)</option>
+          <option value="b2b">B2B (Col AB)</option>
+          <option value="super_b2b">Super B2B (Col AC)</option>
+        </select>
         <i class="fas fa-sync-alt" onclick="syncImages()" style="cursor:pointer; margin-left:5px;"></i>
         <div style="position:relative; margin-left:5px; display:flex; align-items:center;">
           <i class="fas fa-ellipsis-v" onclick="toggleHdrMenu(event)"
@@ -1405,6 +1410,16 @@
           <div style="flex: 1;">
             <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">SKU</label>
             <input type="text" id="editProdSku" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;" placeholder="e.g. BAN-1001">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: #2563eb; font-size: 12px;">B2B Price (Col AB)</label>
+            <input type="number" id="editProdB2bPrice" style="width: 100%; padding: 8px; border: 1px solid #93c5fd; border-radius: 6px; margin-top: 4px;" placeholder="B2B Wholesale">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: #b45309; font-size: 12px;">Super B2B (Col AC)</label>
+            <input type="number" id="editProdSuperB2bPrice" style="width: 100%; padding: 8px; border: 1px solid #fde68a; border-radius: 6px; margin-top: 4px;" placeholder="Super B2B Rate">
           </div>
         </div>
         <div style="display: flex; gap: 10px;">
