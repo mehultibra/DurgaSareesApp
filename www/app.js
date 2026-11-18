@@ -291,15 +291,35 @@ window.setPricingTier = function (tier, fromCustomerLink) {
     var sel = document.getElementById('superAdminPricingSelect');
     if (sel && sel.value !== validTier) sel.value = validTier;
 
-    if (typeof renderProductGrid === 'function' && Array.isArray(window.displayList)) {
-        renderProductGrid(window.displayList);
+    var lbl = validTier === 'super_b2b' ? 'Super B2B (Col AC)' : (validTier === 'b2b' ? 'B2B (Col AB)' : 'Retail (Col J)');
+
+    var obBadge = document.getElementById('orderOnBehalfPricingBadge');
+    if (obBadge) {
+        obBadge.innerText = lbl;
+        obBadge.style.background = validTier === 'super_b2b' ? '#fef3c7' : (validTier === 'b2b' ? '#dbeafe' : '#f1f5f9');
+        obBadge.style.color = validTier === 'super_b2b' ? '#92400e' : (validTier === 'b2b' ? '#1e40af' : '#be185d');
     }
+    var barText = document.getElementById('adminPricingTierText');
+    if (barText) {
+        barText.innerText = lbl;
+        barText.style.background = validTier === 'super_b2b' ? '#fef3c7' : (validTier === 'b2b' ? '#dbeafe' : '#f1f5f9');
+        barText.style.color = validTier === 'super_b2b' ? '#92400e' : (validTier === 'b2b' ? '#1e40af' : '#334155');
+    }
+
+    if (typeof applyFilter === 'function') {
+        applyFilter();
+    } else if (typeof renderProductGrid === 'function' && typeof displayList !== 'undefined' && Array.isArray(displayList)) {
+        renderProductGrid(displayList);
+    }
+
     if (typeof curProduct !== 'undefined' && curProduct) {
-        var dtPrice = document.getElementById('dtPriceBot');
-        if (dtPrice) dtPrice.innerText = window.getProductEffectivePrice(curProduct);
+        var effP = window.getProductEffectivePrice ? window.getProductEffectivePrice(curProduct) : curProduct.price;
+        var dtPriceBot = document.getElementById('dtPriceBot');
+        if (dtPriceBot) dtPriceBot.innerText = effP;
+        var dtPriceTop = document.getElementById('dtPrice');
+        if (dtPriceTop) dtPriceTop.innerText = '₹' + effP;
     }
     if (fromCustomerLink) {
-        var lbl = validTier === 'super_b2b' ? 'Super B2B (Col AC)' : (validTier === 'b2b' ? 'B2B (Col AB)' : 'Retail (Col J)');
         var toastId = 'pToast_' + Date.now();
         var tHtml = `<div id="${toastId}" style="position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:8px 16px; border-radius:20px; font-size:12px; font-weight:bold; box-shadow:0 4px 15px rgba(0,0,0,0.3); z-index:999999; text-align:center; display:flex; align-items:center; gap:6px; pointer-events:none; transition:opacity 0.4s;">
             <i class="fas fa-tags" style="color:#38bdf8;"></i>
@@ -311,6 +331,11 @@ window.setPricingTier = function (tier, fromCustomerLink) {
             if (el) { el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }
         }, 2500);
     }
+};
+
+window.cycleAdminPricingTier = function () {
+    var next = window.activePricingTier === 'retail' ? 'b2b' : (window.activePricingTier === 'b2b' ? 'super_b2b' : 'retail');
+    window.setPricingTier(next, true);
 };
 
 // ==========================================
@@ -1515,8 +1540,10 @@ window.syncAdminUI = function () {
         if (document.getElementById('btnTopLiveAdmin')) {
             document.getElementById('btnTopLiveAdmin').style.display = hasCRM ? 'inline-block' : 'none';
         }
+        if (document.getElementById('menuPricingTier')) {
+            document.getElementById('menuPricingTier').style.display = hasCRM ? 'flex' : 'none';
+        }
         if (document.getElementById('superAdminPricingSelect')) {
-            document.getElementById('superAdminPricingSelect').style.display = hasCRM ? 'inline-block' : 'none';
             document.getElementById('superAdminPricingSelect').value = window.activePricingTier || 'retail';
         }
         if (document.getElementById('menuManageSections')) {
@@ -1720,8 +1747,10 @@ function initApp() {
         if (window.isSuperAdmin) {
             if (document.getElementById('menuLiveAdmin')) document.getElementById('menuLiveAdmin').style.display = 'flex';
             if (document.getElementById('btnTopLiveAdmin')) document.getElementById('btnTopLiveAdmin').style.display = 'block';
+            if (document.getElementById('menuPricingTier')) {
+                document.getElementById('menuPricingTier').style.display = 'flex';
+            }
             if (document.getElementById('superAdminPricingSelect')) {
-                document.getElementById('superAdminPricingSelect').style.display = 'inline-block';
                 document.getElementById('superAdminPricingSelect').value = window.activePricingTier || 'retail';
             }
             if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
@@ -10059,6 +10088,34 @@ window.openLiveAdmin = function () {
                     return bTime - aTime;
                 });
 
+                function checkCustomerHasPendingMatch(item) {
+                    if (!item || !item.data) return false;
+                    let d = item.data;
+                    let docId = item.id;
+                    if (docId.startsWith('guest_')) return false;
+                    if (d.isAdmin || d.role === 'admin') return false;
+                    if (d.isApproved || d.approvalStatus === 'approved') return false;
+
+                    let pKey = getPhoneKey(docId) || getPhoneKey(d.user) || getPhoneKey(d.phone);
+                    if (pKey && partyLinksByPhone.has(pKey)) return false;
+
+                    if (Array.isArray(d.matchedAccounts) && d.matchedAccounts.length > 0) return true;
+                    let uData = window.adminCustomerCache[docId] || (pKey ? window.adminCustomerCache[pKey] : null);
+                    if (uData) {
+                        if (uData.isApproved || uData.approvalStatus === 'approved') return false;
+                        if (Array.isArray(uData.matchedAccounts) && uData.matchedAccounts.length > 0) return true;
+                    }
+
+                    if (pKey && pKey.length >= 10 && window._compiledCustomersList && window._compiledCustomersList.length > 0) {
+                        let p10 = pKey.slice(-10);
+                        return window._compiledCustomersList.some(c => {
+                            let cp = String(c.p || (Array.isArray(c.cleanPhones) && c.cleanPhones[0]) || (Array.isArray(c.phones) && c.phones[0]) || '').replace(/\D/g, '').slice(-10);
+                            return cp === p10;
+                        });
+                    }
+                    return false;
+                }
+
                 // Update summary counts
                 let liveCount = 0;
                 let pendingCount = 0;
@@ -10066,7 +10123,7 @@ window.openLiveAdmin = function () {
                     let d = item.data;
                     let isLive = d.lastActive && typeof d.lastActive.toDate === 'function' && (Date.now() - d.lastActive.toDate().getTime() < 60000);
                     if (isLive) liveCount++;
-                    if (!item.id.startsWith('guest_') && !d.isAdmin && d.role !== 'admin' && (d.approvalStatus === 'pending' || !d.isApproved)) pendingCount++;
+                    if (checkCustomerHasPendingMatch(item)) pendingCount++;
                 });
 
                 let countsEl = document.getElementById('adminLiveCounts');
@@ -10266,6 +10323,13 @@ window.openLiveAdmin = function () {
                                 if (boxEl && typeof window.renderApprovalBoxHtml === 'function') {
                                     boxEl.innerHTML = window.renderApprovalBoxHtml(docId, safeDocId, fallbackData);
                                 }
+                                let cardEl = boxEl ? boxEl.closest('.admin-live-card') : null;
+                                if (cardEl) {
+                                    cardEl.setAttribute('data-pending', '1');
+                                    if (window._activeLiveFilter === 'pending') {
+                                        cardEl.style.display = 'block';
+                                    }
+                                }
                             }
                         });
                     }
@@ -10276,7 +10340,7 @@ window.openLiveAdmin = function () {
                     }
 
                     let searchHaystack = esc((dispName + ' ' + docId + ' ' + (d.customerStation || '') + ' ' + (d.role || '') + ' ' + (d.linkedAccountName || '') + ' ' + (d.linkedAccount || '')).toLowerCase());
-                    let isPendingCard = !isGuest && !isAdminUser && (d.approvalStatus === 'pending' || !d.isApproved);
+                    let isPendingCard = checkCustomerHasPendingMatch(item);
 
                     let html = `<div class="admin-live-card" data-search="${searchHaystack}" data-pending="${isPendingCard ? '1' : '0'}" data-live="${isLiveNow ? '1' : '0'}" style="background:white; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:4px solid ${borderColor};">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
@@ -16796,6 +16860,7 @@ window.exitOrderOnBehalf = function () {
             localStorage.setItem("dsCustomerDetails", adminOwn);
         }
         window.activeOrderOnBehalf = null;
+        if (typeof window.setPricingTier === 'function') window.setPricingTier('retail');
         window.updateOrderOnBehalfBanner();
         loadCartCustomerDetails();
     }
@@ -16812,6 +16877,11 @@ window.updateOrderOnBehalfBanner = function () {
         var isAllowed = Boolean(window.isSuperAdmin || window.isAdminMode);
 
         if (isAllowed) {
+            var tier = window.activePricingTier || 'retail';
+            var tierLbl = tier === 'super_b2b' ? 'Super B2B (Col AC)' : (tier === 'b2b' ? 'B2B (Col AB)' : 'Retail (Col J)');
+            var tierBg = tier === 'super_b2b' ? '#fef3c7' : (tier === 'b2b' ? '#dbeafe' : '#fff');
+            var tierColor = tier === 'super_b2b' ? '#92400e' : (tier === 'b2b' ? '#1e40af' : '#be185d');
+
             if (stored && stored.name) {
                 var locParts = [];
                 if (stored.station) locParts.push(stored.station);
@@ -16839,6 +16909,7 @@ window.updateOrderOnBehalfBanner = function () {
                     <div style="display:flex; align-items:center; gap:6px; overflow:hidden; flex:1; min-width:0;">
                       <i class="fas fa-store" style="font-size:12px; color:#fbcfe8;"></i>
                       <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold;">${escHtml(stored.name)}${escHtml(locStr)}</span>
+                      <span id="orderOnBehalfPricingBadge" style="font-size:9.5px; background:${tierBg}; color:${tierColor}; padding:1px 6px; border-radius:3px; font-weight:800; white-space:nowrap;">${tierLbl}</span>
                       ${hasSisters ? `<span style="font-size:9.5px; background:#fef08a; color:#854d0e; padding:1px 5px; border-radius:3px; font-weight:bold; white-space:nowrap;"><i class="fas fa-layer-group"></i> ${sisterAccounts.length} Merged</span>` : ''}
                     </div>
                     <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
@@ -16869,6 +16940,7 @@ window.updateOrderOnBehalfBanner = function () {
                     <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
                       <i class="fas fa-user-shield" style="font-size:13px; color:#93c5fd;"></i>
                       <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(adminName)}${escHtml(adminLoc)}</span>
+                      <span id="orderOnBehalfPricingBadge" style="font-size:9.5px; background:#1e293b; color:#38bdf8; border:1px solid #38bdf8; padding:1px 6px; border-radius:3px; font-weight:800; white-space:nowrap;">${tierLbl}</span>
                     </div>
                     <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
                       <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-weight:600;"><i class="fas fa-user-plus" style="font-size:9px; margin-right:3px;"></i> Select Party</span>
