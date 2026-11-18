@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "patch-android": "patch-package",
-    "build": "echo 'No build step required'"
+    "build": "echo 'No build step required'",
+    "cap": "cap"
   },
   "keywords": [],
   "author": "",
