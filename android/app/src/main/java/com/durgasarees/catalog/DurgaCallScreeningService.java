@@ -14,6 +14,7 @@ import android.telecom.Call;
 import android.telecom.CallScreeningService;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
+import org.json.JSONObject;
 
 public class DurgaCallScreeningService extends CallScreeningService {
     private static final String CHANNEL_ID = "ds_live_call_channel";
@@ -51,22 +52,22 @@ public class DurgaCallScreeningService extends CallScreeningService {
             }
 
             SharedPreferences sp = getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
-            if (!sp.getBoolean("call_popup_enabled", true)) {
+            if (!sp.getBoolean("is_super_admin", false) || !sp.getBoolean("call_popup_enabled", true)) {
                 return;
             }
 
-            // Look up contact name if present in phone contacts
-            String partyName = lookupContactName(p10);
+            // Look up party name directly from ERP software database
+            String partyName = getCallerPartyName(this, p10);
 
-            // Strict check: Only show notification/popup for numbers matching accounts in our app
-            if (!isDurgaSareesAccount(this, p10, partyName)) {
+            // Strict check: Only show notification/popup for numbers matching accounts in our app database
+            if (partyName == null || partyName.trim().isEmpty()) {
                 return;
             }
 
             long now = System.currentTimeMillis();
             sp.edit()
                     .putString("last_call_phone", p10)
-                    .putString("last_call_name", partyName != null ? partyName : "")
+                    .putString("last_call_name", partyName)
                     .putString("last_call_dir", direction)
                     .putLong("last_call_time", now)
                     .apply();
@@ -80,25 +81,79 @@ public class DurgaCallScreeningService extends CallScreeningService {
         }
     }
 
-    public static boolean isDurgaSareesAccount(Context context, String p10, String partyName) {
-        if (p10 == null || context == null) return false;
+    private static volatile JSONObject sCallerCache = null;
+
+    public static synchronized void saveCallerDatabase(Context context, String jsonStr) {
+        if (context == null || jsonStr == null) return;
+        try {
+            java.io.FileOutputStream fos = context.openFileOutput("ds_caller_db.json", Context.MODE_PRIVATE);
+            fos.write(jsonStr.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            fos.close();
+            sCallerCache = new JSONObject(jsonStr);
+        } catch (Throwable ignored) {}
+    }
+
+    public static synchronized void clearCallerDatabase(Context context) {
+        sCallerCache = null;
+        if (context == null) return;
+        try {
+            context.deleteFile("ds_caller_db.json");
+        } catch (Throwable ignored) {}
+    }
+
+    private static synchronized JSONObject getCallerCache(Context context) {
+        if (sCallerCache != null) return sCallerCache;
+        if (context == null) return null;
+        try {
+            java.io.File file = new java.io.File(context.getFilesDir(), "ds_caller_db.json");
+            if (!file.exists()) return null;
+            java.io.FileInputStream fis = context.openFileInput("ds_caller_db.json");
+            byte[] bytes = new byte[(int) file.length()];
+            fis.read(bytes);
+            fis.close();
+            sCallerCache = new JSONObject(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            return sCallerCache;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    public static String getCallerPartyName(Context context, String p10) {
+        if (p10 == null || context == null) return null;
         String clean10 = p10.replaceAll("\\D", "");
-        if (clean10.length() < 10) return false;
+        if (clean10.length() < 10) return null;
         clean10 = clean10.substring(clean10.length() - 10);
 
+        // 1. Direct O(1) ERP software database lookup
+        JSONObject db = getCallerCache(context);
+        if (db != null) {
+            String name = db.optString(clean10, null);
+            if (name != null && !name.trim().isEmpty()) {
+                return name.trim();
+            }
+        }
+
+        // 2. Fallback: Query ONLY contacts under account "com.durgasarees.catalog" (Never personal contacts)
         Cursor cursor = null;
         try {
-            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(clean10));
-            cursor = context.getContentResolver().query(uri, new String[]{ ContactsContract.PhoneLookup.DISPLAY_NAME }, null, null, null);
+            cursor = context.getContentResolver().query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                new String[]{ ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER },
+                ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'com.durgasarees.catalog' AND " + ContactsContract.RawContacts.DELETED + " = 0",
+                null,
+                null
+            );
             if (cursor != null) {
                 while (cursor.moveToNext()) {
-                    int nameIdx = cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME);
-                    if (nameIdx >= 0) {
+                    int numIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+                    int nameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+                    if (numIdx >= 0 && nameIdx >= 0) {
+                        String num = cursor.getString(numIdx);
                         String name = cursor.getString(nameIdx);
-                        if (name != null) {
-                            String nUpper = name.toUpperCase();
-                            if ((nUpper.contains("[") && nUpper.contains("]")) || nUpper.contains("(AG:")) {
-                                return true;
+                        if (num != null && name != null) {
+                            String n10 = num.replaceAll("\\D", "");
+                            if (n10.length() >= 10 && n10.substring(n10.length() - 10).equals(clean10)) {
+                                return name.trim();
                             }
                         }
                     }
@@ -108,30 +163,29 @@ public class DurgaCallScreeningService extends CallScreeningService {
         } finally {
             if (cursor != null) try { cursor.close(); } catch (Throwable ignored) {}
         }
-        return false;
+
+        return null;
     }
 
-    private String lookupContactName(String p10) {
-        Cursor cursor = null;
-        try {
-            Uri uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(p10));
-            cursor = getContentResolver().query(uri, new String[] { ContactsContract.PhoneLookup.DISPLAY_NAME }, null,
-                    null, null);
-            if (cursor != null && cursor.moveToFirst()) {
-                int nameIdx = cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME);
-                if (nameIdx >= 0)
-                    return cursor.getString(nameIdx);
-            }
-        } catch (Throwable ignored) {
-        } finally {
-            if (cursor != null) {
-                try {
-                    cursor.close();
-                } catch (Throwable ignored) {
+    public static String getCallerPhoneByName(Context context, String name) {
+        if (name == null || name.trim().isEmpty() || context == null) return null;
+        String trimmed = name.trim().toUpperCase();
+        JSONObject db = getCallerCache(context);
+        if (db != null) {
+            java.util.Iterator<String> keys = db.keys();
+            while (keys.hasNext()) {
+                String phone = keys.next();
+                String val = db.optString(phone, "");
+                if (val.toUpperCase().contains(trimmed) || trimmed.contains(val.toUpperCase())) {
+                    return phone;
                 }
             }
         }
         return null;
+    }
+
+    public static boolean isDurgaSareesAccount(Context context, String p10, String partyName) {
+        return getCallerPartyName(context, p10) != null;
     }
 
     public static void showCallNotification(Context context, String p10, String partyName, String direction) {

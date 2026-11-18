@@ -122,7 +122,7 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             }
 
             SharedPreferences sp = getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
-            if (!sp.getBoolean("call_popup_enabled", true)) {
+            if (!sp.getBoolean("is_super_admin", false) || !sp.getBoolean("call_popup_enabled", true)) {
                 return;
             }
 
@@ -224,17 +224,9 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 return;
             }
 
-            if (partyName == null || isGenericDialerStatus(partyName)) {
-                if (p10 != null && !p10.isEmpty()) {
-                    partyName = lookupNameByPhone(p10);
-                }
-            }
+            // Strict check: Only show notification/popup for numbers matching accounts in our app database
+            partyName = DurgaCallScreeningService.getCallerPartyName(this, p10);
             if (partyName == null || partyName.trim().isEmpty()) {
-                partyName = p10;
-            }
-
-            // Strict check: Only show notification/popup for numbers matching accounts in our app
-            if (!DurgaCallScreeningService.isDurgaSareesAccount(this, p10, partyName)) {
                 return;
             }
 
@@ -315,6 +307,8 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
     private String lookupPhoneByName(String name) {
         if (name == null || name.trim().isEmpty()) return null;
         String trimmed = name.trim();
+        String byDb = DurgaCallScreeningService.getCallerPhoneByName(this, trimmed);
+        if (byDb != null) return byDb;
         Cursor cursor = null;
         try {
             cursor = getContentResolver().query(

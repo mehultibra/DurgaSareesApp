@@ -1594,6 +1594,9 @@ async function checkAdminStatus(phone) {
         window.syncAdminUI();
 
         if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform()) {
+            if (typeof window.syncCallerDirectoryToNative === 'function') {
+                window.syncCallerDirectoryToNative();
+            }
             // Check Live Call Screening role banner
             if (window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.checkCallerIdRole === 'function') {
                 window.Capacitor.Plugins.CallMonitor.checkCallerIdRole().then(function (st) {
@@ -6754,6 +6757,9 @@ async function logout() {
         localStorage.removeItem('dsIsAdmin');
         window.isAdminMode = false;
         window.isSuperAdmin = false;
+        if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.setSuperAdmin === 'function') {
+            window.Capacitor.Plugins.CallMonitor.setSuperAdmin({ isSuperAdmin: false }).catch(function(){});
+        }
         window.isStaff = false;
         localStorage.removeItem('dsIsStaff');
         localStorage.removeItem('ds_active_on_behalf');
@@ -12672,6 +12678,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
     if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
                 if (syncIcon) syncIcon.classList.remove('fa-spin');
                 window.renderCustomerDirectoryUI();
+                if (window.isSuperAdmin && typeof window.syncCallerDirectoryToNative === 'function') window.syncCallerDirectoryToNative();
 
                 // Check AccountingMeta/dashboard in background to see if master data changed
                 var meta = await window.loadAccountingDashboardMeta();
@@ -12838,6 +12845,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
             } catch(e){}
 
             window.renderCustomerDirectoryUI();
+            if (window.isSuperAdmin && typeof window.syncCallerDirectoryToNative === 'function') window.syncCallerDirectoryToNative();
         }
     } catch (e) {
         console.warn("Could not load AccountingCustomers from Firestore:", e);
@@ -13230,6 +13238,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                             if (added) {
                                 window.populateCustomerFilterDropdowns(window._compiledCustomersList);
                                 window.renderCustomerDirectoryUI();
+                                if (window.isSuperAdmin && typeof window.syncCallerDirectoryToNative === 'function') window.syncCallerDirectoryToNative();
                             }
                         }
                     }
@@ -17649,6 +17658,63 @@ window.enableCallPopupSuperAdmin = async function () {
 
 window.enableNativeCallScreening = async function () {
     await window.enableCallPopupSuperAdmin();
+};
+
+window.syncCallerDirectoryToNative = async function () {
+    if (!window.isSuperAdmin || !window.Capacitor || !window.Capacitor.isNativePlatform()) return;
+    var plugin = window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor;
+    if (!plugin || typeof plugin.syncCallerDirectory !== 'function') return;
+
+    var list = window._compiledCustomersList || [];
+    if (!list || list.length === 0) return;
+
+    var phoneMap = {};
+    list.forEach(function (c) {
+        var isAg = Boolean(c.role === 'agent' || c.isAgent || c.atype === '12');
+        var pName = (c.n || c.name || c.firm || c.c || '').trim();
+        var pStation = (c.ct || c.station || '').trim();
+        var pAgent = (c.ag || c.agent || '').trim();
+        var displayName = (isAg ? '★ Agent: ' : '') + pName + (pStation ? ' [' + pStation + ']' : '') + (pAgent && !isAg ? ' (Ag: ' + pAgent + ')' : '');
+
+        var sales = parseFloat(c.totDr || c.totalDebit || c.totalSales || 0) || 0;
+        var docId = window.sanitizeDocId ? window.sanitizeDocId(c.c) : String(c.c).replace(/[\/\.\s]/g, '_');
+        var cachedRep = window._accountingReportsCache && window._accountingReportsCache[docId];
+        if (cachedRep && cachedRep.finishSales && cachedRep.finishSales.length > 0) {
+            var fsAmt = cachedRep.finishSales.reduce(function (tot, r) { return tot + (parseFloat(r[7] || r[6] || 0) || 0); }, 0);
+            if (fsAmt > sales) sales = fsAmt;
+        }
+
+        var rawPhones = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p ? [c.p] : []));
+        rawPhones.forEach(function (ph) {
+            var p10 = String(ph || '').replace(/\D/g, '').slice(-10);
+            if (p10.length === 10) {
+                var existing = phoneMap[p10];
+                if (!existing) {
+                    phoneMap[p10] = { name: displayName, sales: sales, isAgent: isAg };
+                } else {
+                    if (isAg && !existing.isAgent) {
+                        phoneMap[p10] = { name: displayName, sales: sales, isAgent: isAg };
+                    } else if (!existing.isAgent && sales > existing.sales) {
+                        phoneMap[p10] = { name: displayName, sales: sales, isAgent: isAg };
+                    }
+                }
+            }
+        });
+    });
+
+    var callers = {};
+    for (var p in phoneMap) {
+        callers[p] = phoneMap[p].name;
+    }
+
+    try {
+        await plugin.syncCallerDirectory({
+            isSuperAdmin: true,
+            callers: callers
+        });
+    } catch (e) {
+        console.warn("syncCallerDirectory error:", e);
+    }
 };
 
 window.showLiveCallFloatBanner = function () {

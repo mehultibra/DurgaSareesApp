@@ -72,6 +72,44 @@ public class CallMonitorPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void setSuperAdmin(PluginCall call) {
+        try {
+            boolean isSuper = call.getBoolean("isSuperAdmin", false);
+            SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
+            sp.edit().putBoolean("is_super_admin", isSuper).apply();
+            if (!isSuper) {
+                DurgaCallScreeningService.clearCallerDatabase(getContext());
+            }
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("setSuperAdmin error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void syncCallerDirectory(PluginCall call) {
+        try {
+            boolean isSuperAdmin = call.getBoolean("isSuperAdmin", false);
+            SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
+            sp.edit().putBoolean("is_super_admin", isSuperAdmin).apply();
+
+            if (!isSuperAdmin) {
+                DurgaCallScreeningService.clearCallerDatabase(getContext());
+                call.resolve();
+                return;
+            }
+
+            JSObject callers = call.getObject("callers");
+            if (callers != null) {
+                DurgaCallScreeningService.saveCallerDatabase(getContext(), callers.toString());
+            }
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("syncCallerDirectory error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
     public void getPopupEnabled(PluginCall call) {
         try {
             SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
