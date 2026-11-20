@@ -7469,8 +7469,32 @@ function printCartPdf() {
 function openSyncReportModal() {
     closeModals();
     openModal('syncReportModal');
-    window.showGlobalErrorLogs();
+    if (typeof window.switchSyncReportTab === 'function') {
+        window.switchSyncReportTab('audit');
+    } else {
+        window.showGlobalErrorLogs();
+    }
 }
+
+window.switchSyncReportTab = function (tab) {
+    var auditView = document.getElementById('syncAuditView');
+    var logsView = document.getElementById('syncLogsView');
+    var tabAudit = document.getElementById('tabSyncAudit');
+    var tabLogs = document.getElementById('tabSyncLogs');
+    if (tab === 'logs') {
+        if (auditView) auditView.style.display = 'none';
+        if (logsView) logsView.style.display = 'flex';
+        if (tabAudit) { tabAudit.style.color = '#64748b'; tabAudit.style.borderBottom = 'none'; }
+        if (tabLogs) { tabLogs.style.color = 'var(--myntra-pink)'; tabLogs.style.borderBottom = '2px solid var(--myntra-pink)'; }
+        if (typeof window.showGlobalErrorLogs === 'function') window.showGlobalErrorLogs();
+    } else {
+        if (auditView) auditView.style.display = 'flex';
+        if (logsView) logsView.style.display = 'none';
+        if (tabAudit) { tabAudit.style.color = 'var(--myntra-pink)'; tabAudit.style.borderBottom = '2px solid var(--myntra-pink)'; }
+        if (tabLogs) { tabLogs.style.color = '#64748b'; tabLogs.style.borderBottom = 'none'; }
+        if (typeof renderSyncReportPartial === 'function') renderSyncReportPartial();
+    }
+};
 
 window.syncReportResults = [];
 
@@ -7551,18 +7575,13 @@ async function runSyncReport() {
             result.status = 'error';
         }
 
-        // Ensure grid image is in memory
+        // Check if grid image is in memory cache
         try {
             var isGridInMemory = await getImageFromDB(p.gridUrl);
-            if (!isGridInMemory) {
-                if (result.status !== 'error') {
-                    result.error = "Grid missing from memory";
-                    result.status = 'error';
-                } else {
-                    result.error += " | Grid missing";
-                }
-            }
-        } catch (e) { }
+            result.isCached = !!isGridInMemory;
+        } catch (e) {
+            result.isCached = false;
+        }
 
         window.syncReportResults.push(result);
         renderSyncReportPartial();
@@ -7579,7 +7598,13 @@ async function runSyncReport() {
 function renderSyncReportPartial() {
     var chkElement = document.getElementById('chkShowCompletedSync');
     var showCompleted = chkElement ? chkElement.checked : false;
-    var container = document.getElementById('syncReportBody');
+    var container = document.getElementById('syncReportResultsList') || document.getElementById('syncReportBody');
+    if (!container) return;
+
+    if (!window.syncReportResults || window.syncReportResults.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:30px 10px; color:#64748b; font-size:13px;"><i class="fas fa-search" style="font-size:24px; color:#94a3b8; margin-bottom:8px; display:block;"></i>Click <b>Scan All Products</b> above to audit catalog images across Firebase Storage.</div>';
+        return;
+    }
 
     var html = '';
     var errorCount = 0;
@@ -7628,7 +7653,7 @@ function renderSyncReportPartial() {
             <div style="flex:1;">
                 <div style="font-weight:bold; font-size:13px; color:var(--text-main);">${r.name}</div>
                 <div style="font-size:11px; color:var(--text-light); margin-bottom:4px;">SKU: ${r.sku}</div>
-                ${r.status === 'error' ? `<div style="font-size:12px; color:#c62828; font-weight:bold;">Error: ${r.error}</div>` : `<div style="font-size:12px; color:#2e7d32;">Found ${r.imageCount} images</div>`}
+                ${r.status === 'error' ? `<div style="font-size:12px; color:#c62828; font-weight:bold;">Error: ${r.error}</div>` : `<div style="font-size:12px; color:#2e7d32;">Found ${r.imageCount} images ${r.isCached ? '• <span style="color:#0284c7; font-weight:600;">Cached offline</span>' : ''}</div>`}
             </div>
         </div>
         `;
