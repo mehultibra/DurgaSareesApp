@@ -680,7 +680,7 @@ window.updateLivePresence = function (productId, force = false) {
             isApproved: cd.isApproved !== undefined ? cd.isApproved : !!cd.linkedAccount,
             linkedAccount: cd.linkedAccount || cd.accountCode || null,
             linkedAccountName: cd.linkedAccountName || cd.name || null,
-            pricingTier: cd.pricingTier || window.activePricingTier || 'retail',
+            pricingTier: window.activePricingTier || cd.pricingTier || 'retail',
             approvedByAdmin: cd.approvedByAdmin || null,
             approvedAt: cd.approvedAt || null,
             role: cd.role || (cd.isAgent ? 'agent' : 'customer'),
@@ -1121,6 +1121,7 @@ async function verifyOtp() {
                     role: f.role ? f.role.stringValue : "customer",
                     linkedAccount: f.linkedAccount ? f.linkedAccount.stringValue : "",
                     linkedAccountName: f.linkedAccountName ? f.linkedAccountName.stringValue : "",
+                    pricingTier: f.pricingTier ? f.pricingTier.stringValue : "retail",
                     approvalStatus: f.approvalStatus ? f.approvalStatus.stringValue : "pending",
                     isApproved: Boolean(f.isApproved && f.isApproved.booleanValue === true),
                     approvedByAdmin: f.approvedByAdmin ? f.approvedByAdmin.stringValue : "",
@@ -1660,6 +1661,7 @@ async function checkAdminStatus(phone) {
                 isApproved: Boolean(f.isApproved ? f.isApproved.booleanValue === true : (existingCd.isApproved === true)),
                 linkedAccount: f.linkedAccount ? f.linkedAccount.stringValue : (existingCd.linkedAccount || ""),
                 role: f.role ? f.role.stringValue : (existingCd.role || "customer"),
+                pricingTier: f.pricingTier ? f.pricingTier.stringValue : (existingCd.pricingTier || "retail"),
                 matchedAccounts: existingCd.matchedAccounts || []
             };
             if (f.matchedAccountsJson && f.matchedAccountsJson.stringValue) {
@@ -1668,6 +1670,9 @@ async function checkAdminStatus(phone) {
             localStorage.setItem("dsAdminOwnProfile", JSON.stringify(userProfile));
             if (!localStorage.getItem("ds_active_on_behalf")) {
                 localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile));
+                if (!isSuper && !isStaffUser && userProfile.pricingTier && typeof window.setPricingTier === 'function') {
+                    window.setPricingTier(userProfile.pricingTier);
+                }
             }
         }
 
@@ -1754,6 +1759,27 @@ function initApp() {
                 document.getElementById('superAdminPricingSelect').value = window.activePricingTier || 'retail';
             }
             if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
+        } else if (!window.isAdminMode && activeUser) {
+            // ⚡ Real-Time Customer Pricing Tier Listener: detects admin tier upgrades instantly
+            try {
+                if (typeof firebase !== 'undefined' && firebase.firestore) {
+                    if (window._liveTierUnsub) window._liveTierUnsub();
+                    window._liveTierUnsub = firebase.firestore().collection('LiveSessions').doc(activeUser).onSnapshot(function (snap) {
+                        if (snap && snap.exists) {
+                            var sData = snap.data();
+                            if (sData && sData.pricingTier && sData.pricingTier !== window.activePricingTier) {
+                                if (typeof window.setPricingTier === 'function') {
+                                    window.setPricingTier(sData.pricingTier, true);
+                                }
+                                var cd = {};
+                                try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
+                                cd.pricingTier = sData.pricingTier;
+                                localStorage.setItem('dsCustomerDetails', JSON.stringify(cd));
+                            }
+                        }
+                    }, function (e) { });
+                }
+            } catch (e) { }
         }
     } catch (e) {
         console.warn("initApp admin UI sync error:", e);
@@ -6113,15 +6139,13 @@ function saveProductEdit(p) {
         if (p && p.docId) {
             showDevLog("Syncing Page: " + p.name + " -> Rate: " + p.price + " Pack: " + p.packing, false);
 
-            var fbUpdateUrlPrice = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=price&updateMask.fieldPaths=b2bPrice&updateMask.fieldPaths=superB2bPrice";
+            var fbUpdateUrlPrice = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=price";
             window.fetchWithRetry(fbUpdateUrlPrice, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     fields: {
-                        price: { doubleValue: Number(p.price) || 0 },
-                        b2bPrice: { doubleValue: Number(p.b2bPrice) || 0 },
-                        superB2bPrice: { doubleValue: Number(p.superB2bPrice) || 0 }
+                        price: { doubleValue: Number(p.price) || 0 }
                     }
                 })
             }, 1).then(res => {
@@ -6147,15 +6171,31 @@ function saveProductEdit(p) {
                         action: 'updateProductDetails',
                         productName: p.name,
                         price: p.price,
-                        b2bPrice: p.b2bPrice || 0,
-                        superB2bPrice: p.superB2bPrice || 0,
                         packing: p.packing,
                         section: p.section || 'sarees'
                     })
                 }).then(r => r.json())
                     .then(data => {
                         if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
-                        else showDevLog("✅ Excel Updated: " + p.name, false);
+                        else {
+                            showDevLog("✅ Excel Updated: " + p.name, false);
+                            if (data.b2bPrice !== undefined) p.b2bPrice = Number(data.b2bPrice) || 0;
+                            if (data.superB2bPrice !== undefined) p.superB2bPrice = Number(data.superB2bPrice) || 0;
+                            if (p.docId && (p.b2bPrice || p.superB2bPrice)) {
+                                var fbTierPatch = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=b2bPrice&updateMask.fieldPaths=superB2bPrice";
+                                window.fetchWithRetry(fbTierPatch, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        fields: {
+                                            b2bPrice: { doubleValue: Number(p.b2bPrice) || 0 },
+                                            superB2bPrice: { doubleValue: Number(p.superB2bPrice) || 0 }
+                                        }
+                                    })
+                                }, 1).catch(function () { });
+                            }
+                            refreshCardUI(p.id);
+                        }
                     }).catch(e => showDevLog("Excel Net Err: " + e.message, true));
             } else {
                 showDevLog("❌ DS_APP_SCRIPT_URL is missing!", true);
@@ -7413,15 +7453,31 @@ function saveCartInlineEdit(productId, closeEdit = true) {
                         action: 'updateProductDetails',
                         productName: matchP.name,
                         price: newRate,
-                        b2bPrice: matchP.b2bPrice || 0,
-                        superB2bPrice: matchP.superB2bPrice || 0,
                         packing: newPacking,
                         section: matchP.section || 'sarees'
                     })
                 }).then(r => r.json())
                     .then(data => {
                         if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
-                        else showDevLog("✅ Excel Updated: " + matchP.name, false);
+                        else {
+                            showDevLog("✅ Excel Updated: " + matchP.name, false);
+                            if (data.b2bPrice !== undefined) matchP.b2bPrice = Number(data.b2bPrice) || 0;
+                            if (data.superB2bPrice !== undefined) matchP.superB2bPrice = Number(data.superB2bPrice) || 0;
+                            if (matchP.docId && (matchP.b2bPrice || matchP.superB2bPrice)) {
+                                var fbTierPatch = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=b2bPrice&updateMask.fieldPaths=superB2bPrice";
+                                window.fetchWithRetry(fbTierPatch, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        fields: {
+                                            b2bPrice: { doubleValue: Number(matchP.b2bPrice) || 0 },
+                                            superB2bPrice: { doubleValue: Number(matchP.superB2bPrice) || 0 }
+                                        }
+                                    })
+                                }, 1).catch(function () { });
+                            }
+                            refreshCardUI(matchP.id);
+                        }
                     })
                     .catch(e => showDevLog("Excel Net Err: " + e.message, true));
             } else {
@@ -10532,23 +10588,46 @@ window.updateCustomerPricingTier = async function (docId, partyCode, newTier) {
             } catch (e) { }
         }
 
-        // 2. Update LiveSessions
-        if (docId) {
-            var lpUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(docId) + "?updateMask.fieldPaths=pricingTier";
-            await fetch(lpUrl, {
+        // 2. Update LiveSessions & Users across all phone key variants
+        var clean10 = String(docId || '').replace(/\D/g, '').slice(-10);
+        var possibleIds = [docId];
+        if (clean10.length === 10) {
+            possibleIds.push(clean10);
+            possibleIds.push('+91' + clean10);
+        }
+        possibleIds = [...new Set(possibleIds.filter(Boolean))];
+
+        for (var pId of possibleIds) {
+            var lpUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(pId) + "?updateMask.fieldPaths=pricingTier";
+            fetch(lpUrl, {
                 method: "PATCH",
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fields: { pricingTier: { stringValue: validTier } } })
-            }).catch(e => console.warn("LiveSessions tier update err:", e));
+            }).catch(function () { });
+
+            var uUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(pId) + "?updateMask.fieldPaths=pricingTier";
+            fetch(uUrl, {
+                method: "PATCH",
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fields: { pricingTier: { stringValue: validTier } } })
+            }).catch(function () { });
         }
 
-        // 3. If currently on-behalf of this party, sync active tier immediately
+        // 3. Immediately switch active tier and re-render product rates on screen
         var activeOnBehalf = null;
         try { activeOnBehalf = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch (e) { }
-        if (activeOnBehalf && (activeOnBehalf.firm === partyCode || activeOnBehalf.phone === docId)) {
+        if (activeOnBehalf && (activeOnBehalf.firm === partyCode || activeOnBehalf.phone === docId || (clean10 && String(activeOnBehalf.phone).includes(clean10)))) {
             activeOnBehalf.pricingTier = validTier;
             localStorage.setItem('ds_active_on_behalf', JSON.stringify(activeOnBehalf));
+        }
+
+        if (typeof window.setPricingTier === 'function') {
             window.setPricingTier(validTier, true);
+        }
+        if (typeof applyFilter === 'function') {
+            applyFilter();
+        } else if (typeof renderProductGrid === 'function' && typeof displayList !== 'undefined' && Array.isArray(displayList)) {
+            renderProductGrid(displayList);
         }
 
         var tierName = validTier === 'super_b2b' ? 'Super B2B (Col AC)' : (validTier === 'b2b' ? 'B2B (Col AB)' : 'Retail (Col J)');
