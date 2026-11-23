@@ -267,6 +267,12 @@ window.activePricingTier = localStorage.getItem('ds_active_pricing_tier') || 're
 window.getProductEffectivePrice = function (p, explicitTier) {
     if (!p) return 0;
     var tier = explicitTier || window.activePricingTier || 'retail';
+    if (!window.hasCRMAccess || !window.hasCRMAccess()) {
+        var myCd = {};
+        try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
+        var isApproved = Boolean(myCd.isApproved === true && myCd.approvalStatus === 'approved');
+        tier = isApproved ? (myCd.pricingTier || 'b2b') : 'retail';
+    }
     var regularPrice = Number(p.price) || 0;
     var b2b = Number(p.b2bPrice) || 0;
     var superB2b = Number(p.superB2bPrice) || 0;
@@ -2711,10 +2717,12 @@ function buildCardDetails(p) {
     var favClass = (favorites[p.id] || (p.docId && favorites[p.docId])) ? "fas fa-heart fav-active" : "far fa-heart fav-inactive";
 
     var tierBadge = '';
-    if (window.activePricingTier === 'super_b2b' && (p.superB2bPrice > 0 || p.b2bPrice > 0)) {
-        tierBadge = '<span style="font-size:9px; background:#fef3c7; color:#92400e; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:3px;">SUPER</span>';
-    } else if (window.activePricingTier === 'b2b' && p.b2bPrice > 0) {
-        tierBadge = '<span style="font-size:9px; background:#dbeafe; color:#1e40af; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:3px;">B2B</span>';
+    if (window.hasCRMAccess && window.hasCRMAccess()) {
+        if (window.activePricingTier === 'super_b2b' && (p.superB2bPrice > 0 || p.b2bPrice > 0)) {
+            tierBadge = '<span style="font-size:9px; background:#fef3c7; color:#92400e; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:3px;">SUPER</span>';
+        } else if (window.activePricingTier === 'b2b' && p.b2bPrice > 0) {
+            tierBadge = '<span style="font-size:9px; background:#dbeafe; color:#1e40af; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:3px;">B2B</span>';
+        }
     }
 
     var h = [];
@@ -7125,7 +7133,9 @@ async function openCustomerDetailsModal() {
             var sisters = [];
             var list = window._compiledCustomersList || [];
             if (p10.length === 10) {
+                var isDetailsAgent = window.isAgentAccount(d);
                 sisters = list.filter(function (x) {
+                    if (isDetailsAgent !== window.isAgentAccount(x)) return false;
                     var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? String(x.p || x.phone).split(/[,;/ ]+/) : []));
                     return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
                 });
@@ -11042,10 +11052,12 @@ window.openProductDetailsModal = function (pid, event) {
             { label: 'Colours Matching', val: p.mult ? (p.mult + (p.mult > 1 ? ' Colours Set' : ' Colour')) : '' },
             { label: 'SKU', val: p.sku }
         ];
-        if (window.activePricingTier === 'super_b2b' && (p.superB2bPrice > 0 || p.b2bPrice > 0)) {
-            fields.unshift({ label: 'Super B2B Rate (Col AC)', val: '₹' + (p.superB2bPrice || p.b2bPrice) });
-        } else if (window.activePricingTier === 'b2b' && p.b2bPrice > 0) {
-            fields.unshift({ label: 'B2B Rate (Col AB)', val: '₹' + p.b2bPrice });
+        if (window.hasCRMAccess && window.hasCRMAccess()) {
+            if (window.activePricingTier === 'super_b2b' && (p.superB2bPrice > 0 || p.b2bPrice > 0)) {
+                fields.unshift({ label: 'Super B2B Rate (Col AC)', val: '₹' + (p.superB2bPrice || p.b2bPrice) });
+            } else if (window.activePricingTier === 'b2b' && p.b2bPrice > 0) {
+                fields.unshift({ label: 'B2B Rate (Col AB)', val: '₹' + p.b2bPrice });
+            }
         }
 
         var html = '';
@@ -17086,8 +17098,10 @@ window.updateOrderOnBehalfBanner = function () {
                 var list = window._compiledCustomersList || [];
                 var p10 = String(stored.phone || '').replace(/\D/g, '').slice(-10);
                 var sisterAccounts = [];
+                var isDetailsAgent = window.isAgentAccount(stored);
                 if (p10.length === 10) {
                     sisterAccounts = list.filter(function (x) {
+                        if (isDetailsAgent !== window.isAgentAccount(x)) return false;
                         var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? String(x.p || x.phone).split(/[,;/ ]+/) : []));
                         return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
                     });
