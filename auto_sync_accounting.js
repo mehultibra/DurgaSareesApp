@@ -915,6 +915,12 @@ async function syncAccountingData() {
     // C. Check PhoneDirectory
     Object.keys(phoneDirectoryMap).forEach(p10 => {
         const docData = phoneDirectoryMap[p10];
+        if (Array.isArray(docData.matchedAccounts) && docData.matchedAccounts.length > 1) {
+            const hasAgent = docData.matchedAccounts.some(a => a.role === 'agent' || (a.code && String(a.code).startsWith('AG')));
+            if (hasAgent) {
+                docData.matchedAccounts = docData.matchedAccounts.filter(a => a.role === 'agent' || (a.code && String(a.code).startsWith('AG')));
+            }
+        }
         const hKey = 'phone_' + p10;
         const currentHash = computeHash(docData);
         if (existingHashes[hKey] !== currentHash) {

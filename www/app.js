@@ -1195,6 +1195,15 @@ async function checkUserInFirestore(phone) {
     }
 }
 
+// 🛡️ Standard Account Role Identifier: strictly determines if an account is an Agent
+window.isAgentAccount = function (acc) {
+    if (!acc) return false;
+    if (acc.role === 'agent' || acc.isAgent === true || acc.atype === '12') return true;
+    var c = String(acc.c || acc.code || acc.accountCode || acc.linkedAccount || '').trim().toUpperCase();
+    if (c.startsWith('AG')) return true;
+    return false;
+};
+
 // 🔍 Find matching customer or agent accounts by phone from Cloud PhoneDirectory
 window.findAccountsByPhone = async function (phoneStr) {
     if (!phoneStr) return [];
@@ -1227,9 +1236,14 @@ window.findAccountsByPhone = async function (phoneStr) {
                         totalDebit: f.totalDebit ? Number(f.totalDebit.integerValue || f.totalDebit.doubleValue || 0) : (f.totDr ? Number(f.totDr.integerValue || f.totDr.doubleValue || 0) : 0),
                         totalSales: f.totalSales ? Number(f.totalSales.integerValue || f.totalSales.doubleValue || 0) : (f.totalDebit ? Number(f.totalDebit.integerValue || f.totalDebit.doubleValue || 0) : 0),
                         role: aRole,
-                        isAgent: aRole === 'agent'
+                        isAgent: aRole === 'agent' || (f.code && f.code.stringValue && f.code.stringValue.startsWith('AG'))
                     };
                 });
+                // If there are multiple accounts with same number in agent and customer, treat it strictly as an agent account
+                var hasAgent = matches.some(m => window.isAgentAccount(m));
+                if (hasAgent) {
+                    matches = matches.filter(m => window.isAgentAccount(m));
+                }
                 return matches;
             }
         }
@@ -1243,8 +1257,12 @@ window.findAccountsByPhone = async function (phoneStr) {
 // 🔗 Auto-link user to matched ERP account & create Firestore record with pending approval
 window.autoLinkUserAccount = async function (phoneStr, matchedAccounts) {
     if (!phoneStr || !matchedAccounts || matchedAccounts.length === 0) return;
+    var hasAgent = matchedAccounts.some(m => window.isAgentAccount(m));
+    if (hasAgent) {
+        matchedAccounts = matchedAccounts.filter(m => window.isAgentAccount(m));
+    }
     var primary = matchedAccounts[0];
-    var isAgent = primary.role === 'agent' || !!primary.isAgent;
+    var isAgent = hasAgent || primary.role === 'agent' || !!primary.isAgent;
 
     var userProfile = {
         name: primary.name,
@@ -13735,11 +13753,13 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         var nameDisplay = (tokens && tokens.length > 0 && typeof highlightContactMatch === 'function') ? highlightContactMatch(c.n, tokens) : escHtml(c.n);
         var locDisplay = [c.ct, (c.st && c.st !== c.ct ? c.st : '')].filter(Boolean).map(x => (tokens && tokens.length > 0 && typeof highlightContactMatch === 'function') ? highlightContactMatch(x, tokens) : escHtml(x)).join(', ');
 
+        var isCardAgent = window.isAgentAccount(c);
         var sisterCount = 0;
         var pList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p ? [c.p] : []));
         var p10Set = new Set(pList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(x) { return x.length === 10; }));
         if (p10Set.size > 0) {
             var sisters = (window._compiledCustomersList || []).filter(function(x) {
+                if (isCardAgent !== window.isAgentAccount(x)) return false;
                 var rawL = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p ? [x.p] : []));
                 return rawL.some(function (num) { return p10Set.has(String(num || '').replace(/\D/g, '').slice(-10)); });
             });
@@ -13956,23 +13976,42 @@ window.openMyReportsSelfService = function () {
         }
     }
 
-    var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent);
+    var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
     var list = window._compiledCustomersList || [];
-    var matches = myCd.matchedAccounts || [];
-    var targetCode = null;
+    var p10 = String(myCd.phone || '').replace(/\D/g, '').slice(-10);
 
     if (isAgentUser) {
-        var agentKws = window.getAgentKeywords(myCd);
-        var agentCusts = list.filter(function (c) {
-            return window.customerMatchesAgent(c, agentKws);
+        // Agent user: strictly merge agent sister accounts, NEVER show customer accounts or customer reports
+        var agentSisters = list.filter(function (x) {
+            if (!window.isAgentAccount(x)) return false;
+            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+            return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
         });
-        targetCode = myCd.linkedAccount || (matches[0] && (matches[0].code || matches[0].c)) || (agentCusts[0] && (agentCusts[0].c || agentCusts[0].code));
+        var targetCode = myCd.linkedAccount || (agentSisters[0] && (agentSisters[0].c || agentSisters[0].code));
+        if (!targetCode && myCd.matchedAccounts && myCd.matchedAccounts.length > 0) {
+            var firstAg = myCd.matchedAccounts.find(m => window.isAgentAccount(m));
+            if (firstAg) targetCode = firstAg.code || firstAg.c;
+        }
         if (targetCode) {
-            window.openCustomerReportsModal(targetCode, false, agentCusts.length > 1 ? agentCusts : null);
+            window.openCustomerReportsModal(targetCode, false, agentSisters.length > 1 ? agentSisters : null);
             return;
         }
     } else {
-        targetCode = myCd.linkedAccount || (matches[0] && (matches[0].code || matches[0].c));
+        // Customer user: strictly show merged customer accounts, NEVER show agent reports
+        var custSisters = list.filter(function (x) {
+            if (window.isAgentAccount(x)) return false;
+            var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
+            return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+        });
+        var targetCode = myCd.linkedAccount || (custSisters[0] && (custSisters[0].c || custSisters[0].code));
+        if (!targetCode && myCd.matchedAccounts && myCd.matchedAccounts.length > 0) {
+            var firstCust = myCd.matchedAccounts.find(m => !window.isAgentAccount(m));
+            if (firstCust) targetCode = firstCust.code || firstCust.c;
+        }
+        if (targetCode) {
+            window.openCustomerReportsModal(targetCode, false, custSisters.length > 1 ? custSisters : null);
+            return;
+        }
     }
 
     if (!targetCode) {
@@ -14426,15 +14465,22 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     if (!cust) {
         var num10 = pCodeNorm.replace(/\D/g, '').slice(-10);
         if (num10.length === 10) {
-            cust = list.find(function (x) {
+            var fullList = (list && list.length > 0) ? list : (window._customerDirectoryMaster || []);
+            var phoneMatches = fullList.filter(function (x) {
                 var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
                 return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === num10; });
             });
-            if (!cust && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
-                cust = window._customerDirectoryMaster.find(function (x) {
-                    var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
-                    return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === num10; });
-                });
+            if (phoneMatches.length > 0) {
+                var hasAg = phoneMatches.some(x => window.isAgentAccount(x));
+                if (isAgentUser || (!isSelfService && hasAg)) {
+                    // "if there is multiple account with same number in agent and customer then treat it is a agent account and dont show customer reports even if number is feed in account"
+                    cust = phoneMatches.find(x => window.isAgentAccount(x)) || phoneMatches[0];
+                } else if (isSelfService) {
+                    // "same if a customer is linked and same number is in agent database then only show merged customer account dont show agent reports"
+                    cust = phoneMatches.find(x => !window.isAgentAccount(x)) || phoneMatches[0];
+                } else {
+                    cust = phoneMatches[0];
+                }
             }
         }
     }
@@ -14471,49 +14517,32 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
         if (cachedTop) { cust = cachedTop; window._currentReportingCustomer = cust; }
     } else {
         window._currentReportingSisterAccounts = null;
-        var isTargetAgent = Boolean(cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG'))));
-        if (isTargetAgent) {
-            var targetAgentKws = [cust.n, cust.name, cust.c, cust.code].filter(Boolean).map(x => String(x).trim().toUpperCase());
-            var agentParties = list.filter(function (c) {
-                if (c.c === cust.c) return false;
-                return window.customerMatchesAgent ? window.customerMatchesAgent(c, targetAgentKws) : false;
+        var isTargetAgent = window.isAgentAccount(cust);
+        var custPhoneList = Array.isArray(cust.cleanPhones) && cust.cleanPhones.length ? cust.cleanPhones : (Array.isArray(cust.phones) && cust.phones.length ? cust.phones : (cust.p || cust.phone ? String(cust.p || cust.phone).split(/[,;/ ]+/) : []));
+        var custP10s = new Set(custPhoneList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(x) { return x.length === 10; }));
+        if (custP10s.size > 0) {
+            var sisters = list.filter(function(x) {
+                // Agent account will be able to see merged agents but never a customer account in any case.
+                // Same if a customer is linked and same number is in agent database then only show merged customer account dont show agent reports.
+                if (isTargetAgent !== window.isAgentAccount(x)) return false;
+                var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? String(x.p || x.phone).split(/[,;/ ]+/) : []));
+                return rawList.some(function (num) {
+                    var n10 = String(num || '').replace(/\D/g, '').slice(-10);
+                    return n10.length === 10 && custP10s.has(n10);
+                });
             });
-            if (agentParties.length === 0 && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
-                agentParties = window._customerDirectoryMaster.filter(function (c) {
-                    if (c.c === cust.c) return false;
-                    return window.customerMatchesAgent ? window.customerMatchesAgent(c, targetAgentKws) : false;
+            if (sisters.length > 1) {
+                window._currentReportingSisterAccounts = sisters;
+                var cachedTop = null, maxDisAmt = -1;
+                sisters.forEach(function(s) {
+                    var sc = window.sanitizeDocId ? window.sanitizeDocId(s.c) : String(s.c).replace(/[\/\.\s]/g, '_');
+                    var r = window._accountingReportsCache && window._accountingReportsCache[sc];
+                    if (r && r.finishSales && r.finishSales.length) {
+                        var amt = r.finishSales.reduce(function(tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
+                        if (amt > maxDisAmt) { maxDisAmt = amt; cachedTop = s; }
+                    }
                 });
-            }
-            if (agentParties.length > 0) {
-                window._currentReportingSisterAccounts = agentParties;
-            }
-        } else if (cust) {
-            var isCustAgent = Boolean(cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG')));
-            var custPhoneList = Array.isArray(cust.cleanPhones) && cust.cleanPhones.length ? cust.cleanPhones : (Array.isArray(cust.phones) && cust.phones.length ? cust.phones : (cust.p || cust.phone ? String(cust.p || cust.phone).split(/[,;/ ]+/) : []));
-            var custP10s = new Set(custPhoneList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(x) { return x.length === 10; }));
-            if (custP10s.size > 0) {
-                var sisters = list.filter(function(x) {
-                    var isXAgent = Boolean(x.role === 'agent' || x.isAgent || x.atype === '12' || (x.c && String(x.c).startsWith('AG')));
-                    if (isCustAgent !== isXAgent) return false;
-                    var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? String(x.p || x.phone).split(/[,;/ ]+/) : []));
-                    return rawList.some(function (num) {
-                        var n10 = String(num || '').replace(/\D/g, '').slice(-10);
-                        return n10.length === 10 && custP10s.has(n10);
-                    });
-                });
-                if (sisters.length > 1) {
-                    window._currentReportingSisterAccounts = sisters;
-                    var cachedTop = null, maxDisAmt = -1;
-                    sisters.forEach(function(s) {
-                        var sc = window.sanitizeDocId ? window.sanitizeDocId(s.c) : String(s.c).replace(/[\/\.\s]/g, '_');
-                        var r = window._accountingReportsCache && window._accountingReportsCache[sc];
-                        if (r && r.finishSales && r.finishSales.length) {
-                            var amt = r.finishSales.reduce(function(tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
-                            if (amt > maxDisAmt) { maxDisAmt = amt; cachedTop = s; }
-                        }
-                    });
-                    if (cachedTop) { cust = cachedTop; window._currentReportingCustomer = cust; }
-                }
+                if (cachedTop) { cust = cachedTop; window._currentReportingCustomer = cust; }
             }
         }
     }
@@ -16930,7 +16959,9 @@ window.selectPartyForOrder = function (cust) {
         var sisters = [];
         var list = window._compiledCustomersList || [];
         if (p10.length === 10) {
+            var isDetailsAgent = window.isAgentAccount(details);
             sisters = list.filter(function (x) {
+                if (isDetailsAgent !== window.isAgentAccount(x)) return false;
                 var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? String(x.p || x.phone).split(/[,;/ ]+/) : []));
                 return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
             });
@@ -18630,6 +18661,19 @@ window.pasteAndLookupCaller = async function () {
                 });
             }
         } catch(e){}
+    }
+
+    if (matched.length > 1) {
+        var myCd = {};
+        try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+        var isSelf = !window.hasCRMAccess();
+        var isAgentUser = isSelf && window.isAgentAccount(myCd);
+        var hasAg = matched.some(c => window.isAgentAccount(c));
+        if (isAgentUser || (!isSelf && hasAg)) {
+            matched = matched.filter(c => window.isAgentAccount(c));
+        } else if (isSelf) {
+            matched = matched.filter(c => !window.isAgentAccount(c));
+        }
     }
 
     if (matched.length > 1) {
