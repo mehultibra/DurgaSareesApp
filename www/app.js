@@ -3094,9 +3094,7 @@ function loadAndCacheDesignImage(imgEl, url, designGridUrl, productId, fileName,
                 else if (lu.includes('.jpeg?alt=media')) fbUrl = url.replace(/\.jpeg\?alt=media/i, '.jpg?alt=media');
                 else if (lu.includes('.png?alt=media')) fbUrl = url.replace(/\.png\?alt=media/i, '.webp?alt=media');
                 if (fbUrl) {
-                    if (typeof window.logAppError === 'function') {
-                        window.logAppError('AUDITOR: Fallback Swap', `Swapped ${url} to ${fbUrl} for ${fileName} | HTTP ${r.status}`);
-                    }
+                    console.log('[ZOOM] Fallback Swap:', `Swapped ${url} to ${fbUrl} for ${fileName} | HTTP ${r.status}`);
                     var r2 = await window.fetchWithRetry(fbUrl);
                     if (r2.ok) {
                         var b2 = await r2.blob();
@@ -3162,9 +3160,7 @@ function fetchZoomNatively(zoomUrl, imgEl) {
         else if (lowerUrl.includes('.jpeg?alt=media')) { newZoomUrl = zoomUrl.replace(/\.jpeg\?alt=media/i, '.jpg?alt=media'); extChangeMsg = ".jpeg -> .jpg"; }
         else if (lowerUrl.includes('.png?alt=media')) { newZoomUrl = zoomUrl.replace(/\.png\?alt=media/i, '.webp?alt=media'); extChangeMsg = ".png -> .webp"; }
 
-        if (typeof window.logAppError === 'function') {
-            window.logAppError('AUDITOR: Image Fallback Triggered', `Failed to load ${filename}. Trying ${extChangeMsg}`);
-        }
+        console.log('[ZOOM] Image Fallback Triggered:', `Trying ${extChangeMsg} for ${filename}`);
 
         if (newZoomUrl) {
             var fallbackImg = new Image();
@@ -7142,7 +7138,7 @@ async function openCustomerDetailsModal() {
             }
             if (sisters.length > 1) {
                 window._currentActivePartySisterAccounts = sisters;
-                repLbl.innerHTML = `<i class="fas fa-layer-group"></i> ${sisters.length} Merged Accounts (${escHtml(d.name || d.firm)})`;
+                repLbl.innerHTML = `<i class="fas fa-layer-group"></i> ${escHtml(d.name || d.firm)} (${sisters.length} accounts merged)`;
                 repBtn.innerHTML = `<i class="fas fa-chart-line"></i> Merged Report (${sisters.length})`;
                 repRow.style.display = 'flex';
             } else {
@@ -8446,7 +8442,7 @@ window.processCameraOutbox = async function () {
                     await window.deleteFromOutbox(item.id);
                     var uploadDuration = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
                     var totalJourney = ((Date.now() - item.ts) / 1000).toFixed(2);
-                    window.logAppError('Upload Success', `File: ${filename} | Net Time: ${uploadDuration}s | Total Journey: ${totalJourney}s`);
+                    console.log(`✅ Upload Success: File: ${filename} | Net Time: ${uploadDuration}s | Total Journey: ${totalJourney}s`);
                     console.log(`✅ Successfully uploaded: ${filename} in ${uploadDuration}s`);
                 } else {
                     throw new Error(`Status ${uploadRes.status}`);
@@ -16980,7 +16976,7 @@ window.selectPartyForOrder = function (cust) {
         }
         if (sisters.length > 1) {
             window._currentActivePartySisterAccounts = sisters;
-            repLbl.innerHTML = `<i class="fas fa-layer-group"></i> ${sisters.length} Merged Accounts (${escHtml(details.name || details.firm)})`;
+            repLbl.innerHTML = `<i class="fas fa-layer-group"></i> ${escHtml(details.name || details.firm)} (${sisters.length} accounts merged)`;
             repBtn.innerHTML = `<i class="fas fa-chart-line"></i> Merged Report (${sisters.length})`;
             repRow.style.display = 'flex';
         } else {
@@ -17110,22 +17106,22 @@ window.updateOrderOnBehalfBanner = function () {
                 window._currentActivePartySisterAccounts = hasSisters ? sisterAccounts : null;
                 var safeTargetCode = encodeURIComponent(stored.firm || stored.name || '').replace(/'/g, "%27");
 
+                var partyDisplayName = String(stored.name || stored.firm || '').trim();
+                var mergedBracket = hasSisters ? ` (${sisterAccounts.length} accounts merged)` : '';
+
                 banner.style.background = '#be185d';
                 banner.style.color = '#fff';
                 banner.onclick = openCustomerDetailsModal;
                 banner.innerHTML = `
                     <div style="display:flex; align-items:center; gap:6px; overflow:hidden; flex:1; min-width:0;">
-                      <i class="fas fa-store" style="font-size:12px; color:#fbcfe8;"></i>
-                      <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold;">${escHtml(stored.name)}${escHtml(locStr)}</span>
-                      <span id="orderOnBehalfPricingBadge" style="font-size:9.5px; background:${tierBg}; color:${tierColor}; padding:1px 6px; border-radius:3px; font-weight:800; white-space:nowrap;">${tierLbl}</span>
-                      ${hasSisters ? `<span style="font-size:9.5px; background:#fef08a; color:#854d0e; padding:1px 5px; border-radius:3px; font-weight:bold; white-space:nowrap;"><i class="fas fa-layer-group"></i> ${sisterAccounts.length} Merged</span>` : ''}
+                      <i class="fas fa-store" style="font-size:12px; color:#fbcfe8; flex-shrink:0;"></i>
+                      <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold; font-size:12px;">${escHtml(partyDisplayName)}${hasSisters ? `<span style="font-weight:normal; opacity:0.9;">${escHtml(mergedBracket)}</span>` : ''}${locStr ? ` • ${escHtml(locStr.replace(/^[ ()•]+|[ ()•]+$/g, ''))}` : ''}</span>
                     </div>
-                    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                    <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
                       <button type="button" onclick="event.stopPropagation(); window.openCustomerReportsModal(decodeURIComponent('${safeTargetCode}'), false, window._currentActivePartySisterAccounts)"
                               style="background:#fff; color:#be185d; border:none; padding:3px 7px; border-radius:4px; font-size:10.5px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:3px;" title="${hasSisters ? 'View Merged Reports' : 'View Report'}">
                         <i class="fas fa-chart-line"></i> ${hasSisters ? 'Merged Report' : 'Report'}
                       </button>
-                      <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 5px; border-radius:4px; font-weight:normal;">Change</span>
                       <button type="button" onclick="event.stopPropagation(); window.exitOrderOnBehalf()" style="background:#fff; color:#be185d; border:none; padding:3px 6px; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer;" title="Clear Party">
                         <i class="fas fa-times"></i>
                       </button>
