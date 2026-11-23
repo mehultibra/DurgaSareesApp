@@ -7523,6 +7523,10 @@ function printCartPdf() {
 // ====================================
 
 function openSyncReportModal() {
+    if (!window.isSuperAdmin && !window.isAdminMode && !window.hasCRMAccess()) {
+        alert("🔒 Access Denied: Sync Report is restricted to Administrators.");
+        return;
+    }
     closeModals();
     openModal('syncReportModal');
     if (typeof window.switchSyncReportTab === 'function') {
@@ -9799,6 +9803,10 @@ window.shareWhatsAppLink = async function () {
 };
 
 window.openLiveAdmin = function () {
+    if (!window.isSuperAdmin && !window.isAdminMode && !window.hasCRMAccess()) {
+        alert("🔒 Access Denied: Admin Live Sessions is restricted to Administrators.");
+        return;
+    }
     openModal('adminLiveModal');
     var contentEl = document.getElementById('adminLiveContent');
     contentEl.innerHTML = '<div style="text-align:center; color:#666; padding:20px;">Fetching live activity...</div>';
@@ -14400,7 +14408,11 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     var pCodeNorm = cleanPartyCode.toUpperCase();
 
     if (isSelfService) {
-        var isAllowed = allowedCodes.includes(pCodeNorm) || allowedCodes.some(c => c && pCodeNorm.includes(c));
+        var isAllowed = allowedCodes.some(function (c) {
+            if (!c) return false;
+            var cClean = String(c).trim().toUpperCase();
+            return pCodeNorm === cClean || (cClean.length >= 3 && (pCodeNorm.startsWith(cClean + '_') || pCodeNorm.startsWith(cClean + ' ')));
+        });
         if (!isAllowed) {
             alert("🔒 Access Denied: You can only view reports for your own approved accounts.");
             return;
@@ -14507,6 +14519,10 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     }
 
     // Reset In-Window Quick Party Search
+    var searchContainer = document.getElementById('custRepSearchContainer');
+    if (searchContainer) {
+        searchContainer.style.display = window.hasCRMAccess() ? 'block' : 'none';
+    }
     var qSearchInp = document.getElementById('custRepQuickPartySearch');
     if (qSearchInp) qSearchInp.value = '';
     var qSearchDrop = document.getElementById('custRepQuickSearchResults');
@@ -14757,6 +14773,13 @@ window.closeCustomerReportsModal = function () {
 
 // 8. Tab Switcher
 window.switchCustomerReportTab = function (tabName) {
+    var myCd = {};
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+    var isAgentUser = !window.hasCRMAccess() && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
+    if (isAgentUser && tabName === 'ledger') {
+        alert("🔒 Ledger statement is restricted for agent accounts.");
+        tabName = 'sales';
+    }
     window._activeCustomerReportTab = tabName;
     var tabs = ['sales', 'outstanding', 'ledger', 'crm'];
     var tabNamesMap = {
@@ -14894,6 +14917,22 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     try { rawCode = decodeURIComponent(rawCode); } catch(e){}
     var codeClean = window.sanitizeDocId ? window.sanitizeDocId(rawCode) : String(rawCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
 
+    var isAgentUser = !window.hasCRMAccess() && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
+    var isTargetAgent = Boolean(cust && (cust.role === 'agent' || cust.isAgent || (cust.atype === '12') || (cust.c && String(cust.c).startsWith('AG'))));
+    var isViewingAgent = isAgentUser || isTargetAgent;
+    var activeAgentKws = isAgentUser ? (window.getAgentKeywords ? window.getAgentKeywords(myCd) : []) : (isTargetAgent ? [cust.n, cust.name, cust.c, cust.code].filter(Boolean).map(x => String(x).trim().toUpperCase()) : []);
+
+    function matchesAgentBill(val) {
+        if (!isViewingAgent) return true;
+        if (!val || activeAgentKws.length === 0) return false;
+        var normVal = String(val).trim().toUpperCase();
+        if (normVal.length < 2 || ['-', '.', 'NA', 'N/A', 'DIRECT', 'SELF', 'NONE'].includes(normVal)) return false;
+        return activeAgentKws.some(kw => {
+            if (!kw || kw.length < 2) return false;
+            return normVal.includes(kw) || (kw.length >= 3 && kw.includes(normVal));
+        });
+    }
+
     window._accountingReportsCache = window._accountingReportsCache || {};
 
     // 2-Hour Local Cache Check to save Firestore credits
@@ -15025,6 +15064,8 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             var sDispatchAmt = 0;
             var sDispatchPcs = 0;
             (sRep.finishSales || []).forEach(function (r) {
+                var bBroker = Array.isArray(r) ? r[16] : (r && (r.haste || r.ag || r.agent || r.broker));
+                if (isViewingAgent && !matchesAgentBill(bBroker)) return;
                 if (Array.isArray(r)) {
                     var rowCopy = r.slice();
                     if (!isAccAgent) {
@@ -15046,6 +15087,8 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             });
             sisterDispatchMap.set(sCode, { amt: sDispatchAmt, pcs: sDispatchPcs, count: (sRep.finishSales || []).length, acc: sAcc });
             (sRep.outstanding || []).forEach(function (r) {
+                var rAg = r && (r.ag || r.agent || r.broker || (Array.isArray(r) ? r[9] : ''));
+                if (isViewingAgent && !matchesAgentBill(rAg)) return;
                 if (r && typeof r === 'object') {
                     var osCopy = Object.assign({}, r);
                     if (!osCopy.party && !isAccAgent) osCopy.party = pLabel;
@@ -15171,16 +15214,11 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         return;
     }
 
-    var isAgentUser = !window.hasCRMAccess() && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
-    var isTargetAgent = Boolean(cust && (cust.role === 'agent' || cust.isAgent || (cust.atype === '12') || (cust.c && String(cust.c).startsWith('AG'))));
-    var isViewingAgent = isAgentUser || isTargetAgent;
-    var activeAgentKws = isAgentUser ? (window.getAgentKeywords ? window.getAgentKeywords(myCd) : []) : (isTargetAgent ? [cust.n, cust.name, cust.c, cust.code].filter(Boolean).map(x => String(x).trim().toUpperCase()) : []);
-
-    function matchesAgentBill(val) {
-        if (!isViewingAgent) return true;
-        if (!val || activeAgentKws.length === 0) return false;
-        var normVal = String(val).trim().toUpperCase();
-        return activeAgentKws.some(kw => normVal.includes(kw) || kw.includes(normVal));
+    // Re-verify viewing agent context
+    if (!isViewingAgent && cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG')))) {
+        isTargetAgent = true;
+        isViewingAgent = true;
+        activeAgentKws = [cust.n, cust.name, cust.c, cust.code].filter(Boolean).map(x => String(x).trim().toUpperCase());
     }
 
     if (isViewingAgent) {
@@ -15221,8 +15259,9 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         var fsList = rawFsList.filter(r => {
             var b = String(r[1] || '').toUpperCase();
             if (b.includes('/CS') || b.includes('/GR') || b.includes('/CN') || b.includes('/CR') || b.endsWith('CS') || b.endsWith('GR')) return false;
-            if (isAgentUser && !matchesAgentBill(r[16])) return false;
-            if (activeAgentFilter && !String(r[16] || '').toLowerCase().replace(/\./g, '').includes(activeAgentFilter)) return false;
+            var bBroker = Array.isArray(r) ? r[16] : (r && (r.haste || r.ag || r.agent || r.broker));
+            if (isViewingAgent && !matchesAgentBill(bBroker)) return false;
+            if (activeAgentFilter && !String(bBroker || '').toLowerCase().replace(/\./g, '').includes(activeAgentFilter)) return false;
             return dateInRange(r[0]);
         });
 
@@ -15460,7 +15499,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
             osList = osList.filter(r => !r.dt || r.dt <= toDate);
         }
 
-        if (isAgentUser) {
+        if (isViewingAgent) {
             osList = osList.filter(r => matchesAgentBill(r.ag));
         }
 
@@ -15837,6 +15876,7 @@ window.resetCustomerReportZoom = function () {
 };
 
 window.handleCustRepQuickSearch = function (query) {
+    if (!window.hasCRMAccess()) return;
     var q = String(query || '').trim().toLowerCase().replace(/\./g, '');
     var drop = document.getElementById('custRepQuickSearchResults');
     var clrBtn = document.getElementById('btnCustRepClearSearch');
@@ -15944,16 +15984,35 @@ window.openBillInvoiceModal = function (billNo) {
         return;
     }
 
-    // Agent Privacy: only allow viewing if agent matches bill Broker/Haste (b[13])
+    // Agent & Customer Privacy: strictly restrict invoice viewing
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+    var isSelfService = !window.hasCRMAccess();
     var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent);
     if (isAgentUser) {
         var agentKws = window.getAgentKeywords ? window.getAgentKeywords(myCd) : [];
         var billBroker = String(b[13] || '').trim().toUpperCase();
-        var isBrokerMatch = agentKws.some(function (kw) { return billBroker.includes(kw) || kw.includes(billBroker); });
+        var isBrokerMatch = agentKws.some(function (kw) {
+            if (!kw || kw.length < 2) return false;
+            return billBroker.includes(kw) || (kw.length >= 3 && kw.includes(billBroker));
+        });
         if (!isBrokerMatch) {
             alert("🔒 Access Denied: You can only view invoices where you are the broker.");
+            return;
+        }
+    } else if (isSelfService) {
+        var billParty = String(b[2] || '').trim().toUpperCase();
+        var allowedNames = [
+            String(myCd.linkedAccountName || '').trim().toUpperCase(),
+            String(myCd.name || '').trim().toUpperCase(),
+            String(myCd.linkedAccount || '').trim().toUpperCase(),
+            ...(myCd.matchedAccounts || []).map(m => String(m.name || m.n || m.code || m.c || '').trim().toUpperCase())
+        ].filter(Boolean);
+        var isPartyMatch = allowedNames.some(function (n) {
+            return n.length >= 3 && (billParty.includes(n) || n.includes(billParty));
+        });
+        if (!isPartyMatch) {
+            alert("🔒 Access Denied: You can only view invoices for your own account.");
             return;
         }
     }
