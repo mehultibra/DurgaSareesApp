@@ -18309,7 +18309,19 @@ window.startCRMCall = function (code, name, phone, station, agent, balance, drCr
         } catch(e){}
     }
 
-    window.location.href = 'tel:+91' + clean10;
+    // Safely trigger phone dialer via temporary anchor without polluting WebView navigation/history
+    try {
+        var a = document.createElement('a');
+        a.href = 'tel:+91' + clean10;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () {
+            if (a && a.parentNode) a.parentNode.removeChild(a);
+        }, 500);
+    } catch(e) {
+        window.open('tel:+91' + clean10, '_system');
+    }
 };
 window.initiateTrackedCall = window.startCRMCall;
 
@@ -18397,120 +18409,29 @@ window.insertTextAtCursor = function (inputEl, textToInsert) {
     inputEl._lastSelectionEnd = newPos;
 };
 
-window.saveQuickCRMNote = async function () {
+window.saveQuickCRMNote = function () {
     var cust = window._currentReportingCustomer;
     if (!cust) return;
     var inp = document.getElementById('custRepQuickNote');
-    var msgEl = document.getElementById('custRepQuickNoteMsg');
     var noteText = (inp ? inp.value : '').trim();
     if (!noteText) {
         alert("Please enter or speak a call note.");
+        if (inp) inp.focus();
         return;
     }
 
-    try {
-        var token = await getCachedAuthToken(false);
-        var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
-        var safeCode = window.sanitizeDocId ? window.sanitizeDocId(cust.c || cust.n) : String(cust.c || cust.n || '').replace(/[\/\.#\?\[\]\s]/g, '_');
-        var nowIso = new Date().toISOString();
-
-        var staffProfile = null;
-        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
-        var staffName = (staffProfile && staffProfile.name) || 'Admin';
-
-        // Fetch existing PartyCRM to maintain recentLogsJson
-        var existingLogs = [];
-        try {
-            var gRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, { headers: headers });
-            if (gRes && gRes.ok) {
-                var gd = await gRes.json();
-                if (gd && gd.fields && gd.fields.recentLogsJson) {
-                    existingLogs = JSON.parse(gd.fields.recentLogsJson.stringValue || '[]');
-                }
-            }
-        } catch(e){}
-
-        if (existingLogs.length === 0 && window.fetchPartyCRMLogs) {
-            try {
-                var prevCrm = await window.fetchPartyCRMLogs(cust);
-                if (prevCrm && prevCrm.allLogs && prevCrm.allLogs.length > 0) {
-                    existingLogs = prevCrm.allLogs.slice();
-                }
-            } catch(e){}
-        }
-
-        var newEntry = {
-            id: 'quick_' + Date.now(),
-            partyCode: cust.c || '',
-            partyName: cust.n || cust.c || '',
-            phone: cust.p || '',
-            station: cust.ct || '',
-            agent: cust.ag || '',
-            staffName: staffName,
-            callType: 'call',
-            disposition: 'Live Note',
+    if (typeof window.openPostCallCRMModal === 'function') {
+        window.openPostCallCRMModal({
+            code: cust.c || cust.code || '',
+            name: cust.n || cust.name || cust.c || '',
+            phone: cust.p || cust.phone || '',
+            station: cust.ct || cust.station || '',
+            agent: cust.ag || cust.agent || '',
+            balance: cust.b || 0,
+            drCr: cust.d || '',
             note: noteText,
-            promisedAmount: 0,
-            promisedDate: '',
-            createdAt: nowIso
-        };
-        existingLogs.unshift(newEntry);
-        if (existingLogs.length > 30) existingLogs = existingLogs.slice(0, 30);
-
-        var partyCrmBody = {
-            fields: {
-                partyCode: { stringValue: cust.c || '' },
-                partyName: { stringValue: cust.n || cust.c || '' },
-                station: { stringValue: cust.ct || '' },
-                phone: { stringValue: cust.p || '' },
-                agent: { stringValue: cust.ag || '' },
-                lastNote: { stringValue: noteText },
-                lastDisposition: { stringValue: 'Live Note' },
-                lastCallAt: { timestampValue: nowIso },
-                status: { stringValue: 'contacted' },
-                recentLogsJson: { stringValue: JSON.stringify(existingLogs) },
-                updatedAt: { timestampValue: nowIso }
-            }
-        };
-
-        var pUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode + "?updateMask.fieldPaths=lastCallAt&updateMask.fieldPaths=lastDisposition&updateMask.fieldPaths=lastNote&updateMask.fieldPaths=status&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=partyCode&updateMask.fieldPaths=partyName&updateMask.fieldPaths=phone&updateMask.fieldPaths=station&updateMask.fieldPaths=agent&updateMask.fieldPaths=recentLogsJson";
-        await fetch(pUrl, { method: 'PATCH', headers: headers, body: JSON.stringify(partyCrmBody) });
-
-        var tBody = {
-            fields: {
-                partyCode: { stringValue: cust.c || '' },
-                partyName: { stringValue: cust.n || cust.c || '' },
-                station: { stringValue: cust.ct || '' },
-                phone: { stringValue: cust.p || '' },
-                agent: { stringValue: cust.ag || '' },
-                note: { stringValue: noteText },
-                callType: { stringValue: 'call' },
-                callOutcome: { stringValue: 'live_call_discussion' },
-                createdAt: { timestampValue: nowIso }
-            }
-        };
-        fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode + "/Timeline", { method: 'POST', headers: headers, body: JSON.stringify(tBody) }).catch(function(){});
-
-        if (inp) {
-            inp.value = '';
-            inp._lastSelectionStart = 0;
-            inp._lastSelectionEnd = 0;
-        }
-        if (msgEl) {
-            msgEl.innerText = "✓ Note saved to party conversation history!";
-            msgEl.style.display = 'block';
-            setTimeout(function () { msgEl.style.display = 'none'; }, 3000);
-        }
-
-        if (typeof window.loadCustRepLastTalkBanner === 'function') {
-            window.loadCustRepLastTalkBanner(cust.c);
-        }
-        if (typeof window.loadCRMHubFollowups === 'function') {
-            window.loadCRMHubFollowups();
-        }
-    } catch (e) {
-        console.warn("Save quick note error:", e);
-        alert("Failed to save CRM note: " + e.message);
+            isFromQuickNote: true
+        });
     }
 };
 
@@ -19107,9 +19028,14 @@ window.openPostCallCRMModal = function (ctx, name, phone, station, agent, callTy
     }
 
     // Reset Form
-    window.selectCRMCallType('outgoing');
+    window.selectCRMCallType((typeof ctx === 'object' && ctx.callType) ? ctx.callType : 'outgoing');
     window.selectCRMDisposition('');
-    document.getElementById('crmNoteInput').value = '';
+    var initialNote = (typeof ctx === 'object' && (ctx.note || ctx.initialNote)) ? (ctx.note || ctx.initialNote) : '';
+    if (!initialNote) {
+        var qInp = document.getElementById('custRepQuickNote');
+        if (qInp && qInp.value) initialNote = qInp.value.trim();
+    }
+    document.getElementById('crmNoteInput').value = initialNote;
     document.getElementById('crmPromisedAmount').value = '';
     document.getElementById('crmFollowUpDate').value = '';
     var errEl = document.getElementById('crmErr');
@@ -19529,6 +19455,20 @@ window.savePostCallCRM = async function () {
         window.closePostCallCRMModal();
         alert('✓ Call note & follow-up saved successfully!');
 
+        // Clear quick note input in customer report if present
+        var qInp = document.getElementById('custRepQuickNote');
+        if (qInp) {
+            qInp.value = '';
+            qInp._lastSelectionStart = 0;
+            qInp._lastSelectionEnd = 0;
+        }
+        var qMsg = document.getElementById('custRepQuickNoteMsg');
+        if (qMsg) {
+            qMsg.innerText = "✓ Note & follow-up saved!";
+            qMsg.style.display = 'block';
+            setTimeout(function () { qMsg.style.display = 'none'; }, 3000);
+        }
+
         // Refresh reports live talk / follow-up banner
         if (typeof window.loadCustRepLastTalkBanner === 'function') {
             window.loadCustRepLastTalkBanner(code || name);
@@ -19724,7 +19664,7 @@ window.loadCRMHubFollowups = async function () {
                 lastStaff: f.lastStaffName ? f.lastStaffName.stringValue : '',
                 lastDisp: f.lastDisposition ? f.lastDisposition.stringValue : '',
                 lastNote: f.lastNote ? f.lastNote.stringValue : '',
-                followUpDate: f.nextFollowUpDate ? f.nextFollowUpDate.stringValue : '',
+                followUpDate: (f.nextFollowUpDate ? f.nextFollowUpDate.stringValue : '') || (f.followUpDate ? f.followUpDate.stringValue : '') || (recentLogs[0] ? (recentLogs[0].followUpDate || recentLogs[0].nextFollowUpDate || '') : ''),
                 promisedAmt: f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0,
                 status: f.status ? f.status.stringValue : 'pending',
                 recentLogs: recentLogs
@@ -19747,9 +19687,6 @@ window.loadCRMHubFollowups = async function () {
                 if (!existing.station && fu.station) existing.station = fu.station;
                 if (!existing.agent && fu.agent) existing.agent = fu.agent;
                 if (!existing.code && fu.code) existing.code = fu.code;
-                if (!existing.followUpDate || (fu.followUpDate && fu.followUpDate < existing.followUpDate)) {
-                    existing.followUpDate = fu.followUpDate;
-                }
                 if (fu.promisedAmt > existing.promisedAmt) {
                     existing.promisedAmt = fu.promisedAmt;
                 }
@@ -19758,6 +19695,11 @@ window.loadCRMHubFollowups = async function () {
                     existing.lastNote = fu.lastNote || existing.lastNote;
                     existing.lastDisp = fu.lastDisp || existing.lastDisp;
                     existing.lastStaff = fu.lastStaff || existing.lastStaff;
+                    if (fu.followUpDate) {
+                        existing.followUpDate = fu.followUpDate;
+                    }
+                } else if (!existing.followUpDate && fu.followUpDate) {
+                    existing.followUpDate = fu.followUpDate;
                 }
                 var combinedLogs = (existing.recentLogs || []).concat(fu.recentLogs || []);
                 var seenLogKeys = new Set();
