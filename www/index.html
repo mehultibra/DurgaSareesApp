@@ -1624,7 +1624,7 @@
         <div style="display: flex; gap: 10px;">
           <div style="flex: 1;">
             <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Price (₹)</label>
-            <input type="number" id="addProdPrice"
+            <input type="number" id="addProdPrice" oninput="if(window.autoCalcAddProdTierPrices) window.autoCalcAddProdTierPrices()"
               style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"
               placeholder="e.g. 1250">
           </div>
@@ -1633,6 +1633,20 @@
             <input type="text" id="addProdSku" oninput="window.isSkuManuallyEdited = true"
               style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"
               placeholder="e.g. BAN-1001">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: #2563eb; font-size: 12px;">B2B Price (Col AB)</label>
+            <input type="number" id="addProdB2bPrice"
+              style="width: 100%; padding: 8px; border: 1px solid #93c5fd; border-radius: 6px; margin-top: 4px;"
+              placeholder="Auto-calculated (Col AB)">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-weight: bold; color: #b45309; font-size: 12px;">Special Price (Col AC)</label>
+            <input type="number" id="addProdSuperB2bPrice"
+              style="width: 100%; padding: 8px; border: 1px solid #fde68a; border-radius: 6px; margin-top: 4px;"
+              placeholder="Auto-calculated (Col AC)">
           </div>
         </div>
         <div style="display: flex; gap: 10px;">
@@ -1743,7 +1757,7 @@
         <div style="display: flex; gap: 10px;">
           <div style="flex: 1;">
             <label style="font-weight: bold; color: var(--text-main); font-size: 12px;">Price (₹)</label>
-            <input type="number" id="editProdPrice"
+            <input type="number" id="editProdPrice" oninput="if(window.autoCalcEditProdTierPrices) window.autoCalcEditProdTierPrices()"
               style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin-top: 4px;"
               placeholder="e.g. 1250">
           </div>
@@ -1762,10 +1776,10 @@
               placeholder="B2B Wholesale">
           </div>
           <div style="flex: 1;">
-            <label style="font-weight: bold; color: #b45309; font-size: 12px;">Super B2B (Col AC)</label>
+            <label style="font-weight: bold; color: #b45309; font-size: 12px;">Special Price (Col AC)</label>
             <input type="number" id="editProdSuperB2bPrice"
               style="width: 100%; padding: 8px; border: 1px solid #fde68a; border-radius: 6px; margin-top: 4px;"
-              placeholder="Super B2B Rate">
+              placeholder="Special Price Rate">
           </div>
         </div>
         <div style="display: flex; gap: 10px;">

@@ -11357,6 +11357,11 @@ window.saveProductDetails = async function () {
     var price = document.getElementById('editProdPrice').value.trim();
     var b2bVal = parseFloat(document.getElementById('editProdB2bPrice') ? document.getElementById('editProdB2bPrice').value : 0) || 0;
     var superB2bVal = parseFloat(document.getElementById('editProdSuperB2bPrice') ? document.getElementById('editProdSuperB2bPrice').value : 0) || 0;
+    if ((b2bVal <= 0 || superB2bVal <= 0) && price) {
+        var autoTiers = window.calcCategoryTierPrices ? window.calcCategoryTierPrices(catVal, price) : { b2bPrice: 0, superB2bPrice: 0 };
+        if (b2bVal <= 0) b2bVal = autoTiers.b2bPrice;
+        if (superB2bVal <= 0) superB2bVal = autoTiers.superB2bPrice;
+    }
     var sku = document.getElementById('editProdSku').value.trim();
     var packing = document.getElementById('editProdPacking').value.trim();
     var mult = document.getElementById('editProdMult').value.trim();
@@ -11538,6 +11543,10 @@ window.openAddProductModal = function () {
     document.getElementById('addProdClone').innerHTML = '<option value="">Select a product to clone details...</option>';
     document.getElementById('addProdName').value = '';
     document.getElementById('addProdPrice').value = '';
+    var addB2b = document.getElementById('addProdB2bPrice');
+    if (addB2b) { addB2b.value = ''; }
+    var addSb2b = document.getElementById('addProdSuperB2bPrice');
+    if (addSb2b) { addSb2b.value = ''; }
     document.getElementById('addProdPacking').value = '';
     document.getElementById('addProdMult').value = '1';
     document.getElementById('addProdFabric').value = '';
@@ -11611,6 +11620,88 @@ window.onAddProdCatChange = function () {
         html += `<option value="${p.id}">${p.name}</option>`;
     });
     cloneSelect.innerHTML = html;
+    if (window.autoCalcAddProdTierPrices) window.autoCalcAddProdTierPrices();
+};
+
+window.calcCategoryTierPrices = function (category, retailPrice) {
+    var pPrice = parseFloat(retailPrice) || 0;
+    if (pPrice <= 0) return { b2bPrice: 0, superB2bPrice: 0 };
+
+    var cleanCat = String(category || '').trim().toLowerCase();
+    var b2bSamples = [];
+    var superSamples = [];
+
+    function collectSamples(filterFn) {
+        if (!Array.isArray(window.allProducts)) return;
+        for (var i = 0; i < window.allProducts.length; i++) {
+            var item = window.allProducts[i];
+            if (!item || !item.price || !filterFn(item)) continue;
+            var ip = parseFloat(item.price) || 0;
+            var ib = parseFloat(item.b2bPrice) || 0;
+            var is_ = parseFloat(item.superB2bPrice) || 0;
+            if (ip > 0) {
+                if (ib > 0) b2bSamples.push({ price: ip, tier: ib, ratio: ib / ip, diff: ip - ib });
+                if (is_ > 0) superSamples.push({ price: ip, tier: is_, ratio: is_ / ip, diff: ip - is_ });
+            }
+        }
+    }
+
+    if (cleanCat) {
+        collectSamples(p => p.cat && String(p.cat).trim().toLowerCase() === cleanCat);
+    }
+
+    // Fallback: if category has no samples, check all products
+    if (b2bSamples.length === 0 || superSamples.length === 0) {
+        collectSamples(p => true);
+    }
+
+    function estimateTier(samples) {
+        if (!samples || samples.length === 0) return 0;
+        var firstDiff = samples[0].diff;
+        var diffConsistent = samples.every(s => Math.abs(s.diff - firstDiff) < 1);
+        if (diffConsistent && firstDiff > 0 && pPrice > firstDiff) {
+            return Math.round(pPrice - firstDiff);
+        }
+        var avgRatio = samples.reduce((sum, s) => sum + s.ratio, 0) / samples.length;
+        return Math.round(pPrice * avgRatio);
+    }
+
+    return {
+        b2bPrice: estimateTier(b2bSamples),
+        superB2bPrice: estimateTier(superSamples)
+    };
+};
+
+window.autoCalcAddProdTierPrices = function () {
+    var catSelect = document.getElementById('addProdCat');
+    var catSelectVal = catSelect ? catSelect.value.trim() : '';
+    var newCatInput = document.getElementById('addProdNewCatInput');
+    var cat = (catSelectVal === '__NEW__' && newCatInput) ? newCatInput.value.trim() : catSelectVal;
+    var priceInput = document.getElementById('addProdPrice');
+    var price = priceInput ? parseFloat(priceInput.value) : 0;
+
+    if (!price || price <= 0) return;
+
+    var tiers = window.calcCategoryTierPrices(cat, price);
+    var b2bInput = document.getElementById('addProdB2bPrice');
+    var superB2bInput = document.getElementById('addProdSuperB2bPrice');
+    if (b2bInput) b2bInput.value = tiers.b2bPrice || '';
+    if (superB2bInput) superB2bInput.value = tiers.superB2bPrice || '';
+};
+
+window.autoCalcEditProdTierPrices = function () {
+    var catInput = document.getElementById('editProdCat');
+    var cat = catInput ? catInput.value.trim() : '';
+    var priceInput = document.getElementById('editProdPrice');
+    var price = priceInput ? parseFloat(priceInput.value) : 0;
+
+    if (!price || price <= 0) return;
+
+    var tiers = window.calcCategoryTierPrices(cat, price);
+    var b2bInput = document.getElementById('editProdB2bPrice');
+    var superB2bInput = document.getElementById('editProdSuperB2bPrice');
+    if (b2bInput && tiers.b2bPrice > 0) b2bInput.value = tiers.b2bPrice;
+    if (superB2bInput && tiers.superB2bPrice > 0) superB2bInput.value = tiers.superB2bPrice;
 };
 
 window.onAddProdCloneChange = function () {
@@ -11620,6 +11711,13 @@ window.onAddProdCloneChange = function () {
     var p = window.allProducts.find(x => x.id === pid);
     if (p) {
         document.getElementById('addProdPrice').value = p.price || '';
+        var b2bEl = document.getElementById('addProdB2bPrice');
+        var sb2bEl = document.getElementById('addProdSuperB2bPrice');
+        if (b2bEl) b2bEl.value = p.b2bPrice || '';
+        if (sb2bEl) sb2bEl.value = p.superB2bPrice || '';
+        if (window.autoCalcAddProdTierPrices && (!p.b2bPrice || !p.superB2bPrice)) {
+            window.autoCalcAddProdTierPrices();
+        }
         document.getElementById('addProdPacking').value = p.packing || '';
         document.getElementById('addProdMult').value = p.mult || '1';
         document.getElementById('addProdFabric').value = p.fabric || '';
@@ -11647,6 +11745,15 @@ window.submitNewProduct = async function () {
 
     var name = document.getElementById('addProdName').value.trim();
     var price = document.getElementById('addProdPrice').value.trim();
+    var b2bInput = document.getElementById('addProdB2bPrice');
+    var superB2bInput = document.getElementById('addProdSuperB2bPrice');
+    var b2bVal = parseFloat(b2bInput ? b2bInput.value : 0) || 0;
+    var superB2bVal = parseFloat(superB2bInput ? superB2bInput.value : 0) || 0;
+    if (b2bVal <= 0 || superB2bVal <= 0) {
+        var autoTiers = window.calcCategoryTierPrices ? window.calcCategoryTierPrices(cat, price) : { b2bPrice: 0, superB2bPrice: 0 };
+        if (b2bVal <= 0) b2bVal = autoTiers.b2bPrice;
+        if (superB2bVal <= 0) superB2bVal = autoTiers.superB2bPrice;
+    }
     var packing = document.getElementById('addProdPacking').value.trim();
     var mult = document.getElementById('addProdMult').value.trim();
     var fabric = document.getElementById('addProdFabric').value.trim();
@@ -11671,6 +11778,8 @@ window.submitNewProduct = async function () {
             cat: { stringValue: cat },
             section: { stringValue: secVal },
             price: { doubleValue: Number(price || 0) },
+            b2bPrice: { doubleValue: Number(b2bVal) },
+            superB2bPrice: { doubleValue: Number(superB2bVal) },
             packing: { stringValue: packing },
             mult: { doubleValue: Number(mult || 1) },
             fabric: { stringValue: fabric },
@@ -11733,6 +11842,8 @@ window.submitNewProduct = async function () {
                         category: cat,
                         name: name,
                         price: parseFloat(price),
+                        b2bPrice: b2bVal,
+                        superB2bPrice: superB2bVal,
                         packing: packing,
                         mult: parseFloat(mult || "1"),
                         fabric: fabric,
@@ -11760,6 +11871,8 @@ window.submitNewProduct = async function () {
             cat: cat,
             section: secVal,
             price: parseFloat(price),
+            b2bPrice: b2bVal,
+            superB2bPrice: superB2bVal,
             mrp: 0,
             packing: packing,
             mult: parseFloat(mult || "1"),
