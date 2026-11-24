@@ -18410,8 +18410,7 @@ window.insertTextAtCursor = function (inputEl, textToInsert) {
 };
 
 window.saveQuickCRMNote = function () {
-    var cust = window._currentReportingCustomer;
-    if (!cust) return;
+    var cust = window._currentReportingCustomer || {};
     var inp = document.getElementById('custRepQuickNote');
     var noteText = (inp ? inp.value : '').trim();
     if (!noteText) {
@@ -18420,13 +18419,19 @@ window.saveQuickCRMNote = function () {
         return;
     }
 
+    var code = cust.c || cust.code || (document.getElementById('custRepName') ? document.getElementById('custRepName').innerText.trim() : '');
+    var name = cust.n || cust.name || code;
+    var phone = cust.p || cust.phone || (document.getElementById('custRepPhoneText') ? document.getElementById('custRepPhoneText').innerText.replace(/\D/g, '').slice(-10) : '');
+    var station = cust.ct || cust.station || (document.getElementById('custRepCity') ? document.getElementById('custRepCity').innerText.trim() : '');
+    var agent = cust.ag || cust.agent || (document.getElementById('custRepAgentName') ? document.getElementById('custRepAgentName').innerText.trim() : '');
+
     if (typeof window.openPostCallCRMModal === 'function') {
         window.openPostCallCRMModal({
-            code: cust.c || cust.code || '',
-            name: cust.n || cust.name || cust.c || '',
-            phone: cust.p || cust.phone || '',
-            station: cust.ct || cust.station || '',
-            agent: cust.ag || cust.agent || '',
+            code: code,
+            name: name,
+            phone: phone,
+            station: station,
+            agent: agent,
             balance: cust.b || 0,
             drCr: cust.d || '',
             note: noteText,
@@ -19574,7 +19579,8 @@ window.loadCRMHubFollowups = async function () {
 
         var data = await res.json();
         var docs = data.documents || [];
-        var todayStr = new Date().toISOString().slice(0, 10);
+        var _dNow = new Date();
+        var todayStr = _dNow.getFullYear() + '-' + String(_dNow.getMonth() + 1).padStart(2, '0') + '-' + String(_dNow.getDate()).padStart(2, '0');
 
         var list = window._compiledCustomersList || [];
         var rawFollowups = docs.map(function (d) {
@@ -19653,6 +19659,12 @@ window.loadCRMHubFollowups = async function () {
                 }];
             }
 
+            var rawFuDate = (f.nextFollowUpDate ? f.nextFollowUpDate.stringValue : '') || (f.followUpDate ? f.followUpDate.stringValue : '') || (recentLogs[0] ? (recentLogs[0].followUpDate || recentLogs[0].nextFollowUpDate || '') : '');
+            if (rawFuDate && /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}/.test(rawFuDate.trim())) {
+                var pParts = rawFuDate.trim().split(/[\/\-]/);
+                rawFuDate = pParts[2] + '-' + pParts[1].padStart(2, '0') + '-' + pParts[0].padStart(2, '0');
+            }
+
             return {
                 docId: docId,
                 code: cleanCode,
@@ -19664,7 +19676,7 @@ window.loadCRMHubFollowups = async function () {
                 lastStaff: f.lastStaffName ? f.lastStaffName.stringValue : '',
                 lastDisp: f.lastDisposition ? f.lastDisposition.stringValue : '',
                 lastNote: f.lastNote ? f.lastNote.stringValue : '',
-                followUpDate: (f.nextFollowUpDate ? f.nextFollowUpDate.stringValue : '') || (f.followUpDate ? f.followUpDate.stringValue : '') || (recentLogs[0] ? (recentLogs[0].followUpDate || recentLogs[0].nextFollowUpDate || '') : ''),
+                followUpDate: rawFuDate,
                 promisedAmt: f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0,
                 status: f.status ? f.status.stringValue : 'pending',
                 recentLogs: recentLogs
