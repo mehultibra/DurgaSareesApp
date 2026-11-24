@@ -14745,24 +14745,56 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     }
 
     // Check & display live call indicator
+    var isLive = Boolean(isCallTriggered);
+    if (!isLive) {
+        try {
+            var rawTrk = localStorage.getItem('ds_active_tracked_call');
+            if (rawTrk) {
+                var trk = JSON.parse(rawTrk);
+                if (trk && (trk.code === cust.c || trk.phone === cust.p)) isLive = true;
+            }
+        } catch(e){}
+    }
     var liveBadge = document.getElementById('liveCallStatusBadge');
     if (liveBadge) {
-        var isLive = Boolean(isCallTriggered);
-        if (!isLive) {
-            try {
-                var rawTrk = localStorage.getItem('ds_active_tracked_call');
-                if (rawTrk) {
-                    var trk = JSON.parse(rawTrk);
-                    if (trk && (trk.code === cust.c || trk.phone === cust.p)) isLive = true;
-                }
-            } catch(e){}
-        }
         if (!isSelfService && isLive) {
             liveBadge.innerHTML = `<span><i class="fas fa-phone-volume fa-shake" style="color:#16a34a; margin-right:5px;"></i> 📞 LIVE CALL: ${escHtml(cust.n)}${cust.p ? (' (' + escHtml(cust.p) + ')') : ''}</span><span style="font-size:10px; color:#15803d;">Dispatches &amp; Orders Ready</span>`;
             liveBadge.style.display = 'flex';
         } else {
             liveBadge.style.display = 'none';
         }
+    }
+
+    // Phone number badge merged with party name in reports header
+    var repPhoneBadge = document.getElementById('custRepPhoneBadge');
+    var repPhoneText = document.getElementById('custRepPhoneText');
+    var repPhoneIcon = document.getElementById('custRepPhoneIcon');
+    var pNum = cust.p || cust.phone || '';
+    if (!pNum && Array.isArray(cust.cleanPhones) && cust.cleanPhones.length > 0) pNum = cust.cleanPhones[0];
+    var p10 = String(pNum || '').replace(/\D/g, '').slice(-10);
+    if (repPhoneBadge) {
+        if (p10 && p10.length === 10) {
+            if (repPhoneText) repPhoneText.innerText = p10;
+            repPhoneBadge.style.display = 'inline-flex';
+            if (isLive) {
+                repPhoneBadge.style.background = '#22c55e';
+                repPhoneBadge.style.color = '#ffffff';
+                repPhoneBadge.style.border = '1px solid #16a34a';
+                repPhoneBadge.style.boxShadow = '0 0 8px rgba(34,197,94,0.6)';
+                if (repPhoneIcon) repPhoneIcon.className = 'fas fa-phone-volume fa-shake';
+            } else {
+                repPhoneBadge.style.background = '#f0fdf4';
+                repPhoneBadge.style.color = '#16a34a';
+                repPhoneBadge.style.border = '1px solid #bbf7d0';
+                repPhoneBadge.style.boxShadow = 'none';
+                if (repPhoneIcon) repPhoneIcon.className = 'fas fa-phone-alt';
+            }
+        } else {
+            repPhoneBadge.style.display = 'none';
+        }
+    }
+    if (typeof window.initReportPinchZoom === 'function') {
+        window.initReportPinchZoom();
     }
 
     // Populate Last Talk / CRM Follow-Up Summary Banner (SuperAdmin & Staff)
@@ -15892,24 +15924,70 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
 // 🔍 IN-WINDOW PARTY SEARCH & REPORT ZOOM
 // ==========================================
 window._reportZoomLevel = 1.0;
+window.initReportPinchZoom = function () {
+    var area = document.getElementById('custReportContentArea');
+    if (!area || area._pinchInit) return;
+    area._pinchInit = true;
+
+    var startDist = 0;
+    var startZoom = 1.0;
+    var lastTap = 0;
+
+    area.addEventListener('touchstart', function (e) {
+        if (e.touches && e.touches.length === 2) {
+            startDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            startZoom = window._reportZoomLevel || 1.0;
+        } else if (e.touches && e.touches.length === 1) {
+            var now = Date.now();
+            if (now - lastTap < 300) {
+                // Double-tap to reset/zoom
+                window._reportZoomLevel = (window._reportZoomLevel && window._reportZoomLevel > 1.1) ? 1.0 : 1.4;
+                var wrap = document.getElementById('erpReportPrintWrapper') || area.firstElementChild;
+                if (wrap) wrap.style.zoom = window._reportZoomLevel;
+                lastTap = 0;
+            } else {
+                lastTap = now;
+            }
+        }
+    }, { passive: true });
+
+    area.addEventListener('touchmove', function (e) {
+        if (e.touches && e.touches.length === 2 && startDist > 0) {
+            if (e.cancelable) e.preventDefault();
+            var dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            if (dist > 0) {
+                var factor = dist / startDist;
+                var newZoom = Math.max(0.6, Math.min(2.5, Math.round(startZoom * factor * 100) / 100));
+                window._reportZoomLevel = newZoom;
+                var wrap = document.getElementById('erpReportPrintWrapper') || area.firstElementChild;
+                if (wrap) wrap.style.zoom = newZoom;
+            }
+        }
+    }, { passive: false });
+
+    area.addEventListener('touchend', function (e) {
+        if (!e.touches || e.touches.length < 2) {
+            startDist = 0;
+        }
+    }, { passive: true });
+};
+
 window.zoomCustomerReport = function (delta) {
-    window._reportZoomLevel = Math.max(0.6, Math.min(1.5, Math.round((window._reportZoomLevel + delta) * 10) / 10));
-    var zoomValEl = document.getElementById('custRepZoomVal');
-    if (zoomValEl) zoomValEl.innerText = Math.round(window._reportZoomLevel * 100) + '%';
+    window._reportZoomLevel = Math.max(0.6, Math.min(2.5, Math.round((window._reportZoomLevel + delta) * 10) / 10));
     var wrap = document.getElementById('erpReportPrintWrapper');
-    if (wrap) {
-        wrap.style.zoom = window._reportZoomLevel;
-    }
+    if (wrap) wrap.style.zoom = window._reportZoomLevel;
 };
 
 window.resetCustomerReportZoom = function () {
     window._reportZoomLevel = 1.0;
-    var zoomValEl = document.getElementById('custRepZoomVal');
-    if (zoomValEl) zoomValEl.innerText = '100%';
     var wrap = document.getElementById('erpReportPrintWrapper');
-    if (wrap) {
-        wrap.style.zoom = 1.0;
-    }
+    if (wrap) wrap.style.zoom = 1.0;
 };
 
 window.handleCustRepQuickSearch = function (query) {
@@ -17109,13 +17187,26 @@ window.updateOrderOnBehalfBanner = function () {
                 var partyDisplayName = String(stored.name || stored.firm || '').trim();
                 var mergedBracket = hasSisters ? ` (${sisterAccounts.length} accounts merged)` : '';
 
+                var isLiveCallActive = false;
+                try {
+                    var rawTrk = localStorage.getItem('ds_active_tracked_call');
+                    if (rawTrk) {
+                        var trk = JSON.parse(rawTrk);
+                        if (trk && (trk.code === stored.firm || (p10 && trk.phone === p10))) isLiveCallActive = true;
+                    }
+                } catch(e){}
+                var phoneBadgeHtml = p10 && p10.length === 10 ? `
+                  <span style="display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:bold; background:${isLiveCallActive ? '#22c55e' : 'rgba(34,197,94,0.18)'}; color:${isLiveCallActive ? '#fff' : '#86efac'}; border:1px solid ${isLiveCallActive ? '#16a34a' : 'rgba(134,239,172,0.4)'}; padding:1px 5px; border-radius:10px; margin-left:4px; flex-shrink:0;">
+                    <i class="fas ${isLiveCallActive ? 'fa-phone-volume fa-shake' : 'fa-phone-alt'}" style="font-size:8.5px;"></i> ${p10}
+                  </span>` : '';
+
                 banner.style.background = '#be185d';
                 banner.style.color = '#fff';
                 banner.onclick = openCustomerDetailsModal;
                 banner.innerHTML = `
                     <div style="display:flex; align-items:center; gap:6px; overflow:hidden; flex:1; min-width:0;">
                       <i class="fas fa-store" style="font-size:12px; color:#fbcfe8; flex-shrink:0;"></i>
-                      <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold; font-size:12px;">${escHtml(partyDisplayName)}${hasSisters ? `<span style="font-weight:normal; opacity:0.9;">${escHtml(mergedBracket)}</span>` : ''}${locStr ? ` • ${escHtml(locStr.replace(/^[ ()•]+|[ ()•]+$/g, ''))}` : ''}</span>
+                      <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold; font-size:12px;">${escHtml(partyDisplayName)}${hasSisters ? `<span style="font-weight:normal; opacity:0.9;">${escHtml(mergedBracket)}</span>` : ''}${phoneBadgeHtml}${locStr ? ` • ${escHtml(locStr.replace(/^[ ()•]+|[ ()•]+$/g, ''))}` : ''}</span>
                     </div>
                     <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
                       <button type="button" onclick="event.stopPropagation(); window.openCustomerReportsModal(decodeURIComponent('${safeTargetCode}'), false, window._currentActivePartySisterAccounts)"
@@ -17805,6 +17896,39 @@ window.sendCatalogDesignsWhatsApp = function (code, name, phone) {
     window.open(waUrl, '_blank');
 };
 
+// 📝 Safe Text Cursor Insertion for Voice Dictation
+window.insertTextAtCursor = function (inputEl, textToInsert) {
+    if (!inputEl) return;
+    var val = inputEl.value || '';
+    var start = (typeof inputEl._lastSelectionStart === 'number') ? inputEl._lastSelectionStart : ((typeof inputEl.selectionStart === 'number') ? inputEl.selectionStart : val.length);
+    var end = (typeof inputEl._lastSelectionEnd === 'number') ? inputEl._lastSelectionEnd : ((typeof inputEl.selectionEnd === 'number') ? inputEl.selectionEnd : val.length);
+    if (start < 0) start = 0;
+    if (end < start) end = start;
+    if (start > val.length) start = val.length;
+    if (end > val.length) end = val.length;
+
+    var prefix = val.slice(0, start);
+    var suffix = val.slice(end);
+    var insert = String(textToInsert || '').trim();
+    if (!insert) return;
+
+    if (prefix.length > 0 && !prefix.endsWith(' ') && !prefix.endsWith('\n')) {
+        insert = ' ' + insert;
+    }
+    if (suffix.length > 0 && !suffix.startsWith(' ') && !suffix.startsWith('\n')) {
+        insert = insert + ' ';
+    }
+
+    inputEl.value = prefix + insert + suffix;
+    var newPos = prefix.length + insert.length;
+    inputEl.focus();
+    if (typeof inputEl.setSelectionRange === 'function') {
+        try { inputEl.setSelectionRange(newPos, newPos); } catch (e) { }
+    }
+    inputEl._lastSelectionStart = newPos;
+    inputEl._lastSelectionEnd = newPos;
+};
+
 window.saveQuickCRMNote = async function () {
     var cust = window._currentReportingCustomer;
     if (!cust) return;
@@ -17817,15 +17941,77 @@ window.saveQuickCRMNote = async function () {
     }
 
     try {
-        var token = await getCachedAuthToken(true);
+        var token = await getCachedAuthToken(false);
         var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
-        var safeCode = window.sanitizeDocId ? window.sanitizeDocId(cust.c) : cust.c.replace(/[\/\.#\?\[\]\s]/g, '_');
+        var safeCode = window.sanitizeDocId ? window.sanitizeDocId(cust.c || cust.n) : String(cust.c || cust.n || '').replace(/[\/\.#\?\[\]\s]/g, '_');
         var nowIso = new Date().toISOString();
 
-        var body = {
+        var staffProfile = null;
+        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+        var staffName = (staffProfile && staffProfile.name) || 'Admin';
+
+        // Fetch existing PartyCRM to maintain recentLogsJson
+        var existingLogs = [];
+        try {
+            var gRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode, { headers: headers });
+            if (gRes && gRes.ok) {
+                var gd = await gRes.json();
+                if (gd && gd.fields && gd.fields.recentLogsJson) {
+                    existingLogs = JSON.parse(gd.fields.recentLogsJson.stringValue || '[]');
+                }
+            }
+        } catch(e){}
+
+        if (existingLogs.length === 0 && window.fetchPartyCRMLogs) {
+            try {
+                var prevCrm = await window.fetchPartyCRMLogs(cust);
+                if (prevCrm && prevCrm.allLogs && prevCrm.allLogs.length > 0) {
+                    existingLogs = prevCrm.allLogs.slice();
+                }
+            } catch(e){}
+        }
+
+        var newEntry = {
+            id: 'quick_' + Date.now(),
+            partyCode: cust.c || '',
+            partyName: cust.n || cust.c || '',
+            phone: cust.p || '',
+            station: cust.ct || '',
+            agent: cust.ag || '',
+            staffName: staffName,
+            callType: 'call',
+            disposition: 'Live Note',
+            note: noteText,
+            promisedAmount: 0,
+            promisedDate: '',
+            createdAt: nowIso
+        };
+        existingLogs.unshift(newEntry);
+        if (existingLogs.length > 30) existingLogs = existingLogs.slice(0, 30);
+
+        var partyCrmBody = {
             fields: {
-                partyCode: { stringValue: cust.c },
-                partyName: { stringValue: cust.n || cust.c },
+                partyCode: { stringValue: cust.c || '' },
+                partyName: { stringValue: cust.n || cust.c || '' },
+                station: { stringValue: cust.ct || '' },
+                phone: { stringValue: cust.p || '' },
+                agent: { stringValue: cust.ag || '' },
+                lastNote: { stringValue: noteText },
+                lastDisposition: { stringValue: 'Live Note' },
+                lastCallAt: { timestampValue: nowIso },
+                status: { stringValue: 'contacted' },
+                recentLogsJson: { stringValue: JSON.stringify(existingLogs) },
+                updatedAt: { timestampValue: nowIso }
+            }
+        };
+
+        var pUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode + "?updateMask.fieldPaths=lastCallAt&updateMask.fieldPaths=lastDisposition&updateMask.fieldPaths=lastNote&updateMask.fieldPaths=status&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=partyCode&updateMask.fieldPaths=partyName&updateMask.fieldPaths=phone&updateMask.fieldPaths=station&updateMask.fieldPaths=agent&updateMask.fieldPaths=recentLogsJson";
+        await fetch(pUrl, { method: 'PATCH', headers: headers, body: JSON.stringify(partyCrmBody) });
+
+        var tBody = {
+            fields: {
+                partyCode: { stringValue: cust.c || '' },
+                partyName: { stringValue: cust.n || cust.c || '' },
                 station: { stringValue: cust.ct || '' },
                 phone: { stringValue: cust.p || '' },
                 agent: { stringValue: cust.ag || '' },
@@ -17835,15 +18021,24 @@ window.saveQuickCRMNote = async function () {
                 createdAt: { timestampValue: nowIso }
             }
         };
+        fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode + "/Timeline", { method: 'POST', headers: headers, body: JSON.stringify(tBody) }).catch(function(){});
 
-        var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + safeCode + "/Timeline";
-        await fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body) });
-
-        if (inp) inp.value = '';
+        if (inp) {
+            inp.value = '';
+            inp._lastSelectionStart = 0;
+            inp._lastSelectionEnd = 0;
+        }
         if (msgEl) {
-            msgEl.innerText = "✓ CRM Note saved to timeline!";
+            msgEl.innerText = "✓ Note saved to party conversation history!";
             msgEl.style.display = 'block';
             setTimeout(function () { msgEl.style.display = 'none'; }, 3000);
+        }
+
+        if (typeof window.loadCustRepLastTalkBanner === 'function') {
+            window.loadCustRepLastTalkBanner(cust.c);
+        }
+        if (typeof window.loadCRMHubFollowups === 'function') {
+            window.loadCRMHubFollowups();
         }
     } catch (e) {
         console.warn("Save quick note error:", e);
@@ -17859,8 +18054,7 @@ window.toggleQuickNoteSpeech = async function () {
         try {
             var res = await window.Capacitor.Plugins.NativeSpeech.startListening({ lang: 'hi-IN' });
             if (res && res.text) {
-                inp.value = (inp.value ? inp.value.trim() + ' ' : '') + res.text.trim();
-                inp.focus();
+                window.insertTextAtCursor(inp, res.text);
             }
         } catch(e) {
             console.warn("Speech error:", e);
@@ -17875,7 +18069,7 @@ window.toggleQuickNoteSpeech = async function () {
             rec.lang = 'hi-IN';
             rec.onresult = function (ev) {
                 if (ev.results && ev.results[0] && ev.results[0][0]) {
-                    inp.value = (inp.value ? inp.value.trim() + ' ' : '') + ev.results[0][0].transcript;
+                    window.insertTextAtCursor(inp, ev.results[0][0].transcript);
                 }
             };
             rec.start();
@@ -18536,8 +18730,7 @@ window.toggleCRMSpeechDictation = async function () {
 
             var res = await window.Capacitor.Plugins.NativeSpeech.startListening({ lang: selectedLang });
             if (res && res.text && noteInp) {
-                noteInp.value = (noteInp.value ? noteInp.value.trim() + ' ' : '') + res.text.trim();
-                noteInp.focus();
+                window.insertTextAtCursor(noteInp, res.text);
             }
         } catch(speechErr) {
             console.warn("Native speech recognizer error:", speechErr);
@@ -18587,7 +18780,7 @@ window.toggleCRMSpeechDictation = async function () {
                 transcript += event.results[i][0].transcript + ' ';
             }
             if (noteInp) {
-                noteInp.value = (noteInp.value ? noteInp.value.trim() + ' ' : '') + transcript.trim();
+                window.insertTextAtCursor(noteInp, transcript);
             }
         };
 
@@ -18823,8 +19016,17 @@ window.savePostCallCRM = async function () {
             } catch(e){}
         }
 
+        if (existingLogs.length === 0 && typeof window.fetchPartyCRMLogs === 'function') {
+            try {
+                var prevCrm = await window.fetchPartyCRMLogs({ c: code, n: name, p: phone });
+                if (prevCrm && prevCrm.allLogs && prevCrm.allLogs.length > 0) {
+                    existingLogs = prevCrm.allLogs.slice();
+                }
+            } catch(e){}
+        }
+
         existingLogs.unshift(logEntry);
-        if (existingLogs.length > 25) existingLogs = existingLogs.slice(0, 25);
+        if (existingLogs.length > 30) existingLogs = existingLogs.slice(0, 30);
 
         var partyCrmBody = {
             fields: {
@@ -18931,10 +19133,19 @@ window.refreshCRMData = function () {
 window.loadCRMHubFollowups = async function () {
     var area = document.getElementById('crmHubContentArea');
     if (!area) return;
-    area.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading follow-up queue...</div>';
+
+    var cached = window._cachedFollowupsHtml || '';
+    if (!cached) {
+        try { cached = localStorage.getItem('ds_cached_followups_html') || ''; } catch(e){}
+    }
+    if (cached) {
+        area.innerHTML = cached;
+    } else {
+        area.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading follow-up queue...</div>';
+    }
 
     try {
-        var token = await getCachedAuthToken(true);
+        var token = await getCachedAuthToken(false);
         var headers = Object.assign({}, token ? { 'Authorization': 'Bearer ' + token } : {});
 
         var res = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM?pageSize=100", {
@@ -18942,7 +19153,9 @@ window.loadCRMHubFollowups = async function () {
         });
 
         if (!res.ok) {
-            area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Could not load follow-up queue (HTTP ' + res.status + ')</div>';
+            if (!cached) {
+                area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Could not load follow-up queue (HTTP ' + res.status + ')</div>';
+            }
             return;
         }
 
@@ -18951,7 +19164,7 @@ window.loadCRMHubFollowups = async function () {
         var todayStr = new Date().toISOString().slice(0, 10);
 
         var list = window._compiledCustomersList || [];
-        var followups = docs.map(function (d) {
+        var rawFollowups = docs.map(function (d) {
             var f = d.fields || {};
             var docId = d.name ? d.name.split('/').pop() : '';
             var rawCode = f.partyCode ? f.partyCode.stringValue : docId;
@@ -19046,6 +19259,46 @@ window.loadCRMHubFollowups = async function () {
         }).filter(function (x) {
             return x.status !== 'done';
         });
+
+        // Group & merge documents belonging to same party or phone
+        var groupedMap = new Map();
+        rawFollowups.forEach(function (fu) {
+            var groupKey = (fu.phone && fu.phone.length === 10) ? ('p_' + fu.phone) : ('c_' + (fu.code || fu.name).toLowerCase());
+            if (!groupedMap.has(groupKey)) {
+                groupedMap.set(groupKey, Object.assign({}, fu));
+            } else {
+                var existing = groupedMap.get(groupKey);
+                if ((!existing.name || existing.name === existing.phone) && fu.name && fu.name !== fu.phone) {
+                    existing.name = fu.name;
+                }
+                if (!existing.station && fu.station) existing.station = fu.station;
+                if (!existing.agent && fu.agent) existing.agent = fu.agent;
+                if (!existing.code && fu.code) existing.code = fu.code;
+                if (!existing.followUpDate || (fu.followUpDate && fu.followUpDate < existing.followUpDate)) {
+                    existing.followUpDate = fu.followUpDate;
+                }
+                if (fu.promisedAmt > existing.promisedAmt) {
+                    existing.promisedAmt = fu.promisedAmt;
+                }
+                if (fu.lastCallAt && (!existing.lastCallAt || fu.lastCallAt > existing.lastCallAt)) {
+                    existing.lastCallAt = fu.lastCallAt;
+                    existing.lastNote = fu.lastNote || existing.lastNote;
+                    existing.lastDisp = fu.lastDisp || existing.lastDisp;
+                    existing.lastStaff = fu.lastStaff || existing.lastStaff;
+                }
+                var combinedLogs = (existing.recentLogs || []).concat(fu.recentLogs || []);
+                var seenLogKeys = new Set();
+                existing.recentLogs = combinedLogs.filter(function(l) {
+                    var lk = (l.id || '') + '_' + (l.createdAt || '') + '_' + (l.note || '');
+                    if (seenLogKeys.has(lk)) return false;
+                    seenLogKeys.add(lk);
+                    return true;
+                }).sort(function(a, b) {
+                    return (b.createdAt || '').localeCompare(a.createdAt || '');
+                });
+            }
+        });
+        var followups = Array.from(groupedMap.values());
 
         // Sort: overdue first, then promised amount desc
         followups.sort(function (a, b) {
@@ -19154,9 +19407,13 @@ window.loadCRMHubFollowups = async function () {
         });
         html += '</div>';
         area.innerHTML = html;
+        window._cachedFollowupsHtml = html;
+        try { localStorage.setItem('ds_cached_followups_html', html); } catch(e){}
 
     } catch (e) {
-        area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Error loading follow-ups: ' + e.message + '</div>';
+        if (!cached) {
+            area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Error loading follow-ups: ' + e.message + '</div>';
+        }
     }
 };
 
