@@ -271,7 +271,13 @@ window.getProductEffectivePrice = function (p, explicitTier) {
         var myCd = {};
         try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
         var isApproved = Boolean(myCd.isApproved === true && myCd.approvalStatus === 'approved');
-        tier = isApproved ? (myCd.pricingTier || 'b2b') : 'retail';
+        if (isApproved) {
+            var assignedTier = (myCd.pricingTier === 'super_b2b') ? 'super_b2b' : 'b2b';
+            var custMode = localStorage.getItem('ds_customer_price_mode') || 'wholesale';
+            tier = (custMode === 'retail') ? 'retail' : (explicitTier || assignedTier);
+        } else {
+            tier = 'retail';
+        }
     }
     var regularPrice = Number(p.price) || 0;
     var b2b = Number(p.b2bPrice) || 0;
@@ -297,7 +303,7 @@ window.setPricingTier = function (tier, fromCustomerLink) {
     var sel = document.getElementById('superAdminPricingSelect');
     if (sel && sel.value !== validTier) sel.value = validTier;
 
-    var lbl = validTier === 'super_b2b' ? 'Super B2B (Col AC)' : (validTier === 'b2b' ? 'B2B (Col AB)' : 'Retail (Col J)');
+    var lbl = validTier === 'super_b2b' ? 'Special Price (Col AC)' : (validTier === 'b2b' ? 'B2B (Col AB)' : 'Retail (Col J)');
 
     var obBadge = document.getElementById('orderOnBehalfPricingBadge');
     if (obBadge) {
@@ -342,6 +348,115 @@ window.setPricingTier = function (tier, fromCustomerLink) {
 window.cycleAdminPricingTier = function () {
     var next = window.activePricingTier === 'retail' ? 'b2b' : (window.activePricingTier === 'b2b' ? 'super_b2b' : 'retail');
     window.setPricingTier(next, true);
+};
+
+window.toggleCustomerPricingMode = function (forceMode) {
+    var myCd = {};
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
+    var isApproved = Boolean(myCd.isApproved === true && myCd.approvalStatus === 'approved');
+    if (!isApproved && (!window.hasCRMAccess || !window.hasCRMAccess())) return;
+
+    var currentMode = localStorage.getItem('ds_customer_price_mode') || 'wholesale';
+    var newMode = forceMode || (currentMode === 'wholesale' ? 'retail' : 'wholesale');
+    try { localStorage.setItem('ds_customer_price_mode', newMode); } catch(e){}
+
+    var assignedTier = (myCd.pricingTier === 'super_b2b') ? 'super_b2b' : 'b2b';
+    var effectiveTier = (newMode === 'retail') ? 'retail' : assignedTier;
+    window.activePricingTier = effectiveTier;
+
+    if (typeof window.updateCustomerPricingUI === 'function') {
+        window.updateCustomerPricingUI();
+    }
+
+    if (typeof applyFilter === 'function') {
+        applyFilter();
+    } else if (typeof renderProductGrid === 'function' && typeof displayList !== 'undefined' && Array.isArray(displayList)) {
+        renderProductGrid(displayList);
+    }
+
+    if (typeof curProduct !== 'undefined' && curProduct) {
+        var effP = window.getProductEffectivePrice ? window.getProductEffectivePrice(curProduct) : curProduct.price;
+        var dtPriceBot = document.getElementById('dtPriceBot');
+        if (dtPriceBot) dtPriceBot.innerText = effP;
+        var dtPriceTop = document.getElementById('dtPrice');
+        if (dtPriceTop) dtPriceTop.innerText = '₹' + effP;
+    }
+
+    var labelName = (newMode === 'retail') ? 'Retail Price' : (assignedTier === 'super_b2b' ? 'Special Price' : 'Wholesale Rate');
+    var toastId = 'pToast_' + Date.now();
+    var tHtml = `<div id="${toastId}" style="position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:8px 16px; border-radius:20px; font-size:12px; font-weight:bold; box-shadow:0 4px 15px rgba(0,0,0,0.3); z-index:999999; text-align:center; display:flex; align-items:center; gap:6px; pointer-events:none; transition:opacity 0.4s;">
+        <i class="fas fa-tags" style="color:#38bdf8;"></i>
+        <span>Price Display: ${labelName}</span>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', tHtml);
+    setTimeout(() => {
+        var el = document.getElementById(toastId);
+        if (el) { el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }
+    }, 2000);
+};
+
+window.updateCustomerPricingUI = function () {
+    var myCd = {};
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
+    var isApproved = Boolean(myCd.isApproved === true && myCd.approvalStatus === 'approved');
+    var assignedTier = (myCd.pricingTier === 'super_b2b') ? 'super_b2b' : 'b2b';
+    var isCustomerEligible = isApproved && (assignedTier === 'b2b' || assignedTier === 'super_b2b');
+
+    var toggleContainer = document.getElementById('customerPricingToggleContainer');
+    var cdToggleRow = document.getElementById('cdCustomerPricingToggleRow');
+
+    var isStaffOrAdmin = Boolean(window.hasCRMAccess && window.hasCRMAccess());
+    var showToggle = isCustomerEligible && !isStaffOrAdmin;
+
+    if (toggleContainer) toggleContainer.style.display = showToggle ? 'block' : 'none';
+    if (cdToggleRow) cdToggleRow.style.display = showToggle ? 'flex' : 'none';
+
+    if (!showToggle) return;
+
+    var custMode = localStorage.getItem('ds_customer_price_mode') || 'wholesale';
+    var isWholesale = custMode !== 'retail';
+    var wholesaleLabel = (assignedTier === 'super_b2b') ? 'Special Price' : 'Wholesale';
+
+    // 1. Header Menu toggle
+    var btnW = document.getElementById('btnCustPriceWholesale');
+    var btnR = document.getElementById('btnCustPriceRetail');
+    var badge = document.getElementById('custPricingBadge');
+    var hint = document.getElementById('custPricingHint');
+
+    if (btnW) {
+        btnW.innerText = wholesaleLabel;
+        btnW.style.background = isWholesale ? (assignedTier === 'super_b2b' ? '#d97706' : '#2563eb') : 'transparent';
+        btnW.style.color = isWholesale ? '#fff' : '#64748b';
+    }
+    if (btnR) {
+        btnR.style.background = !isWholesale ? '#be185d' : 'transparent';
+        btnR.style.color = !isWholesale ? '#fff' : '#64748b';
+    }
+    if (badge) {
+        badge.innerText = isWholesale ? wholesaleLabel : 'Retail';
+        badge.style.background = isWholesale ? (assignedTier === 'super_b2b' ? '#fef3c7' : '#dbeafe') : '#fdf2f8';
+        badge.style.color = isWholesale ? (assignedTier === 'super_b2b' ? '#92400e' : '#1e40af') : '#be185d';
+    }
+    if (hint) {
+        hint.innerText = isWholesale ? ('Showing your ' + wholesaleLabel + ' rates. Switch to Retail when showing designs to clients.') : 'Showing retail prices. Your clients will not see wholesale rates.';
+    }
+
+    // 2. CustomerDetailsModal toggle
+    var cdW = document.getElementById('cdBtnWholesale');
+    var cdR = document.getElementById('cdBtnRetail');
+    var cdSub = document.getElementById('cdPricingSubText');
+    if (cdW) {
+        cdW.innerText = wholesaleLabel;
+        cdW.style.background = isWholesale ? (assignedTier === 'super_b2b' ? '#d97706' : '#2563eb') : 'transparent';
+        cdW.style.color = isWholesale ? '#fff' : '#475569';
+    }
+    if (cdR) {
+        cdR.style.background = !isWholesale ? '#be185d' : 'transparent';
+        cdR.style.color = !isWholesale ? '#fff' : '#475569';
+    }
+    if (cdSub) {
+        cdSub.innerText = isWholesale ? ('Active: ' + wholesaleLabel) : 'Active: Retail Price';
+    }
 };
 
 // ==========================================
@@ -2738,10 +2853,21 @@ function buildCardDetails(p) {
     var favClass = (favorites[p.id] || (p.docId && favorites[p.docId])) ? "fas fa-heart fav-active" : "far fa-heart fav-inactive";
 
     var tierBadge = '';
-    if (window.hasCRMAccess && window.hasCRMAccess()) {
-        if (window.activePricingTier === 'super_b2b' && (p.superB2bPrice > 0 || p.b2bPrice > 0)) {
-            tierBadge = '<span style="font-size:9px; background:#fef3c7; color:#92400e; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:3px;">SUPER</span>';
-        } else if (window.activePricingTier === 'b2b' && p.b2bPrice > 0) {
+    var myCd = {};
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
+    var isApprovedCust = Boolean(myCd.isApproved === true && myCd.approvalStatus === 'approved');
+    var showBadge = Boolean((window.hasCRMAccess && window.hasCRMAccess()) || isApprovedCust);
+
+    if (showBadge) {
+        var currentEffectiveTier = window.activePricingTier;
+        if (!window.hasCRMAccess || !window.hasCRMAccess()) {
+            var assignedTier = (myCd.pricingTier === 'super_b2b') ? 'super_b2b' : 'b2b';
+            var custMode = localStorage.getItem('ds_customer_price_mode') || 'wholesale';
+            currentEffectiveTier = (custMode === 'retail') ? 'retail' : assignedTier;
+        }
+        if (currentEffectiveTier === 'super_b2b' && (p.superB2bPrice > 0 || p.b2bPrice > 0)) {
+            tierBadge = '<span style="font-size:9px; background:#fef3c7; color:#92400e; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:3px;">SPECIAL</span>';
+        } else if (currentEffectiveTier === 'b2b' && p.b2bPrice > 0) {
             tierBadge = '<span style="font-size:9px; background:#dbeafe; color:#1e40af; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:3px;">B2B</span>';
         }
     }
@@ -6959,6 +7085,7 @@ updateAndroidBackState();
 function toggleHdrMenu(event) {
     if (event) event.stopPropagation();
     if (typeof window.syncAdminUI === 'function') window.syncAdminUI();
+    if (typeof window.updateCustomerPricingUI === 'function') window.updateCustomerPricingUI();
     var menu = document.getElementById('hdrMenu');
     if (menu) {
         var isAllowed = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
@@ -7136,6 +7263,7 @@ function renderCustomerDetails(d, container) {
 }
 
 async function openCustomerDetailsModal() {
+    if (typeof window.updateCustomerPricingUI === 'function') window.updateCustomerPricingUI();
     var d = null;
     var stored = localStorage.getItem("dsCustomerDetails");
     if (stored) {
