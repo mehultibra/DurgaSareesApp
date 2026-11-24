@@ -628,7 +628,7 @@ fetchGuestLocation();
 
 let presenceTimeout = null;
 let lastPresencePush = 0;
-window.updateLivePresence = function (productId, force = false) {
+window.updateLivePresence = function (productId, force = false, activityDesc = null) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     // Strict guard: Admin / SuperAdmin / Staff / Order-On-Behalf actions must NEVER push to LiveSessions
     if (Boolean(window.isSuperAdmin || window.isAdminMode || (typeof window.hasCRMAccess === 'function' && window.hasCRMAccess()))) return;
@@ -672,9 +672,24 @@ window.updateLivePresence = function (productId, force = false) {
         let recentSurfing = [];
         try { recentSurfing = JSON.parse(localStorage.getItem('dsRecentSurfing') || "[]"); } catch (e) { }
 
+        let activity = activityDesc;
+        if (!activity) {
+            if (productId && productId !== 'catalog' && productId !== 'reports' && productId !== 'cart') {
+                let p = (typeof allProducts !== 'undefined' && Array.isArray(allProducts)) ? allProducts.find(x => x.id === productId || x.docId === productId) : null;
+                activity = 'Viewing: ' + (p ? p.name : productId);
+            } else if (productId === 'reports') {
+                activity = 'Viewing Reports';
+            } else if (productId === 'cart') {
+                activity = 'Viewing Cart';
+            } else {
+                activity = 'Browsing Catalog';
+            }
+        }
+
         const payload = {
             user: uid,
-            currentProduct: productId || null,
+            currentProduct: (productId && productId !== 'catalog' && productId !== 'reports' && productId !== 'cart') ? productId : null,
+            currentActivity: activity,
             customerName: customerName,
             customerStation: customerStation,
             historyMap: historyMap,
@@ -2109,6 +2124,7 @@ function initApp() {
             Promise.resolve(otaP2).catch(function () {}).finally(function () {
                 setTimeout(function () {
                     if (typeof syncImages === 'function') syncImages(true);
+                    if (typeof window.initSuperAdminLiveSurfingMonitor === 'function') window.initSuperAdminLiveSurfingMonitor();
                 }, 2500);
             });
         });
@@ -10312,12 +10328,22 @@ window.openLiveAdmin = function () {
 
                     let viewingHtml = '';
                     if (!d.isOfflineUser) {
-                        let viewingProduct = 'None';
-                        if (d.currentProduct) {
-                            let p = allProducts.find(x => x.id === d.currentProduct || x.docId === d.currentProduct);
-                            viewingProduct = p ? p.name : d.currentProduct;
+                        let act = d.currentActivity;
+                        if (!act) {
+                            if (d.currentProduct) {
+                                let p = allProducts.find(x => x.id === d.currentProduct || x.docId === d.currentProduct);
+                                act = 'Viewing: ' + (p ? p.name : d.currentProduct);
+                            } else {
+                                act = 'Browsing Catalog';
+                            }
                         }
-                        viewingHtml = `<div style="font-size:13px; margin-bottom:4px; color:#475569;"><b>Viewing:</b> ${esc(viewingProduct)}</div>`;
+                        let actIcon = '🏠';
+                        let actLower = act.toLowerCase();
+                        if (actLower.includes('report')) actIcon = '📊';
+                        else if (actLower.includes('cart')) actIcon = '🛍️';
+                        else if (actLower.includes('viewing') || actLower.includes('product')) actIcon = '👗';
+
+                        viewingHtml = `<div style="font-size:13px; margin-bottom:4px; color:#475569;"><b>Live Activity:</b> <span style="font-weight:600; color:#0f172a;">${actIcon} ${esc(act)}</span></div>`;
                     }
 
                     let historyHtml = '';
@@ -10576,6 +10602,81 @@ window.closeLiveAdmin = function () {
     if (typeof window.liveAdminUnsubscribe === 'function') {
         window.liveAdminUnsubscribe();
     }
+};
+
+window.showSuperAdminSurfingAlert = function (customerTitle, activityText) {
+    var toast = document.getElementById('dsAdminSurfingAlert');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'dsAdminSurfingAlert';
+        toast.style.cssText = 'position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:999999; background:#0f172a; color:#fff; padding:8px 14px; border-radius:24px; font-size:12px; font-weight:600; display:flex; align-items:center; gap:8px; box-shadow:0 8px 20px rgba(0,0,0,0.3); border:1px solid #334155; transition:opacity 0.3s ease, transform 0.3s ease; pointer-events:auto; cursor:pointer;';
+        document.body.appendChild(toast);
+    }
+    var actIcon = '🏠';
+    var lower = (activityText || '').toLowerCase();
+    if (lower.includes('report')) actIcon = '📊';
+    else if (lower.includes('cart')) actIcon = '🛍️';
+    else if (lower.includes('viewing') || lower.includes('product')) actIcon = '👗';
+
+    toast.innerHTML = `<span style="background:#10b981; width:8px; height:8px; border-radius:50%; display:inline-block;"></span>
+                       <span><span style="color:#38bdf8;">${esc(customerTitle)}</span>: <span style="color:#fde047;">${actIcon} ${esc(activityText)}</span></span>`;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+    toast.onclick = function () {
+        if (typeof window.openAdminLiveModal === 'function') window.openAdminLiveModal();
+    };
+
+    if (window._surfingAlertTimer) clearTimeout(window._surfingAlertTimer);
+    window._surfingAlertTimer = setTimeout(function () {
+        if (toast) {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(-50%) translateY(-20px)';
+        }
+    }, 4500);
+};
+
+window.initSuperAdminLiveSurfingMonitor = function () {
+    if (!window.isSuperAdmin && localStorage.getItem('dsIsAdmin') !== 'true') return;
+    if (window._liveSurfingListenerAttached) return;
+    window._liveSurfingListenerAttached = true;
+
+    try {
+        if (typeof firebase === 'undefined' || !firebase.firestore) return;
+        var myUid = typeof getActiveUserId === 'function' ? getActiveUserId() : '';
+        var knownActivities = {};
+
+        firebase.firestore().collection('LiveSessions')
+            .onSnapshot(function (snapshot) {
+                var now = Date.now();
+                snapshot.docChanges().forEach(function (change) {
+                    if (change.type === 'added' || change.type === 'modified') {
+                        var d = change.doc.data();
+                        if (!d || d.user === myUid) return;
+
+                        var lastActiveMillis = 0;
+                        if (d.lastActive) {
+                            if (typeof d.lastActive.toMillis === 'function') lastActiveMillis = d.lastActive.toMillis();
+                            else if (d.lastActive.seconds) lastActiveMillis = d.lastActive.seconds * 1000;
+                            else if (typeof d.lastActive === 'number') lastActiveMillis = d.lastActive;
+                        }
+                        if (now - lastActiveMillis > 90000) return;
+
+                        var act = d.currentActivity || (d.currentProduct ? 'Viewing Product' : 'Browsing Catalog');
+                        var lastAct = knownActivities[change.doc.id];
+                        if (lastAct !== act) {
+                            knownActivities[change.doc.id] = act;
+                            if (lastAct !== undefined) {
+                                var cName = d.customerName || d.user || 'Customer';
+                                var cStation = d.customerStation && d.customerStation !== 'Unknown' ? ` (${d.customerStation})` : '';
+                                window.showSuperAdminSurfingAlert(cName + cStation, act);
+                            }
+                        }
+                    }
+                });
+            }, function (err) {
+                console.warn("LiveSessions monitor skipped:", err);
+            });
+    } catch (e) {}
 };
 
 window.refreshLiveApprovalBoxes = function () {
@@ -14006,6 +14107,9 @@ window.openMyReportsSelfService = function () {
             alert("Your account is pending admin approval.");
             return;
         }
+        if (typeof window.updateLivePresence === 'function') {
+            window.updateLivePresence('reports', true, 'Viewing Reports');
+        }
     }
 
     var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
@@ -14453,6 +14557,9 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
             alert("Your account is pending admin approval.");
             return;
         }
+        if (typeof window.updateLivePresence === 'function') {
+            window.updateLivePresence('reports', true, 'Viewing Reports');
+        }
     }
 
     var isSelfService = !window.hasCRMAccess();
@@ -14870,6 +14977,9 @@ window.closeCustomerReportsModal = function () {
         acctSelect.value = '';
     }
     window._currentReportingSisterAccounts = null;
+    if (!window.hasCRMAccess() && typeof window.updateLivePresence === 'function') {
+        window.updateLivePresence(null, true, 'Browsing Catalog');
+    }
 };
 
 // 8. Tab Switcher
@@ -14882,6 +14992,9 @@ window.switchCustomerReportTab = function (tabName) {
         tabName = 'sales';
     }
     window._activeCustomerReportTab = tabName;
+    if (!window.hasCRMAccess() && typeof window.updateLivePresence === 'function') {
+        window.updateLivePresence('reports', true, 'Viewing Reports: ' + tabName.toUpperCase());
+    }
     var tabs = ['sales', 'outstanding', 'ledger', 'crm'];
     var tabNamesMap = {
         sales: 'tabBtnSales',
@@ -19555,7 +19668,16 @@ window.loadCRMHubFollowups = async function () {
                 });
             }
         });
-        var followups = Array.from(groupedMap.values());
+        var allPending = Array.from(groupedMap.values());
+        var todayFollowups = allPending.filter(function (fu) {
+            return !fu.followUpDate || fu.followUpDate <= todayStr;
+        });
+        var upcomingFollowups = allPending.filter(function (fu) {
+            return fu.followUpDate && fu.followUpDate > todayStr;
+        });
+
+        if (!window._crmHubFollowupTab) window._crmHubFollowupTab = 'today';
+        var followups = window._crmHubFollowupTab === 'upcoming' ? upcomingFollowups : todayFollowups;
 
         // Sort: overdue first, then promised amount desc
         followups.sort(function (a, b) {
@@ -19565,17 +19687,33 @@ window.loadCRMHubFollowups = async function () {
             return (b.promisedAmt || 0) - (a.promisedAmt || 0);
         });
 
+        var tabsHeaderHtml = `
+        <div style="display:flex; gap:8px; margin-bottom:12px; background:#f1f5f9; padding:4px; border-radius:8px;">
+          <button type="button" onclick="window.switchCRMHubFollowupTab('today')"
+            style="flex:1; padding:7px 10px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer; border:none; transition:all 0.2s; background:${window._crmHubFollowupTab !== 'upcoming' ? '#0284c7' : 'transparent'}; color:${window._crmHubFollowupTab !== 'upcoming' ? '#fff' : '#64748b'}; box-shadow:${window._crmHubFollowupTab !== 'upcoming' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'};">
+            <i class="fas fa-calendar-day"></i> Today & Overdue (${todayFollowups.length})
+          </button>
+          <button type="button" onclick="window.switchCRMHubFollowupTab('upcoming')"
+            style="flex:1; padding:7px 10px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer; border:none; transition:all 0.2s; background:${window._crmHubFollowupTab === 'upcoming' ? '#0284c7' : 'transparent'}; color:${window._crmHubFollowupTab === 'upcoming' ? '#fff' : '#64748b'}; box-shadow:${window._crmHubFollowupTab === 'upcoming' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'};">
+            <i class="fas fa-calendar-alt"></i> Upcoming (${upcomingFollowups.length})
+          </button>
+        </div>`;
+
         if (followups.length === 0) {
-            area.innerHTML = `
-            <div style="text-align:center; padding:40px 20px; color:#64748b;">
+            area.innerHTML = tabsHeaderHtml + `
+            <div style="text-align:center; padding:35px 20px; color:#64748b; background:#fff; border-radius:10px; border:1px solid #e2e8f0;">
               <i class="fas fa-check-circle" style="font-size:32px; color:#10b981; margin-bottom:8px;"></i>
-              <div style="font-size:14px; font-weight:bold; color:#1e293b;">All caught up!</div>
-              <div style="font-size:12px; margin-top:4px;">No pending customer follow-ups scheduled for today.</div>
+              <div style="font-size:14px; font-weight:bold; color:#1e293b;">
+                ${window._crmHubFollowupTab === 'upcoming' ? 'No Upcoming Follow-ups' : 'All caught up for today!'}
+              </div>
+              <div style="font-size:12px; margin-top:4px;">
+                ${window._crmHubFollowupTab === 'upcoming' ? 'No future follow-ups scheduled after today.' : 'No pending customer follow-ups scheduled for today.'}
+              </div>
             </div>`;
             return;
         }
 
-        var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+        var html = tabsHeaderHtml + '<div style="display:flex; flex-direction:column; gap:8px;">';
         followups.forEach(function (fu, idx) {
             var isOverdue = fu.followUpDate && fu.followUpDate < todayStr;
             var isToday = fu.followUpDate === todayStr;
@@ -19672,6 +19810,11 @@ window.loadCRMHubFollowups = async function () {
             area.innerHTML = '<div style="text-align:center; padding:30px; color:#dc2626;">Error loading follow-ups: ' + e.message + '</div>';
         }
     }
+};
+
+window.switchCRMHubFollowupTab = function (tab) {
+    window._crmHubFollowupTab = tab;
+    window.loadCRMHubFollowups();
 };
 
 window.toggleCRMFollowupHistory = function (idx) {
