@@ -2013,7 +2013,12 @@ function initApp() {
         else renderProductGrid(displayList);
         updateCartHeader();
 
-        let pidParam = new URLSearchParams(window.location.search).get('pid') || (typeof window.pendingDeepLinkPid !== 'undefined' ? window.pendingDeepLinkPid : null);
+        var urlParams = new URLSearchParams(window.location.search);
+        let pidParam = urlParams.get('pid') || (typeof window.pendingDeepLinkPid !== 'undefined' ? window.pendingDeepLinkPid : null);
+        let designParam = urlParams.get('d') || urlParams.get('design') || null;
+        if (designParam) {
+            window._pendingDeepLinkDesign = designParam;
+        }
         if (pidParam) {
             window.pendingDeepLinkPid = null;
             window.isDeepLinkOpen = true;
@@ -3300,7 +3305,9 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         window.recordTimeSpent();
     }
 
-    var p = allProducts.find(x => x.id === productId || x.docId === productId);
+    var p = allProducts.find(x => x.id === productId || x.docId === productId ||
+        (x.sku && String(x.sku).toLowerCase() === String(productId).toLowerCase()) ||
+        (x.name && String(x.name).toLowerCase() === String(productId).toLowerCase()));
     if (!p) return;
     curProduct = p;
     window.viewStartTime = Date.now();
@@ -3849,6 +3856,23 @@ function openDetail(productId, skipShow, keepSearchShown, onRenderComplete) {
         setTimeout(updateBottomQtyFromActiveDesign, 50);
         updateLiveDetailHeader();
         if (typeof window.initCustShareLongPress === 'function') window.initCustShareLongPress();
+
+        if (window._pendingDeepLinkDesign) {
+            var targetD = String(window._pendingDeepLinkDesign).trim().toLowerCase().replace(/\.(webp|jpg|jpeg|png)$/i, '');
+            window._pendingDeepLinkDesign = null;
+            var matchedFile = files.find(function (f) {
+                var fName = String(f.name || '').toLowerCase().replace(/\.(webp|jpg|jpeg|png)$/i, '');
+                if (fName === targetD) return true;
+                var numF = fName.replace(/\D/g, '');
+                var numT = targetD.replace(/\D/g, '');
+                return numF && numT && (numF === numT || parseInt(numF) === parseInt(numT));
+            });
+            if (matchedFile && typeof openFs === 'function') {
+                setTimeout(function () {
+                    openFs(p.id, 0, matchedFile.name);
+                }, 150);
+            }
+        }
     }
 
 }
@@ -14147,20 +14171,26 @@ window.loadCustRepLastTalkBanner = async function (partyCode) {
         var res = await window.fetchPartyCRMLogs(cust);
         var allLogs = res.allLogs || [];
         var f = res.latestField;
-        if (f && (f.lastNote || f.lastDisposition || f.lastCallAt || allLogs.length > 0)) {
+        if (f && (f.lastNote || f.lastDisposition || f.lastCallAt || f.nextFollowUpDate || allLogs.length > 0)) {
             var disp = f.lastDisposition ? f.lastDisposition.stringValue : (allLogs[0] ? allLogs[0].disposition : '');
             var note = f.lastNote ? f.lastNote.stringValue : (allLogs[0] ? allLogs[0].note : '');
+            var followUpDate = (f.nextFollowUpDate ? f.nextFollowUpDate.stringValue : '') || (allLogs[0] ? (allLogs[0].followUpDate || allLogs[0].nextFollowUpDate || '') : '');
             var promised = f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.stringValue || f.promisedAmount.integerValue || '') : (allLogs[0] ? allLogs[0].promisedAmount : '');
             var promisedDate = f.promisedDate ? f.promisedDate.stringValue : (allLogs[0] ? allLogs[0].promisedDate : '');
+            var staffName = (f.lastStaffName ? f.lastStaffName.stringValue : '') || (allLogs[0] ? (allLogs[0].staffName || allLogs[0].staff) : '');
             var callTime = f.lastCallAt ? new Date(f.lastCallAt.timestampValue || f.lastCallAt.stringValue).toLocaleDateString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : (allLogs[0] && allLogs[0].createdAt ? new Date(allLogs[0].createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : 'Recent');
 
+            var badgesHtml = '';
+            if (disp) badgesHtml += `<span style="background:#e0f2fe; color:#0369a1; padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">${escHtml(disp)}</span> `;
+            if (followUpDate) badgesHtml += `<span style="background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;"><i class="fas fa-calendar-check"></i> Next Follow-up: ${escHtml(followUpDate)}</span> `;
+
             lastTalkBanner.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; flex-wrap:wrap; gap:4px;">
                     <span style="font-weight:bold; color:#0369a1;"><i class="fas fa-comments"></i> Latest Conversation (${callTime || 'Recent'}):</span>
-                    ${disp ? `<span style="background:#e0f2fe; color:#0369a1; padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">${escHtml(disp)}</span>` : ''}
+                    <div>${badgesHtml}</div>
                 </div>
-                <div style="color:#334155; font-size:11px;"><b>Note:</b> ${escHtml(note || 'Call discussion recorded')}</div>
-                ${promised ? `<div style="color:#92400e; font-weight:bold; font-size:10px; margin-top:2px;">💰 Promised: ₹ ${promised} ${promisedDate ? ('by ' + promisedDate) : ''}</div>` : ''}
+                <div style="color:#334155; font-size:11px;"><b>Note:</b> ${escHtml(note || 'Call discussion recorded')} ${staffName ? `<span style="color:#64748b; font-size:10px;">(by ${escHtml(staffName)})</span>` : ''}</div>
+                ${promised ? `<div style="color:#15803d; font-weight:bold; font-size:10px; margin-top:2px;">💰 Promised: ₹ ${Number(promised).toLocaleString('en-IN')} ${promisedDate ? ('by ' + promisedDate) : ''}</div>` : ''}
                 ${allLogs.length > 1 ? `
                 <div style="margin-top:5px; border-top:1px dashed #bae6fd; padding-top:4px;">
                     <div onclick="var el=document.getElementById('rep_all_crm_history'); if(el){el.style.display=el.style.display==='none'?'block':'none';}" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-size:10.5px; color:#0284c7; font-weight:bold;">
@@ -14170,12 +14200,14 @@ window.loadCustRepLastTalkBanner = async function (partyCode) {
                     <div id="rep_all_crm_history" style="display:none; max-height:160px; overflow-y:auto; margin-top:6px; display:flex; flex-direction:column; gap:4px;">
                         ${allLogs.map(function(l) {
                             var dt = l.createdAt ? new Date(l.createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) + ' ' + new Date(l.createdAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }) : '';
+                            var lfu = l.followUpDate || l.nextFollowUpDate || '';
                             return `
                             <div style="background:#fff; border:1px solid #e0f2fe; border-left:3px solid #0284c7; border-radius:4px; padding:4px 6px; font-size:10.5px;">
                                 <div style="display:flex; justify-content:space-between; font-weight:600; color:#0f172a;">
                                     <span>${escHtml(l.disposition || 'Note')} ${l.staffName ? `<span style="font-weight:normal; color:#64748b;">(by ${escHtml(l.staffName)})</span>` : ''}</span>
                                     <span style="font-size:9.5px; color:#64748b;">${dt}</span>
                                 </div>
+                                ${lfu ? `<div style="color:#92400e; font-weight:bold; font-size:9.5px; margin-top:1px;"><i class="fas fa-calendar-alt"></i> Follow-up: ${escHtml(lfu)}</div>` : ''}
                                 ${l.note ? `<div style="color:#334155; margin-top:2px;">${escHtml(l.note)}</div>` : ''}
                                 ${l.promisedAmount ? `<div style="color:#16a34a; font-weight:bold; font-size:9.5px; margin-top:1px;">Promise: ₹ ${Number(l.promisedAmount).toLocaleString('en-IN')}</div>` : ''}
                             </div>`;
@@ -16137,114 +16169,223 @@ window.openBillInvoiceModal = function (billNo) {
     var container = document.getElementById('billInvoicePrintableContainer');
     if (!container) return;
 
+    var cust = window._currentReportingCustomer || {};
     var billItems = b[23] || [];
     var totPcs = 0, totMts = 0;
     billItems.forEach(it => {
-        totPcs += (it[4] || 0);
-        totMts += (it[5] || 0);
+        totPcs += (parseFloat(it[4]) || 0);
+        totMts += (parseFloat(it[5]) || 0);
     });
 
-    var paidBadge = (b[21] === 'Y')
-        ? `<span style="background:#dcfce7; color:#15803d; border:1px solid #86efac; padding:2px 8px; border-radius:4px; font-weight:bold;">PAID</span>`
-        : `<span style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; padding:2px 8px; border-radius:4px; font-weight:bold;">UNPAID (${escHtml(b[22] || 'Due')})</span>`;
+    var grossAmt = parseFloat(b[14]) || 0;
+    var discAmt = parseFloat(b[17]) || 0;
+    var discPct = parseFloat(b[16]) || 0;
+    var gstAmt = parseFloat(b[19]) || 0;
+    var netAmt = parseFloat(b[20]) || (grossAmt - Math.abs(discAmt) + gstAmt);
+    if (!grossAmt && netAmt) grossAmt = netAmt;
+
+    var taxableVal = Math.max(0, grossAmt - Math.abs(discAmt));
+    var partyGstin = (cust && cust.g) ? cust.g : (b[24] || '24AFXPA0184R1ZW');
+    var isGujarat = String(partyGstin).startsWith('24') || (String(b[5] || '').toUpperCase().includes('GUJARAT'));
+    var placeOfSupply = isGujarat ? '24-Gujarat' : (b[5] ? `State (${escHtml(b[5])})` : '24-Gujarat');
+    var partyPan = (cust && cust.pan) ? cust.pan : (partyGstin.length >= 12 ? partyGstin.slice(2, 12) : 'AFXPA0184R');
+    var wordsStr = window.numberToWordsIndian(netAmt);
+
+    var cgstVal = isGujarat ? (gstAmt ? (gstAmt / 2) : (taxableVal * 0.025)) : 0;
+    var sgstVal = isGujarat ? (gstAmt ? (gstAmt / 2) : (taxableVal * 0.025)) : 0;
+    var igstVal = !isGujarat ? (gstAmt || (taxableVal * 0.05)) : 0;
 
     var html = `
-    <div id="taxInvoicePrintDoc" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size:11px; color:#1e293b; background:#fff; padding:12px; border:1px solid #cbd5e1; border-radius:8px;">
+    <div id="taxInvoicePrintDoc" style="font-family:'Courier New', Courier, monospace, 'Segoe UI', Tahoma, sans-serif; font-size:10.5px; color:#000; background:#fff; padding:14px 18px; border:1px solid #94a3b8; border-radius:4px; max-width:760px; margin:0 auto; box-sizing:border-box; line-height:1.25;">
       
-      <!-- Company Header -->
-      <div style="text-align:center; border-bottom:2px solid #be185d; padding-bottom:8px; margin-bottom:10px;">
-        <div style="font-size:18px; font-weight:bold; color:#be185d; letter-spacing:1px;">DURGA SAREES</div>
-        <div style="font-size:10px; color:#64748b;">Wholesale Manufacturer of Exclusive Fancy Sarees</div>
-        <div style="font-size:10px; color:#64748b;">Surat, Gujarat, India • Phone: 9998232380 • Web: www.durgasarees.com</div>
-        <div style="display:inline-block; margin-top:4px; font-size:11px; font-weight:bold; background:#fdf2f8; color:#be185d; padding:2px 10px; border-radius:4px; border:1px solid #fbcfe8;">
+      <!-- Top invocation & phones -->
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+        <span style="flex:1;"></span>
+        <span style="font-weight:bold; font-size:12px; letter-spacing:1px; text-align:center; flex:2;">!! Shree Ganeshaya Namah !!</span>
+        <span style="flex:1; text-align:right; font-size:9.5px; color:#1e293b; line-height:1.2;">
+          A/C. Mob. :- 8128002150<br>
+          PHONES: 0261, 2337216
+        </span>
+      </div>
+
+      <!-- Main Company Title & Info with Logo -->
+      <div style="text-align:center; margin-bottom:6px;">
+        <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:2px;">
+          <img src="logo.png" alt="Durga Sarees" style="height:44px; width:auto; object-fit:contain;" onerror="this.style.display='none'">
+          <div style="font-size:24px; font-weight:900; letter-spacing:2px; font-family:'Times New Roman', serif; color:#000;">DURGA SAREES</div>
+        </div>
+        <div style="font-size:10px; font-weight:bold; color:#000;">
+          GSTIN: <b>24ACMPT6714A1ZP</b> &nbsp;&nbsp; Udyam (MSME) No.: <b>UDYAM-GJ-22-0033441 (SMALL)</b> &nbsp;&nbsp; PAN NO.: <b>ACMPT6714A</b>
+        </div>
+        <div style="font-size:9px; color:#1e293b; margin-top:2px;">
+          1ST FLOOR, DURGA HOUSE, FP 48, BEHIND SAI KHATI MARKET, NEAR WATER TANK, UMARWADA, RING ROAD, SURAT
+        </div>
+        <div style="margin-top:6px; display:inline-block; border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:2px 24px; font-size:14px; font-weight:900; letter-spacing:3px;">
           TAX INVOICE
         </div>
       </div>
 
-      <!-- Bill & Party Info Grid -->
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; background:#f8fafc; padding:8px 10px; border-radius:6px; border:1px solid #e2e8f0; font-size:11px;">
+      <!-- Section: Buyer & Bill Details Grid -->
+      <div style="border-top:1px solid #000; border-bottom:1px solid #000; padding:6px 0; display:grid; grid-template-columns:1.25fr 0.75fr; gap:12px; font-size:10.5px;">
         <div>
-          <div><b style="color:#64748b;">Bill No:</b> <span style="font-weight:bold; font-size:13px; color:#0284c7;">#${escHtml(b[0])}</span></div>
-          <div><b style="color:#64748b;">Bill Date:</b> <b>${escHtml(b[1])}</b></div>
-          <div><b style="color:#64748b;">Status:</b> ${paidBadge}</div>
-          <div style="margin-top:4px;"><b style="color:#64748b;">Broker / Haste:</b> ${escHtml(b[13] || 'DIRECT')}</div>
+          <div><b>Buyer:</b> <span style="font-weight:bold; font-size:11.5px;">${escHtml(b[2])}</span></div>
+          ${b[4] ? `<div style="color:#1e293b; font-size:10px; line-height:1.2;">${escHtml(b[4])}</div>` : ''}
+          <div><b>SURAT PIN NO. :</b> 395002 &nbsp;&nbsp; <b>PH. :</b> ${escHtml(b[3] || '-')}</div>
+          <div style="margin-top:2px; font-size:10px;">
+            <b>GSTIN:</b> ${escHtml(partyGstin)} &nbsp;&nbsp; <b>Place of Supply:</b> ${escHtml(placeOfSupply)} &nbsp;&nbsp; <b>PAN NO:</b> ${escHtml(partyPan)}
+          </div>
         </div>
-        <div>
-          <div><b style="color:#64748b;">Party:</b> <b style="font-size:12px; color:#0f172a;">${escHtml(b[2])}</b></div>
-          ${b[3] ? `<div><b style="color:#64748b;">Phone:</b> ${escHtml(b[3])}</div>` : ''}
-          ${b[5] ? `<div><b style="color:#64748b;">Destination:</b> ${escHtml(b[5])}</div>` : ''}
-          ${b[4] ? `<div style="font-size:10px; color:#64748b; line-height:1.2; margin-top:2px;">${escHtml(b[4])}</div>` : ''}
+        <div style="border-left:1px solid #cbd5e1; padding-left:10px; font-size:10.5px;">
+          <div><b>BILL NO. :</b> <span style="font-weight:bold; font-size:12px;">${escHtml(b[0])}</span></div>
+          <div><b>CHALLAN  :</b> ${escHtml(b[0])}</div>
+          <div><b>DATE     :</b> <b>${escHtml(b[1])}</b></div>
+          <div><b>ORDER NO :</b> -</div>
+          <div><b>PAN NO   :</b> --${escHtml(partyPan || 'ACMPT6714A')}</div>
         </div>
       </div>
 
-      <!-- Dispatch & Transport Info -->
-      <div style="background:#f1f5f9; padding:6px 10px; border-radius:6px; margin-bottom:10px; font-size:10.5px; display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-        <div><i class="fas fa-truck" style="color:var(--myntra-pink);"></i> <b>Transport:</b> ${escHtml(b[6] || 'Local Dispatch')}</div>
-        <div><b>LR No:</b> ${escHtml(b[7] || 'N/A')} ${b[8] ? ('(Date: ' + escHtml(b[8]) + ')') : ''}</div>
-        <div><b>Parcels / Cases:</b> ${escHtml(b[9] || '1')} ${b[10] ? ('• Wgt: ' + escHtml(b[10]) + ' KG') : ''}</div>
-        <div>${b[11] ? ('<b>Freight:</b> ₹ ' + escHtml(b[11])) : ''} ${b[12] ? ('• <b>e-Way:</b> ' + escHtml(b[12])) : ''}</div>
+      <!-- Section: Consignee -->
+      <div style="border-bottom:1px solid #000; padding:4px 0; font-size:10px;">
+        <div><b>Consignee:</b> <span style="font-weight:bold;">${escHtml(b[2])}</span></div>
+        <div><b>GSTIN:</b> ${escHtml(partyGstin)} &nbsp;&nbsp;&nbsp;&nbsp; <b>ADDRESS:</b> ,${escHtml(b[5] || 'SURAT')}</div>
       </div>
 
-      <!-- Itemized Table -->
-      <div style="overflow-x:auto; margin-bottom:10px;">
-        <table style="width:100%; border-collapse:collapse; font-size:11px;">
-          <thead>
-            <tr style="background:#e2e8f0; color:#334155; font-size:10px;">
-              <th style="padding:6px; text-align:center; border:1px solid #cbd5e1; width:30px;">#</th>
-              <th style="padding:6px; border:1px solid #cbd5e1;">SCREEN / QUALITY NAME</th>
-              <th style="padding:6px; border:1px solid #cbd5e1;">HSN</th>
-              <th style="padding:6px; border:1px solid #cbd5e1;">PACK</th>
-              <th style="padding:6px; text-align:right; border:1px solid #cbd5e1;">PCS</th>
-              <th style="padding:6px; text-align:right; border:1px solid #cbd5e1;">MTR</th>
-              <th style="padding:6px; text-align:right; border:1px solid #cbd5e1;">RATE</th>
-              <th style="padding:6px; text-align:right; border:1px solid #cbd5e1;">AMOUNT</th>
+      <!-- Section: Agent -->
+      <div style="border-bottom:1px solid #000; padding:4px 0; display:grid; grid-template-columns:1.25fr 0.75fr; font-size:10px;">
+        <div><b>AGENT   :</b> ${escHtml(b[13] || 'DIRECT')}</div>
+        <div><b>PHONES:</b> ,</div>
+        <div style="grid-column:1/-1;"><b>ADDRESS :</b> ,,</div>
+      </div>
+
+      <!-- Section: Dispatch & Transport Info -->
+      <div style="border-bottom:1px solid #000; padding:4px 0; display:grid; grid-template-columns:1.1fr 1fr 0.9fr; gap:2px 8px; font-size:10px;">
+        <div><b>L. R. NO.  :</b> ${escHtml(b[7] || '-')}</div>
+        <div><b>LR DATE:</b> ${escHtml(b[8] || b[1] || '-')}</div>
+        <div><b>WEIGHT :</b> ${escHtml(b[10] || '-')}</div>
+        <div><b>TRANSPORT:</b> ${escHtml(b[6] || 'Local Dispatch')}</div>
+        <div><b>CASE NO:</b> ${escHtml(b[9] || '1')}</div>
+        <div><b>FREIGHT:</b> ${b[11] ? ('₹ ' + escHtml(b[11])) : '-'}</div>
+        <div><b>STATION  :</b> ${escHtml(b[5] || 'SURAT')}</div>
+        <div style="grid-column:span 2; text-align:right;"><b>HSN:</b> 540752</div>
+      </div>
+
+      <!-- Section: Itemized Table -->
+      <table style="width:100%; border-collapse:collapse; margin-top:2px; font-size:10px;">
+        <thead>
+          <tr style="border-top:1px solid #000; border-bottom:1px solid #000; font-weight:bold;">
+            <th style="padding:4px 2px; text-align:center; width:26px;">SR.</th>
+            <th style="padding:4px 4px; text-align:left;">PERTICULARS</th>
+            <th style="padding:4px 4px; text-align:center;">COLOUR</th>
+            <th style="padding:4px 4px; text-align:center;">PACKING</th>
+            <th style="padding:4px 4px; text-align:right;">PICS</th>
+            <th style="padding:4px 4px; text-align:right;">CUT</th>
+            <th style="padding:4px 4px; text-align:right;">METERS</th>
+            <th style="padding:4px 4px; text-align:right;">RATE</th>
+            <th style="padding:4px 4px; text-align:center;">PER</th>
+            <th style="padding:4px 4px; text-align:right;">AMOUNT</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${billItems.length > 0 ? billItems.map((it, idx) => `
+            <tr>
+              <td style="padding:3px 2px; text-align:center; vertical-align:top;">${idx + 1}</td>
+              <td style="padding:3px 4px; vertical-align:top; font-weight:bold;">
+                ${escHtml(it[0] || 'SAREE FINISH')}
+                ${it[9] ? `<div style="font-weight:normal; font-size:9px; color:#334155;">(${escHtml(it[9])})</div>` : ''}
+              </td>
+              <td style="padding:3px 4px; text-align:center; vertical-align:top;">${escHtml(it[1] || '-')}</td>
+              <td style="padding:3px 4px; text-align:center; vertical-align:top;">${escHtml(it[2] || 'THAILI')}</td>
+              <td style="padding:3px 4px; text-align:right; vertical-align:top;">${it[4] || 0}</td>
+              <td style="padding:3px 4px; text-align:right; vertical-align:top;">0.00</td>
+              <td style="padding:3px 4px; text-align:right; vertical-align:top;">${it[5] ? Number(it[5]).toFixed(2) : '0.00'}</td>
+              <td style="padding:3px 4px; text-align:right; vertical-align:top;">${it[6] ? Number(it[6]).toFixed(2) : '0.00'}</td>
+              <td style="padding:3px 4px; text-align:center; vertical-align:top;">${escHtml(it[3] || 'MTS')}</td>
+              <td style="padding:3px 4px; text-align:right; vertical-align:top; font-weight:bold;">${Number(it[7] || 0).toFixed(2)}</td>
             </tr>
-          </thead>
-          <tbody>
-            ${billItems.map((it, idx) => `
-              <tr style="border-bottom:1px solid #f1f5f9;">
-                <td style="padding:5px; text-align:center; border:1px solid #e2e8f0; color:#64748b;">${idx + 1}</td>
-                <td style="padding:5px 8px; border:1px solid #e2e8f0; font-weight:600; color:#0f172a;">${escHtml(it[0])}</td>
-                <td style="padding:5px; border:1px solid #e2e8f0; color:#64748b; font-size:10px;">${escHtml(it[8] || '540754')}</td>
-                <td style="padding:5px; border:1px solid #e2e8f0; color:#475569;">${escHtml(it[2])}</td>
-                <td style="padding:5px 8px; text-align:right; border:1px solid #e2e8f0; font-weight:bold;">${it[4]}</td>
-                <td style="padding:5px 8px; text-align:right; border:1px solid #e2e8f0;">${it[5] ? it[5].toFixed(2) : '-'}</td>
-                <td style="padding:5px 8px; text-align:right; border:1px solid #e2e8f0;">₹ ${it[6] ? it[6].toFixed(2) : '0.00'}</td>
-                <td style="padding:5px 8px; text-align:right; border:1px solid #e2e8f0; font-weight:bold;">₹ ${Math.round(it[7] || 0).toLocaleString('en-IN')}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+          `).join('') : `
+            <tr>
+              <td style="padding:3px 2px; text-align:center;">1</td>
+              <td style="padding:3px 4px; font-weight:bold;">SAREE FINISH GOODS</td>
+              <td style="padding:3px 4px; text-align:center;">-</td>
+              <td style="padding:3px 4px; text-align:center;">THAILI</td>
+              <td style="padding:3px 4px; text-align:right;">${totPcs || 1}</td>
+              <td style="padding:3px 4px; text-align:right;">0.00</td>
+              <td style="padding:3px 4px; text-align:right;">${totMts ? totMts.toFixed(2) : '0.00'}</td>
+              <td style="padding:3px 4px; text-align:right;">-</td>
+              <td style="padding:3px 4px; text-align:center;">MTS</td>
+              <td style="padding:3px 4px; text-align:right; font-weight:bold;">${grossAmt.toFixed(2)}</td>
+            </tr>
+          `}
+        </tbody>
+      </table>
+
+      <!-- Section: Bank Account & Remark -->
+      <div style="border-top:1px solid #000; padding:4px 0; margin-top:4px; font-size:10px;">
+        <div><b>BANK A/C No. : 59209427113115 HDFC BANK &nbsp;-&nbsp; IFSC Code: HDFC0000251, UPI : DURGASAREES@HDFCBANK</b></div>
+        <div style="margin-top:2px;"><b>REMARK :</b> ${escHtml(b[22] || '')}</div>
       </div>
 
-      <!-- Financial Totals Calculation Box -->
-      <div style="display:flex; justify-content:flex-end; margin-top:6px;">
-        <div style="min-width:240px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 12px; font-size:11px; display:flex; flex-direction:column; gap:4px;">
-          <div style="display:flex; justify-content:space-between;">
-            <span style="color:#64748b;">Total Pcs:</span>
-            <b>${totPcs} Pcs</b>
-          </div>
-          <div style="display:flex; justify-content:space-between;">
-            <span style="color:#64748b;">Gross Amount:</span>
-            <b>₹ ${Math.round(b[14] || 0).toLocaleString('en-IN')}</b>
-          </div>
-          ${b[17] ? `
-            <div style="display:flex; justify-content:space-between; color:#b91c1c;">
-              <span>${escHtml(b[15] || 'Discount')} (${escHtml(b[16])}%):</span>
-              <b>-₹ ${Math.abs(Math.round(b[17])).toLocaleString('en-IN')}</b>
-            </div>
-          ` : ''}
-          ${b[19] ? `
-            <div style="display:flex; justify-content:space-between; color:#0369a1;">
-              <span>GST (${escHtml(b[18])}%):</span>
-              <b>+₹ ${Math.round(b[19]).toLocaleString('en-IN')}</b>
-            </div>
-          ` : ''}
-          <div style="display:flex; justify-content:space-between; padding-top:6px; border-top:1.5px solid #cbd5e1; font-size:13px; font-weight:bold; color:#0f172a;">
-            <span>Net Bill Amount:</span>
-            <span style="color:#be185d;">₹ ${Math.round(b[20] || 0).toLocaleString('en-IN')}</span>
-          </div>
+      <!-- Section: Sub Total Row -->
+      <div style="border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0; display:flex; justify-content:space-between; font-weight:bold; font-size:10.5px;">
+        <span style="width:180px;">SUB TOTAL</span>
+        <span style="width:70px; text-align:right;">${totPcs}</span>
+        <span style="width:90px; text-align:right;">${totMts ? totMts.toFixed(2) : '0.00'}</span>
+        <span style="width:120px; text-align:right;">${grossAmt.toFixed(2)}</span>
+      </div>
+
+      <!-- Section: Calculations (Discounts, Tax, Net) -->
+      <div style="padding:4px 0; font-size:10.5px; display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+        ${discAmt ? `
+        <div style="display:flex; justify-content:space-between; width:340px;">
+          <span>LESS -&gt; ${grossAmt.toFixed(2)} X ${discPct ? discPct.toFixed(2) : '0.00'} % :</span>
+          <span style="font-weight:bold;">-${Math.abs(discAmt).toFixed(2)}</span>
+        </div>` : ''}
+        ${isGujarat ? `
+        <div style="display:flex; justify-content:space-between; width:340px;">
+          <span>CGST @ 2.50% on Taxable Value ${taxableVal.toFixed(2)} =</span>
+          <span>${cgstVal.toFixed(2)}</span>
         </div>
+        <div style="display:flex; justify-content:space-between; width:340px;">
+          <span>SGST @ 2.50% on Taxable Value ${taxableVal.toFixed(2)} =</span>
+          <span>${sgstVal.toFixed(2)}</span>
+        </div>` : `
+        <div style="display:flex; justify-content:space-between; width:340px;">
+          <span>IGST @ 5.00% on Taxable Value ${taxableVal.toFixed(2)} =</span>
+          <span>${igstVal.toFixed(2)}</span>
+        </div>`}
+      </div>
+
+      <!-- Section: Due Days & Invoice Value -->
+      <div style="border-top:1px solid #000; border-bottom:1px solid #000; padding:4px 0; display:flex; justify-content:space-between; align-items:center; font-weight:bold; font-size:12px;">
+        <span>DUE DAYS: 45</span>
+        <span>Invoice Value &nbsp;&nbsp;&nbsp;&nbsp; ₹ ${netAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+      </div>
+
+      <!-- Amount in words -->
+      <div style="padding:4px 0; font-weight:bold; font-size:10px; letter-spacing:0.3px;">
+        ${wordsStr}
+      </div>
+
+      <!-- Section: Terms & Conditions and Signature -->
+      <div style="border-top:1px solid #000; padding-top:6px; margin-top:2px; font-size:9px; display:flex; justify-content:space-between; align-items:flex-start;">
+        <div style="max-width:62%; line-height:1.3;">
+          <b>TERMS &amp; CONDITIONS:-</b><br>
+          1) SUBJECT TO SURAT JURISDICTION.<br>
+          2) GOODS HAVE BEEN SOLD &amp; DESPATCHED AT THE ENTIRE RISK OF THE PURCHASER.<br>
+          3) COMPLAINTS, IF ANY REGARDING THIS INVOICE MUST BE INFORMED IN WRITING WITHIN 48 HOURS.
+        </div>
+        <div style="text-align:right; font-weight:bold; font-size:10px; line-height:1.4;">
+          FOR DURGA SAREES<br><br><br>
+          AUTH. SIGN
+        </div>
+      </div>
+
+      <!-- Bottom dispatch footer -->
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:9.5px; font-weight:bold; margin-top:8px; border-top:1px dashed #94a3b8; padding-top:4px;">
+        <span>SALES MAN : ${escHtml(b[13] || 'ROHIT PATIL')}</span>
+        <span>DELIVERED BY : </span>
+        <span>E-WAY BILL No: ${escHtml(b[12] || '-')}</span>
+        <span>Transporter ID: 24AQBPS9728G1ZK</span>
       </div>
 
     </div>`;
@@ -16266,15 +16407,126 @@ window.closeBillModal = function () {
 window.printBillInvoice = function () {
     var printContent = document.getElementById('taxInvoicePrintDoc');
     if (!printContent) return;
-    var printWindow = window.open('', '', 'width=800,height=900');
+    var printWindow = window.open('', '', 'width=850,height=950');
     printWindow.document.write('<html><head><title>Tax Invoice</title>');
-    printWindow.document.write('<style>body { font-family: Segoe UI, sans-serif; padding: 20px; } table { width:100%; border-collapse:collapse; } th, td { border:1px solid #cbd5e1; padding:6px; } @media print { body { -webkit-print-color-adjust: exact; } }</style>');
+    printWindow.document.write('<style>body { font-family: "Courier New", Courier, monospace; margin: 0; padding: 15px; } @media print { body { -webkit-print-color-adjust: exact; margin: 0; padding: 10px; } }</style>');
     printWindow.document.write('</head><body>');
     printWindow.document.write(printContent.outerHTML);
     printWindow.document.write('</body></html>');
     printWindow.document.close();
     printWindow.focus();
-    setTimeout(() => { printWindow.print(); printWindow.close(); }, 300);
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 350);
+};
+
+// Share Tax Invoice as PDF
+window.shareBillInvoicePDF = async function () {
+    var invoiceEl = document.getElementById('taxInvoicePrintDoc');
+    if (!invoiceEl) {
+        alert("Invoice content not ready.");
+        return;
+    }
+    var b = window._currentActiveBillData;
+    var billNo = (b && b[0]) ? String(b[0]).replace(/[^a-zA-Z0-9]/g, '_') : 'Invoice';
+    var fileName = `DurgaSarees_Invoice_${billNo}.pdf`;
+
+    var btn = window.event ? (window.event.currentTarget || window.event.target) : null;
+    var oldText = btn ? btn.innerHTML : '';
+    if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PDF...';
+
+    try {
+        if (window.html2canvas && window.jspdf && window.jspdf.jsPDF) {
+            var canvas = await window.html2canvas(invoiceEl, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff'
+            });
+            var imgData = canvas.toDataURL('image/jpeg', 0.95);
+            var { jsPDF } = window.jspdf;
+            var pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+            var pw = pdf.internal.pageSize.getWidth();
+            var ph = pdf.internal.pageSize.getHeight();
+            var margin = 20;
+            var maxW = pw - (margin * 2);
+            var maxH = ph - (margin * 2);
+            var imgRatio = canvas.width / canvas.height;
+            var drawW = maxW;
+            var drawH = maxW / imgRatio;
+            if (drawH > maxH) {
+                drawH = maxH;
+                drawW = maxH * imgRatio;
+            }
+            var x = (pw - drawW) / 2;
+            var y = margin;
+            pdf.addImage(imgData, 'JPEG', x, y, drawW, drawH);
+
+            var pdfBlob = pdf.output('blob');
+            var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+            if (isNative && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem && window.Capacitor.Plugins.Share) {
+                var reader = new FileReader();
+                reader.onloadend = async function () {
+                    var base64data = reader.result.split(',')[1];
+                    var writeRes = await window.Capacitor.Plugins.Filesystem.writeFile({
+                        path: fileName,
+                        data: base64data,
+                        directory: 'CACHE'
+                    });
+                    await window.Capacitor.Plugins.Share.share({
+                        title: fileName,
+                        url: writeRes.uri,
+                        dialogTitle: 'Share Tax Invoice PDF'
+                    });
+                };
+                reader.readAsDataURL(pdfBlob);
+            } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], fileName, { type: 'application/pdf' })] })) {
+                var fileObj = new File([pdfBlob], fileName, { type: 'application/pdf' });
+                await navigator.share({ files: [fileObj], title: fileName });
+            } else {
+                pdf.save(fileName);
+            }
+        } else {
+            window.printBillInvoice();
+        }
+    } catch (e) {
+        console.warn("PDF generation error, fallback to print:", e);
+        window.printBillInvoice();
+    } finally {
+        if (btn) btn.innerHTML = oldText;
+    }
+};
+
+// Number to Words in Indian Currency System
+window.numberToWordsIndian = function (amount) {
+    var num = Math.round(Math.abs(Number(amount) || 0));
+    if (num === 0) return 'ZERO ONLY';
+    var a = ['', 'ONE ', 'TWO ', 'THREE ', 'FOUR ', 'FIVE ', 'SIX ', 'SEVEN ', 'EIGHT ', 'NINE ', 'TEN ',
+        'ELEVEN ', 'TWELVE ', 'THIRTEEN ', 'FOURTEEN ', 'FIFTEEN ', 'SIXTEEN ', 'SEVENTEEN ', 'EIGHTEEN ', 'NINETEEN '];
+    var b = ['', '', 'TWENTY ', 'THIRTY ', 'FORTY ', 'FIFTY ', 'SIXTY ', 'SEVENTY ', 'EIGHTY ', 'NINETY '];
+
+    function inWords(n) {
+        if (n < 20) return a[n];
+        var digit = n % 10;
+        return b[Math.floor(n / 10)] + (digit ? a[digit] : '');
+    }
+
+    var str = '';
+    var crore = Math.floor(num / 10000000);
+    num %= 10000000;
+    var lakh = Math.floor(num / 100000);
+    num %= 100000;
+    var thousand = Math.floor(num / 1000);
+    num %= 1000;
+    var hundred = Math.floor(num / 100);
+    var rest = num % 100;
+
+    if (crore > 0) str += inWords(crore) + 'CRORE ';
+    if (lakh > 0) str += inWords(lakh) + 'LAKH ';
+    if (thousand > 0) str += inWords(thousand) + 'THOUSAND ';
+    if (hundred > 0) str += inWords(hundred) + 'HUNDRED ';
+    if (rest > 0) {
+        str += inWords(rest);
+    }
+    return (str.trim() + ' ONLY').toUpperCase();
 };
 
 // Share Bill via WhatsApp
@@ -19060,6 +19312,11 @@ window.savePostCallCRM = async function () {
 
         window.closePostCallCRMModal();
         alert('✓ Call note & follow-up saved successfully!');
+
+        // Refresh reports live talk / follow-up banner
+        if (typeof window.loadCustRepLastTalkBanner === 'function') {
+            window.loadCustRepLastTalkBanner(code || name);
+        }
 
         // Refresh CRM tab if open
         if (typeof window.renderCustomerCRMTab === 'function') {

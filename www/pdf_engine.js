@@ -156,21 +156,24 @@ async function getActualDesignsForProduct(p, shareType, action) {
     return filesToReturn;
 }
 
-const WEBSITE_BASE = "https://www.durgasarees.com";
-const WEBSITE_PRODUCT_BASE = "https://www.durgasarees.com/product-page/";
+const APP_BASE_URL = "https://durga-sarees.web.app";
+const WEBSITE_BASE = "https://durga-sarees.web.app";
+const WEBSITE_PRODUCT_BASE = "https://durga-sarees.web.app/?pid=";
 
-// Build Wix product URL from SKU and product name
-function buildWixProductUrl(product) {
-    var sku = (product.sku || "").trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-    var nameSlug = (product.name || "").trim().toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9\-]/g, '');
-    if (sku && nameSlug) {
-        return WEBSITE_PRODUCT_BASE + sku + '-' + nameSlug;
-    } else if (nameSlug) {
-        return WEBSITE_PRODUCT_BASE + nameSlug;
+// Build App product URL with optional design parameter
+function buildAppProductUrl(product, designId) {
+    if (!product) return APP_BASE_URL;
+    var pid = product.docId || product.id || product.sku || product.name || '';
+    var url = APP_BASE_URL + "/?pid=" + encodeURIComponent(pid);
+    if (designId && designId !== 'DIRECT' && designId !== 'Cover') {
+        url += "&d=" + encodeURIComponent(designId);
     }
-    return WEBSITE_BASE;
+    return url;
+}
+
+// Backward-compatible alias
+function buildWixProductUrl(product, designId) {
+    return buildAppProductUrl(product, designId);
 }
 
 // ==========================================
@@ -897,8 +900,9 @@ async function generateCartOrderPDF(actionType) {
                             var imgX = cellX + ((CELL_W - THUMB_GAP - drawW) / 2);
                             var imgY = y;
                             doc.addImage(item._pdfImgSrc, 'JPEG', imgX, imgY, drawW, drawH);
-                            // Make the thumbnail image a clickable link
-                            doc.link(imgX, imgY, drawW, drawH, { url: wixUrl });
+                            // Make the thumbnail image a clickable link to specific design
+                            var designAppUrl = buildAppProductUrl(p, dId);
+                            doc.link(imgX, imgY, drawW, drawH, { url: designAppUrl });
                         } catch(e) {
                             // Render error placeholder with reason
                             var errMsg = item._pdfFailReason || 'Render error';
@@ -931,7 +935,8 @@ async function generateCartOrderPDF(actionType) {
                     var startX = labelX - (totalW / 2);
                     
                     doc.setTextColor(40, 40, 40);
-                    doc.text(dLabelText, startX, y + THUMB_SIZE + 14);
+                    var designUrl = buildAppProductUrl(p, dId);
+                    doc.textWithLink(dLabelText, startX, y + THUMB_SIZE + 14, { url: designUrl });
                     doc.setTextColor(255, 63, 108);
                     doc.text(qtyText, startX + dLabelW, y + THUMB_SIZE + 14);
                 }
