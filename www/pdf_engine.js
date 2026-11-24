@@ -1554,7 +1554,10 @@ async function shareNativeImages(productName, productPrice, imageUrlsArray, deep
                 }
 
                 let shareTitle = productName;
-                if (productPrice) shareTitle += " — ₹" + productPrice;
+                if (productPrice) {
+                    var isB2bOrSuper = (window.activePricingTier === 'b2b' || window.activePricingTier === 'super_b2b');
+                    shareTitle += isB2bOrSuper ? (" — Rate: ₹" + productPrice) : (" — ₹" + productPrice);
+                }
                 
                 let shareOptions = {
                     title: shareTitle,
@@ -1954,7 +1957,8 @@ window.triggerShare = async function (action) {
         }
         if (typeof shareNativeImages === 'function') {
             var pLink = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(curProduct.docId || curProduct.id);
-            await shareNativeImages(curProduct.name, curProduct.price, highResUrls, pLink);
+            var effP = (window.getProductEffectivePrice ? window.getProductEffectivePrice(curProduct) : curProduct.price);
+            await shareNativeImages(curProduct.name, effP, highResUrls, pLink);
         }
     } else {
         if (typeof generateNativePDF === 'function') {

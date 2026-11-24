@@ -4309,14 +4309,15 @@ window.shareSelectedProductImages = async function () {
     }
 
     var deepLink = "https://durga-sarees.web.app/?pid=" + encodeURIComponent(prod.docId || prod.id);
+    var effPrice = window.getProductEffectivePrice ? window.getProductEffectivePrice(prod) : prod.price;
 
     if (typeof window.shareNativeImages === 'function') {
-        await window.shareNativeImages(prod.name, prod.price, highResUrls, deepLink);
+        await window.shareNativeImages(prod.name, effPrice, highResUrls, deepLink);
     } else {
         if (typeof navigator !== 'undefined' && navigator.share) {
             try {
                 await navigator.share({
-                    title: prod.name + (prod.price ? " — ₹" + prod.price : ""),
+                    title: prod.name + (effPrice ? " — ₹" + effPrice : ""),
                     text: (typeof window.generateShareMessage === 'function') ? window.generateShareMessage(prod) : ("*Durga Sarees* - " + prod.name + "\n" + deepLink)
                 });
                 return;
@@ -9726,9 +9727,21 @@ window.generateShareMessage = function (prod) {
     details.push(link);
     details.push("");
 
-    details.push(`Price`);
+    var currentTier = window.activePricingTier || 'retail';
+    if (!window.hasCRMAccess || !window.hasCRMAccess()) {
+        var myCd = {};
+        try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
+        if (myCd.isApproved === true && myCd.approvalStatus === 'approved') {
+            currentTier = myCd.pricingTier || 'b2b';
+        }
+    }
+    var isB2bOrSuper = (currentTier === 'b2b' || currentTier === 'super_b2b');
+    var effPrice = window.getProductEffectivePrice ? window.getProductEffectivePrice(prod, currentTier) : prod.price;
+    var priceLabel = isB2bOrSuper ? 'Rate' : 'Price';
+
+    details.push(priceLabel);
     var pricePacking = [];
-    if (prod.price) pricePacking.push(`${prod.price}/-`);
+    if (effPrice) pricePacking.push(`${effPrice}/-`);
     if (prod.packing && prod.packing !== "None") pricePacking.push(prod.packing);
     if (pricePacking.length > 0) details.push(`*${pricePacking.join(' ')}*`);
 
@@ -9755,7 +9768,7 @@ window.shareWhatsAppLink = async function () {
             lines.push("Here are " + favProducts.length + " selected items from our collection:");
             lines.push("");
             favProducts.slice(0, 15).forEach((p, idx) => {
-                var pPrice = p.price ? " — ₹" + p.price : "";
+                var pPrice = p.price ? " — ₹" + (window.getProductEffectivePrice ? window.getProductEffectivePrice(p) : p.price) : "";
                 lines.push((idx + 1) + ". *" + p.name + "*" + pPrice);
                 lines.push("   https://durga-sarees.web.app/?pid=" + encodeURIComponent(p.docId || p.id));
             });
