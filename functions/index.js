@@ -404,3 +404,54 @@ exports.getMasterCache = functions.https.onRequest(async (req, res) => {
     }
 });
 
+// Send push notification to Super Admin whenever a new user logs in / registers
+exports.notifyAdminOnNewUser = functions.firestore.document('Users/{userId}').onCreate(async (snap, context) => {
+    const admin = require('firebase-admin');
+    if (admin.apps.length === 0) admin.initializeApp();
+
+    const data = snap.data() || {};
+    if (data.isAdmin === true || data.isStaff === true) return null;
+
+    const rawPhone = String(data.phone || context.params.userId || '').trim();
+    const p10 = rawPhone.replace(/\D/g, '').slice(-10);
+    if (['9998232380', '9425032549', '9302632549'].includes(p10)) return null;
+
+    const dispName = String(data.firm || data.linkedAccountName || data.name || 'New Customer').trim();
+    const station = String(data.station || '').trim();
+    const locStr = station ? ` (${station})` : '';
+    const autoLinked = data.autoLinkedFromERP === true && data.linkedAccount;
+    const statusHint = autoLinked ? 'Matched ERP • Tap to approve & set B2B price' : 'Tap to link party & assign B2B pricing';
+
+    const title = '🆕 New User Logged In';
+    const body = `${dispName}${locStr}${rawPhone ? ' • ' + rawPhone : ''} — ${statusHint}`;
+
+    try {
+        await admin.messaging().send({
+            topic: 'super_admin_alerts',
+            notification: {
+                title: title,
+                body: body
+            },
+            data: {
+                type: 'new_user_login',
+                phone: rawPhone,
+                name: dispName,
+                firm: String(data.firm || ''),
+                station: station,
+                open_live_admin: 'true'
+            },
+            android: {
+                priority: 'high',
+                notification: {
+                    channelId: 'ds_new_user_channel',
+                    sound: 'default',
+                    clickAction: 'OPEN_LIVE_ADMIN'
+                }
+            }
+        });
+    } catch (err) {
+        console.error('notifyAdminOnNewUser FCM error:', err);
+    }
+    return null;
+});
+

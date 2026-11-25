@@ -40,6 +40,7 @@ repositories {
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation 'com.google.firebase:firebase-messaging:24.1.1'
     implementation "androidx.appcompat:appcompat:${rootProject.ext.androidxAppCompatVersion}"
     implementation "androidx.coordinatorlayout:coordinatorlayout:${rootProject.ext.androidxCoordinatorLayoutVersion}"
     implementation "androidx.core:core-splashscreen:${rootProject.ext.coreSplashScreenVersion}"

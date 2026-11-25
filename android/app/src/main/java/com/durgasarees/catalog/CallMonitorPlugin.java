@@ -16,6 +16,7 @@ import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import com.google.firebase.messaging.FirebaseMessaging;
 
 @CapacitorPlugin(
     name = "CallMonitor",
@@ -79,10 +80,69 @@ public class CallMonitorPlugin extends Plugin {
             sp.edit().putBoolean("is_super_admin", isSuper).apply();
             if (!isSuper) {
                 DurgaCallScreeningService.clearCallerDatabase(getContext());
+                try { FirebaseMessaging.getInstance().unsubscribeFromTopic(DurgaMessagingService.TOPIC_SUPER_ADMIN); } catch (Throwable ignored) {}
+            } else {
+                try { FirebaseMessaging.getInstance().subscribeToTopic(DurgaMessagingService.TOPIC_SUPER_ADMIN); } catch (Throwable ignored) {}
             }
             call.resolve();
         } catch (Throwable t) {
             call.reject("setSuperAdmin error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void requestNotificationPermission(PluginCall call) {
+        try {
+            if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
+                requestPermissionForAlias("notifications", call, "adminNotifPermsCallback");
+                return;
+            }
+            JSObject ret = new JSObject();
+            ret.put("granted", true);
+            call.resolve(ret);
+        } catch (Throwable t) {
+            call.reject("requestNotificationPermission error: " + t.getMessage());
+        }
+    }
+
+    @PermissionCallback
+    private void adminNotifPermsCallback(PluginCall call) {
+        boolean granted = Build.VERSION.SDK_INT < 33 || getPermissionState("notifications") == PermissionState.GRANTED;
+        JSObject ret = new JSObject();
+        ret.put("granted", granted);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void showNewUserNotification(PluginCall call) {
+        try {
+            String title = call.getString("title", "🆕 New User Logged In");
+            String body = call.getString("body", "Tap to link party and assign B2B pricing");
+            String phone = call.getString("phone", "");
+            DurgaMessagingService.showNewUserNotification(getContext(), title, body, phone);
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("showNewUserNotification error: " + t.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void consumePendingAdminRoute(PluginCall call) {
+        try {
+            SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
+            boolean openLive = sp.getBoolean("pending_open_live_admin", false);
+            String phone = sp.getString("pending_open_live_admin_phone", "");
+            if (openLive) {
+                sp.edit().remove("pending_open_live_admin").remove("pending_open_live_admin_phone").apply();
+            }
+            JSObject ret = new JSObject();
+            ret.put("openLiveAdmin", openLive);
+            ret.put("phone", phone);
+            call.resolve(ret);
+        } catch (Throwable t) {
+            JSObject ret = new JSObject();
+            ret.put("openLiveAdmin", false);
+            call.resolve(ret);
         }
     }
 
@@ -95,9 +155,11 @@ public class CallMonitorPlugin extends Plugin {
 
             if (!isSuperAdmin) {
                 DurgaCallScreeningService.clearCallerDatabase(getContext());
+                try { FirebaseMessaging.getInstance().unsubscribeFromTopic(DurgaMessagingService.TOPIC_SUPER_ADMIN); } catch (Throwable ignored) {}
                 call.resolve();
                 return;
             }
+            try { FirebaseMessaging.getInstance().subscribeToTopic(DurgaMessagingService.TOPIC_SUPER_ADMIN); } catch (Throwable ignored) {}
 
             JSObject callers = call.getObject("callers");
             if (callers != null) {
@@ -361,5 +423,20 @@ public class CallMonitorPlugin extends Plugin {
 
     public static boolean isMonitorEnabled() {
         return isEnabled;
+    }
+
+    public static void notifyNewUserLoggedIn(Context context, String phone, String name) {
+        try {
+            if (instance != null && instance.getBridge() != null && instance.getBridge().getWebView() != null) {
+                instance.getBridge().getWebView().post(() -> {
+                    try {
+                        String safePhone = escapeJsString(phone);
+                        String safeName = escapeJsString(name);
+                        String js = "window.dispatchEvent(new CustomEvent('dsNewUserLoggedIn', { detail: { phone: '" + safePhone + "', name: '" + safeName + "' } }));";
+                        instance.getBridge().getWebView().evaluateJavascript(js, null);
+                    } catch (Throwable ignored) {}
+                });
+            }
+        } catch (Throwable ignored) {}
     }
 }

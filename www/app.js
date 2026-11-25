@@ -1849,6 +1849,15 @@ async function checkAdminStatus(phone) {
         window.syncAdminUI();
 
         if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform()) {
+            if (window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor) {
+                var cm = window.Capacitor.Plugins.CallMonitor;
+                if (typeof cm.setSuperAdmin === 'function') {
+                    cm.setSuperAdmin({ isSuperAdmin: true }).catch(function () {});
+                }
+                if (typeof cm.requestNotificationPermission === 'function') {
+                    cm.requestNotificationPermission().catch(function () {});
+                }
+            }
             if (typeof window.syncCallerDirectoryToNative === 'function') {
                 window.syncCallerDirectoryToNative();
             }
@@ -1872,6 +1881,8 @@ async function checkAdminStatus(phone) {
                 window._contactsMigrationScheduled = true;
                 try { localStorage.setItem('ds_contacts_account_migrated_v8', 'true'); } catch(e){}
             }
+        } else if (!window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.setSuperAdmin === 'function') {
+            window.Capacitor.Plugins.CallMonitor.setSuperAdmin({ isSuperAdmin: false }).catch(function () {});
         }
 
     } catch (e) {
@@ -10758,13 +10769,14 @@ window.showSuperAdminSurfingAlert = function (customerTitle, activityText) {
     if (lower.includes('report')) actIcon = '📊';
     else if (lower.includes('cart')) actIcon = '🛍️';
     else if (lower.includes('viewing') || lower.includes('product')) actIcon = '👗';
+    else if (lower.includes('logged in') || lower.includes('b2b')) actIcon = '🆕';
 
     toast.innerHTML = `<span style="background:#10b981; width:8px; height:8px; border-radius:50%; display:inline-block;"></span>
                        <span><span style="color:#38bdf8;">${esc(customerTitle)}</span>: <span style="color:#fde047;">${actIcon} ${esc(activityText)}</span></span>`;
     toast.style.opacity = '1';
     toast.style.transform = 'translateX(-50%) translateY(0)';
     toast.onclick = function () {
-        if (typeof window.openAdminLiveModal === 'function') window.openAdminLiveModal();
+        if (typeof window.openLiveAdmin === 'function') window.openLiveAdmin();
     };
 
     if (window._surfingAlertTimer) clearTimeout(window._surfingAlertTimer);
@@ -10776,6 +10788,29 @@ window.showSuperAdminSurfingAlert = function (customerTitle, activityText) {
     }, 4500);
 };
 
+window.triggerNewUserAdminAlert = function (phone, name, station, isFromNativePush) {
+    if (!window.isSuperAdmin && localStorage.getItem('dsIsAdmin') !== 'true') return;
+    var p10 = String(phone || '').replace(/\D/g, '').slice(-10);
+    var key = p10 || String(name || 'new_user');
+    window._notifiedNewUsers = window._notifiedNewUsers || {};
+    var now = Date.now();
+    if (window._notifiedNewUsers[key] && (now - window._notifiedNewUsers[key] < 300000)) return;
+    window._notifiedNewUsers[key] = now;
+
+    var label = (name || 'New User') + (station ? ' (' + station + ')' : '');
+    if (typeof window.showSuperAdminSurfingAlert === 'function') {
+        window.showSuperAdminSurfingAlert(label, 'New User Logged In • Tap to Link & Set B2B');
+    }
+
+    if (!isFromNativePush && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.showNewUserNotification === 'function') {
+        window.Capacitor.Plugins.CallMonitor.showNewUserNotification({
+            title: '🆕 New User Logged In',
+            body: label + (phone ? ' • ' + phone : '') + ' — Tap to link party & assign B2B pricing',
+            phone: String(phone || '')
+        }).catch(function () {});
+    }
+};
+
 window.initSuperAdminLiveSurfingMonitor = function () {
     if (!window.isSuperAdmin && localStorage.getItem('dsIsAdmin') !== 'true') return;
     if (window._liveSurfingListenerAttached) return;
@@ -10785,6 +10820,8 @@ window.initSuperAdminLiveSurfingMonitor = function () {
         if (typeof firebase === 'undefined' || !firebase.firestore) return;
         var myUid = typeof getActiveUserId === 'function' ? getActiveUserId() : '';
         var knownActivities = {};
+        var usersMonitorStartMs = Date.now();
+        var usersSnapshotInitialized = false;
 
         firebase.firestore().collection('LiveSessions')
             .onSnapshot(function (snapshot) {
@@ -10816,6 +10853,29 @@ window.initSuperAdminLiveSurfingMonitor = function () {
                 });
             }, function (err) {
                 console.warn("LiveSessions monitor skipped:", err);
+            });
+
+        firebase.firestore().collection('Users')
+            .onSnapshot(function (snapshot) {
+                if (!usersSnapshotInitialized) {
+                    usersSnapshotInitialized = true;
+                    return;
+                }
+                snapshot.docChanges().forEach(function (change) {
+                    if (change.type === 'added') {
+                        var d = change.doc.data() || {};
+                        if (d.isAdmin === true || d.isStaff === true || d.isApproved === true) return;
+                        var createdMs = 0;
+                        if (d.createdAt && typeof d.createdAt.toMillis === 'function') createdMs = d.createdAt.toMillis();
+                        else if (d.createdAt && d.createdAt.seconds) createdMs = d.createdAt.seconds * 1000;
+                        if (createdMs && createdMs < usersMonitorStartMs - 120000) return;
+                        var uPhone = d.phone || change.doc.id;
+                        var uName = d.firm || d.linkedAccountName || d.name || 'New Customer';
+                        window.triggerNewUserAdminAlert(uPhone, uName, d.station || '', false);
+                    }
+                });
+            }, function (err) {
+                console.warn("Users monitor skipped:", err);
             });
     } catch (e) {}
 };
@@ -19196,6 +19256,13 @@ function setupCRMCallReturnListener() {
         if (typeof window.checkLiveCallOnResume === 'function') {
             window.checkLiveCallOnResume();
         }
+        if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.consumePendingAdminRoute === 'function') {
+            window.Capacitor.Plugins.CallMonitor.consumePendingAdminRoute().then(function (res) {
+                if (res && res.openLiveAdmin && typeof window.openLiveAdmin === 'function') {
+                    window.openLiveAdmin();
+                }
+            }).catch(function () {});
+        }
         if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.checkCallerIdRole === 'function') {
             window.Capacitor.Plugins.CallMonitor.checkCallerIdRole().then(function (st) {
                 var banner = document.getElementById('enableCallPopupBanner');
@@ -19243,6 +19310,23 @@ function setupCRMCallReturnListener() {
         var badge = document.getElementById('liveCallStatusBadge');
         if (badge) badge.style.display = 'none';
         if (typeof window.updateOrderOnBehalfBanner === 'function') window.updateOrderOnBehalfBanner();
+    });
+
+    window.addEventListener('dsOpenLiveAdmin', function () {
+        if (!window.isSuperAdmin && localStorage.getItem('dsIsAdmin') !== 'true') return;
+        if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.consumePendingAdminRoute === 'function') {
+            window.Capacitor.Plugins.CallMonitor.consumePendingAdminRoute().catch(function () {});
+        }
+        if (typeof window.openLiveAdmin === 'function') {
+            window.openLiveAdmin();
+        }
+    });
+
+    window.addEventListener('dsNewUserLoggedIn', function (ev) {
+        var d = (ev && ev.detail) ? ev.detail : ev;
+        if (d && typeof window.triggerNewUserAdminAlert === 'function') {
+            window.triggerNewUserAdminAlert(d.phone || '', d.name || '', '', true);
+        }
     });
 
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {

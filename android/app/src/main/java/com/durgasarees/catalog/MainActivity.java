@@ -98,6 +98,25 @@ public class MainActivity extends BridgeActivity {
 
     private void handleLiveCallIntent(android.content.Intent intent) {
         if (intent == null) return;
+        boolean openLiveAdmin = intent.getBooleanExtra("open_live_admin", false) || "OPEN_LIVE_ADMIN".equals(intent.getAction());
+        String newUserPhone = intent.getStringExtra("new_user_phone");
+        if (openLiveAdmin) {
+            intent.removeExtra("open_live_admin");
+            intent.removeExtra("new_user_phone");
+            setIntent(new android.content.Intent(this, MainActivity.class));
+            try {
+                String safeUPhone = newUserPhone != null ? newUserPhone.replace("\\", "\\\\").replace("'", "\\'") : "";
+                getSharedPreferences("ds_call_prefs", MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("pending_open_live_admin", true)
+                    .putString("pending_open_live_admin_phone", newUserPhone != null ? newUserPhone : "")
+                    .apply();
+                if (bridge != null) {
+                    bridge.triggerWindowJSEvent("dsOpenLiveAdmin", "{ phone: '" + safeUPhone + "' }");
+                }
+            } catch (Throwable ignored) {}
+            return;
+        }
         String phone = intent.getStringExtra("live_call_phone");
         String name = intent.getStringExtra("live_call_name");
         if ((phone != null && !phone.trim().isEmpty()) || (name != null && !name.trim().isEmpty())) {
