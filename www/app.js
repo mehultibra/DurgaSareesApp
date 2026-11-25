@@ -7133,7 +7133,16 @@ async function logout() {
             }
         }
         localStorage.removeItem('dsUserToken');
+        localStorage.removeItem('dsUserPhone');
+        localStorage.removeItem('dsCustomerDetails');
         localStorage.removeItem('dsIsAdmin');
+        localStorage.removeItem('ds_return_to_report_party');
+        localStorage.removeItem('ds_party_links_backup');
+        try {
+            Object.keys(localStorage).forEach(function (k) {
+                if (k && k.startsWith('ds_rep_cache_')) localStorage.removeItem(k);
+            });
+        } catch (lsErr) { }
         window.isAdminMode = false;
         window.isSuperAdmin = false;
         if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.setSuperAdmin === 'function') {
@@ -7150,6 +7159,19 @@ async function logout() {
         if (typeof window.syncAdminUI === 'function') window.syncAdminUI();
         window._compiledCustomersList = [];
         window._accountingReportsCache = null;
+        window._currentReportingCustomer = null;
+        window._currentActivePartySisterAccounts = null;
+        window._accountingMetaDashboard = null;
+        try {
+            if (typeof getDB === 'function' && typeof storeName !== 'undefined') {
+                getDB().then(function (db) {
+                    try {
+                        var tx = db.transaction(storeName, 'readwrite');
+                        tx.objectStore(storeName).delete('accounting_customers_cache');
+                    } catch (txErr) { }
+                }).catch(function () { });
+            }
+        } catch (idbErr) { }
         if (typeof closeModals === 'function') closeModals(true);
         if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'none';
         if (document.getElementById('customerDetailReportsModal')) document.getElementById('customerDetailReportsModal').style.display = 'none';
@@ -17860,6 +17882,7 @@ window.selectPartyForOrder = function (cust) {
 };
 
 window.startOrderOnBehalf = function (targetCust) {
+    if (typeof window.hasCRMAccess === 'function' && !window.hasCRMAccess()) return;
     var cust = targetCust || window._currentReportingCustomer;
     if (!cust) return;
 
