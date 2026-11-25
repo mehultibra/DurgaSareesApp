@@ -46,12 +46,55 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             pkg.contains("telephony");
     }
 
+    public static boolean isCallAudioActive(Context context) {
+        if (context == null) return false;
+        try {
+            AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+            int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
+            return (mode == AudioManager.MODE_IN_CALL
+                || mode == AudioManager.MODE_IN_COMMUNICATION
+                || mode == AudioManager.MODE_RINGTONE
+                || mode == 4 // AudioManager.MODE_CALL_SCREENING (API 33+)
+                || mode == 5 // AudioManager.MODE_CALL_REDIRECT (API 33+)
+                || mode == 6); // AudioManager.MODE_COMMUNICATION_REDIRECT (API 33+)
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    public static boolean hasOngoingDialerNotification() {
+        try {
+            DurgaCallNotificationListener listener = sInstance;
+            if (listener == null) return false;
+            StatusBarNotification[] active = listener.getActiveNotifications();
+            if (active == null) return false;
+            for (StatusBarNotification sbn : active) {
+                if (sbn == null || !isDialerPkg(sbn.getPackageName())) continue;
+                Notification n = sbn.getNotification();
+                if (n == null || (n.flags & Notification.FLAG_ONGOING_EVENT) == 0) continue;
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    String chId = n.getChannelId();
+                    if (chId != null) {
+                        String lowerCh = chId.toLowerCase();
+                        if (lowerCh.contains("record") || lowerCh.contains("audio") || lowerCh.contains("saving") || lowerCh.contains("saved") || lowerCh.contains("voice") || lowerCh.contains("missed")) {
+                            continue;
+                        }
+                    }
+                }
+                return true;
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    public static boolean isAnyCallActive(Context context) {
+        return isCallAudioActive(context) || hasOngoingDialerNotification();
+    }
+
     public static void scanActiveNotificationsNow(Context context) {
         try {
             if (context != null) {
-                AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-                int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
-                boolean inCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_RINGTONE);
+                boolean inCall = isAnyCallActive(context);
                 if (!inCall) {
                     sLastProcessedKey = "";
                     sLastProcessedTime = 0;
@@ -87,24 +130,7 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             String pkg = sbn.getPackageName();
             if (!isDialerPkg(pkg)) return;
 
-            boolean hasDialer = false;
-            try {
-                StatusBarNotification[] active = getActiveNotifications();
-                if (active != null) {
-                    for (StatusBarNotification a : active) {
-                        if (a != null && isDialerPkg(a.getPackageName())) {
-                            hasDialer = true;
-                            break;
-                        }
-                    }
-                }
-            } catch (Throwable ignored) {}
-
-            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
-            boolean inCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION);
-
-            if (!hasDialer || !inCall) {
+            if (!isAnyCallActive(this)) {
                 sLastProcessedKey = "";
                 sLastProcessedTime = 0;
                 CallMonitorPlugin.notifyCallDisconnected(this);
@@ -125,11 +151,6 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             if (!sp.getBoolean("is_super_admin", false) || !sp.getBoolean("call_popup_enabled", true)) {
                 return;
             }
-
-            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            int mode = am != null ? am.getMode() : AudioManager.MODE_NORMAL;
-            boolean inCall = (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_RINGTONE);
-            if (!inCall) return;
 
             Notification n = sbn.getNotification();
             if (n == null || n.extras == null) return;
