@@ -167,7 +167,7 @@ window.isStaff = false;
 try {
     var _savedToken = String(localStorage.getItem('dsUserToken') || localStorage.getItem('dsAdminPhone') || localStorage.getItem('dsUserPhone') || '');
     var _savedP10 = _savedToken.replace(/\D/g, '').slice(-10);
-    if (_savedP10 === '9998232380' || _savedP10 === '9425032549' || _savedP10 === '9302632549') {
+    if (_savedP10 === '9998232380' || _savedP10 === '9712277640' || _savedP10 === '9328193525') {
         window.isSuperAdmin = true;
         localStorage.setItem('dsIsAdmin', 'true');
     } else {
@@ -358,7 +358,7 @@ window.toggleCustomerPricingMode = function (forceMode) {
 
     var currentMode = localStorage.getItem('ds_customer_price_mode') || 'wholesale';
     var newMode = forceMode || (currentMode === 'wholesale' ? 'retail' : 'wholesale');
-    try { localStorage.setItem('ds_customer_price_mode', newMode); } catch(e){}
+    try { localStorage.setItem('ds_customer_price_mode', newMode); } catch (e) { }
 
     var assignedTier = (myCd.pricingTier === 'super_b2b') ? 'super_b2b' : 'b2b';
     var effectiveTier = (newMode === 'retail') ? 'retail' : assignedTier;
@@ -1088,7 +1088,7 @@ async function checkForOTAUpdates(isManual) {
         if (latestVersion && latestVersion !== currentVersion) {
             console.log("OTA update available:", latestVersion);
             var updaterPlugin = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorUpdater) || window.CapacitorUpdater;
-            
+
             var toast = null;
             if (isManual) {
                 // Show non-intrusive live updating pill ONLY for manual check
@@ -1234,7 +1234,7 @@ async function verifyOtp() {
 
         var inputPhone = document.getElementById('lPhone').value.trim();
         var countryCode = document.getElementById('lCountry') ? document.getElementById('lCountry').value.trim() : "+91";
-        
+
         if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.phoneNumber) {
             phoneStr = firebase.auth().currentUser.phoneNumber;
         } else {
@@ -1264,7 +1264,7 @@ async function verifyOtp() {
                     approvedAt: f.approvedAt ? f.approvedAt.timestampValue : ""
                 };
                 if (f.matchedAccountsJson && f.matchedAccountsJson.stringValue) {
-                    try { existingProfile.matchedAccounts = JSON.parse(f.matchedAccountsJson.stringValue); } catch(e){}
+                    try { existingProfile.matchedAccounts = JSON.parse(f.matchedAccountsJson.stringValue); } catch (e) { }
                 }
                 localStorage.setItem("dsCustomerDetails", JSON.stringify(existingProfile));
                 completeLogin(phoneStr);
@@ -1383,7 +1383,7 @@ window.findAccountsByPhone = async function (phoneStr) {
                 return matches;
             }
         }
-    } catch(err) {
+    } catch (err) {
         console.warn("Cloud PhoneDirectory lookup error:", err);
     }
 
@@ -1420,7 +1420,7 @@ window.autoLinkUserAccount = async function (phoneStr, matchedAccounts) {
         matchedAccounts: matchedAccounts
     };
 
-    try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
+    try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch (e) { }
 
     try {
         var token = await getCachedAuthToken(true);
@@ -1455,7 +1455,7 @@ window.autoLinkUserAccount = async function (phoneStr, matchedAccounts) {
             headers: headers,
             body: JSON.stringify(doc)
         });
-    } catch(err) {
+    } catch (err) {
         console.warn("Firestore auto-link user write skipped:", err);
     }
 };
@@ -1576,12 +1576,12 @@ async function saveProfile() {
                 phone: phone,
                 docId: data.name ? decodeURIComponent(data.name.split('/').pop()) : phone
             };
-            try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
+            try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch (e) { }
             completeLogin(phone);
         } else {
             var errData = await res.json();
             console.error("Profile Save Error:", errData);
-            
+
             // Try Firebase Web SDK fallback
             if (typeof firebase !== 'undefined' && firebase.firestore && firebase.auth && firebase.auth().currentUser) {
                 try {
@@ -1601,7 +1601,7 @@ async function saveProfile() {
                         phone: phone,
                         docId: phone
                     };
-                    try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
+                    try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch (e) { }
                     completeLogin(phone);
                     return;
                 } catch (fsErr) {
@@ -1633,7 +1633,7 @@ async function saveProfile() {
                     phone: phone,
                     docId: phone
                 };
-                try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch(e){}
+                try { localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile)); } catch (e) { }
                 completeLogin(phone);
                 return;
             } catch (fsErr) {
@@ -1721,7 +1721,7 @@ window.syncAdminUI = function () {
 
         // Customer / Agent Self-Service: "📊 My Reports"
         var myCd = {};
-        try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+        try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
         var hasApprovedLinkedAcc = Boolean((myCd.linkedAccount || (myCd.matchedAccounts && myCd.matchedAccounts.length > 0)) && myCd.isApproved === true && myCd.approvalStatus === 'approved');
         var isSelfServiceUser = !window.isAdminMode && !window.isSuperAdmin;
 
@@ -1758,7 +1758,7 @@ async function checkAdminStatus(phone) {
         var f = (data && data.length > 0 && data[0].document) ? data[0].document.fields : null;
 
         var cleanPhone10 = String(phone || '').replace(/\D/g, '').slice(-10);
-        var isSuperPhone = (cleanPhone10 === '9998232380' || cleanPhone10 === '9425032549' || cleanPhone10 === '9302632549');
+        var isSuperPhone = (cleanPhone10 === '9998232380' || cleanPhone10 === '9712277640' || cleanPhone10 === '9328193525');
 
         if (!f) {
             try {
@@ -1788,8 +1788,8 @@ async function checkAdminStatus(phone) {
                     var rData = await rRes.json();
                     if (rData && rData.fields) {
                         var roleVal = (rData.fields[phone] && rData.fields[phone].stringValue) ||
-                                      (rData.fields['+91' + cleanPhone10] && rData.fields['+91' + cleanPhone10].stringValue) ||
-                                      (rData.fields[cleanPhone10] && rData.fields[cleanPhone10].stringValue);
+                            (rData.fields['+91' + cleanPhone10] && rData.fields['+91' + cleanPhone10].stringValue) ||
+                            (rData.fields[cleanPhone10] && rData.fields[cleanPhone10].stringValue);
                         if (roleVal === 'admin') isSuper = true;
                         if (roleVal === 'staff') isStaffUser = true;
                     }
@@ -1802,7 +1802,7 @@ async function checkAdminStatus(phone) {
 
         if (f) {
             var existingCd = {};
-            try { existingCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+            try { existingCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
             var userProfile = {
                 name: f.name ? f.name.stringValue : (existingCd.name || ""),
                 firm: f.firm ? f.firm.stringValue : (existingCd.firm || ""),
@@ -1819,7 +1819,7 @@ async function checkAdminStatus(phone) {
                 matchedAccounts: existingCd.matchedAccounts || []
             };
             if (f.matchedAccountsJson && f.matchedAccountsJson.stringValue) {
-                try { userProfile.matchedAccounts = JSON.parse(f.matchedAccountsJson.stringValue); } catch(e){}
+                try { userProfile.matchedAccounts = JSON.parse(f.matchedAccountsJson.stringValue); } catch (e) { }
             }
             localStorage.setItem("dsAdminOwnProfile", JSON.stringify(userProfile));
             if (!localStorage.getItem("ds_active_on_behalf")) {
@@ -1830,7 +1830,7 @@ async function checkAdminStatus(phone) {
             }
         }
 
-                        if (window.isSuperAdmin) {
+        if (window.isSuperAdmin) {
             localStorage.setItem('dsIsAdmin', 'true');
         } else {
             localStorage.setItem('dsIsAdmin', 'false');
@@ -1841,9 +1841,9 @@ async function checkAdminStatus(phone) {
         if (window.isSuperAdmin || window.isStaff) {
             try {
                 if (typeof firebase !== 'undefined' && firebase.firestore && activeUser) {
-                    firebase.firestore().collection('LiveSessions').doc(activeUser).delete().catch(function () {});
+                    firebase.firestore().collection('LiveSessions').doc(activeUser).delete().catch(function () { });
                 }
-            } catch(e){}
+            } catch (e) { }
         }
 
         window.syncAdminUI();
@@ -1852,10 +1852,10 @@ async function checkAdminStatus(phone) {
             if (window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor) {
                 var cm = window.Capacitor.Plugins.CallMonitor;
                 if (typeof cm.setSuperAdmin === 'function') {
-                    cm.setSuperAdmin({ isSuperAdmin: true }).catch(function () {});
+                    cm.setSuperAdmin({ isSuperAdmin: true }).catch(function () { });
                 }
                 if (typeof cm.requestNotificationPermission === 'function') {
-                    cm.requestNotificationPermission().catch(function () {});
+                    cm.requestNotificationPermission().catch(function () { });
                 }
             }
             if (typeof window.syncCallerDirectoryToNative === 'function') {
@@ -1868,21 +1868,21 @@ async function checkAdminStatus(phone) {
                     if (banner) {
                         banner.style.display = (!st || !st.held || !st.notificationListenerEnabled) ? 'flex' : 'none';
                     }
-                }).catch(function () {});
+                }).catch(function () { });
             }
 
             // Ensure dedicated "Durga Sarees ERP" account exists in phonebook
             if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeContacts && typeof window.Capacitor.Plugins.NativeContacts.ensureAccount === 'function') {
-                window.Capacitor.Plugins.NativeContacts.ensureAccount().catch(function(){});
+                window.Capacitor.Plugins.NativeContacts.ensureAccount().catch(function () { });
             }
 
             // Mark migration complete to prevent background contact sync on every startup
             if (!window._contactsMigrationScheduled) {
                 window._contactsMigrationScheduled = true;
-                try { localStorage.setItem('ds_contacts_account_migrated_v8', 'true'); } catch(e){}
+                try { localStorage.setItem('ds_contacts_account_migrated_v8', 'true'); } catch (e) { }
             }
         } else if (!window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.setSuperAdmin === 'function') {
-            window.Capacitor.Plugins.CallMonitor.setSuperAdmin({ isSuperAdmin: false }).catch(function () {});
+            window.Capacitor.Plugins.CallMonitor.setSuperAdmin({ isSuperAdmin: false }).catch(function () { });
         }
 
     } catch (e) {
@@ -2224,7 +2224,7 @@ function initApp() {
             }
             // Scan and fetch OTA updates FIRST, then scan images once OTA check finishes
             var otaP = window._otaCheckPromise || (typeof window.checkForOTAUpdates === 'function' ? window.checkForOTAUpdates() : Promise.resolve());
-            Promise.resolve(otaP).catch(function () {}).finally(function () {
+            Promise.resolve(otaP).catch(function () { }).finally(function () {
                 setTimeout(function () {
                     if (typeof syncImages === 'function') syncImages(true);
                 }, 1500);
@@ -2247,7 +2247,7 @@ function initApp() {
                 }
             }
             var otaP2 = window._otaCheckPromise || (typeof window.checkForOTAUpdates === 'function' ? window.checkForOTAUpdates() : Promise.resolve());
-            Promise.resolve(otaP2).catch(function () {}).finally(function () {
+            Promise.resolve(otaP2).catch(function () { }).finally(function () {
                 setTimeout(function () {
                     if (typeof syncImages === 'function') syncImages(true);
                     if (typeof window.initSuperAdminLiveSurfingMonitor === 'function') window.initSuperAdminLiveSurfingMonitor();
@@ -4228,7 +4228,7 @@ window.initCustShareLongPress = function () {
             if (!targetCard) return;
             window._suppressCardClick = true;
             setTimeout(function () { window._suppressCardClick = false; }, 400);
-            if (navigator.vibrate) try { navigator.vibrate(50); } catch(err){}
+            if (navigator.vibrate) try { navigator.vibrate(50); } catch (err) { }
             window.enterCustShareSelectMode(targetCard);
             clearLp();
         }, 450);
@@ -4430,7 +4430,7 @@ window.shareSelectedProductImages = async function () {
         if (typeof window.resolveCorrectUrl === 'function') {
             try {
                 resolved = await window.resolveCorrectUrl(prod, dName);
-            } catch(e){}
+            } catch (e) { }
         }
         if (!resolved && imgEl) {
             resolved = imgEl.getAttribute('data-zoom-url') || imgEl.src;
@@ -4458,7 +4458,7 @@ window.shareSelectedProductImages = async function () {
                     text: (typeof window.generateShareMessage === 'function') ? window.generateShareMessage(prod) : ("*Durga Sarees* - " + prod.name + "\n" + deepLink)
                 });
                 return;
-            } catch(e){}
+            } catch (e) { }
         }
         var msg = (typeof window.generateShareMessage === 'function') ? window.generateShareMessage(prod) : ("*Durga Sarees* - " + prod.name + "\n" + deepLink);
         window.open("https://wa.me/?text=" + encodeURIComponent(msg), '_blank');
@@ -5094,7 +5094,7 @@ function openCart(preserveScroll) {
             if (isEditing) {
                 var ratePackHtml = window.isSuperAdmin ?
                     (' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
-                     ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;">') :
+                        ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;">') :
                     (' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing || 1));
                 cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ratePackHtml + '</div>');
                 cHtml.push('</div>');
@@ -6537,7 +6537,7 @@ function handleHardwareBack() {
     var retParty = window._returnToReportPartyCode || localStorage.getItem('ds_return_to_report_party');
     if (retParty) {
         window._returnToReportPartyCode = null;
-        try { localStorage.removeItem('ds_return_to_report_party'); } catch(e){}
+        try { localStorage.removeItem('ds_return_to_report_party'); } catch (e) { }
         if (typeof window.openCustomerReportsModal === 'function') {
             window.openCustomerReportsModal(retParty, false);
             return;
@@ -6910,8 +6910,8 @@ window.applyFilter = function () {
                 var pSec = p.section || 'sarees';
                 if (pSec !== window.activeSection) {
                     var m = (p.name && p.name.toLowerCase().includes(query)) ||
-                            (p.sku && p.sku.toLowerCase().includes(query)) ||
-                            (p.fabric && p.fabric.toLowerCase().includes(query));
+                        (p.sku && p.sku.toLowerCase().includes(query)) ||
+                        (p.fabric && p.fabric.toLowerCase().includes(query));
                     if (m) {
                         countsBySec[pSec] = (countsBySec[pSec] || 0) + 1;
                     }
@@ -7146,7 +7146,7 @@ async function logout() {
         window.isAdminMode = false;
         window.isSuperAdmin = false;
         if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.setSuperAdmin === 'function') {
-            window.Capacitor.Plugins.CallMonitor.setSuperAdmin({ isSuperAdmin: false }).catch(function(){});
+            window.Capacitor.Plugins.CallMonitor.setSuperAdmin({ isSuperAdmin: false }).catch(function () { });
         }
         window.isStaff = false;
         localStorage.removeItem('dsIsStaff');
@@ -7159,6 +7159,8 @@ async function logout() {
         if (typeof window.syncAdminUI === 'function') window.syncAdminUI();
         window._compiledCustomersList = [];
         window._accountingReportsCache = null;
+        window._partyCrmCache = {};
+        window._partyCrmInFlight = {};
         window._currentReportingCustomer = null;
         window._currentActivePartySisterAccounts = null;
         window._accountingMetaDashboard = null;
@@ -7266,7 +7268,7 @@ function renderCustomerDetails(d, container) {
         if (onBehalf && onBehalf.name) {
             cd = Object.assign({}, cd, onBehalf);
         }
-    } catch(e){}
+    } catch (e) { }
 
     var primaryName = cd.name || cd.firm || "Select Customer / Party";
     var station = cd.station || "";
@@ -7460,7 +7462,7 @@ async function saveCustomerDetails() {
                 try {
                     var myOwn = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}');
                     adminInfo = myOwn.name ? `${myOwn.name} (${activeUser || ''})` : (activeUser || "Admin");
-                } catch(e){}
+                } catch (e) { }
 
                 var pLinkDoc = {
                     fields: {
@@ -7482,7 +7484,7 @@ async function saveCustomerDetails() {
                     method: "PATCH",
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(pLinkDoc)
-                }).catch(function(e){ console.warn("PartyLinks save error:", e); });
+                }).catch(function (e) { console.warn("PartyLinks save error:", e); });
 
                 // If phone is provided, also update/link in Users collection in Firestore
                 if (d.phone) {
@@ -7509,7 +7511,7 @@ async function saveCustomerDetails() {
                         method: "PATCH",
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(userPatchDoc)
-                    }).catch(function(e){ console.warn("Users linking save error:", e); });
+                    }).catch(function (e) { console.warn("Users linking save error:", e); });
                 }
 
                 // Update local backup
@@ -7524,9 +7526,9 @@ async function saveCustomerDetails() {
                         gst: d.gst
                     };
                     localStorage.setItem('ds_party_links_backup', JSON.stringify(backup));
-                } catch(e){}
+                } catch (e) { }
             }
-        } catch(linkErr) {
+        } catch (linkErr) {
             console.warn("Failed to persist party link to Firebase:", linkErr);
         }
     }
@@ -10056,7 +10058,7 @@ window.openLiveAdmin = function () {
             if (typeof window.refreshLiveApprovalBoxes === 'function') {
                 window.refreshLiveApprovalBoxes();
             }
-        }).catch(function () {});
+        }).catch(function () { });
     }
 
     function parseFirestoreRest(fields) {
@@ -10096,7 +10098,7 @@ window.openLiveAdmin = function () {
 
         var token = null;
         if (typeof getCachedAuthToken === 'function') {
-            try { token = await getCachedAuthToken(true); } catch(e){}
+            try { token = await getCachedAuthToken(true); } catch (e) { }
         }
         var authHeaders = { 'Content-Type': 'application/json' };
         if (token) authHeaders['Authorization'] = 'Bearer ' + token;
@@ -10194,7 +10196,7 @@ window.openLiveAdmin = function () {
                             }
                         }
                     }
-                } catch(e){}
+                } catch (e) { }
 
                 function getPhoneKey(p) {
                     if (!p) return '';
@@ -10218,7 +10220,7 @@ window.openLiveAdmin = function () {
                         if (d.matchedAccountsJson) {
                             try {
                                 matchesArr = typeof d.matchedAccountsJson === 'string' ? JSON.parse(d.matchedAccountsJson) : d.matchedAccountsJson;
-                            } catch(e) {}
+                            } catch (e) { }
                         } else if (d.matchedAccounts) {
                             matchesArr = Array.isArray(d.matchedAccounts) ? d.matchedAccounts : [];
                         }
@@ -10251,7 +10253,7 @@ window.openLiveAdmin = function () {
                             let pKey = getPhoneKey(uPhone);
                             if (pKey) window.adminCustomerCache[pKey] = uObj;
                         }
-                    } catch(e) {
+                    } catch (e) {
                         console.error("Error parsing Users doc:", e);
                     }
                 });
@@ -10358,7 +10360,7 @@ window.openLiveAdmin = function () {
                     if (!item || !item.data) return false;
                     var d = item.data;
                     var uid = String(item.id || d.user || '');
-                    if (d.isAdmin || uid === '+919998232380' || uid === '+919425032549' || uid === '+919302632549' || uid.includes('9998232380') || uid.includes('9425032549') || uid.includes('9302632549')) return false;
+                    if (d.isAdmin || uid === '+919998232380' || uid === '+919712277640' || uid === '+919328193525' || uid.includes('9998232380') || uid.includes('9712277640') || uid.includes('9328193525')) return false;
                     return true;
                 });
 
@@ -10394,7 +10396,7 @@ window.openLiveAdmin = function () {
                         if (!c) continue;
                         let ms = 0;
                         if (typeof c.toDate === 'function') {
-                            try { ms = c.toDate().getTime(); } catch(e){}
+                            try { ms = c.toDate().getTime(); } catch (e) { }
                         } else if (c instanceof Date) {
                             ms = c.getTime();
                         } else if (typeof c === 'number') {
@@ -10829,7 +10831,7 @@ window.triggerNewUserAdminAlert = function (phone, name, station, isFromNativePu
             title: '🆕 New User Logged In',
             body: label + (phone ? ' • ' + phone : '') + ' — Tap to link party & assign B2B pricing',
             phone: String(phone || '')
-        }).catch(function () {});
+        }).catch(function () { });
     }
 };
 
@@ -10899,7 +10901,7 @@ window.initSuperAdminLiveSurfingMonitor = function () {
             }, function (err) {
                 console.warn("Users monitor skipped:", err);
             });
-    } catch (e) {}
+    } catch (e) { }
 };
 
 window.refreshLiveApprovalBoxes = function () {
@@ -11117,21 +11119,21 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
             </div>
             <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;">
                 ${matches.map((acc, idx) => {
-                    var aRole = (acc.role === 'agent' || acc.isAgent) ? 'agent' : 'customer';
-                    var accCodeUpper = String(acc.code || '').trim().toUpperCase();
-                    var accNameUpper = String(acc.name || '').trim().toUpperCase();
-                    var custInfo = (window._compiledCustomersList || []).find(x => {
-                        var xc = String(x.c || '').trim().toUpperCase();
-                        var xn = String(x.n || '').trim().toUpperCase();
-                        return (accCodeUpper && xc === accCodeUpper) || (accNameUpper && xn === accNameUpper);
-                    });
-                    var gstNum = (acc.gst || (custInfo ? (custInfo.g || custInfo.gst) : '') || '').trim();
-                    var salesAmt = Number(
-                        (custInfo && (custInfo.totDr || custInfo.totalDebit || custInfo.totalSales)) ||
-                        acc.totalSales || acc.totalDebit || acc.sales || acc.totDr || 0
-                    );
-                    var totalSalesVal = salesAmt > 0 ? ('₹ ' + salesAmt.toLocaleString('en-IN')) : (custInfo ? '₹ 0' : '');
-                    return `
+        var aRole = (acc.role === 'agent' || acc.isAgent) ? 'agent' : 'customer';
+        var accCodeUpper = String(acc.code || '').trim().toUpperCase();
+        var accNameUpper = String(acc.name || '').trim().toUpperCase();
+        var custInfo = (window._compiledCustomersList || []).find(x => {
+            var xc = String(x.c || '').trim().toUpperCase();
+            var xn = String(x.n || '').trim().toUpperCase();
+            return (accCodeUpper && xc === accCodeUpper) || (accNameUpper && xn === accNameUpper);
+        });
+        var gstNum = (acc.gst || (custInfo ? (custInfo.g || custInfo.gst) : '') || '').trim();
+        var salesAmt = Number(
+            (custInfo && (custInfo.totDr || custInfo.totalDebit || custInfo.totalSales)) ||
+            acc.totalSales || acc.totalDebit || acc.sales || acc.totDr || 0
+        );
+        var totalSalesVal = salesAmt > 0 ? ('₹ ' + salesAmt.toLocaleString('en-IN')) : (custInfo ? '₹ 0' : '');
+        return `
                         <label style="display:flex; align-items:flex-start; gap:8px; background:#fff; border:1px solid #cbd5e1; padding:6px 8px; border-radius:5px; cursor:pointer;">
                             <input type="radio" name="link_acc_${safeDocId}" value="${esc(acc.code)}" ${idx === 0 ? 'checked' : ''} data-name="${esc(acc.name)}" data-role="${aRole}" style="margin-top:2px;">
                             <div style="font-size:11px; flex:1; min-width:0;">
@@ -11151,7 +11153,7 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
                             </div>
                         </label>
                     `;
-                }).join('')}
+    }).join('')}
             </div>
             <button type="button" onclick="window.approveUserAccount('${docId}')"
                     style="background:#059669; color:#fff; border:none; padding:6px 14px; border-radius:5px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
@@ -11207,7 +11209,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
         } else {
             adminName = activeUser ? `Admin (${activeUser})` : "Admin";
         }
-    } catch(e){}
+    } catch (e) { }
 
     if (!confirm(`Approve and permanently link account for:\n\nPhone: ${docId}\nAccount: ${selectedName || selectedCode} [${selectedRole.toUpperCase()}]\n\nApproving Admin: ${adminName}`)) {
         return;
@@ -11246,12 +11248,12 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
                 var pUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(pId) +
                     "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role&updateMask.fieldPaths=pricingTier";
                 await fetch(pUrl, { method: "PATCH", headers: headers, body: JSON.stringify(patchBody) });
-            } catch(e) {}
+            } catch (e) { }
             try {
                 var lpUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(pId) +
                     "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role&updateMask.fieldPaths=pricingTier";
                 await fetch(lpUrl, { method: "PATCH", headers: headers, body: JSON.stringify(patchBody) });
-            } catch(e) {}
+            } catch (e) { }
         }
 
         // ☁️ Persist to PartyLinks collection so it survives 2-hour accounting syncs
@@ -11279,7 +11281,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
                     headers: headers,
                     body: JSON.stringify(partyPatchBody)
                 });
-            } catch(partyErr) {
+            } catch (partyErr) {
                 console.warn("PartyLinks save error:", partyErr);
             }
 
@@ -11302,7 +11304,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
                     localPartyLinks['+91' + clean10] = approvedLinkObj;
                 }
                 localStorage.setItem('ds_party_links_backup', JSON.stringify(localPartyLinks));
-            } catch(e){}
+            } catch (e) { }
         }
 
         // Update cache across all docId variants
@@ -11328,7 +11330,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
         }
 
         alert(`✅ Account Approved & Linked Permanently!\n\nUser: ${docId}\nLinked to: ${selectedName} [${selectedRole.toUpperCase()}]\nApproved by: ${adminName}`);
-    } catch(err) {
+    } catch (err) {
         console.error("Approve error:", err);
         alert("Approval failed: " + err.message);
     }
@@ -12458,7 +12460,7 @@ window.handleBulkFolderSelection = async function (files) {
         var uploadTasks = imgFiles.map((imgFile, imgIdx) => {
             return async function () {
                 var designId = fileDesignIds[imgIdx];
-                
+
                 // 1. Direct immediate Grid & Zoom WebP generation & upload
                 try {
                     await window.convertAndUploadGridAndZoom(imgFile, gridUrl, zoomUrl, designId);
@@ -12621,8 +12623,8 @@ window.queueSelectedImagesForProduct = async function (items, secVal, catVal, is
                             gridUrl: gridUrl,
                             zoomUrl: zoomUrl
                         })
-                    }).catch(e => {});
-                } catch (e) {}
+                    }).catch(e => { });
+                } catch (e) { }
             }
 
             var newP = {
@@ -12792,7 +12794,7 @@ window.scanStorageCategoryForProducts = async function () {
         }
 
         var newNames = discoveredNames.filter(name => {
-            return !window.allProducts.some(x => 
+            return !window.allProducts.some(x =>
                 (x.section || 'sarees').toLowerCase() === secVal.toLowerCase() &&
                 x.name && x.name.trim().toLowerCase() === name.toLowerCase()
             );
@@ -12800,7 +12802,7 @@ window.scanStorageCategoryForProducts = async function () {
 
         // Also check if any existing products in this category need their stock designs restored
         var existingNeedingFix = discoveredNames.filter(name => {
-            var ex = window.allProducts.find(x => 
+            var ex = window.allProducts.find(x =>
                 (x.section || 'sarees').toLowerCase() === secVal.toLowerCase() &&
                 x.name && x.name.trim().toLowerCase() === name.toLowerCase()
             );
@@ -12970,7 +12972,7 @@ window.scanStorageCategoryForProducts = async function () {
         // Process existing products that need stock repair
         for (var eIdx = 0; eIdx < existingNeedingFix.length; eIdx++) {
             var fixName = existingNeedingFix[eIdx];
-            var exProd = window.allProducts.find(x => 
+            var exProd = window.allProducts.find(x =>
                 (x.section || 'sarees').toLowerCase() === secVal.toLowerCase() &&
                 x.name && x.name.trim().toLowerCase() === fixName.toLowerCase()
             );
@@ -13395,14 +13397,14 @@ window.switchCustomerHubSection = function (section) {
         }
     } else if (window._activeCustomerHubSection === 'crm') {
         if ((!window._compiledCustomersList || !window._compiledCustomersList.length) && typeof window.loadAccountingDirectoryData === 'function') {
-            window.loadAccountingDirectoryData(false).catch(function(){});
+            window.loadAccountingDirectoryData(false).catch(function () { });
         }
         if (typeof window.switchCRMHubTab === 'function') {
             window.switchCRMHubTab(window._activeCRMHubTab || 'followups');
         }
     } else if (window._activeCustomerHubSection === 'lookup') {
         if ((!window._compiledCustomersList || !window._compiledCustomersList.length) && typeof window.loadAccountingDirectoryData === 'function') {
-            window.loadAccountingDirectoryData(false).catch(function(){});
+            window.loadAccountingDirectoryData(false).catch(function () { });
         }
         var inp = document.getElementById('incomingCallerInput');
         if (inp) inp.focus();
@@ -13526,8 +13528,8 @@ window.formatErpSyncTime = function (isoStr) {
         var d = new Date(isoStr);
         if (isNaN(d.getTime())) return isoStr;
         return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ', ' +
-               d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-    } catch(e) {
+            d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch (e) {
         return isoStr;
     }
 };
@@ -13549,7 +13551,7 @@ window.updateCustomerHubSyncBadge = async function () {
             if (txtEl) txtEl.innerText = disp;
             if (footEl) footEl.innerText = disp;
         }
-    } catch(e){}
+    } catch (e) { }
 };
 
 window.loadAccountingDashboardMeta = async function (forceRefresh = false) {
@@ -13586,7 +13588,7 @@ window.loadAccountingDashboardMeta = async function (forceRefresh = false) {
             }
             return d;
         }
-    } catch(e) {
+    } catch (e) {
         console.warn("Could not load AccountingMeta/dashboard:", e);
     }
     return null;
@@ -13620,31 +13622,40 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
                 window._compiledCustomersList = idbData.list;
                 window._accountingLastSyncedAt = idbData.syncedAt || null;
                 if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
-    if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
+                if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
                 if (syncIcon) syncIcon.classList.remove('fa-spin');
                 window.renderCustomerDirectoryUI();
                 if (window.isSuperAdmin && typeof window.syncCallerDirectoryToNative === 'function') window.syncCallerDirectoryToNative();
 
-                // Check AccountingMeta/dashboard in background to see if master data changed
-                var meta = await window.loadAccountingDashboardMeta();
-                if (meta && meta.lastSyncedAt) {
-                    window._accountingLastSyncedAt = meta.lastSyncedAt;
-                    if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
-    if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
+                // Check AccountingMeta/dashboard non-blocking in background so live call / UI opens immediately
+                if (!window._dirBgMetaCheckPromise) {
+                    window._dirBgMetaCheckPromise = (async function () {
+                        try {
+                            var meta = await window.loadAccountingDashboardMeta();
+                            if (meta && meta.lastSyncedAt) {
+                                window._accountingLastSyncedAt = meta.lastSyncedAt;
+                                if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
+                                if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
+                            }
+                            var isFresh = false;
+                            if (meta && meta.custMasterHash && idbData.custMasterHash && meta.custMasterHash === idbData.custMasterHash) {
+                                isFresh = true;
+                            } else if (meta && meta.lastSyncedAt && idbData.syncedAt && meta.lastSyncedAt === idbData.syncedAt) {
+                                isFresh = true;
+                            } else if (idbData.list && idbData.list.length > 0 && !meta) {
+                                isFresh = true;
+                            }
+                            if (!isFresh) {
+                                await window.loadAccountingDirectoryData(true);
+                            }
+                        } catch (bgErr) { } finally {
+                            window._dirBgMetaCheckPromise = null;
+                        }
+                    })();
                 }
-                var isFresh = false;
-                if (meta && meta.custMasterHash && idbData.custMasterHash && meta.custMasterHash === idbData.custMasterHash) {
-                    isFresh = true;
-                } else if (meta && meta.lastSyncedAt && idbData.syncedAt && meta.lastSyncedAt === idbData.syncedAt) {
-                    isFresh = true;
-                } else if (idbData.list && idbData.list.length > 0 && !meta) {
-                    isFresh = true;
-                }
-                if (isFresh) {
-                    return; // Cache is completely fresh! Zero cloud re-download required.
-                }
+                return;
             }
-        } catch(e) {}
+        } catch (e) { }
     }
 
     if (container && (!window._compiledCustomersList || window._compiledCustomersList.length === 0)) {
@@ -13656,7 +13667,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
         </div>`;
     }
 
-        // Fetch dashboard metadata
+    // Fetch dashboard metadata
     var meta = await window.loadAccountingDashboardMeta();
 
     try {
@@ -13680,7 +13691,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
                                     var f = doc.fields;
                                     var jsonStr = f.itemsJson && f.itemsJson.stringValue;
                                     if (jsonStr) {
-                                        try { return JSON.parse(jsonStr); } catch(e){ return []; }
+                                        try { return JSON.parse(jsonStr); } catch (e) { return []; }
                                     }
                                     if (f.items && f.items.arrayValue && f.items.arrayValue.values) {
                                         return f.items.arrayValue.values.map(function (v) {
@@ -13697,7 +13708,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
                                                 b: m.b ? Number(m.b.doubleValue || m.b.integerValue || 0) : 0,
                                                 d: m.d && m.d.stringValue,
                                                 cleanPhones: (m.cleanPhones && m.cleanPhones.arrayValue && m.cleanPhones.arrayValue.values)
-                                                    ? m.cleanPhones.arrayValue.values.map(function(x){ return x.stringValue; }).filter(Boolean)
+                                                    ? m.cleanPhones.arrayValue.values.map(function (x) { return x.stringValue; }).filter(Boolean)
                                                     : [],
                                                 pb: m.pb ? Number(m.pb.integerValue || m.pb.doubleValue || 0) : 0,
                                                 sbills: m.sbills ? Number(m.sbills.integerValue || m.sbills.doubleValue || 0) : 0,
@@ -13744,11 +13755,11 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
             }
 
             if (allDocs.length > 0) {
-                loadedList = allDocs.map(function(d){ return window.parseFirestoreCustomerDoc(d); }).filter(Boolean);
+                loadedList = allDocs.map(function (d) { return window.parseFirestoreCustomerDoc(d); }).filter(Boolean);
             }
         }
 
-                if (loadedList.length > 0) {
+        if (loadedList.length > 0) {
             var seen = new Set();
             window._compiledCustomersList = loadedList.filter(function (c) {
                 var k = (c.n || c.c || '').trim().toUpperCase();
@@ -13776,7 +13787,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
             }
             window._accountingLastSyncedAt = (meta && meta.lastSyncedAt) || window._accountingLastSyncedAt || null;
             if (typeof window.updateCustomerHubSyncBadge === 'function') window.updateCustomerHubSyncBadge();
-    if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
+            if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
 
             // Cache in IndexedDB for fast subsequent opens
             try {
@@ -13787,7 +13798,7 @@ window.loadAccountingDirectoryData = async function (forceRefresh = false) {
                     syncedAt: window._accountingLastSyncedAt,
                     custMasterHash: (meta && meta.custMasterHash) || null
                 }, "accounting_customers_cache");
-            } catch(e){}
+            } catch (e) { }
 
             window.renderCustomerDirectoryUI();
             if (window.isSuperAdmin && typeof window.syncCallerDirectoryToNative === 'function') window.syncCallerDirectoryToNative();
@@ -14021,10 +14032,10 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
             // Default to party selected on the main page when opening (no list dump)
             var activeParty = window.activeOrderOnBehalf;
             if (!activeParty) {
-                try { activeParty = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+                try { activeParty = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch (e) { }
             }
             if (!activeParty) {
-                try { activeParty = JSON.parse(localStorage.getItem('dsCustomerDetails') || 'null'); } catch(e){}
+                try { activeParty = JSON.parse(localStorage.getItem('dsCustomerDetails') || 'null'); } catch (e) { }
             }
             if (activeParty && (activeParty.firm || activeParty.name)) {
                 var pCode = String(activeParty.firm || activeParty.c || activeParty.code || '').trim().toUpperCase();
@@ -14109,9 +14120,9 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                 var aCt = (a.ct || '').toLowerCase().replace(/\./g, '');
                 var bCt = (b.ct || '').toLowerCase().replace(/\./g, '');
                 var aScore = (aN.startsWith(firstTok) ? 100 : (aN.includes(' ' + firstTok) ? 80 : (aN.includes(firstTok) ? 50 : 0))) +
-                             (aCt.startsWith(firstTok) ? 60 : (aCt.includes(firstTok) ? 30 : 0));
+                    (aCt.startsWith(firstTok) ? 60 : (aCt.includes(firstTok) ? 30 : 0));
                 var bScore = (bN.startsWith(firstTok) ? 100 : (bN.includes(' ' + firstTok) ? 80 : (bN.includes(firstTok) ? 50 : 0))) +
-                             (bCt.startsWith(firstTok) ? 60 : (bCt.includes(firstTok) ? 30 : 0));
+                    (bCt.startsWith(firstTok) ? 60 : (bCt.includes(firstTok) ? 30 : 0));
                 return bScore - aScore;
             });
         }
@@ -14187,7 +14198,7 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
                             }
                         }
                     }
-                } catch(e) {
+                } catch (e) {
                     console.warn("ERP customer cloud search error:", e);
                 }
             }, 200);
@@ -14225,9 +14236,9 @@ window.renderCustomerDirectoryUI = function (isAppend = false) {
         var isCardAgent = window.isAgentAccount(c);
         var sisterCount = 0;
         var pList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p ? [c.p] : []));
-        var p10Set = new Set(pList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(x) { return x.length === 10; }));
+        var p10Set = new Set(pList.map(function (num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function (x) { return x.length === 10; }));
         if (p10Set.size > 0) {
-            var sisters = (window._compiledCustomersList || []).filter(function(x) {
+            var sisters = (window._compiledCustomersList || []).filter(function (x) {
                 if (isCardAgent !== window.isAgentAccount(x)) return false;
                 var rawL = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p ? [x.p] : []));
                 return rawL.some(function (num) { return p10Set.has(String(num || '').replace(/\D/g, '').slice(-10)); });
@@ -14432,7 +14443,7 @@ window.customerMatchesAgent = function (c, agentKeywords) {
 
 window.openMyReportsSelfService = function () {
     var myCd = {};
-    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
 
     if (!window.hasCRMAccess()) {
         if (myCd.isApproved !== true || myCd.approvalStatus !== 'approved') {
@@ -14499,105 +14510,131 @@ window.switchCustomerReportsAccount = function (newCode) {
     }
 };
 
-window.fetchPartyCRMLogs = async function (cust) {
+window.fetchPartyCRMLogs = async function (cust, forceRefresh) {
     if (!cust) return { allLogs: [], latestField: null };
     try {
-        var token = await getCachedAuthToken(true);
-        var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        window._partyCrmCache = window._partyCrmCache || {};
+        window._partyCrmInFlight = window._partyCrmInFlight || {};
+        var sisCount = (window._currentReportingSisterAccounts && Array.isArray(window._currentReportingSisterAccounts)) ? window._currentReportingSisterAccounts.length : 0;
+        var cacheKey = String(cust.c || cust.n || cust.p || '').trim().toUpperCase() + '|s' + sisCount;
 
-        var candidateKeys = new Set();
-        var addKey = function (v) {
-            if (!v) return;
-            var s = String(v).trim();
-            if (!s) return;
-            if (window.sanitizeDocId) candidateKeys.add(window.sanitizeDocId(s));
-            candidateKeys.add(s.replace(/[\/\.#\?\[\]\s]/g, '_'));
-            candidateKeys.add(encodeURIComponent(s));
-            var p10 = s.replace(/\D/g, '').slice(-10);
-            if (p10.length === 10) {
-                candidateKeys.add(p10);
-                candidateKeys.add('91' + p10);
-                candidateKeys.add('+91' + p10);
-                candidateKeys.add('%2091' + p10);
-                candidateKeys.add(' 91' + p10);
-            }
-        };
-
-        addKey(cust.c);
-        addKey(cust.n);
-        addKey(cust.p);
-        (cust.cleanPhones || []).forEach(addKey);
-        (cust.phones || []).forEach(addKey);
-
-        if (window._currentReportingSisterAccounts && Array.isArray(window._currentReportingSisterAccounts)) {
-            window._currentReportingSisterAccounts.forEach(function (s) {
-                addKey(s.c || s.code);
-                addKey(s.n || s.name);
-                addKey(s.p || s.phone);
-                (s.cleanPhones || []).forEach(addKey);
-            });
+        if (!forceRefresh && cacheKey && window._partyCrmCache[cacheKey] && (Date.now() - window._partyCrmCache[cacheKey].ts < 120000)) {
+            return window._partyCrmCache[cacheKey].val;
+        }
+        if (!forceRefresh && cacheKey && window._partyCrmInFlight[cacheKey]) {
+            return await window._partyCrmInFlight[cacheKey];
         }
 
-        var keyList = Array.from(candidateKeys).filter(Boolean);
-        var fetchPromises = keyList.map(function (k) {
-            return fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + k, { headers: headers })
-                .then(function (r) { return r && r.ok ? r.json() : null; })
-                .catch(function () { return null; });
-        });
+        var loaderPromise = (async function () {
+            var token = await getCachedAuthToken(false);
+            var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
 
-        var results = await Promise.all(fetchPromises);
-        var validDocs = results.filter(function (d) { return d && d.fields; });
+            var candidateKeys = new Set();
+            var addKey = function (v, isPhoneOnly) {
+                if (!v) return;
+                var s = String(v).trim();
+                if (!s) return;
+                if (!isPhoneOnly) {
+                    if (window.sanitizeDocId) candidateKeys.add(window.sanitizeDocId(s));
+                    candidateKeys.add(s.replace(/[\/\.#\?\[\]\s]/g, '_'));
+                    var enc = encodeURIComponent(s);
+                    if (enc !== s) candidateKeys.add(enc);
+                }
+                var p10 = s.replace(/\D/g, '').slice(-10);
+                if (p10.length === 10) {
+                    candidateKeys.add(p10);
+                    candidateKeys.add('91' + p10);
+                    candidateKeys.add('+91' + p10);
+                }
+            };
 
-        var allLogs = [];
-        var seenLogIds = new Set();
-        var latestField = null;
+            addKey(cust.c);
+            addKey(cust.n);
+            addKey(cust.p, true);
+            (cust.cleanPhones || []).forEach(function (ph) { addKey(ph, true); });
+            (cust.phones || []).forEach(function (ph) { addKey(ph, true); });
 
-        validDocs.forEach(function (doc) {
-            var f = doc.fields;
-            if (!latestField && (f.lastNote || f.lastDisposition || f.lastCallAt)) {
-                latestField = f;
+            if (window._currentReportingSisterAccounts && Array.isArray(window._currentReportingSisterAccounts)) {
+                window._currentReportingSisterAccounts.forEach(function (s) {
+                    addKey(s.c || s.code);
+                    addKey(s.n || s.name);
+                    addKey(s.p || s.phone, true);
+                    (s.cleanPhones || []).forEach(function (ph) { addKey(ph, true); });
+                });
             }
-            if (f.recentLogsJson && f.recentLogsJson.stringValue) {
-                try {
-                    var parsed = JSON.parse(f.recentLogsJson.stringValue);
-                    if (Array.isArray(parsed)) {
-                        parsed.forEach(function (log) {
-                            var logKey = log.id || (String(log.createdAt || '') + '_' + String(log.note || ''));
-                            if (!seenLogIds.has(logKey)) {
-                                seenLogIds.add(logKey);
-                                allLogs.push(log);
-                            }
+
+            var keyList = Array.from(candidateKeys).filter(Boolean);
+            var fetchPromises = keyList.map(function (k) {
+                return fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyCRM/" + k, { headers: headers })
+                    .then(function (r) { return r && r.ok ? r.json() : null; })
+                    .catch(function () { return null; });
+            });
+
+            var results = await Promise.all(fetchPromises);
+            var validDocs = results.filter(function (d) { return d && d.fields; });
+
+            var allLogs = [];
+            var seenLogIds = new Set();
+            var latestField = null;
+
+            validDocs.forEach(function (doc) {
+                var f = doc.fields;
+                if (!latestField && (f.lastNote || f.lastDisposition || f.lastCallAt)) {
+                    latestField = f;
+                }
+                if (f.recentLogsJson && f.recentLogsJson.stringValue) {
+                    try {
+                        var parsed = JSON.parse(f.recentLogsJson.stringValue);
+                        if (Array.isArray(parsed)) {
+                            parsed.forEach(function (log) {
+                                var logKey = log.id || (String(log.createdAt || '') + '_' + String(log.note || ''));
+                                if (!seenLogIds.has(logKey)) {
+                                    seenLogIds.add(logKey);
+                                    allLogs.push(log);
+                                }
+                            });
+                        }
+                    } catch (e) { }
+                }
+                if (allLogs.length === 0 && (f.lastNote || f.lastDisposition)) {
+                    var singleKey = (f.lastCallAt ? f.lastCallAt.timestampValue : '') + '_' + (f.lastNote ? f.lastNote.stringValue : '');
+                    if (!seenLogIds.has(singleKey)) {
+                        seenLogIds.add(singleKey);
+                        allLogs.push({
+                            disposition: f.lastDisposition ? f.lastDisposition.stringValue : '',
+                            note: f.lastNote ? f.lastNote.stringValue : '',
+                            promisedAmount: f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0,
+                            promisedDate: f.promisedDate ? f.promisedDate.stringValue : '',
+                            staffName: f.lastStaffName ? f.lastStaffName.stringValue : '',
+                            createdAt: f.lastCallAt ? (f.lastCallAt.timestampValue || f.lastCallAt.stringValue) : ''
                         });
                     }
-                } catch(e){}
-            }
-            if (allLogs.length === 0 && (f.lastNote || f.lastDisposition)) {
-                var singleKey = (f.lastCallAt ? f.lastCallAt.timestampValue : '') + '_' + (f.lastNote ? f.lastNote.stringValue : '');
-                if (!seenLogIds.has(singleKey)) {
-                    seenLogIds.add(singleKey);
-                    allLogs.push({
-                        disposition: f.lastDisposition ? f.lastDisposition.stringValue : '',
-                        note: f.lastNote ? f.lastNote.stringValue : '',
-                        promisedAmount: f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.integerValue || 0) : 0,
-                        promisedDate: f.promisedDate ? f.promisedDate.stringValue : '',
-                        staffName: f.lastStaffName ? f.lastStaffName.stringValue : '',
-                        createdAt: f.lastCallAt ? (f.lastCallAt.timestampValue || f.lastCallAt.stringValue) : ''
-                    });
                 }
-            }
-        });
+            });
 
-        allLogs.sort(function (a, b) {
-            return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
-        });
+            allLogs.sort(function (a, b) {
+                return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+            });
 
-        return { allLogs: allLogs, latestField: latestField || (allLogs[0] ? {
-            lastDisposition: { stringValue: allLogs[0].disposition || '' },
-            lastNote: { stringValue: allLogs[0].note || '' },
-            promisedAmount: { doubleValue: allLogs[0].promisedAmount || 0 },
-            promisedDate: { stringValue: allLogs[0].promisedDate || '' },
-            lastCallAt: { timestampValue: allLogs[0].createdAt || '' }
-        } : null) };
+            var finalRes = {
+                allLogs: allLogs, latestField: latestField || (allLogs[0] ? {
+                    lastDisposition: { stringValue: allLogs[0].disposition || '' },
+                    lastNote: { stringValue: allLogs[0].note || '' },
+                    promisedAmount: { doubleValue: allLogs[0].promisedAmount || 0 },
+                    promisedDate: { stringValue: allLogs[0].promisedDate || '' },
+                    lastCallAt: { timestampValue: allLogs[0].createdAt || '' }
+                } : null)
+            };
+            if (cacheKey) window._partyCrmCache[cacheKey] = { ts: Date.now(), val: finalRes };
+            return finalRes;
+        })();
+
+        if (cacheKey) window._partyCrmInFlight[cacheKey] = loaderPromise;
+        try {
+            return await loaderPromise;
+        } finally {
+            if (cacheKey) delete window._partyCrmInFlight[cacheKey];
+        }
     } catch (e) {
         return { allLogs: [], latestField: null };
     }
@@ -14618,7 +14655,7 @@ window.loadCustRepLastTalkBanner = async function (partyCode) {
             var promised = f.promisedAmount ? (f.promisedAmount.doubleValue || f.promisedAmount.stringValue || f.promisedAmount.integerValue || '') : (allLogs[0] ? allLogs[0].promisedAmount : '');
             var promisedDate = f.promisedDate ? f.promisedDate.stringValue : (allLogs[0] ? allLogs[0].promisedDate : '');
             var staffName = (f.lastStaffName ? f.lastStaffName.stringValue : '') || (allLogs[0] ? (allLogs[0].staffName || allLogs[0].staff) : '');
-            var callTime = f.lastCallAt ? new Date(f.lastCallAt.timestampValue || f.lastCallAt.stringValue).toLocaleDateString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : (allLogs[0] && allLogs[0].createdAt ? new Date(allLogs[0].createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : 'Recent');
+            var callTime = f.lastCallAt ? new Date(f.lastCallAt.timestampValue || f.lastCallAt.stringValue).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : (allLogs[0] && allLogs[0].createdAt ? new Date(allLogs[0].createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Recent');
 
             var badgesHtml = '';
             if (disp) badgesHtml += `<span style="background:#e0f2fe; color:#0369a1; padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">${escHtml(disp)}</span> `;
@@ -14638,10 +14675,10 @@ window.loadCustRepLastTalkBanner = async function (partyCode) {
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div id="rep_all_crm_history" style="display:none; max-height:160px; overflow-y:auto; margin-top:6px; display:flex; flex-direction:column; gap:4px;">
-                        ${allLogs.map(function(l) {
-                            var dt = l.createdAt ? new Date(l.createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) + ' ' + new Date(l.createdAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }) : '';
-                            var lfu = l.followUpDate || l.nextFollowUpDate || '';
-                            return `
+                        ${allLogs.map(function (l) {
+                var dt = l.createdAt ? new Date(l.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' ' + new Date(l.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
+                var lfu = l.followUpDate || l.nextFollowUpDate || '';
+                return `
                             <div style="background:#fff; border:1px solid #e0f2fe; border-left:3px solid #0284c7; border-radius:4px; padding:4px 6px; font-size:10.5px;">
                                 <div style="display:flex; justify-content:space-between; font-weight:600; color:#0f172a;">
                                     <span>${escHtml(l.disposition || 'Note')} ${l.staffName ? `<span style="font-weight:normal; color:#64748b;">(by ${escHtml(l.staffName)})</span>` : ''}</span>
@@ -14651,7 +14688,7 @@ window.loadCustRepLastTalkBanner = async function (partyCode) {
                                 ${l.note ? `<div style="color:#334155; margin-top:2px;">${escHtml(l.note)}</div>` : ''}
                                 ${l.promisedAmount ? `<div style="color:#16a34a; font-weight:bold; font-size:9.5px; margin-top:1px;">Promise: ₹ ${Number(l.promisedAmount).toLocaleString('en-IN')}</div>` : ''}
                             </div>`;
-                        }).join('')}
+            }).join('')}
                     </div>
                 </div>` : ''}
             `;
@@ -14659,7 +14696,7 @@ window.loadCustRepLastTalkBanner = async function (partyCode) {
             return;
         }
         lastTalkBanner.style.display = 'none';
-    } catch(e) {
+    } catch (e) {
         lastTalkBanner.style.display = 'none';
     }
 };
@@ -14677,7 +14714,7 @@ window.saveCustRepQuickNote = async function (disposition) {
         var pInput = prompt("Enter promised payment amount (₹):", "25000");
         if (pInput === null) return;
         promisedAmt = parseFloat(pInput) || 0;
-        var pDateInput = prompt("Enter promised payment date (DD/MM/YYYY):", new Date(Date.now() + 7*24*60*60*1000).toLocaleDateString('en-IN'));
+        var pDateInput = prompt("Enter promised payment date (DD/MM/YYYY):", new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-IN'));
         if (pDateInput) promisedDt = pDateInput;
     }
 
@@ -14712,10 +14749,10 @@ window.saveCustRepQuickNote = async function (disposition) {
                     existingLogs = JSON.parse(gd.fields.recentLogsJson.stringValue || '[]');
                 }
             }
-        } catch(e){}
+        } catch (e) { }
 
         var staffProfile = null;
-        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch (e) { }
         var staffName = (staffProfile && staffProfile.name) || 'Admin';
 
         existingLogs.unshift({
@@ -14764,10 +14801,12 @@ window.saveCustRepQuickNote = async function (disposition) {
             setTimeout(() => { if (msgEl) msgEl.style.display = 'none'; }, 3000);
         }
 
+        window._partyCrmCache = {};
+        window._partyCrmInFlight = {};
         if (typeof window.loadCustRepLastTalkBanner === 'function') {
             window.loadCustRepLastTalkBanner(cust.c);
         }
-    } catch(e) {
+    } catch (e) {
         console.warn("Error saving quick note:", e);
         if (msgEl) {
             msgEl.innerText = "Error saving note";
@@ -14869,15 +14908,15 @@ window.executePartyPhoneAction = function (actionType, phone, custObj) {
 // 6. Open Customer Detail Reports Modal
 window.openCustomerReportsModal = async function (partyCode, isCallTriggered, sisterAccountsList) {
     var myCd = {};
-    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
 
     if (!partyCode) {
         var actParty = window.activeOrderOnBehalf;
         if (!actParty) {
-            try { actParty = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+            try { actParty = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch (e) { }
         }
         if (!actParty) {
-            try { actParty = JSON.parse(localStorage.getItem('dsCustomerDetails') || 'null'); } catch(e){}
+            try { actParty = JSON.parse(localStorage.getItem('dsCustomerDetails') || 'null'); } catch (e) { }
         }
         if (actParty && (actParty.firm || actParty.code || actParty.name)) {
             partyCode = actParty.firm || actParty.code || actParty.name;
@@ -14924,7 +14963,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
             var nextDec = decodeURIComponent(cleanPartyCode);
             if (nextDec === cleanPartyCode) break;
             cleanPartyCode = nextDec;
-        } catch(e) { break; }
+        } catch (e) { break; }
     }
     partyCode = cleanPartyCode;
     var pCodeNorm = cleanPartyCode.toUpperCase();
@@ -14989,11 +15028,11 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     if (sisterAccountsList && Array.isArray(sisterAccountsList) && sisterAccountsList.length > 1) {
         window._currentReportingSisterAccounts = sisterAccountsList;
         var cachedTop = null, maxDisAmt = -1;
-        sisterAccountsList.forEach(function(s) {
+        sisterAccountsList.forEach(function (s) {
             var sc = window.sanitizeDocId ? window.sanitizeDocId(s.c) : String(s.c).replace(/[\/\.\s]/g, '_');
             var r = window._accountingReportsCache && window._accountingReportsCache[sc];
             if (r && r.finishSales && r.finishSales.length) {
-                var amt = r.finishSales.reduce(function(tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
+                var amt = r.finishSales.reduce(function (tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
                 if (amt > maxDisAmt) { maxDisAmt = amt; cachedTop = s; }
             }
         });
@@ -15002,9 +15041,9 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
         window._currentReportingSisterAccounts = null;
         var isTargetAgent = window.isAgentAccount(cust);
         var custPhoneList = Array.isArray(cust.cleanPhones) && cust.cleanPhones.length ? cust.cleanPhones : (Array.isArray(cust.phones) && cust.phones.length ? cust.phones : (cust.p || cust.phone ? String(cust.p || cust.phone).split(/[,;/ ]+/) : []));
-        var custP10s = new Set(custPhoneList.map(function(num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function(x) { return x.length === 10; }));
+        var custP10s = new Set(custPhoneList.map(function (num) { return String(num || '').replace(/\D/g, '').slice(-10); }).filter(function (x) { return x.length === 10; }));
         if (custP10s.size > 0) {
-            var sisters = list.filter(function(x) {
+            var sisters = list.filter(function (x) {
                 // Agent account will be able to see merged agents but never a customer account in any case.
                 // Same if a customer is linked and same number is in agent database then only show merged customer account dont show agent reports.
                 if (isTargetAgent !== window.isAgentAccount(x)) return false;
@@ -15017,11 +15056,11 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
             if (sisters.length > 1) {
                 window._currentReportingSisterAccounts = sisters;
                 var cachedTop = null, maxDisAmt = -1;
-                sisters.forEach(function(s) {
+                sisters.forEach(function (s) {
                     var sc = window.sanitizeDocId ? window.sanitizeDocId(s.c) : String(s.c).replace(/[\/\.\s]/g, '_');
                     var r = window._accountingReportsCache && window._accountingReportsCache[sc];
                     if (r && r.finishSales && r.finishSales.length) {
-                        var amt = r.finishSales.reduce(function(tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
+                        var amt = r.finishSales.reduce(function (tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
                         if (amt > maxDisAmt) { maxDisAmt = amt; cachedTop = s; }
                     }
                 });
@@ -15228,7 +15267,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
                 var trk = JSON.parse(rawTrk);
                 if (trk && (trk.code === cust.c || trk.phone === cust.p)) isLive = true;
             }
-        } catch(e){}
+        } catch (e) { }
         if (!isLive && window._lastActiveCallPhone && cust) {
             var custP10List = Array.isArray(cust.cleanPhones) && cust.cleanPhones.length ? cust.cleanPhones : (Array.isArray(cust.phones) && cust.phones.length ? cust.phones : (cust.p ? [cust.p] : []));
             if (custP10List.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === window._lastActiveCallPhone; })) {
@@ -15323,7 +15362,7 @@ window.closeCustomerReportsModal = function () {
 // 8. Tab Switcher
 window.switchCustomerReportTab = function (tabName) {
     var myCd = {};
-    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
     var isAgentUser = !window.hasCRMAccess() && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
     if (isAgentUser && tabName === 'ledger') {
         alert("🔒 Ledger statement is restricted for agent accounts.");
@@ -15418,7 +15457,7 @@ window.expandCustRepHeader = function () {
 // 9. Render Active Report Tab (Exact layouts matching user ERP software)
 window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     var myCd = {};
-    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
     var isSelfService = !window.hasCRMAccess();
     var hasApprovedLinkedAcc = Boolean((myCd.linkedAccount || (myCd.matchedAccounts && myCd.matchedAccounts.length > 0)) && myCd.isApproved === true && myCd.approvalStatus === 'approved');
     if (isSelfService && !hasApprovedLinkedAcc) return;
@@ -15466,7 +15505,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
     }
 
     var rawCode = (selectedAcctCode || cust.c || cust.n || '');
-    try { rawCode = decodeURIComponent(rawCode); } catch(e){}
+    try { rawCode = decodeURIComponent(rawCode); } catch (e) { }
     var codeClean = window.sanitizeDocId ? window.sanitizeDocId(rawCode) : String(rawCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
 
     var isAgentUser = !window.hasCRMAccess() && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
@@ -15487,120 +15526,135 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
 
     window._accountingReportsCache = window._accountingReportsCache || {};
 
-    // 2-Hour Local Cache Check to save Firestore credits
-    var cacheKey = "ds_rep_cache_" + codeClean;
-    var cachedEntry = null;
-    try {
-        var rawCache = localStorage.getItem(cacheKey);
-        if (rawCache) cachedEntry = JSON.parse(rawCache);
-    } catch(e){}
-
+    // Instant Stale-While-Revalidate Cache (renders immediately if any cache exists, refreshes silently if > 2h)
     var TWO_HOURS = 2 * 60 * 60 * 1000;
-    var isCacheValid = cachedEntry && cachedEntry.data && (Date.now() - (cachedEntry.cachedAt || 0) < TWO_HOURS);
+    var bgRefreshCodes = [];
+    var isMergedView = Boolean(isSelectVisible && acctSelEl && acctSelEl.value === '__MERGED__' && window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1);
 
-    if (!isForceRefresh && isCacheValid && !window._accountingReportsCache[codeClean]) {
-        window._accountingReportsCache[codeClean] = cachedEntry.data;
+    function hydrateReportFromLocal(targetClean) {
+        if (!targetClean) return false;
+        if (isForceRefresh) return false;
+        if (window._accountingReportsCache[targetClean]) return true;
+        try {
+            var rawCache = localStorage.getItem("ds_rep_cache_" + targetClean);
+            if (rawCache) {
+                var parsedCache = JSON.parse(rawCache);
+                if (parsedCache && parsedCache.data) {
+                    window._accountingReportsCache[targetClean] = parsedCache.data;
+                    if (Date.now() - (parsedCache.cachedAt || 0) >= TWO_HOURS && bgRefreshCodes.indexOf(targetClean) === -1) {
+                        bgRefreshCodes.push(targetClean);
+                    }
+                    return true;
+                }
+            }
+        } catch (e) { }
+        return false;
     }
 
-    if (!window._accountingReportsCache[codeClean]) {
-        area.innerHTML = `
-        <div style="text-align:center; padding:40px 20px; color:#6b7280; font-size:13px;">
-          <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
-          <div style="font-weight:600; color:#374151;">Loading Cloud ERP Report...</div>
-          <div style="font-size:11px; margin-top:4px;">Retrieving on-demand ledger, sales bills, and transport...</div>
-        </div>`;
+    var needFetchSet = new Set();
+    if (isForceRefresh || !hydrateReportFromLocal(codeClean)) {
+        needFetchSet.add(codeClean);
+    }
+
+    if (isMergedView) {
+        window._currentReportingSisterAccounts.forEach(function (sAcc) {
+            var sCode = sAcc.c || sAcc.code || sAcc.n || sAcc.name || '';
+            var sClean = window.sanitizeDocId ? window.sanitizeDocId(sCode) : String(sCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
+            if (sClean && (isForceRefresh || !hydrateReportFromLocal(sClean))) {
+                needFetchSet.add(sClean);
+            }
+        });
+    }
+
+    if (needFetchSet.size > 0) {
+        var fetchList = Array.from(needFetchSet);
+        area.innerHTML = isMergedView
+            ? `<div style="text-align:center; padding:40px 20px; color:#6b7280; font-size:13px;"><i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i><div style="font-weight:600; color:#374151;">Merging Reports for ${window._currentReportingSisterAccounts.length} Accounts...</div><div style="font-size:11px; margin-top:4px;">Retrieving ledger, sales bills, and transport...</div></div>`
+            : `<div style="text-align:center; padding:40px 20px; color:#6b7280; font-size:13px;"><i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i><div style="font-weight:600; color:#374151;">Loading Cloud ERP Report...</div><div style="font-size:11px; margin-top:4px;">Retrieving on-demand ledger, sales bills, and transport...</div></div>`;
         try {
             var token = await getCachedAuthToken();
             var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-            var url = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + encodeURIComponent(codeClean);
-            var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 2) : fetch(url, { headers: headers }));
-            if (res && res.ok) {
-                var doc = await res.json();
-                var parsed = window.parseFirestoreReportDoc(doc);
-                window._accountingReportsCache[codeClean] = parsed;
+            var primaryErrorStatus = null;
+            await Promise.all(fetchList.map(async function (tClean) {
                 try {
-                    localStorage.setItem(cacheKey, JSON.stringify({ data: parsed, cachedAt: Date.now() }));
-                } catch(e){}
-            } else if (res && res.status === 404) {
-                window._accountingReportsCache[codeClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
-            } else {
+                    var tUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + encodeURIComponent(tClean);
+                    var tRes = await (window.fetchWithRetry ? window.fetchWithRetry(tUrl, { headers: headers }, 1) : fetch(tUrl, { headers: headers }));
+                    if (tRes && tRes.ok) {
+                        var tDoc = await tRes.json();
+                        var tParsed = window.parseFirestoreReportDoc(tDoc);
+                        window._accountingReportsCache[tClean] = tParsed;
+                        try {
+                            localStorage.setItem("ds_rep_cache_" + tClean, JSON.stringify({ data: tParsed, cachedAt: Date.now() }));
+                        } catch (e) { }
+                    } else if (tRes && tRes.status === 404) {
+                        window._accountingReportsCache[tClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
+                    } else if (tClean === codeClean) {
+                        primaryErrorStatus = tRes ? tRes.status : 'error';
+                    } else if (!window._accountingReportsCache[tClean]) {
+                        window._accountingReportsCache[tClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
+                    }
+                } catch (err) {
+                    if (tClean === codeClean && !window._accountingReportsCache[tClean]) {
+                        primaryErrorStatus = 'network';
+                    } else if (!window._accountingReportsCache[tClean]) {
+                        window._accountingReportsCache[tClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
+                    }
+                }
+            }));
+            if (primaryErrorStatus && !window._accountingReportsCache[codeClean]) {
                 area.innerHTML = `
                 <div style="text-align:center; padding:40px 20px; color:#dc2626; font-size:13px;">
                   <i class="fas fa-exclamation-circle" style="font-size:28px; margin-bottom:8px;"></i>
                   <div style="font-weight:bold;">Report Temporarily Unavailable</div>
-                  <div style="font-size:11px; color:#64748b; margin-top:4px;">Could not load report from cloud server (HTTP ${res ? res.status : 'error'}).</div>
+                  <div style="font-size:11px; color:#64748b; margin-top:4px;">Could not load report from cloud server (${primaryErrorStatus === 'network' ? 'network error' : 'HTTP ' + primaryErrorStatus}).</div>
                   <button type="button" onclick="window.renderCustomerReportActiveTab(true)" style="margin-top:12px; background:var(--myntra-pink); color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
                     <i class="fas fa-sync-alt"></i> Retry Loading
                   </button>
                 </div>`;
                 return;
             }
-        } catch(e) {
+        } catch (e) {
             console.warn("Could not fetch AccountingReports on-demand:", e);
-            area.innerHTML = `
-            <div style="text-align:center; padding:40px 20px; color:#dc2626; font-size:13px;">
-              <i class="fas fa-exclamation-circle" style="font-size:28px; margin-bottom:8px;"></i>
-              <div style="font-weight:bold;">Report Connection Failed</div>
-              <div style="font-size:11px; color:#64748b; margin-top:4px;">Please check internet connection and try again.</div>
-              <button type="button" onclick="window.renderCustomerReportActiveTab(true)" style="margin-top:12px; background:var(--myntra-pink); color:#fff; border:none; padding:6px 14px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
-                <i class="fas fa-sync-alt"></i> Retry Loading
-              </button>
-            </div>`;
             return;
         }
+    } else if (bgRefreshCodes.length > 0 && !window._repBgRefreshing) {
+        window._repBgRefreshing = true;
+        (async function (codesToRefresh, expectedRawCode) {
+            try {
+                var token = await getCachedAuthToken();
+                var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                var anyUpdated = false;
+                await Promise.all(codesToRefresh.map(async function (rClean) {
+                    try {
+                        var rUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + encodeURIComponent(rClean);
+                        var rRes = await fetch(rUrl, { headers: headers });
+                        if (rRes && rRes.ok) {
+                            var rDoc = await rRes.json();
+                            var rParsed = window.parseFirestoreReportDoc(rDoc);
+                            var prevStr = JSON.stringify(window._accountingReportsCache[rClean] || {});
+                            var nextStr = JSON.stringify(rParsed || {});
+                            window._accountingReportsCache[rClean] = rParsed;
+                            try { localStorage.setItem("ds_rep_cache_" + rClean, JSON.stringify({ data: rParsed, cachedAt: Date.now() })); } catch (e) { }
+                            if (prevStr !== nextStr) anyUpdated = true;
+                        }
+                    } catch (e) { }
+                }));
+                if (anyUpdated) {
+                    var repModal = document.getElementById('customerDetailReportsModal');
+                    var curCust = window._currentReportingCustomer;
+                    if (repModal && repModal.style.display === 'flex' && curCust && (curCust.c === expectedRawCode || curCust.n === expectedRawCode)) {
+                        window.renderCustomerReportActiveTab(false);
+                    }
+                }
+            } catch (e) { } finally {
+                window._repBgRefreshing = false;
+            }
+        })(bgRefreshCodes.slice(), rawCode);
     }
 
     var partyRep = window._accountingReportsCache[codeClean] || { finishSales: [], outstanding: [], ledger: [], bills: {} };
 
-    var isMergedView = Boolean(isSelectVisible && acctSelEl && acctSelEl.value === '__MERGED__' && window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1);
-
     if (isMergedView) {
-        var token = await getCachedAuthToken();
-        var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-        var toFetch = window._currentReportingSisterAccounts.filter(sAcc => {
-            var sCode = sAcc.c || sAcc.code || sAcc.n || sAcc.name || '';
-            var sClean = window.sanitizeDocId ? window.sanitizeDocId(sCode) : String(sCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
-            if (window._accountingReportsCache[sClean]) return false;
-            try {
-                var cRaw = localStorage.getItem("ds_rep_cache_" + sClean);
-                if (cRaw) {
-                    var p = JSON.parse(cRaw);
-                    if (p && p.data && (Date.now() - (p.cachedAt || 0) < TWO_HOURS)) {
-                        window._accountingReportsCache[sClean] = p.data;
-                        return false;
-                    }
-                }
-            } catch(e){}
-            return true;
-        });
-        if (toFetch.length > 0) {
-            area.innerHTML = `
-            <div style="text-align:center; padding:40px 20px; color:#6b7280; font-size:13px;">
-              <i class="fas fa-spinner fa-spin" style="font-size:24px; color:var(--myntra-pink); margin-bottom:10px;"></i>
-              <div style="font-weight:600; color:#374151;">Merging Reports for ${window._currentReportingSisterAccounts.length} Sister Accounts...</div>
-              <div style="font-size:11px; margin-top:4px;">Retrieving on-demand ledger, sales bills, and transport...</div>
-            </div>`;
-            await Promise.all(toFetch.map(async function (sAcc) {
-                var sCode = sAcc.c || sAcc.code || sAcc.n || sAcc.name || '';
-                var sClean = window.sanitizeDocId ? window.sanitizeDocId(sCode) : String(sCode).trim().toUpperCase().replace(/[\/\.\s]/g, '_');
-                try {
-                    var sUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AccountingReports/" + encodeURIComponent(sClean);
-                    var sRes = await (window.fetchWithRetry ? window.fetchWithRetry(sUrl, { headers: headers }, 1) : fetch(sUrl, { headers: headers }));
-                    if (sRes && sRes.ok) {
-                        var sDoc = await sRes.json();
-                        var sParsed = window.parseFirestoreReportDoc(sDoc);
-                        window._accountingReportsCache[sClean] = sParsed;
-                        try {
-                            localStorage.setItem("ds_rep_cache_" + sClean, JSON.stringify({ data: sParsed, cachedAt: Date.now() }));
-                        } catch(e){}
-                    } else {
-                        window._accountingReportsCache[sClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
-                    }
-                } catch(e) {
-                    window._accountingReportsCache[sClean] = { finishSales: [], outstanding: [], ledger: [], bills: {} };
-                }
-            }));
-        }
 
         var mergedFs = [];
         var mergedOs = [];
@@ -16122,7 +16176,7 @@ window.renderCustomerReportActiveTab = async function (isForceRefresh = false) {
         `;
 
         osList.forEach((r, idx) => {
-            var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r.bno)}')"` ;
+            var billClick = `onclick="window.openBillInvoiceModal('${escHtml(r.bno)}')"`;
             var frmBadge = (r.f && r.f !== 'DS') ? `<span style="font-size:9px; background:#e2e8f0; color:#334155; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.f)}</span>` : '';
             var crBadge = (r.pamt < 0 || String(r.bno || '').includes('GR-')) ? `<span style="background:#fef08a; color:#854d0e; font-size:9px; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">CR NOTE</span>` : '';
             var pBadge = (r.party && !partyRep.isMerged && !showAgentOsPartyCol) ? `<span style="font-size:9px; background:#eff6ff; color:#1d4ed8; padding:1px 4px; border-radius:3px; margin-left:3px; font-weight:bold;">${escHtml(r.party)}</span>` : '';
@@ -16697,7 +16751,7 @@ window.openBillInvoiceModal = function (billNo) {
 
     // Agent & Customer Privacy: strictly restrict invoice viewing
     var myCd = {};
-    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+    try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
     var isSelfService = !window.hasCRMAccess();
     var isAgentUser = Boolean(myCd.role === 'agent' || myCd.isAgent);
     if (isAgentUser) {
@@ -17131,7 +17185,7 @@ window.shareReportPDF = async function () {
             if (preOpenedWindow) {
                 preOpenedWindow.document.write('<!DOCTYPE html><html><body style="font-family:sans-serif; text-align:center; padding:50px; background:#f8fafc;"><div style="color:#be185d; font-size:18px; font-weight:bold; margin-bottom:8px;">Generating Report PDF...</div><div style="color:#64748b; font-size:13px;">Please wait, opening in a moment.</div></body></html>');
             }
-        } catch(e){}
+        } catch (e) { }
     }
 
     try {
@@ -17206,7 +17260,7 @@ window.shareReportPDF = async function () {
                         fontStyle: 'bold',
                         fontSize: 7
                     },
-                    didDrawPage: function(data) {
+                    didDrawPage: function (data) {
                         pdf.setFontSize(7);
                         pdf.setTextColor(148, 163, 184);
                         pdf.text(`Page ${pdf.internal.getNumberOfPages()} - Durga Sarees`, pageW / 2, pageH - 8, { align: 'center' });
@@ -17238,7 +17292,7 @@ window.shareReportPDF = async function () {
                     });
                     if (btn) btn.innerHTML = oldText;
                     return;
-                } catch(natErr) {
+                } catch (natErr) {
                     console.warn("Capacitor native share error:", natErr);
                 }
             }
@@ -17312,14 +17366,14 @@ window.printActiveCustomerReport = function () {
 };
 
 // Preferred Transport Setter (Cart & Checkout)
-window.setOrderTransport = function(val) {
+window.setOrderTransport = function (val) {
     var valClean = String(val || '').trim();
     localStorage.setItem('ds_preferred_transport', valClean);
     try {
         var cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}');
         cd.transport = valClean;
         localStorage.setItem('dsCustomerDetails', JSON.stringify(cd));
-    } catch(e){}
+    } catch (e) { }
     var inp = document.getElementById('orderTransportInput');
     if (inp && inp.value !== valClean) inp.value = valClean;
     var cdInp = document.getElementById('cdTransport');
@@ -17382,7 +17436,7 @@ function highlightContactMatch(text, tokens) {
         return cleanT.split('').map(function (ch) {
             return /[a-z0-9]/i.test(ch) ? (ch + '\\.?\\s*') : ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }).join('');
-    }).filter(Boolean).sort((a,b) => b.length - a.length);
+    }).filter(Boolean).sort((a, b) => b.length - a.length);
     if (sorted.length === 0) return escaped;
     var regex = new RegExp('(' + sorted.join('|') + ')', 'gi');
     return escaped.replace(regex, '<mark style="background:#fef08a; color:#854d0e; font-weight:bold; padding:0 2px; border-radius:2px;">$1</mark>');
@@ -17498,8 +17552,8 @@ window.mergeFirebasePartyLinks = async function (list) {
             var backupObj = {};
             linksMap.forEach((v, k) => { backupObj[k] = v; });
             localStorage.setItem('ds_party_links_backup', JSON.stringify(backupObj));
-        } catch(e){}
-    } catch(err) {
+        } catch (e) { }
+    } catch (err) {
         console.warn("mergeFirebasePartyLinks error:", err);
     }
 };
@@ -17642,7 +17696,7 @@ window.searchAndSelectParty = function (query) {
                         return;
                     }
                 }
-            } catch(e){}
+            } catch (e) { }
             var curRes = document.getElementById('cdPartySearchResults');
             if (curRes) curRes.innerHTML = '<div style="padding:12px; font-size:12px; color:#94a3b8; text-align:center;">No party matching "<b>' + esc(query) + '</b>"</div>';
         }, 220);
@@ -17713,7 +17767,7 @@ window.pickPartyForOrder = function (code) {
         if (pRep && pRep.finishSales && pRep.finishSales.length > 0) {
             partyTransport = pRep.finishSales[0][12] || partyTransport;
         }
-    } catch(e){}
+    } catch (e) { }
 
     // Auto-detect state accurately from account or GST or station
     var partyState = cust.st || (typeof window.detectStateFromCustomer === 'function' ? window.detectStateFromCustomer(cust) : '') || '';
@@ -17773,7 +17827,7 @@ window.selectPartyForOrder = function (cust) {
         if (pRep && pRep.finishSales && pRep.finishSales.length > 0) {
             partyTransport = pRep.finishSales[0][12] || partyTransport;
         }
-    } catch(e){}
+    } catch (e) { }
 
     var partyState = cust.st || (typeof window.detectStateFromCustomer === 'function' ? window.detectStateFromCustomer(cust) : '') || '';
     var details = {
@@ -17803,7 +17857,7 @@ window.selectPartyForOrder = function (cust) {
                 var pLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}');
                 var link = pLinks[cleanCode] || (p10 ? pLinks[p10] : null);
                 if (link && link.pricingTier) partyTier = link.pricingTier;
-            } catch(e){}
+            } catch (e) { }
         }
     }
     if (!partyTier) partyTier = 'b2b';
@@ -17816,7 +17870,7 @@ window.selectPartyForOrder = function (cust) {
     var hasAdminPriv = Boolean(window.hasCRMAccess ? window.hasCRMAccess() : (window.isSuperAdmin || window.isAdminMode));
     if (hasAdminPriv) {
         var curProf = null;
-        try { curProf = JSON.parse(localStorage.getItem("dsCustomerDetails") || "null"); } catch(e){}
+        try { curProf = JSON.parse(localStorage.getItem("dsCustomerDetails") || "null"); } catch (e) { }
         if (curProf && !curProf.onBehalf) {
             localStorage.setItem("dsAdminOwnProfile", JSON.stringify(curProf));
         }
@@ -17888,7 +17942,7 @@ window.startOrderOnBehalf = function (targetCust) {
 
     var partyCodeVal = cust.c || cust.n;
     window._returnToReportPartyCode = partyCodeVal;
-    try { localStorage.setItem('ds_return_to_report_party', partyCodeVal); } catch(e){}
+    try { localStorage.setItem('ds_return_to_report_party', partyCodeVal); } catch (e) { }
 
     window.selectPartyForOrder(cust);
     var details = window.activeOrderOnBehalf;
@@ -17919,9 +17973,9 @@ window.startOrderOnBehalf = function (targetCust) {
 
 window.openCurrentPartyDetailsReport = function () {
     var stored = null;
-    try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+    try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch (e) { }
     if (!stored) {
-        try { stored = JSON.parse(localStorage.getItem('dsCustomerDetails') || 'null'); } catch(e){}
+        try { stored = JSON.parse(localStorage.getItem('dsCustomerDetails') || 'null'); } catch (e) { }
     }
     var codeOrName = stored ? (stored.firm || stored.code || stored.name) : null;
     if (typeof closeModal === 'function') closeModal('customerDetailsModal');
@@ -17934,7 +17988,7 @@ window.returnToCustomerReport = function () {
     var retParty = window._returnToReportPartyCode || localStorage.getItem('ds_return_to_report_party');
     if (!retParty) {
         var stored = null;
-        try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+        try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch (e) { }
         if (stored && (stored.firm || stored.name)) retParty = stored.firm || stored.name;
     }
     if (retParty && typeof window.openCustomerReportsModal === 'function') {
@@ -17944,11 +17998,11 @@ window.returnToCustomerReport = function () {
 
 window.exitOrderOnBehalf = function () {
     var stored = null;
-    try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+    try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch (e) { }
     var pName = stored ? (stored.name || "party") : "party";
     if (confirm(`Clear selected party (${pName})?`)) {
         window._returnToReportPartyCode = null;
-        try { localStorage.removeItem('ds_return_to_report_party'); } catch(e){}
+        try { localStorage.removeItem('ds_return_to_report_party'); } catch (e) { }
         localStorage.removeItem("ds_active_on_behalf");
         localStorage.removeItem("dsCustomerDetails");
         var adminOwn = localStorage.getItem("dsAdminOwnProfile");
@@ -17968,7 +18022,7 @@ window.updateOrderOnBehalfBanner = function () {
         if (!banner) return;
 
         var stored = null;
-        try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch(e){}
+        try { stored = JSON.parse(localStorage.getItem('ds_active_on_behalf') || 'null'); } catch (e) { }
 
         var isAllowed = Boolean(window.isSuperAdmin || window.isAdminMode);
 
@@ -18010,7 +18064,7 @@ window.updateOrderOnBehalfBanner = function () {
                         var trk = JSON.parse(rawTrk);
                         if (trk && (trk.code === stored.firm || (p10 && trk.phone === p10))) isLiveCallActive = true;
                     }
-                } catch(e){}
+                } catch (e) { }
                 if (!isLiveCallActive && window._lastActiveCallPhone && p10 && p10 === window._lastActiveCallPhone) {
                     isLiveCallActive = true;
                 }
@@ -18040,9 +18094,9 @@ window.updateOrderOnBehalfBanner = function () {
                 banner.style.display = 'flex';
             } else {
                 var own = null;
-                try { own = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+                try { own = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch (e) { }
                 if (!own || (!own.name && !own.firm)) {
-                    try { own = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+                    try { own = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
                 }
                 var adminName = (own && (own.name || own.firm)) || 'Durga Sarees Admin';
                 var adminStation = (own && own.station) || '';
@@ -18064,9 +18118,9 @@ window.updateOrderOnBehalfBanner = function () {
             }
         } else {
             var cd = null;
-            try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+            try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
             if (!cd || (!cd.name && !cd.firm)) {
-                try { cd = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+                try { cd = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch (e) { }
             }
             var custName = (cd && (cd.name || cd.firm)) || 'Durga Sarees Customer';
             var custStation = (cd && cd.station) || localStorage.getItem('ds_guest_location') || '';
@@ -18305,7 +18359,7 @@ window.startAutomaticContactSync = async function (isManual) {
         setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
     if (totalAdded > 0 || totalUpdated > 0) {
-        try { localStorage.setItem('ds_contacts_account_migrated_v8', 'true'); } catch(e){}
+        try { localStorage.setItem('ds_contacts_account_migrated_v8', 'true'); } catch (e) { }
     }
     window._isSyncingContacts = false;
     if (isManual) {
@@ -18651,13 +18705,13 @@ window.startCRMCall = function (code, name, phone, station, agent, balance, drCr
     window.activeCRMCallContext = callCtx;
     try {
         localStorage.setItem('ds_active_tracked_call', JSON.stringify(callCtx));
-    } catch(e){}
+    } catch (e) { }
 
     // Immediately open Customer Detail Reports with live call context BEFORE dialing
     if (targetCode && typeof window.openCustomerReportsModal === 'function') {
         try {
             window.openCustomerReportsModal(targetCode, true);
-        } catch(e){}
+        } catch (e) { }
     }
 
     // Safely trigger phone dialer via temporary anchor without polluting WebView navigation/history
@@ -18670,7 +18724,7 @@ window.startCRMCall = function (code, name, phone, station, agent, balance, drCr
         setTimeout(function () {
             if (a && a.parentNode) a.parentNode.removeChild(a);
         }, 500);
-    } catch(e) {
+    } catch (e) {
         window.open('tel:+91' + clean10, '_system');
     }
 };
@@ -18684,7 +18738,7 @@ window.checkPendingTrackedCall = async function () {
     try {
         var stored = localStorage.getItem('ds_active_tracked_call');
         if (stored) rawData = JSON.parse(stored);
-    } catch(e){}
+    } catch (e) { }
 
     if (!rawData || !rawData.startTime) return;
 
@@ -18721,7 +18775,7 @@ window.sendCatalogDesignsWhatsApp = function (code, name, phone) {
 
     try {
         localStorage.setItem('ds_active_wa_customer', JSON.stringify({ name: custName, phone: clean10, code: code }));
-    } catch(e){}
+    } catch (e) { }
 
     var waUrl = "https://wa.me/91" + clean10 + "?text=" + encodeURIComponent(msg);
     window.open(waUrl, '_blank');
@@ -18801,7 +18855,7 @@ window.toggleQuickNoteSpeech = async function () {
             if (res && res.text) {
                 window.insertTextAtCursor(inp, res.text);
             }
-        } catch(e) {
+        } catch (e) {
             console.warn("Speech error:", e);
         }
         return;
@@ -18818,7 +18872,7 @@ window.toggleQuickNoteSpeech = async function () {
                 }
             };
             rec.start();
-        } catch(e){}
+        } catch (e) { }
     }
 };
 
@@ -18830,18 +18884,15 @@ window.checkLiveCallOnResume = async function () {
     }
 
     var callInfo = null;
-    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getLastDetectedCall === 'function') {
-        try {
-            callInfo = await window.Capacitor.Plugins.CallMonitor.getLastDetectedCall();
-        } catch (e) { }
-    }
-
     var isInCall = false;
-    if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getCallState === 'function') {
-        try {
-            var st = await window.Capacitor.Plugins.CallMonitor.getCallState();
-            isInCall = Boolean(st && st.isInCall);
-        } catch (e) { }
+    var cmPlugin = (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor) ? window.Capacitor.Plugins.CallMonitor : null;
+    if (cmPlugin) {
+        var nativeRes = await Promise.all([
+            typeof cmPlugin.getLastDetectedCall === 'function' ? cmPlugin.getLastDetectedCall().catch(function () { return null; }) : Promise.resolve(null),
+            typeof cmPlugin.getCallState === 'function' ? cmPlugin.getCallState().catch(function () { return null; }) : Promise.resolve(null)
+        ]);
+        callInfo = nativeRes[0];
+        isInCall = Boolean(nativeRes[1] && nativeRes[1].isInCall);
     }
 
     var tracked = null;
@@ -18862,7 +18913,7 @@ window.checkLiveCallOnResume = async function () {
         try {
             localStorage.removeItem('ds_active_tracked_call');
             localStorage.removeItem('ds_last_active_call_phone');
-        } catch(e){}
+        } catch (e) { }
         var badge = document.getElementById('liveCallStatusBadge');
         if (badge) badge.style.display = 'none';
         if (hadLiveCall && typeof window.updateOrderOnBehalfBanner === 'function') {
@@ -18875,10 +18926,10 @@ window.checkLiveCallOnResume = async function () {
     if (callInfo && callInfo.phone && callInfo.ageMs != null && callInfo.ageMs < 900000) {
         window._lastActiveCallPhone = callInfo.phone;
         window._lastActiveCallName = callInfo.name || '';
-        try { localStorage.setItem('ds_last_active_call_phone', callInfo.phone); } catch(e){}
+        try { localStorage.setItem('ds_last_active_call_phone', callInfo.phone); } catch (e) { }
 
         if (tracked && tracked.phone && tracked.phone !== callInfo.phone) {
-            try { localStorage.removeItem('ds_active_tracked_call'); } catch(e){}
+            try { localStorage.removeItem('ds_active_tracked_call'); } catch (e) { }
             tracked = null;
         }
 
@@ -18912,7 +18963,7 @@ window.checkLiveCallOnResume = async function () {
     // 3. Fallback: If live phone call audio is active on device
     var savedPhone = window._lastActiveCallPhone;
     if (!savedPhone) {
-        try { savedPhone = localStorage.getItem('ds_last_active_call_phone'); } catch(e){}
+        try { savedPhone = localStorage.getItem('ds_last_active_call_phone'); } catch (e) { }
     }
 
     if (savedPhone) {
@@ -18971,7 +19022,7 @@ window.handleDetectedNativeCall = async function (phoneOrName, direction, partyN
     }
 
     window._lastActiveCallPhone = p10;
-    try { localStorage.setItem('ds_last_active_call_phone', p10); } catch(e){}
+    try { localStorage.setItem('ds_last_active_call_phone', p10); } catch (e) { }
     if (partyNameHint) {
         window._lastActiveCallName = partyNameHint;
     }
@@ -19039,7 +19090,7 @@ window.handleDetectedNativeCall = async function (phoneOrName, direction, partyN
             var accCode = window.sanitizeDocId ? window.sanitizeDocId(acc.c) : String(acc.c).replace(/[\/\.\s]/g, '_');
             var rep = window._accountingReportsCache && window._accountingReportsCache[accCode];
             if (rep && rep.finishSales && rep.finishSales.length > 0) {
-                var amt = rep.finishSales.reduce(function(tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
+                var amt = rep.finishSales.reduce(function (tot, row) { return tot + (parseFloat(row[7] || row[6] || 0) || 0); }, 0);
                 if (amt > maxDisAmt) {
                     maxDisAmt = amt;
                     accountWithLastBilling = acc;
@@ -19146,12 +19197,12 @@ window.toggleCallPopupSetting = async function () {
     var newState = !currentlyEnabled;
     try {
         localStorage.setItem('ds_call_popup_enabled', newState ? 'true' : 'false');
-    } catch(e) {}
+    } catch (e) { }
 
     if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.setPopupEnabled === 'function') {
         try {
             await window.Capacitor.Plugins.CallMonitor.setPopupEnabled({ enabled: newState });
-        } catch(e) {
+        } catch (e) {
             console.warn("CallMonitor.setPopupEnabled error:", e);
         }
     }
@@ -19284,7 +19335,7 @@ function setupCRMCallReturnListener() {
                 if (res && res.openLiveAdmin && typeof window.openLiveAdmin === 'function') {
                     window.openLiveAdmin();
                 }
-            }).catch(function () {});
+            }).catch(function () { });
         }
         if (window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.checkCallerIdRole === 'function') {
             window.Capacitor.Plugins.CallMonitor.checkCallerIdRole().then(function (st) {
@@ -19292,7 +19343,7 @@ function setupCRMCallReturnListener() {
                 if (banner) {
                     banner.style.display = (!st || !st.held || !st.notificationListenerEnabled) ? 'flex' : 'none';
                 }
-            }).catch(function () {});
+            }).catch(function () { });
         }
         if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.getPopupEnabled === 'function') {
             window.Capacitor.Plugins.CallMonitor.getPopupEnabled().then(function (res) {
@@ -19300,7 +19351,7 @@ function setupCRMCallReturnListener() {
                     localStorage.setItem('ds_call_popup_enabled', res.enabled ? 'true' : 'false');
                     if (typeof window.updateCallPopupToggleUI === 'function') window.updateCallPopupToggleUI();
                 }
-            }).catch(function () {});
+            }).catch(function () { });
         }
     }
 
@@ -19329,7 +19380,7 @@ function setupCRMCallReturnListener() {
         try {
             localStorage.removeItem('ds_active_tracked_call');
             localStorage.removeItem('ds_last_active_call_phone');
-        } catch(e){}
+        } catch (e) { }
         var badge = document.getElementById('liveCallStatusBadge');
         if (badge) badge.style.display = 'none';
         if (typeof window.updateOrderOnBehalfBanner === 'function') window.updateOrderOnBehalfBanner();
@@ -19338,7 +19389,7 @@ function setupCRMCallReturnListener() {
     window.addEventListener('dsOpenLiveAdmin', function () {
         if (!window.isSuperAdmin && localStorage.getItem('dsIsAdmin') !== 'true') return;
         if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.consumePendingAdminRoute === 'function') {
-            window.Capacitor.Plugins.CallMonitor.consumePendingAdminRoute().catch(function () {});
+            window.Capacitor.Plugins.CallMonitor.consumePendingAdminRoute().catch(function () { });
         }
         if (typeof window.openLiveAdmin === 'function') {
             window.openLiveAdmin();
@@ -19387,19 +19438,19 @@ window.openPostCallCRMModal = function (ctx, name, phone, station, agent, callTy
 
     var rawCode = String(ctx.code || '').trim();
     while (rawCode.includes('%')) {
-        try { var nc = decodeURIComponent(rawCode); if (nc === rawCode) break; rawCode = nc; } catch(e){ break; }
+        try { var nc = decodeURIComponent(rawCode); if (nc === rawCode) break; rawCode = nc; } catch (e) { break; }
     }
     var rawName = String(ctx.name || '').trim();
     while (rawName.includes('%')) {
-        try { var nn = decodeURIComponent(rawName); if (nn === rawName) break; rawName = nn; } catch(e){ break; }
+        try { var nn = decodeURIComponent(rawName); if (nn === rawName) break; rawName = nn; } catch (e) { break; }
     }
     var rawStation = String(ctx.station || '').trim();
     while (rawStation.includes('%')) {
-        try { var ns = decodeURIComponent(rawStation); if (ns === rawStation) break; rawStation = ns; } catch(e){ break; }
+        try { var ns = decodeURIComponent(rawStation); if (ns === rawStation) break; rawStation = ns; } catch (e) { break; }
     }
     var rawAgent = String(ctx.agent || '').trim();
     while (rawAgent.includes('%')) {
-        try { var na = decodeURIComponent(rawAgent); if (na === rawAgent) break; rawAgent = na; } catch(e){ break; }
+        try { var na = decodeURIComponent(rawAgent); if (na === rawAgent) break; rawAgent = na; } catch (e) { break; }
     }
 
     document.getElementById('crmPartyCode').value = rawCode;
@@ -19425,7 +19476,7 @@ window.openPostCallCRMModal = function (ctx, name, phone, station, agent, callTy
     var staffLabel = document.getElementById('crmStaffIdentifier');
     if (staffLabel) {
         var staffProfile = null;
-        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch (e) { }
         staffLabel.innerText = 'Staff: ' + ((staffProfile && staffProfile.name) || activeUser || 'You');
     }
 
@@ -19450,7 +19501,7 @@ window.closePostCallCRMModal = function () {
     var modal = document.getElementById('postCallCRMModal');
     if (modal) modal.style.display = 'none';
     if (window._isCRMRecognizing && window._activeCRMRecognition) {
-        try { window._activeCRMRecognition.stop(); } catch(e){}
+        try { window._activeCRMRecognition.stop(); } catch (e) { }
         window._isCRMRecognizing = false;
     }
 };
@@ -19528,7 +19579,7 @@ window.toggleCRMSpeechDictation = async function () {
             if (res && res.text && noteInp) {
                 window.insertTextAtCursor(noteInp, res.text);
             }
-        } catch(speechErr) {
+        } catch (speechErr) {
             console.warn("Native speech recognizer error:", speechErr);
         } finally {
             if (btn) btn.style.background = '#f1f5f9';
@@ -19607,7 +19658,7 @@ window.pasteAndLookupCaller = async function () {
         if (navigator.clipboard && navigator.clipboard.readText) {
             raw = await navigator.clipboard.readText();
         }
-    } catch(e){}
+    } catch (e) { }
     if (!raw) {
         raw = prompt("Enter or paste 10-digit phone number to look up:");
     }
@@ -19659,12 +19710,12 @@ window.pasteAndLookupCaller = async function () {
                     matched.push(m);
                 });
             }
-        } catch(e){}
+        } catch (e) { }
     }
 
     if (matched.length > 1) {
         var myCd = {};
-        try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch(e){}
+        try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
         var isSelf = !window.hasCRMAccess();
         var isAgentUser = isSelf && window.isAgentAccount(myCd);
         var hasAg = matched.some(c => window.isAgentAccount(c));
@@ -19715,11 +19766,11 @@ window.savePostCallCRM = async function () {
     if (errEl) errEl.innerText = '';
 
     var rawC = document.getElementById('crmPartyCode').value || '';
-    try { rawC = decodeURIComponent(rawC); } catch(e){}
+    try { rawC = decodeURIComponent(rawC); } catch (e) { }
     var code = rawC.trim();
 
     var rawN = document.getElementById('crmPartyName').value || '';
-    try { rawN = decodeURIComponent(rawN); } catch(e){}
+    try { rawN = decodeURIComponent(rawN); } catch (e) { }
     var name = rawN.trim();
 
     var phone = document.getElementById('crmPartyPhone').value.trim();
@@ -19747,7 +19798,7 @@ window.savePostCallCRM = async function () {
         var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
 
         var staffProfile = null;
-        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch(e){}
+        try { staffProfile = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || '{}'); } catch (e) { }
         var staffName = (staffProfile && staffProfile.name) || activeUser || 'Staff';
         var staffPhone = (staffProfile && staffProfile.phone) || activeUser || '';
         var nowIso = new Date().toISOString();
@@ -19809,7 +19860,7 @@ window.savePostCallCRM = async function () {
                 if (docData && docData.fields && docData.fields.recentLogsJson) {
                     existingLogs = JSON.parse(docData.fields.recentLogsJson.stringValue || '[]');
                 }
-            } catch(e){}
+            } catch (e) { }
         }
 
         if (existingLogs.length === 0 && typeof window.fetchPartyCRMLogs === 'function') {
@@ -19818,7 +19869,7 @@ window.savePostCallCRM = async function () {
                 if (prevCrm && prevCrm.allLogs && prevCrm.allLogs.length > 0) {
                     existingLogs = prevCrm.allLogs.slice();
                 }
-            } catch(e){}
+            } catch (e) { }
         }
 
         existingLogs.unshift(logEntry);
@@ -19850,7 +19901,7 @@ window.savePostCallCRM = async function () {
             body: JSON.stringify(partyCrmBody)
         });
         if (!pRes.ok) {
-            var errD = await pRes.json().catch(function(){});
+            var errD = await pRes.json().catch(function () { });
             throw new Error((errD && errD.error && errD.error.message) || ("Save PartyCRM error HTTP " + pRes.status));
         }
 
@@ -19870,6 +19921,9 @@ window.savePostCallCRM = async function () {
             qMsg.style.display = 'block';
             setTimeout(function () { qMsg.style.display = 'none'; }, 3000);
         }
+
+        window._partyCrmCache = {};
+        window._partyCrmInFlight = {};
 
         // Refresh reports live talk / follow-up banner
         if (typeof window.loadCustRepLastTalkBanner === 'function') {
@@ -19951,7 +20005,7 @@ window.loadCRMHubFollowups = async function () {
 
     var cached = window._cachedFollowupsHtml || '';
     if (!cached) {
-        try { cached = localStorage.getItem('ds_cached_followups_html') || ''; } catch(e){}
+        try { cached = localStorage.getItem('ds_cached_followups_html') || ''; } catch (e) { }
     }
     if (cached) {
         area.innerHTML = cached;
@@ -19991,11 +20045,11 @@ window.loadCRMHubFollowups = async function () {
 
             var cleanCode = String(rawCode || '').trim();
             while (cleanCode.includes('%')) {
-                try { var nc = decodeURIComponent(cleanCode); if (nc === cleanCode) break; cleanCode = nc; } catch(e){ break; }
+                try { var nc = decodeURIComponent(cleanCode); if (nc === cleanCode) break; cleanCode = nc; } catch (e) { break; }
             }
             var cleanName = String(rawName || '').trim();
             while (cleanName.includes('%')) {
-                try { var nn = decodeURIComponent(cleanName); if (nn === cleanName) break; cleanName = nn; } catch(e){ break; }
+                try { var nn = decodeURIComponent(cleanName); if (nn === cleanName) break; cleanName = nn; } catch (e) { break; }
             }
             var cleanPhone10 = String(rawPhone || '').replace(/\D/g, '').slice(-10);
 
@@ -20009,11 +20063,11 @@ window.loadCRMHubFollowups = async function () {
                 }
                 if (!matchedCust && cleanPhone10.length === 10) {
                     var localLinks = {};
-                    try { localLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}'); } catch(e){}
+                    try { localLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}'); } catch (e) { }
                     var linkMatch = localLinks[cleanPhone10] || localLinks['+91' + cleanPhone10];
                     if (linkMatch && (linkMatch.code || linkMatch.partyCode || linkMatch.name || linkMatch.partyName)) {
                         var lTarget = (linkMatch.partyCode || linkMatch.code || linkMatch.partyName || linkMatch.name || '').trim().toUpperCase();
-                        matchedCust = list.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+                        matchedCust = list.find(function (c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
                     }
                 }
                 if (!matchedCust && cleanPhone10.length === 10) {
@@ -20044,7 +20098,7 @@ window.loadCRMHubFollowups = async function () {
 
             var recentLogs = [];
             if (f.recentLogsJson && f.recentLogsJson.stringValue) {
-                try { recentLogs = JSON.parse(f.recentLogsJson.stringValue); } catch(e){}
+                try { recentLogs = JSON.parse(f.recentLogsJson.stringValue); } catch (e) { }
             }
             if (recentLogs.length === 0 && (f.lastNote || f.lastDisp)) {
                 recentLogs = [{
@@ -20112,12 +20166,12 @@ window.loadCRMHubFollowups = async function () {
                 }
                 var combinedLogs = (existing.recentLogs || []).concat(fu.recentLogs || []);
                 var seenLogKeys = new Set();
-                existing.recentLogs = combinedLogs.filter(function(l) {
+                existing.recentLogs = combinedLogs.filter(function (l) {
                     var lk = (l.id || '') + '_' + (l.createdAt || '') + '_' + (l.note || '');
                     if (seenLogKeys.has(lk)) return false;
                     seenLogKeys.add(lk);
                     return true;
-                }).sort(function(a, b) {
+                }).sort(function (a, b) {
                     return (b.createdAt || '').localeCompare(a.createdAt || '');
                 });
             }
@@ -20173,8 +20227,8 @@ window.loadCRMHubFollowups = async function () {
             var isToday = fu.followUpDate === todayStr;
             var dateBadge = fu.followUpDate ? (
                 isOverdue ? `<span style="background:#fee2e2; color:#dc2626; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px;"><i class="fas fa-exclamation-triangle"></i> Overdue: ${fu.followUpDate}</span>` :
-                (isToday ? `<span style="background:#fef3c7; color:#d97706; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px;"><i class="fas fa-calendar-day"></i> Today</span>` :
-                `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px;"><i class="fas fa-clock"></i> ${fu.followUpDate}</span>`)
+                    (isToday ? `<span style="background:#fef3c7; color:#d97706; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px;"><i class="fas fa-calendar-day"></i> Today</span>` :
+                        `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px;"><i class="fas fa-clock"></i> ${fu.followUpDate}</span>`)
             ) : '';
 
             var safeCode = encodeURIComponent(fu.code).replace(/'/g, "%27");
@@ -20216,9 +20270,9 @@ window.loadCRMHubFollowups = async function () {
 
               <div id="fu_history_${idx}" style="display:none; margin-top:8px; padding-top:8px; border-top:1px dashed #cbd5e1; max-height:220px; overflow-y:auto;">
                 <div style="font-size:11px; font-weight:bold; color:#334155; margin-bottom:6px;"><i class="fas fa-comments"></i> Previous Conversation History:</div>
-                ${fu.recentLogs.length > 0 ? fu.recentLogs.map(function(log) {
-                    var logDate = log.createdAt ? (new Date(log.createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }) + ' ' + new Date(log.createdAt).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })) : 'Earlier';
-                    return `
+                ${fu.recentLogs.length > 0 ? fu.recentLogs.map(function (log) {
+                var logDate = log.createdAt ? (new Date(log.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) + ' ' + new Date(log.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })) : 'Earlier';
+                return `
                     <div style="background:#f8fafc; border:1px solid #e2e8f0; border-left:3px solid #0284c7; border-radius:4px; padding:6px 8px; margin-bottom:6px; font-size:11px;">
                       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
                         <span style="font-weight:bold; color:#0f172a;">${escHtml(log.disposition || 'Note')}</span>
@@ -20228,7 +20282,7 @@ window.loadCRMHubFollowups = async function () {
                       ${log.note ? `<div style="color:#334155; line-height:1.3; margin-top:2px;">${escHtml(log.note)}</div>` : ''}
                       ${log.promisedAmount ? `<div style="color:#16a34a; font-weight:bold; font-size:10px; margin-top:2px;">Promise: ₹ ${Number(log.promisedAmount).toLocaleString('en-IN')}</div>` : ''}
                     </div>`;
-                }).join('') : '<div style="font-size:10.5px; color:#94a3b8; font-style:italic;">No recorded notes found.</div>'}
+            }).join('') : '<div style="font-size:10.5px; color:#94a3b8; font-style:italic;">No recorded notes found.</div>'}
               </div>
 
               <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px dashed #f1f5f9;">
@@ -20257,7 +20311,7 @@ window.loadCRMHubFollowups = async function () {
         html += '</div>';
         area.innerHTML = html;
         window._cachedFollowupsHtml = html;
-        try { localStorage.setItem('ds_cached_followups_html', html); } catch(e){}
+        try { localStorage.setItem('ds_cached_followups_html', html); } catch (e) { }
 
     } catch (e) {
         if (!cached) {
@@ -20287,7 +20341,7 @@ window.toggleCRMFollowupHistory = function (idx) {
 window.openCRMReportForParty = function (partyCodeSafe, phone10) {
     var code = decodeURIComponent(partyCodeSafe || '');
     while (code.includes('%')) {
-        try { var nextC = decodeURIComponent(code); if (nextC === code) break; code = nextC; } catch(e){ break; }
+        try { var nextC = decodeURIComponent(code); if (nextC === code) break; code = nextC; } catch (e) { break; }
     }
     var p10 = String(phone10 || code || '').replace(/\D/g, '').slice(-10);
     var list = window._compiledCustomersList || [];
@@ -20296,22 +20350,22 @@ window.openCRMReportForParty = function (partyCodeSafe, phone10) {
     var isCodePhone = !code || code === p10 || /^\+?\d{10,12}$/.test(code.replace(/[\s-]/g, ''));
     if (!isCodePhone) {
         var cUpper = code.toUpperCase();
-        targetCust = list.find(function(c) { return String(c.c || '').trim().toUpperCase() === cUpper || String(c.n || '').trim().toUpperCase() === cUpper; });
+        targetCust = list.find(function (c) { return String(c.c || '').trim().toUpperCase() === cUpper || String(c.n || '').trim().toUpperCase() === cUpper; });
         if (!targetCust && window._customerDirectoryMaster) {
-            targetCust = window._customerDirectoryMaster.find(function(c) { return String(c.c || '').trim().toUpperCase() === cUpper || String(c.n || '').trim().toUpperCase() === cUpper; });
+            targetCust = window._customerDirectoryMaster.find(function (c) { return String(c.c || '').trim().toUpperCase() === cUpper || String(c.n || '').trim().toUpperCase() === cUpper; });
         }
     }
 
     // Check live party links from Firebase / backup first (ground truth)
     if (!targetCust && p10.length === 10) {
         var localLinks = {};
-        try { localLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}'); } catch(e){}
+        try { localLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}'); } catch (e) { }
         var linkMatch = localLinks[p10] || localLinks['+91' + p10];
         if (linkMatch && (linkMatch.code || linkMatch.partyCode || linkMatch.name || linkMatch.partyName)) {
             var lTarget = (linkMatch.partyCode || linkMatch.code || linkMatch.partyName || linkMatch.name || '').trim().toUpperCase();
-            targetCust = list.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+            targetCust = list.find(function (c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
             if (!targetCust && window._customerDirectoryMaster) {
-                targetCust = window._customerDirectoryMaster.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+                targetCust = window._customerDirectoryMaster.find(function (c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
             }
             if (!targetCust) {
                 targetCust = {
@@ -20328,14 +20382,14 @@ window.openCRMReportForParty = function (partyCodeSafe, phone10) {
     }
 
     if (!targetCust && p10.length === 10) {
-        var allMatches = list.filter(function(c) {
+        var allMatches = list.filter(function (c) {
             var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-            return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+            return rList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
         });
         if (allMatches.length === 0 && window._customerDirectoryMaster) {
-            allMatches = window._customerDirectoryMaster.filter(function(c) {
+            allMatches = window._customerDirectoryMaster.filter(function (c) {
                 var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-                return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+                return rList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
             });
         }
         if (allMatches.length > 0) {
@@ -20347,11 +20401,11 @@ window.openCRMReportForParty = function (partyCodeSafe, phone10) {
     var sisters = [];
     if (p10.length === 10) {
         var sourceList = (list && list.length > 0) ? list : (window._customerDirectoryMaster || []);
-        sisters = sourceList.filter(function(x) {
+        sisters = sourceList.filter(function (x) {
             var isXAgent = Boolean(x.role === 'agent' || x.isAgent || x.atype === '12' || (x.c && String(x.c).startsWith('AG')));
             if (isTargetAgent !== isXAgent) return false;
             var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p || x.phone ? [x.p || x.phone] : []));
-            return rawList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
+            return rawList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === p10; });
         });
     }
     if (typeof window.openCustomerReportsModal === 'function') {
@@ -20377,7 +20431,7 @@ window.markCRMFollowUpDone = async function (docId, btnEl) {
         });
 
         if (!res.ok) {
-            var errD = await res.json().catch(function(){});
+            var errD = await res.json().catch(function () { });
             throw new Error((errD && errD.error && errD.error.message) || ("HTTP " + res.status));
         }
 
@@ -20401,7 +20455,7 @@ window.markCRMFollowUpDone = async function (docId, btnEl) {
                 }, 250);
             }
         }
-        setTimeout(function() { window.loadCRMHubFollowups(); }, 600);
+        setTimeout(function () { window.loadCRMHubFollowups(); }, 600);
     } catch (e) {
         alert("Could not update status: " + e.message);
         if (btnEl) {
@@ -20460,10 +20514,10 @@ window.loadCRMTeamFeed = async function () {
             var cleanPhone10 = String(phone || '').replace(/\D/g, '').slice(-10);
             var cleanCode = String(partyCode || '').trim();
             while (cleanCode.includes('%')) {
-                try { var nc = decodeURIComponent(cleanCode); if (nc === cleanCode) break; cleanCode = nc; } catch(e){ break; }
+                try { var nc = decodeURIComponent(cleanCode); if (nc === cleanCode) break; cleanCode = nc; } catch (e) { break; }
             }
             while (partyName.includes('%')) {
-                try { var nn = decodeURIComponent(partyName); if (nn === partyName) break; partyName = nn; } catch(e){ break; }
+                try { var nn = decodeURIComponent(partyName); if (nn === partyName) break; partyName = nn; } catch (e) { break; }
             }
 
             var isPhoneName = !partyName || partyName === phone || partyName === cleanPhone10 || /^\+?\d{10,12}$/.test(partyName.replace(/[\s-]/g, ''));
@@ -20478,13 +20532,13 @@ window.loadCRMTeamFeed = async function () {
             }
             if (!targetCust && cleanPhone10.length === 10) {
                 var localLinks = {};
-                try { localLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}'); } catch(e){}
+                try { localLinks = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}'); } catch (e) { }
                 var linkMatch = localLinks[cleanPhone10] || localLinks['+91' + cleanPhone10];
                 if (linkMatch && (linkMatch.code || linkMatch.partyCode || linkMatch.name || linkMatch.partyName)) {
                     var lTarget = (linkMatch.partyCode || linkMatch.code || linkMatch.partyName || linkMatch.name || '').trim().toUpperCase();
-                    targetCust = list.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+                    targetCust = list.find(function (c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
                     if (!targetCust && window._customerDirectoryMaster) {
-                        targetCust = window._customerDirectoryMaster.find(function(c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
+                        targetCust = window._customerDirectoryMaster.find(function (c) { return String(c.c || '').trim().toUpperCase() === lTarget || String(c.n || '').trim().toUpperCase() === lTarget; });
                     }
                     if (!targetCust) {
                         targetCust = {
@@ -20500,14 +20554,14 @@ window.loadCRMTeamFeed = async function () {
                 }
             }
             if (!targetCust && cleanPhone10.length === 10) {
-                var allMatches = list.filter(function(c) {
+                var allMatches = list.filter(function (c) {
                     var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-                    return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
+                    return rList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
                 });
                 if (allMatches.length === 0 && window._customerDirectoryMaster) {
-                    allMatches = window._customerDirectoryMaster.filter(function(c) {
+                    allMatches = window._customerDirectoryMaster.filter(function (c) {
                         var rList = Array.isArray(c.cleanPhones) && c.cleanPhones.length ? c.cleanPhones : (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.p || c.phone ? [c.p || c.phone] : []));
-                        return rList.some(function(num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
+                        return rList.some(function (num) { return String(num || '').replace(/\D/g, '').slice(-10) === cleanPhone10; });
                     });
                 }
                 if (allMatches.length > 0) {
@@ -20707,7 +20761,7 @@ window.addStaffPhone = async function () {
                     [fullPhone]: { stringValue: 'staff' }
                 }
             })
-        }).catch(function(e){ console.warn("Settings/Roles write error:", e); });
+        }).catch(function (e) { console.warn("Settings/Roles write error:", e); });
 
         alert("✓ Staff privileges granted to " + fullPhone);
         inp.value = '';
@@ -20751,7 +20805,7 @@ window.renderIncomingLookup360Card = async function (matchOrCode) {
     var p10Set = new Set(matchPhones.map(p => String(p).replace(/\D/g, '').slice(-10)).filter(p => p.length === 10));
     var sisterAccounts = [];
     if (p10Set.size > 0) {
-        sisterAccounts = list.filter(function(x) {
+        sisterAccounts = list.filter(function (x) {
             var rawList = Array.isArray(x.cleanPhones) && x.cleanPhones.length ? x.cleanPhones : (Array.isArray(x.phones) && x.phones.length ? x.phones : (x.p ? [x.p] : []));
             return rawList.some(function (num) { return p10Set.has(String(num).replace(/\D/g, '').slice(-10)); });
         });
@@ -20793,7 +20847,7 @@ window.renderIncomingLookup360Card = async function (matchOrCode) {
             var crmRes = await window.fetchPartyCRMLogs(match);
             crmNotes = (crmRes && crmRes.allLogs) ? crmRes.allLogs.slice(0, 5) : [];
         }
-    } catch(e){}
+    } catch (e) { }
 
     var html = `
     <div style="border:1px solid #e2e8f0; border-radius:10px; background:#fff; padding:12px; box-shadow:0 4px 12px rgba(0,0,0,0.06);">
@@ -20881,7 +20935,7 @@ window.handleIncomingLookupSearch = async function (val) {
         try {
             await window.loadAccountingDirectoryData(false);
             list = window._compiledCustomersList || [];
-        } catch(e){}
+        } catch (e) { }
     }
 
     var digitsOnly = query.replace(/\D/g, '');
@@ -20917,7 +20971,7 @@ window.handleIncomingLookupSearch = async function (val) {
                     matches.push(m);
                 });
             }
-        } catch(e){}
+        } catch (e) { }
     }
 
     if (matches.length === 0) {
@@ -20968,14 +21022,14 @@ window.renderCustomerCRMTab = async function (partyCode, partyName, station, pho
     area.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Loading CRM conversation timeline...</div>';
 
     var rawCode = partyCode || (window._currentReportingCustomer && window._currentReportingCustomer.c) || '';
-    try { rawCode = decodeURIComponent(rawCode); } catch(e){}
+    try { rawCode = decodeURIComponent(rawCode); } catch (e) { }
     var rawName = partyName || (window._currentReportingCustomer && window._currentReportingCustomer.n) || rawCode;
-    try { rawName = decodeURIComponent(rawName); } catch(e){}
+    try { rawName = decodeURIComponent(rawName); } catch (e) { }
     var stStr = station || (window._currentReportingCustomer && window._currentReportingCustomer.ct) || '';
-    try { stStr = decodeURIComponent(stStr); } catch(e){}
+    try { stStr = decodeURIComponent(stStr); } catch (e) { }
     var phStr = phone || (window._currentReportingCustomer && window._currentReportingCustomer.p) || '';
     var agStr = agent || (window._currentReportingCustomer && window._currentReportingCustomer.ag) || '';
-    try { agStr = decodeURIComponent(agStr); } catch(e){}
+    try { agStr = decodeURIComponent(agStr); } catch (e) { }
 
     try {
         var custObj = Object.assign({}, window._currentReportingCustomer || {}, {
@@ -21080,9 +21134,9 @@ window.handleCRMQuickSearch = function (val) {
 
     var list = window._compiledCustomersList || [];
     if (list.length === 0 && typeof window.loadAccountingDirectoryData === 'function') {
-        window.loadAccountingDirectoryData(false).then(function() {
+        window.loadAccountingDirectoryData(false).then(function () {
             window.handleCRMQuickSearch(val);
-        }).catch(function(){});
+        }).catch(function () { });
     }
     var digitsOnly = q.replace(/\D/g, '');
     var matches = list.filter(function (c) {
@@ -21104,7 +21158,7 @@ window.handleCRMQuickSearch = function (val) {
     matches.forEach(function (m) {
         var cleanC = String(m.c || m.n || '').trim();
         while (cleanC.includes('%')) {
-            try { var nc = decodeURIComponent(cleanC); if (nc === cleanC) break; cleanC = nc; } catch(e){ break; }
+            try { var nc = decodeURIComponent(cleanC); if (nc === cleanC) break; cleanC = nc; } catch (e) { break; }
         }
         var safeCode = encodeURIComponent(cleanC).replace(/'/g, "%27");
         var safeName = encodeURIComponent(m.n || cleanC).replace(/'/g, "%27");

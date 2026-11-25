@@ -414,7 +414,7 @@ exports.notifyAdminOnNewUser = functions.firestore.document('Users/{userId}').on
 
     const rawPhone = String(data.phone || context.params.userId || '').trim();
     const p10 = rawPhone.replace(/\D/g, '').slice(-10);
-    if (['9998232380', '9425032549', '9302632549'].includes(p10)) return null;
+    if (['9998232380', '9712277640', '9328193525'].includes(p10)) return null;
 
     const dispName = String(data.firm || data.linkedAccountName || data.name || 'New Customer').trim();
     const station = String(data.station || '').trim();
