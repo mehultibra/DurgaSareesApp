@@ -774,7 +774,7 @@ window.updateLivePresence = function (productId, force = false, activityDesc = n
         try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || "{}"); } catch (e) { }
         let own = {};
         try { own = JSON.parse(localStorage.getItem('dsAdminOwnProfile') || "{}"); } catch (e) { }
-        let customerName = own.name || own.firm || (localStorage.getItem('ds_active_on_behalf') ? (own.name || activeUser) : (cd.name || cd.firm)) || activeUser || "Guest";
+        let customerName = own.name || own.firm || (localStorage.getItem('ds_active_on_behalf') ? (own.name || activeUser) : (cd.name || cd.firm || cd.linkedAccountName)) || activeUser || "Guest";
         let customerStation = own.station || cd.station || "Unknown";
 
         let guestLoc = localStorage.getItem('ds_guest_location');
@@ -1883,6 +1883,9 @@ async function checkAdminStatus(phone) {
             }
         } else if (!window.isSuperAdmin && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.setSuperAdmin === 'function') {
             window.Capacitor.Plugins.CallMonitor.setSuperAdmin({ isSuperAdmin: false }).catch(function () { });
+        }
+        if (!window.isSuperAdmin && !window.isStaff && !window.isAdminMode && typeof window.updateLivePresence === 'function') {
+            window.updateLivePresence(null, true, 'Opened App');
         }
 
     } catch (e) {
@@ -10773,7 +10776,7 @@ window.openLiveAdmin = function () {
     };
 
     fetchLiveData();
-    window.liveAdminInterval = setInterval(fetchLiveData, 15000);
+    window.liveAdminInterval = setInterval(fetchLiveData, 8000);
 };
 
 window.closeLiveAdmin = function () {
@@ -10884,6 +10887,43 @@ window.initSuperAdminLiveSurfingMonitor = function () {
                 });
             }, function (err) {
                 console.warn("LiveSessions monitor skipped:", err);
+                if (!window._liveSurfingRestPoller && typeof window.fetchWithRetry === 'function') {
+                    window._liveSurfingRestPoller = setInterval(async function () {
+                        if (!window.isSuperAdmin || document.hidden) return;
+                        try {
+                            var cutoff = new Date(Date.now() - 90000).toISOString();
+                            var qRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents:runQuery", {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    structuredQuery: {
+                                        from: [{ collectionId: "LiveSessions" }],
+                                        where: { fieldFilter: { field: { fieldPath: "lastActive" }, op: "GREATER_THAN_OR_EQUAL", value: { timestampValue: cutoff } } },
+                                        limit: 30
+                                    }
+                                })
+                            }, 1);
+                            var rows = qRes && qRes.ok ? await qRes.json() : [];
+                            (Array.isArray(rows) ? rows : []).forEach(function (r) {
+                                if (!r.document || !r.document.fields) return;
+                                var f = r.document.fields;
+                                var docId = r.document.name.split('/').pop();
+                                var uVal = f.user ? f.user.stringValue : docId;
+                                if (!uVal || uVal === myUid) return;
+                                var act = (f.currentActivity && f.currentActivity.stringValue) || (f.currentProduct && f.currentProduct.stringValue ? 'Viewing Product' : 'Browsing Catalog');
+                                var prevAct = knownActivities[docId];
+                                if (prevAct !== act) {
+                                    knownActivities[docId] = act;
+                                    if (prevAct !== undefined) {
+                                        var cName = (f.customerName && f.customerName.stringValue) || uVal || 'Customer';
+                                        var cSt = (f.customerStation && f.customerStation.stringValue && f.customerStation.stringValue !== 'Unknown') ? ' (' + f.customerStation.stringValue + ')' : '';
+                                        window.showSuperAdminSurfingAlert(cName + cSt, act);
+                                    }
+                                }
+                            });
+                        } catch (e) { }
+                    }, 10000);
+                }
             });
 
         firebase.firestore().collection('Users')

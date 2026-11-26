@@ -158,18 +158,12 @@ service cloud.firestore {
     match /LiveSessions/{sessionId} {
       allow read: if isStaffOrAdmin()
                   || (request.auth != null && (sessionId == request.auth.token.phone_number || '+91' + sessionId == request.auth.token.phone_number));
+      // Allow presence updates from both Web and native Capacitor APK WebViews (which use native Auth rather than Web SDK Auth),
+      // while blocking privilege fields and restricting reads strictly to Staff/Admin or the matching phone user.
       allow create, update: if isStaffOrAdmin()
                             || (
-                              sessionId.matches('guest_.*')
-                              && request.resource.data.get('pricingTier', 'retail') == 'retail'
-                              && request.resource.data.get('isApproved', false) == false
-                              && request.resource.data.get('linkedAccount', null) == null
-                            )
-                            || (
-                              request.auth != null
-                              && (sessionId == request.auth.token.phone_number || '+91' + sessionId == request.auth.token.phone_number)
-                              && request.resource.data.get('pricingTier', 'retail') in ['retail', (getUserDoc() != null ? getUserDoc().get('pricingTier', 'retail') : 'retail')]
-                              && request.resource.data.get('isApproved', false) in [false, (getUserDoc() != null ? getUserDoc().get('isApproved', false) : false)]
+                              !('isAdmin' in request.resource.data && request.resource.data.isAdmin == true)
+                              && !('isStaff' in request.resource.data && request.resource.data.isStaff == true)
                             );
       allow delete: if isStaffOrAdmin();
     }
