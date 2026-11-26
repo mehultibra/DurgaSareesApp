@@ -6366,6 +6366,11 @@ function saveProductEdit(p) {
                 else showDevLog("❌ FB Err " + res.status + " - No Perms for Packing?", true);
             }).catch(err => showDevLog("FB Net Err: " + err.message, true));
 
+            if ((!p.b2bPrice || !p.superB2bPrice) && p.price > 0 && typeof window.calcCategoryTierPrices === 'function') {
+                var est = window.calcCategoryTierPrices(p.cat, p.price);
+                if (!p.b2bPrice && est.b2bPrice > 0) p.b2bPrice = est.b2bPrice;
+                if (!p.superB2bPrice && est.superB2bPrice > 0) p.superB2bPrice = est.superB2bPrice;
+            }
             if (window.DS_APP_SCRIPT_URL) {
                 fetch(window.DS_APP_SCRIPT_URL, {
                     method: 'POST',
@@ -6374,31 +6379,55 @@ function saveProductEdit(p) {
                         action: 'updateProductDetails',
                         productName: p.name,
                         price: p.price,
+                        b2bPrice: p.b2bPrice || 0,
+                        superB2bPrice: p.superB2bPrice || 0,
                         packing: p.packing,
                         section: p.section || 'sarees'
                     })
                 }).then(r => r.json())
                     .then(data => {
-                        if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
-                        else {
-                            showDevLog("✅ Excel Updated: " + p.name, false);
-                            if (data.b2bPrice !== undefined) p.b2bPrice = Number(data.b2bPrice) || 0;
-                            if (data.superB2bPrice !== undefined) p.superB2bPrice = Number(data.superB2bPrice) || 0;
-                            if (p.docId && (p.b2bPrice || p.superB2bPrice)) {
-                                var fbTierPatch = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=b2bPrice&updateMask.fieldPaths=superB2bPrice";
-                                window.fetchWithRetry(fbTierPatch, {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
+                        if (!data.success) {
+                            showDevLog("❌ Excel Err: " + data.msg, true);
+                            if (/not found/i.test(data.msg || '')) {
+                                fetch(window.DS_APP_SCRIPT_URL, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                                     body: JSON.stringify({
-                                        fields: {
-                                            b2bPrice: { doubleValue: Number(p.b2bPrice) || 0 },
-                                            superB2bPrice: { doubleValue: Number(p.superB2bPrice) || 0 }
-                                        }
+                                        action: 'createProduct',
+                                        docId: p.docId || '',
+                                        section: p.section || 'sarees',
+                                        category: p.cat || '',
+                                        name: p.name,
+                                        price: p.price,
+                                        b2bPrice: p.b2bPrice || 0,
+                                        superB2bPrice: p.superB2bPrice || 0,
+                                        packing: p.packing,
+                                        mult: p.mult || 1,
+                                        sku: p.sku || '',
+                                        gridUrl: p.gridUrl || '',
+                                        zoomUrl: p.zoomUrl || ''
                                     })
-                                }, 1).catch(function () { });
+                                }).catch(() => { });
                             }
-                            refreshCardUI(p.id);
+                        } else {
+                            showDevLog("✅ Excel Updated: " + p.name, false);
+                            if (data.b2bPrice !== undefined && Number(data.b2bPrice) > 0) p.b2bPrice = Number(data.b2bPrice);
+                            if (data.superB2bPrice !== undefined && Number(data.superB2bPrice) > 0) p.superB2bPrice = Number(data.superB2bPrice);
                         }
+                        if (p.docId && (p.b2bPrice || p.superB2bPrice)) {
+                            var fbTierPatch = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + p.docId + "?updateMask.fieldPaths=b2bPrice&updateMask.fieldPaths=superB2bPrice";
+                            window.fetchWithRetry(fbTierPatch, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    fields: {
+                                        b2bPrice: { doubleValue: Number(p.b2bPrice) || 0 },
+                                        superB2bPrice: { doubleValue: Number(p.superB2bPrice) || 0 }
+                                    }
+                                })
+                            }, 1).catch(function () { });
+                        }
+                        refreshCardUI(p.id);
                     }).catch(e => showDevLog("Excel Net Err: " + e.message, true));
             } else {
                 showDevLog("❌ DS_APP_SCRIPT_URL is missing!", true);
@@ -7675,6 +7704,11 @@ function saveCartInlineEdit(productId, closeEdit = true) {
                 else showDevLog("❌ FB Err " + res.status, true);
             }).catch(err => showDevLog("FB Net Err: " + err.message, true));
 
+            if ((!matchP.b2bPrice || !matchP.superB2bPrice) && Number(newRate) > 0 && typeof window.calcCategoryTierPrices === 'function') {
+                var est = window.calcCategoryTierPrices(matchP.cat, newRate);
+                if (!matchP.b2bPrice && est.b2bPrice > 0) matchP.b2bPrice = est.b2bPrice;
+                if (!matchP.superB2bPrice && est.superB2bPrice > 0) matchP.superB2bPrice = est.superB2bPrice;
+            }
             // Excel Webhook Sync via Apps Script
             if (window.DS_APP_SCRIPT_URL) {
                 fetch(window.DS_APP_SCRIPT_URL, {
@@ -7684,31 +7718,55 @@ function saveCartInlineEdit(productId, closeEdit = true) {
                         action: 'updateProductDetails',
                         productName: matchP.name,
                         price: newRate,
+                        b2bPrice: matchP.b2bPrice || 0,
+                        superB2bPrice: matchP.superB2bPrice || 0,
                         packing: newPacking,
                         section: matchP.section || 'sarees'
                     })
                 }).then(r => r.json())
                     .then(data => {
-                        if (!data.success) showDevLog("❌ Excel Err: " + data.msg, true);
-                        else {
-                            showDevLog("✅ Excel Updated: " + matchP.name, false);
-                            if (data.b2bPrice !== undefined) matchP.b2bPrice = Number(data.b2bPrice) || 0;
-                            if (data.superB2bPrice !== undefined) matchP.superB2bPrice = Number(data.superB2bPrice) || 0;
-                            if (matchP.docId && (matchP.b2bPrice || matchP.superB2bPrice)) {
-                                var fbTierPatch = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=b2bPrice&updateMask.fieldPaths=superB2bPrice";
-                                window.fetchWithRetry(fbTierPatch, {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
+                        if (!data.success) {
+                            showDevLog("❌ Excel Err: " + data.msg, true);
+                            if (/not found/i.test(data.msg || '')) {
+                                fetch(window.DS_APP_SCRIPT_URL, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                                     body: JSON.stringify({
-                                        fields: {
-                                            b2bPrice: { doubleValue: Number(matchP.b2bPrice) || 0 },
-                                            superB2bPrice: { doubleValue: Number(matchP.superB2bPrice) || 0 }
-                                        }
+                                        action: 'createProduct',
+                                        docId: matchP.docId || '',
+                                        section: matchP.section || 'sarees',
+                                        category: matchP.cat || '',
+                                        name: matchP.name,
+                                        price: newRate,
+                                        b2bPrice: matchP.b2bPrice || 0,
+                                        superB2bPrice: matchP.superB2bPrice || 0,
+                                        packing: newPacking,
+                                        mult: matchP.mult || 1,
+                                        sku: matchP.sku || '',
+                                        gridUrl: matchP.gridUrl || '',
+                                        zoomUrl: matchP.zoomUrl || ''
                                     })
-                                }, 1).catch(function () { });
+                                }).catch(() => { });
                             }
-                            refreshCardUI(matchP.id);
+                        } else {
+                            showDevLog("✅ Excel Updated: " + matchP.name, false);
+                            if (data.b2bPrice !== undefined && Number(data.b2bPrice) > 0) matchP.b2bPrice = Number(data.b2bPrice);
+                            if (data.superB2bPrice !== undefined && Number(data.superB2bPrice) > 0) matchP.superB2bPrice = Number(data.superB2bPrice);
                         }
+                        if (matchP.docId && (matchP.b2bPrice || matchP.superB2bPrice)) {
+                            var fbTierPatch = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Products/" + matchP.docId + "?updateMask.fieldPaths=b2bPrice&updateMask.fieldPaths=superB2bPrice";
+                            window.fetchWithRetry(fbTierPatch, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    fields: {
+                                        b2bPrice: { doubleValue: Number(matchP.b2bPrice) || 0 },
+                                        superB2bPrice: { doubleValue: Number(matchP.superB2bPrice) || 0 }
+                                    }
+                                })
+                            }, 1).catch(function () { });
+                        }
+                        refreshCardUI(matchP.id);
                     })
                     .catch(e => showDevLog("Excel Net Err: " + e.message, true));
             } else {
@@ -11578,13 +11636,13 @@ window.saveProductDetails = async function () {
         refreshCardUI(p.id);
         if (typeof applyFilter === 'function') applyFilter();
 
-        // 3. Sync to Google Apps Script (Webhook)
+        // 3. Sync to Google Apps Script (Webhook) — fallback to createProduct if missing in sheet
         if (window.DS_APP_SCRIPT_URL) {
             fetch(window.DS_APP_SCRIPT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify({
-                    action: 'updateProductDetailsFull', // NEW ACTION TO PREVENT CLASH
+                    action: 'updateProductDetailsFull',
                     productName: p.name,
                     section: p.section,
                     category: p.cat,
@@ -11602,6 +11660,35 @@ window.saveProductDetails = async function () {
                     blouse: p.blouse,
                     cut: p.cut
                 })
+            }).then(r => r.json()).then(data => {
+                if (data && data.success === false && /not found/i.test(data.msg || '')) {
+                    return fetch(window.DS_APP_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'createProduct',
+                            docId: p.docId || '',
+                            section: p.section || 'sarees',
+                            category: p.cat || '',
+                            name: p.name,
+                            price: p.price,
+                            b2bPrice: p.b2bPrice,
+                            superB2bPrice: p.superB2bPrice,
+                            packing: p.packing,
+                            mult: p.mult,
+                            fabric: p.fabric,
+                            work: p.work,
+                            jari: p.jari,
+                            pallu: p.pallu,
+                            border: p.border,
+                            blouse: p.blouse,
+                            cut: p.cut,
+                            sku: p.sku,
+                            gridUrl: p.gridUrl || '',
+                            zoomUrl: p.zoomUrl || ''
+                        })
+                    });
+                }
             }).catch(e => console.error("Apps Script Sync Failed", e));
         }
 
@@ -12669,7 +12756,7 @@ window.queueSelectedImagesForProduct = async function (items, secVal, catVal, is
 
             if (window.DS_APP_SCRIPT_URL) {
                 try {
-                    fetch(window.DS_APP_SCRIPT_URL, {
+                    await fetch(window.DS_APP_SCRIPT_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({
@@ -12679,6 +12766,8 @@ window.queueSelectedImagesForProduct = async function (items, secVal, catVal, is
                             category: catVal,
                             name: prodName,
                             price: 0,
+                            b2bPrice: 0,
+                            superB2bPrice: 0,
                             packing: "1",
                             mult: 1,
                             sku: sku,
