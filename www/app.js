@@ -10180,7 +10180,7 @@ window.openLiveAdmin = function () {
                             approvalStatus: (pf.approvalStatus && pf.approvalStatus.stringValue) ? pf.approvalStatus.stringValue : 'approved',
                             approvedByAdmin: pf.approvedByAdmin ? pf.approvedByAdmin.stringValue : 'Admin',
                             approvedAt: pf.approvedAt ? (pf.approvedAt.timestampValue || pf.approvedAt.stringValue) : '',
-                            pricingTier: pf.pricingTier ? pf.pricingTier.stringValue : 'b2b'
+                            pricingTier: pf.pricingTier ? pf.pricingTier.stringValue : ''
                         });
                     }
                 });
@@ -10242,6 +10242,7 @@ window.openLiveAdmin = function () {
                             linkedAccountName: d.linkedAccountName || '',
                             approvedByAdmin: d.approvedByAdmin || '',
                             approvedAt: d.approvedAt ? (d.approvedAt.toDate ? d.approvedAt.toDate().toISOString() : d.approvedAt) : '',
+                            pricingTier: d.pricingTier || '',
                             matchedAccounts: matchesArr,
                             createdAt: d.createdAt || null
                         };
@@ -10347,6 +10348,7 @@ window.openLiveAdmin = function () {
                             if (u.approvedAt) existingItem.data.approvedAt = u.approvedAt;
                             if (u.isAdmin) existingItem.data.isAdmin = true;
                             if (u.role) existingItem.data.role = u.role;
+                            if (u.pricingTier) existingItem.data.pricingTier = u.pricingTier;
                             if (u.matchedAccounts && u.matchedAccounts.length) existingItem.data.matchedAccounts = u.matchedAccounts;
                         }
                         return;
@@ -10594,7 +10596,8 @@ window.openLiveAdmin = function () {
                                 linkedAccountName: pl.name || pl.partyName,
                                 approvedByAdmin: pl.approvedByAdmin || 'Admin',
                                 approvedAt: pl.approvedAt || '',
-                                role: pl.role || d.role || 'customer'
+                                role: pl.role || d.role || 'customer',
+                                pricingTier: pl.pricingTier || d.pricingTier || 'b2b'
                             };
                             window.adminCustomerCache[docId] = uData;
                             if (pKey) window.adminCustomerCache[pKey] = uData;
@@ -10605,7 +10608,11 @@ window.openLiveAdmin = function () {
                             uData.linkedAccountName = pl.name || pl.partyName;
                             if (pl.approvedByAdmin) uData.approvedByAdmin = pl.approvedByAdmin;
                             if (pl.approvedAt) uData.approvedAt = pl.approvedAt;
+                            if (pl.pricingTier) uData.pricingTier = pl.pricingTier;
+                            else if (!uData.pricingTier && d.pricingTier) uData.pricingTier = d.pricingTier;
                         }
+                    } else if (uData && !uData.pricingTier && d.pricingTier) {
+                        uData.pricingTier = d.pricingTier;
                     }
 
                     let roleBadge = '';
@@ -10918,6 +10925,14 @@ window.refreshLiveApprovalBoxes = function () {
     });
 };
 
+window.getPhoneKey = function (p) {
+    if (!p) return '';
+    var s = String(p).replace(/\D/g, '');
+    if (s.startsWith('91') && s.length > 10) s = s.substring(2);
+    return s;
+};
+var getPhoneKey = window.getPhoneKey;
+
 window.selectPartyFromLive = function (docId) {
     var pKey = getPhoneKey(docId) || docId;
     var uData = (window.adminCustomerCache && (window.adminCustomerCache[docId] || window.adminCustomerCache[pKey])) || null;
@@ -10951,27 +10966,38 @@ window.updateCustomerPricingTier = async function (docId, partyCode, newTier) {
         if (window.adminCustomerCache[docId]) window.adminCustomerCache[docId].pricingTier = validTier;
         if (pKey && window.adminCustomerCache[pKey]) window.adminCustomerCache[pKey].pricingTier = validTier;
 
+        var token = await getCachedAuthToken(true);
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
+        var patchBody = JSON.stringify({ fields: { pricingTier: { stringValue: validTier } } });
+        var clean10 = String(docId || '').replace(/\D/g, '').slice(-10);
+
+        var writeTasks = [];
+
         // 1. Update PartyLinks
         if (partyCode) {
             var safeCode = encodeURIComponent(String(partyCode).trim().toUpperCase().replace(/[\/\.]/g, '_'));
             var partyPatchUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PartyLinks/" + safeCode + "?updateMask.fieldPaths=pricingTier";
-            await fetch(partyPatchUrl, {
-                method: "PATCH",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields: { pricingTier: { stringValue: validTier } } })
-            }).catch(e => console.warn("PartyLinks tier update err:", e));
+            writeTasks.push(
+                fetch(partyPatchUrl, { method: "PATCH", headers: headers, body: patchBody })
+                    .then(function (r) { if (!r.ok) throw new Error('PartyLinks HTTP ' + r.status); })
+            );
 
             try {
                 var localBackup = JSON.parse(localStorage.getItem('ds_party_links_backup') || '{}');
                 var cUpper = String(partyCode).trim().toUpperCase();
                 if (!localBackup[cUpper]) localBackup[cUpper] = {};
                 localBackup[cUpper].pricingTier = validTier;
+                if (clean10.length === 10) {
+                    if (!localBackup[clean10]) localBackup[clean10] = {};
+                    localBackup[clean10].pricingTier = validTier;
+                    if (!localBackup['+91' + clean10]) localBackup['+91' + clean10] = {};
+                    localBackup['+91' + clean10].pricingTier = validTier;
+                }
                 localStorage.setItem('ds_party_links_backup', JSON.stringify(localBackup));
             } catch (e) { }
         }
 
         // 2. Update LiveSessions & Users across all phone key variants
-        var clean10 = String(docId || '').replace(/\D/g, '').slice(-10);
         var possibleIds = [docId];
         if (clean10.length === 10) {
             possibleIds.push(clean10);
@@ -10979,21 +11005,15 @@ window.updateCustomerPricingTier = async function (docId, partyCode, newTier) {
         }
         possibleIds = [...new Set(possibleIds.filter(Boolean))];
 
-        for (var pId of possibleIds) {
+        possibleIds.forEach(function (pId) {
             var lpUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(pId) + "?updateMask.fieldPaths=pricingTier";
-            fetch(lpUrl, {
-                method: "PATCH",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields: { pricingTier: { stringValue: validTier } } })
-            }).catch(function () { });
+            writeTasks.push(fetch(lpUrl, { method: "PATCH", headers: headers, body: patchBody }).catch(function () { }));
 
             var uUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(pId) + "?updateMask.fieldPaths=pricingTier";
-            fetch(uUrl, {
-                method: "PATCH",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields: { pricingTier: { stringValue: validTier } } })
-            }).catch(function () { });
-        }
+            writeTasks.push(fetch(uUrl, { method: "PATCH", headers: headers, body: patchBody }).catch(function () { }));
+        });
+
+        await Promise.all(writeTasks);
 
         // 3. Immediately switch active tier and re-render product rates on screen
         var activeOnBehalf = null;
@@ -11016,6 +11036,8 @@ window.updateCustomerPricingTier = async function (docId, partyCode, newTier) {
         alert(`✅ Pricing Tier for ${partyCode || docId} updated to: ${tierName}`);
     } catch (err) {
         console.error("updateCustomerPricingTier error:", err);
+        if (typeof window.logAppError === 'function') window.logAppError('updateCustomerPricingTier', err.message || String(err));
+        alert('❌ Failed to update pricing tier: ' + (err.message || err));
     }
 };
 

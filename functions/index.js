@@ -1,14 +1,22 @@
 const functions = require('firebase-functions/v1');
-exports.processCameraImage = functions.storage.object().onFinalize(async (object) => {
+
+function getDefaultAdmin() {
     const admin = require('firebase-admin');
+    if (!admin.apps || !admin.apps.some(a => a && a.name === '[DEFAULT]')) {
+        try {
+            admin.initializeApp();
+        } catch (err) {
+            if (!/already exists/i.test(String(err && err.message))) throw err;
+        }
+    }
+    return admin;
+}
+
+exports.processCameraImage = functions.storage.object().onFinalize(async (object) => {
+    const admin = getDefaultAdmin();
     const cloudinary = require('cloudinary').v2;
     const axios = require('axios');
     const piexif = require('piexifjs');
-
-    // Lazy Initialization of Firebase Admin to prevent deployment timeouts
-    if (admin.apps.length === 0) {
-        admin.initializeApp();
-    }
 
     // Initialize Cloudinary config lazily to ensure environment variables are fully loaded
     cloudinary.config({
@@ -214,7 +222,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
             shareInputPath = finalGridUrl.replace(/^(Grid|Zoom)\//i, 'Jpg/Ready Designs/') + shareDestName;
             masterInputPath = finalGridUrl.replace(/^(Grid|Zoom)\//i, 'Input/Ready Designs/') + masterDestName;
         }
-        
+
         // Save Share JPG Buffer to Firebase in Jpg folder
         await bucket.file(shareInputPath).save(shareBuffer, { metadata: { contentType: 'image/jpeg', metadata: { source: '888' } } });
 
@@ -222,7 +230,7 @@ exports.processCameraImage = functions.storage.object().onFinalize(async (object
         await bucket.file(masterInputPath).save(masterBuffer, { metadata: { contentType: 'image/jpeg', metadata: { source: '888' } } });
 
         console.log(`Success: Generated ${destFileName} at ${finalGridUrl} and ${finalZoomUrl}. Master saved to ${masterInputPath}`);
-        
+
         // Touch the product document to bump its updateTime so it sorts to the top of the main grid
         await productRef.update({ latestImageAddedAt: admin.firestore.FieldValue.serverTimestamp() }).catch(e => console.error("Failed to bump updateTime:", e));
 
@@ -268,8 +276,7 @@ exports.syncFromExcel = functions.https.onRequest(async (req, res) => {
     }
 
     try {
-        const admin = require('firebase-admin');
-        if (admin.apps.length === 0) admin.initializeApp();
+        const admin = getDefaultAdmin();
 
         const data = req.body;
         if (!data || !data.productName) {
@@ -305,8 +312,7 @@ exports.cleanupDuplicateJpgs = functions.https.onRequest(async (req, res) => {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const admin = require('firebase-admin');
-    if (admin.apps.length === 0) admin.initializeApp();
+    const admin = getDefaultAdmin();
 
     try {
         const bucket = admin.storage().bucket('durga-sarees.firebasestorage.app');
@@ -361,29 +367,26 @@ exports.getMasterCache = functions.https.onRequest(async (req, res) => {
         return res.status(204).send('');
     }
 
-    const admin = require('firebase-admin');
-    if (admin.apps.length === 0) {
-        admin.initializeApp();
-    }
+    const admin = getDefaultAdmin();
     const bucket = admin.storage().bucket();
-    
+
     try {
         const [files] = await bucket.getFiles();
         const cache = {};
-        
+
         files.forEach(file => {
             const path = file.name;
             // Only process Grid and App_Grid images
             if (!path.startsWith('Grid/') && !path.startsWith('App_Grid/')) return;
             if (!path.endsWith('.webp') && !path.endsWith('.jpg') && !path.endsWith('.png')) return;
-            
+
             const parts = path.split('/');
             const filename = parts.pop();
             const folderPath = parts.join('/');
-            
+
             // Remove extension to save space in the cache string (e.g., '01.webp' -> '01')
             const basename = filename.substring(0, filename.lastIndexOf('.'));
-            
+
             if (!cache[folderPath]) {
                 cache[folderPath] = [];
             }
@@ -406,8 +409,7 @@ exports.getMasterCache = functions.https.onRequest(async (req, res) => {
 
 // Send push notification to Super Admin whenever a new user logs in / registers
 exports.notifyAdminOnNewUser = functions.firestore.document('Users/{userId}').onCreate(async (snap, context) => {
-    const admin = require('firebase-admin');
-    if (admin.apps.length === 0) admin.initializeApp();
+    const admin = getDefaultAdmin();
 
     const data = snap.data() || {};
     if (data.isAdmin === true || data.isStaff === true) return null;
