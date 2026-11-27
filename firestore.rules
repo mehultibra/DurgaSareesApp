@@ -103,14 +103,14 @@ service cloud.firestore {
       // A user can create basic profile + pending auto-link fields ONLY (never pre-approved or admin/staff)
       allow create: if request.auth != null
                     && (request.resource.data.phone == request.auth.token.phone_number || userId == request.auth.token.phone_number)
-                    && !request.resource.data.keys().hasAny(['isAdmin', 'isStaff', 'approvedByAdmin', 'approvedAt', 'pricingTier'])
+                    && !request.resource.data.keys().hasAny(['isAdmin', 'isStaff', 'approvedByAdmin', 'approvedAt', 'pricingTier', 'linkedAccountDocId'])
                     && request.resource.data.get('isApproved', false) == false
                     && request.resource.data.get('approvalStatus', 'pending') == 'pending'
                     && request.resource.data.get('role', 'customer') in ['customer', 'agent'];
       allow read: if request.auth != null && (resource.data.phone == request.auth.token.phone_number || userId == request.auth.token.phone_number);
       allow update: if request.auth != null
                     && (resource.data.phone == request.auth.token.phone_number || userId == request.auth.token.phone_number)
-                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'isStaff', 'isApproved', 'approvalStatus', 'approvedByAdmin', 'approvedAt', 'linkedAccount', 'linkedAccountName', 'role', 'pricingTier']);
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'isStaff', 'isApproved', 'approvalStatus', 'approvedByAdmin', 'approvedAt', 'linkedAccount', 'linkedAccountDocId', 'linkedAccountName', 'role', 'pricingTier']);
     }
 
     // ==========================================

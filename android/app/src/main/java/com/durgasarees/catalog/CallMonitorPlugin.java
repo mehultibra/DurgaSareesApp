@@ -197,9 +197,9 @@ public class CallMonitorPlugin extends Plugin {
                 return sErpCallerCache;
             }
             byte[] bytes = new byte[(int) f.length()];
-            try (java.io.FileInputStream fis = new java.io.FileInputStream(f)) {
-                int read = fis.read(bytes);
-                if (read <= 0) return sErpCallerCache;
+            if (bytes.length == 0) return sErpCallerCache;
+            try (java.io.DataInputStream dis = new java.io.DataInputStream(new java.io.FileInputStream(f))) {
+                dis.readFully(bytes);
             }
             org.json.JSONObject obj = new org.json.JSONObject(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
             java.util.Map<String, String> map = new java.util.HashMap<>(obj.length());
@@ -429,7 +429,7 @@ public class CallMonitorPlugin extends Plugin {
     public void clearLastDetectedCall(PluginCall call) {
         try {
             SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
-            sp.edit().remove("last_call_phone").remove("last_call_dir").remove("last_call_time").apply();
+            sp.edit().remove("last_call_phone").remove("last_call_name").remove("last_call_dir").remove("last_call_time").apply();
             call.resolve();
         } catch (Throwable t) {
             call.resolve();
