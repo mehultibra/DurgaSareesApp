@@ -1,1 +1,7 @@
-{"version":"1.0.16","url":"https://durga-sarees.web.app/update.zip"}
+{
+  "version": "1.0.16",
+  "url": "https://durga-sarees.web.app/update.zip",
+  "latestPlayVersionCode": 0,
+  "forcePlayUpdate": false,
+  "playUpdateMessage": "A new version of Durga Sarees is available on Google Play with faster performance and important fixes."
+}

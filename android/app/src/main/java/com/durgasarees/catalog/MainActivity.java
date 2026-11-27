@@ -1,13 +1,24 @@
 package com.durgasarees.catalog;
 
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
+import com.google.android.play.core.appupdate.AppUpdateManager;
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory;
+import com.google.android.play.core.appupdate.AppUpdateOptions;
+import com.google.android.play.core.install.InstallStateUpdatedListener;
+import com.google.android.play.core.install.model.AppUpdateType;
+import com.google.android.play.core.install.model.InstallStatus;
+import com.google.android.play.core.install.model.UpdateAvailability;
 
 public class MainActivity extends BridgeActivity {
+    private static final int REQ_CODE_PLAY_UPDATE = 9401;
     private static MainActivity instance;
     private boolean webCanGoBack = false;
+    private AppUpdateManager appUpdateManager;
+    private InstallStateUpdatedListener installStateUpdatedListener;
 
     public static MainActivity getInstance() {
         return instance;
@@ -34,6 +45,10 @@ public class MainActivity extends BridgeActivity {
         try {
             enforceLightNavBar();
         } catch (Throwable t) {}
+
+        try {
+            initPlayInAppUpdates();
+        } catch (Throwable ignored) {}
 
         try {
             getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -140,6 +155,65 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    private void initPlayInAppUpdates() {
+        try {
+            appUpdateManager = AppUpdateManagerFactory.create(this);
+            installStateUpdatedListener = state -> {
+                try {
+                    if (state != null && state.installStatus() == InstallStatus.DOWNLOADED) {
+                        showPlayUpdateReadyDialog();
+                    }
+                } catch (Throwable ignored) {}
+            };
+            appUpdateManager.registerListener(installStateUpdatedListener);
+            checkForPlayInAppUpdate();
+        } catch (Throwable ignored) {}
+    }
+
+    private void checkForPlayInAppUpdate() {
+        try {
+            if (appUpdateManager == null) return;
+            appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> {
+                try {
+                    if (info == null) return;
+                    if (info.installStatus() == InstallStatus.DOWNLOADED) {
+                        showPlayUpdateReadyDialog();
+                        return;
+                    }
+                    if (info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                            && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)) {
+                        appUpdateManager.startUpdateFlowForResult(
+                                info,
+                                this,
+                                AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build(),
+                                REQ_CODE_PLAY_UPDATE
+                        );
+                    }
+                } catch (Throwable ignored) {}
+            });
+        } catch (Throwable ignored) {}
+    }
+
+    private void showPlayUpdateReadyDialog() {
+        try {
+            runOnUiThread(() -> {
+                try {
+                    if (isFinishing() || isDestroyed()) return;
+                    new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("Update Ready")
+                            .setMessage("Update downloaded — Tap Restart to install")
+                            .setPositiveButton("Restart", (d, w) -> {
+                                try {
+                                    if (appUpdateManager != null) appUpdateManager.completeUpdate();
+                                } catch (Throwable ignored) {}
+                            })
+                            .setNegativeButton("Later", null)
+                            .show();
+                } catch (Throwable ignored) {}
+            });
+        } catch (Throwable ignored) {}
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -151,6 +225,28 @@ public class MainActivity extends BridgeActivity {
                 bridge.triggerWindowJSEvent("dsNativeAppResumed");
             }
         } catch (Throwable t) {}
+        try {
+            if (appUpdateManager != null) {
+                appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> {
+                    try {
+                        if (info != null && info.installStatus() == InstallStatus.DOWNLOADED) {
+                            appUpdateManager.completeUpdate();
+                        }
+                    } catch (Throwable ignored) {}
+                });
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    public void onDestroy() {
+        try {
+            if (appUpdateManager != null && installStateUpdatedListener != null) {
+                appUpdateManager.unregisterListener(installStateUpdatedListener);
+                installStateUpdatedListener = null;
+            }
+        } catch (Throwable ignored) {}
+        super.onDestroy();
     }
 
     @Override

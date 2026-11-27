@@ -1084,6 +1084,46 @@ async function checkForOTAUpdates(isManual) {
         var latestVersion = data.version;
         var updateUrl = data.url;
 
+        // Controllable Play Store Update Prompt for existing/older APKs
+        try {
+            if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+                var playInfo = await window.Capacitor.Plugins.App.getInfo();
+                var nativeBuild = parseInt(playInfo && playInfo.build, 10) || 0;
+                var targetBuild = parseInt(data.latestPlayVersionCode, 10) || 0;
+                var isForced = Boolean(data.forcePlayUpdate === true);
+                if (targetBuild > 0 && nativeBuild > 0 && nativeBuild < targetBuild && (nativeBuild < 17 || isForced)) {
+                    var dismissedAt = 0;
+                    try { dismissedAt = parseInt(localStorage.getItem('ds_play_prompt_dismissed_at') || '0', 10) || 0; } catch (e) { }
+                    var cooldownElapsed = (Date.now() - dismissedAt) >= (24 * 60 * 60 * 1000);
+                    if (isForced || cooldownElapsed) {
+                        var existingPlayM = document.getElementById('dsPlayUpdateModal');
+                        if (!existingPlayM) {
+                            var safeMsg = (typeof esc === 'function') ? esc(data.playUpdateMessage || "A new version of Durga Sarees is available on Google Play with faster performance and important fixes.") : "A new version of Durga Sarees is available on Google Play.";
+                            var playModalHtml = `
+                              <div id="dsPlayUpdateModal" style="position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:9999999; display:flex; align-items:center; justify-content:center; padding:18px;">
+                                <div style="background:#fff; border-radius:14px; max-width:340px; width:100%; padding:18px; box-shadow:0 16px 40px rgba(0,0,0,0.3); text-align:center;">
+                                  <div style="width:46px; height:46px; border-radius:12px; background:#fff1f2; color:#be185d; display:flex; align-items:center; justify-content:center; margin:0 auto 10px; font-size:20px;">
+                                    <i class="fab fa-google-play"></i>
+                                  </div>
+                                  <div style="font-size:16px; font-weight:800; color:#0f172a; margin-bottom:6px;">App Update Available</div>
+                                  <div style="font-size:12.5px; color:#475569; line-height:1.45; margin-bottom:16px;">${safeMsg}</div>
+                                  <button type="button" onclick="(function(){ try{ window.open('https://play.google.com/store/apps/details?id=com.durgasarees.catalog','_blank'); }catch(e){ window.location.href='market://details?id=com.durgasarees.catalog'; } })()"
+                                    style="width:100%; background:#be185d; color:#fff; border:none; padding:10px 14px; border-radius:8px; font-size:13px; font-weight:bold; cursor:pointer; margin-bottom:${isForced ? '0' : '8px'};">
+                                    Update on Play Store
+                                  </button>
+                                  ${isForced ? '' : `<button type="button" onclick="(function(){ try{ localStorage.setItem('ds_play_prompt_dismissed_at', String(Date.now())); }catch(e){} var m=document.getElementById('dsPlayUpdateModal'); if(m) m.remove(); })()"
+                                    style="width:100%; background:#f1f5f9; color:#475569; border:none; padding:9px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">
+                                    Later
+                                  </button>`}
+                                </div>
+                              </div>`;
+                            document.body.insertAdjacentHTML('beforeend', playModalHtml);
+                        }
+                    }
+                }
+            }
+        } catch (playErr) { }
+
         var savedOtaVer = localStorage.getItem("dsOtaVersion");
         if (!savedOtaVer && !isManual) {
             // Fresh install from Play Store / APK already has latest code built-in
