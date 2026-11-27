@@ -1093,9 +1093,13 @@ async function checkForOTAUpdates(isManual) {
                 var isForced = Boolean(data.forcePlayUpdate === true);
                 if (targetBuild > 0 && nativeBuild > 0 && nativeBuild < targetBuild && (nativeBuild < 17 || isForced)) {
                     var dismissedAt = 0;
-                    try { dismissedAt = parseInt(localStorage.getItem('ds_play_prompt_dismissed_at') || '0', 10) || 0; } catch (e) { }
-                    var cooldownElapsed = (Date.now() - dismissedAt) >= (24 * 60 * 60 * 1000);
-                    if (isForced || cooldownElapsed) {
+                    var skippedBuild = 0;
+                    try {
+                        dismissedAt = parseInt(localStorage.getItem('ds_play_prompt_dismissed_at') || '0', 10) || 0;
+                        skippedBuild = parseInt(localStorage.getItem('ds_play_prompt_skipped_build') || '0', 10) || 0;
+                    } catch (e) { }
+                    var cooldownElapsed = (Date.now() - dismissedAt) >= (7 * 24 * 60 * 60 * 1000);
+                    if (isForced || (skippedBuild < targetBuild && cooldownElapsed)) {
                         var existingPlayM = document.getElementById('dsPlayUpdateModal');
                         if (!existingPlayM) {
                             var safeMsg = (typeof esc === 'function') ? esc(data.playUpdateMessage || "A new version of Durga Sarees is available on Google Play with faster performance and important fixes.") : "A new version of Durga Sarees is available on Google Play.";
@@ -1112,8 +1116,12 @@ async function checkForOTAUpdates(isManual) {
                                     Update on Play Store
                                   </button>
                                   ${isForced ? '' : `<button type="button" onclick="(function(){ try{ localStorage.setItem('ds_play_prompt_dismissed_at', String(Date.now())); }catch(e){} var m=document.getElementById('dsPlayUpdateModal'); if(m) m.remove(); })()"
-                                    style="width:100%; background:#f1f5f9; color:#475569; border:none; padding:9px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">
+                                    style="width:100%; background:#f1f5f9; color:#475569; border:none; padding:9px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; margin-bottom:6px;">
                                     Later
+                                  </button>
+                                  <button type="button" onclick="(function(){ try{ localStorage.setItem('ds_play_prompt_skipped_build', '${targetBuild}'); }catch(e){} var m=document.getElementById('dsPlayUpdateModal'); if(m) m.remove(); })()"
+                                    style="width:100%; background:transparent; color:#94a3b8; border:none; padding:6px 10px; font-size:11px; font-weight:600; cursor:pointer; text-decoration:underline;">
+                                    Skip this version
                                   </button>`}
                                 </div>
                               </div>`;

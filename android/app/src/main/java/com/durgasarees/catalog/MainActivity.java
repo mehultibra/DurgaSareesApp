@@ -17,6 +17,7 @@ public class MainActivity extends BridgeActivity {
     private static final int REQ_CODE_PLAY_UPDATE = 9401;
     private static MainActivity instance;
     private boolean webCanGoBack = false;
+    private boolean mUserDeferredPlayRestart = false;
     private AppUpdateManager appUpdateManager;
     private InstallStateUpdatedListener installStateUpdatedListener;
 
@@ -177,11 +178,19 @@ public class MainActivity extends BridgeActivity {
                 try {
                     if (info == null) return;
                     if (info.installStatus() == InstallStatus.DOWNLOADED) {
-                        showPlayUpdateReadyDialog();
+                        if (!mUserDeferredPlayRestart) showPlayUpdateReadyDialog();
                         return;
                     }
                     if (info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
                             && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)) {
+                        long availBytes = new android.os.StatFs(getFilesDir().getPath()).getAvailableBytes();
+                        if (availBytes < 80L * 1024L * 1024L) return;
+
+                        android.content.SharedPreferences sp = getSharedPreferences("ds_call_prefs", MODE_PRIVATE);
+                        long lastPrompt = sp.getLong("play_update_last_prompt_at", 0L);
+                        if (System.currentTimeMillis() - lastPrompt < 7L * 24L * 60L * 60L * 1000L) return;
+
+                        sp.edit().putLong("play_update_last_prompt_at", System.currentTimeMillis()).apply();
                         appUpdateManager.startUpdateFlowForResult(
                                 info,
                                 this,
@@ -207,7 +216,9 @@ public class MainActivity extends BridgeActivity {
                                     if (appUpdateManager != null) appUpdateManager.completeUpdate();
                                 } catch (Throwable ignored) {}
                             })
-                            .setNegativeButton("Later", null)
+                            .setNegativeButton("Later", (d, w) -> {
+                                mUserDeferredPlayRestart = true;
+                            })
                             .show();
                 } catch (Throwable ignored) {}
             });
@@ -229,8 +240,8 @@ public class MainActivity extends BridgeActivity {
             if (appUpdateManager != null) {
                 appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> {
                     try {
-                        if (info != null && info.installStatus() == InstallStatus.DOWNLOADED) {
-                            appUpdateManager.completeUpdate();
+                        if (info != null && info.installStatus() == InstallStatus.DOWNLOADED && !mUserDeferredPlayRestart) {
+                            showPlayUpdateReadyDialog();
                         }
                     } catch (Throwable ignored) {}
                 });
