@@ -1364,12 +1364,6 @@ window.findAccountsByPhone = async function (phoneStr) {
         var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
         if (res && res.ok) {
             var doc = await res.json();
-            if (doc && doc.fields && doc.fields.agentCustomersJson && doc.fields.agentCustomersJson.stringValue) {
-                try {
-                    window._agentCustomersList = JSON.parse(doc.fields.agentCustomersJson.stringValue);
-                    localStorage.setItem('dsAgentCustomers_' + clean10, doc.fields.agentCustomersJson.stringValue);
-                } catch (e) { }
-            }
             if (doc && doc.fields && doc.fields.matchedAccounts && doc.fields.matchedAccounts.arrayValue && doc.fields.matchedAccounts.arrayValue.values) {
                 var rawMatches = doc.fields.matchedAccounts.arrayValue.values;
                 var matches = rawMatches.map(m => {
@@ -6538,7 +6532,8 @@ function handleHardwareBack() {
     // 1. If Bill Invoice modal is open, close it
     var billM = document.getElementById('billDetailModal');
     if (billM && billM.style.display === 'flex') {
-        billM.style.display = 'none';
+        if (typeof window.closeBillModal === 'function') window.closeBillModal();
+        else billM.style.display = 'none';
         return;
     }
 
@@ -7553,9 +7548,11 @@ async function saveCustomerDetails() {
                 if (d.phone) {
                     var rawPhone = d.phone.trim().replace(/\D/g, '').slice(-10);
                     var cleanPhoneKey = rawPhone.length === 10 ? ('+91' + rawPhone) : d.phone.trim();
+                    var partyDocId = window.sanitizeDocId ? window.sanitizeDocId(partyCodeKey) : String(partyCodeKey || '').trim().toUpperCase().replace(/[\/\.\s]/g, '_');
                     var userPatchDoc = {
                         fields: {
                             linkedAccount: { stringValue: partyCodeKey },
+                            linkedAccountDocId: { stringValue: partyDocId },
                             linkedAccountName: { stringValue: d.name || partyCodeKey },
                             station: { stringValue: d.station || '' },
                             state: { stringValue: d.state || '' },
@@ -7570,7 +7567,7 @@ async function saveCustomerDetails() {
                         }
                     };
                     window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(cleanPhoneKey) +
-                        "?updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=agent&updateMask.fieldPaths=transport&updateMask.fieldPaths=gst&updateMask.fieldPaths=name&updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt", {
+                        "?updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountDocId&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=station&updateMask.fieldPaths=state&updateMask.fieldPaths=agent&updateMask.fieldPaths=transport&updateMask.fieldPaths=gst&updateMask.fieldPaths=name&updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt", {
                         method: "PATCH",
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(userPatchDoc)
@@ -11381,6 +11378,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
         }
         possibleIds = [...new Set(possibleIds.filter(Boolean))];
 
+        var selectedDocId = window.sanitizeDocId ? window.sanitizeDocId(selectedCode) : String(selectedCode || '').trim().toUpperCase().replace(/[\/\.\s]/g, '_');
         var patchBody = {
             fields: {
                 approvalStatus: { stringValue: "approved" },
@@ -11388,6 +11386,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
                 approvedByAdmin: { stringValue: adminName },
                 approvedAt: { timestampValue: nowIso },
                 linkedAccount: { stringValue: selectedCode },
+                linkedAccountDocId: { stringValue: selectedDocId },
                 linkedAccountName: { stringValue: selectedName },
                 role: { stringValue: selectedRole },
                 pricingTier: { stringValue: "b2b" }
@@ -11397,7 +11396,7 @@ window.approveUserAccount = async function (docId, directCode, directName, direc
         for (var pId of possibleIds) {
             try {
                 var pUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(pId) +
-                    "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role&updateMask.fieldPaths=pricingTier";
+                    "?updateMask.fieldPaths=approvalStatus&updateMask.fieldPaths=isApproved&updateMask.fieldPaths=approvedByAdmin&updateMask.fieldPaths=approvedAt&updateMask.fieldPaths=linkedAccount&updateMask.fieldPaths=linkedAccountDocId&updateMask.fieldPaths=linkedAccountName&updateMask.fieldPaths=role&updateMask.fieldPaths=pricingTier";
                 await fetch(pUrl, { method: "PATCH", headers: headers, body: JSON.stringify(patchBody) });
             } catch (e) { }
             try {
@@ -14663,7 +14662,7 @@ window.openMyReportsSelfService = async function () {
                 try {
                     var tok = await getCachedAuthToken(false);
                     var hdrs = tok ? { 'Authorization': 'Bearer ' + tok } : {};
-                    var pdRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PhoneDirectory/" + p10, { headers: hdrs });
+                    var pdRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AgentDirectories/" + p10, { headers: hdrs });
                     if (pdRes && pdRes.ok) {
                         var pdDoc = await pdRes.json();
                         if (pdDoc && pdDoc.fields && pdDoc.fields.agentCustomersJson && pdDoc.fields.agentCustomersJson.stringValue) {
@@ -15169,7 +15168,7 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
                 try {
                     var pdTok = await getCachedAuthToken(false);
                     var pdHdrs = pdTok ? { 'Authorization': 'Bearer ' + pdTok } : {};
-                    var pdR = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PhoneDirectory/" + myP10, { headers: pdHdrs });
+                    var pdR = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/AgentDirectories/" + myP10, { headers: pdHdrs });
                     if (pdR && pdR.ok) {
                         var pdJ = await pdR.json();
                         if (pdJ && pdJ.fields && pdJ.fields.agentCustomersJson && pdJ.fields.agentCustomersJson.stringValue) {
@@ -18539,6 +18538,17 @@ window.startAutomaticContactSync = async function (isManual) {
         return;
     }
 
+    var nativeExistingBefore = -1;
+    if (typeof nativePlugin.getAccountContactCount === 'function') {
+        try {
+            var cntRes = await nativePlugin.getAccountContactCount();
+            if (cntRes && typeof cntRes.count === 'number') nativeExistingBefore = cntRes.count;
+        } catch (e) { }
+    }
+    if (isManual || nativeExistingBefore === 0) {
+        try { localStorage.removeItem('ds_contact_sync_hashes_v2'); } catch (e) { }
+    }
+
     // Filter to parties with at least one clean 10-digit phone
     var candidateList = (list || []).filter(function (c) {
         return Array.isArray(c.cleanPhones) && c.cleanPhones.length > 0;
@@ -18577,6 +18587,7 @@ window.startAutomaticContactSync = async function (isManual) {
     var totalUpdated = 0;
     var totalExisting = 0;
     var lastAccountUsed = '';
+    var lastError = '';
     var BATCH_SIZE = 100;
 
     for (var b = 0; b < candidateList.length; b += BATCH_SIZE) {
@@ -18605,8 +18616,9 @@ window.startAutomaticContactSync = async function (isManual) {
             if (res) {
                 totalAdded += (res.added || 0);
                 totalUpdated += (res.updated || 0);
-                if (res.existingCount) totalExisting = (res.existingCount || 0);
+                if (res.existingCount !== undefined) totalExisting = (res.existingCount || 0);
                 if (res.accountUsed) lastAccountUsed = res.accountUsed;
+                if (res.lastError) lastError = res.lastError;
             }
         } catch (batchErr) {
             console.warn("NativeContacts batch sync error:", batchErr);
@@ -18628,8 +18640,15 @@ window.startAutomaticContactSync = async function (isManual) {
         await new Promise(function (r) { setTimeout(r, 50); });
     }
 
+    if (typeof nativePlugin.getAccountContactCount === 'function') {
+        try {
+            var finalCntRes = await nativePlugin.getAccountContactCount();
+            if (finalCntRes && typeof finalCntRes.count === 'number') totalExisting = finalCntRes.count;
+        } catch (e) { }
+    }
+
     if (bannerText && bannerCount) {
-        bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> Synced ' + completedCount + ' contacts (' + totalAdded + ' added, ' + totalUpdated + ' updated)';
+        bannerText.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> Synced ' + completedCount + ' contacts (' + totalAdded + ' added, ' + totalUpdated + ' updated, ' + totalExisting + ' in ERP account)';
         bannerCount.innerText = '✅ Complete';
         setTimeout(function () { if (banner) banner.style.display = 'none'; }, 5000);
     }
@@ -18638,7 +18657,7 @@ window.startAutomaticContactSync = async function (isManual) {
     }
     window._isSyncingContacts = false;
     if (isManual) {
-        alert("✅ Phonebook Contact Sync Complete!\n\n• Contacts Processed: " + completedCount + "\n• New Added: " + totalAdded + "\n• Existing Updated: " + totalUpdated + (lastAccountUsed ? "\n• Target Account: " + lastAccountUsed : ""));
+        alert("✅ Phonebook Contact Sync Complete!\n\n• Contacts Processed: " + completedCount + "\n• New Added: " + totalAdded + "\n• Existing Updated: " + totalUpdated + "\n• Total in Account: " + totalExisting + (lastAccountUsed ? "\n• Target Account: " + lastAccountUsed : "") + (lastError ? "\n• Last Error: " + lastError : "") + "\n\nOpen Samsung Contacts → ☰ → All contacts (or Durga Sarees ERP) to view.");
     }
 };
 

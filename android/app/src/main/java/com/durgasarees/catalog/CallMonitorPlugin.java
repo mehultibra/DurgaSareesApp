@@ -27,6 +27,13 @@ import com.google.firebase.messaging.FirebaseMessaging;
 public class CallMonitorPlugin extends Plugin {
     private static volatile boolean isEnabled = false;
     private static CallMonitorPlugin instance;
+    private static volatile java.util.Map<String, String> sErpCallerCache = null;
+    private static volatile long sErpCacheLastModified = -1L;
+
+    private static synchronized void invalidateErpCallerCache() {
+        sErpCallerCache = null;
+        sErpCacheLastModified = -1L;
+    }
 
     @Override
     public void load() {
@@ -79,7 +86,9 @@ public class CallMonitorPlugin extends Plugin {
             SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
             sp.edit().putBoolean("is_super_admin", isSuper).apply();
             if (!isSuper) {
+                invalidateErpCallerCache();
                 DurgaCallScreeningService.clearCallerDatabase(getContext());
+                try { getContext().getSharedPreferences("ds_erp_directory", Context.MODE_PRIVATE).edit().clear().apply(); } catch (Throwable ignored) {}
                 try { FirebaseMessaging.getInstance().unsubscribeFromTopic(DurgaMessagingService.TOPIC_SUPER_ADMIN); } catch (Throwable ignored) {}
             } else {
                 try { FirebaseMessaging.getInstance().subscribeToTopic(DurgaMessagingService.TOPIC_SUPER_ADMIN); } catch (Throwable ignored) {}
@@ -154,6 +163,7 @@ public class CallMonitorPlugin extends Plugin {
             sp.edit().putBoolean("is_super_admin", isSuperAdmin).apply();
 
             if (!isSuperAdmin) {
+                invalidateErpCallerCache();
                 DurgaCallScreeningService.clearCallerDatabase(getContext());
                 try { getContext().getSharedPreferences("ds_erp_directory", Context.MODE_PRIVATE).edit().clear().apply(); } catch (Throwable ignored) {}
                 try { FirebaseMessaging.getInstance().unsubscribeFromTopic(DurgaMessagingService.TOPIC_SUPER_ADMIN); } catch (Throwable ignored) {}
@@ -165,6 +175,8 @@ public class CallMonitorPlugin extends Plugin {
             JSObject callers = call.getObject("callers");
             if (callers != null) {
                 DurgaCallScreeningService.saveCallerDatabase(getContext(), callers.toString());
+                invalidateErpCallerCache();
+                getOrLoadErpCache(getContext());
             }
             call.resolve();
         } catch (Throwable t) {
@@ -172,25 +184,67 @@ public class CallMonitorPlugin extends Plugin {
         }
     }
 
+    private static synchronized java.util.Map<String, String> getOrLoadErpCache(Context ctx) {
+        if (ctx == null) return null;
+        try {
+            java.io.File f = new java.io.File(ctx.getFilesDir(), "erp_caller_directory.json");
+            if (!f.exists()) {
+                f = new java.io.File(ctx.getFilesDir(), "ds_caller_db.json");
+            }
+            if (!f.exists()) return sErpCallerCache;
+            long lm = f.lastModified();
+            if (sErpCallerCache != null && lm == sErpCacheLastModified) {
+                return sErpCallerCache;
+            }
+            byte[] bytes = new byte[(int) f.length()];
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(f)) {
+                int read = fis.read(bytes);
+                if (read <= 0) return sErpCallerCache;
+            }
+            org.json.JSONObject obj = new org.json.JSONObject(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            java.util.Map<String, String> map = new java.util.HashMap<>(obj.length());
+            java.util.Iterator<String> keys = obj.keys();
+            while (keys.hasNext()) {
+                String k = keys.next();
+                String v = obj.optString(k, "");
+                if (k != null && !v.trim().isEmpty()) {
+                    map.put(k, v.trim());
+                }
+            }
+            sErpCallerCache = map;
+            sErpCacheLastModified = lm;
+        } catch (Throwable ignored) {}
+        return sErpCallerCache;
+    }
+
     public static String lookupErpCaller(Context ctx, String p10) {
         if (ctx == null || p10 == null) return null;
-        String clean10 = p10.replaceAll("\\D", "");
-        if (clean10.length() < 10) return null;
-        clean10 = clean10.substring(clean10.length() - 10);
-
-        String partyName = DurgaCallScreeningService.getCallerPartyName(ctx, clean10);
-        if (partyName != null && !partyName.trim().isEmpty()) {
-            return partyName.trim();
-        }
-
         try {
-            SharedPreferences spDir = ctx.getSharedPreferences("ds_erp_directory", Context.MODE_PRIVATE);
-            String spName = spDir.getString(clean10, null);
-            if (spName != null && !spName.trim().isEmpty()) {
-                return spName.trim();
+            String clean10 = p10.replaceAll("\\D", "");
+            if (clean10.length() < 10) return null;
+            clean10 = clean10.substring(clean10.length() - 10);
+
+            java.util.Map<String, String> cache = getOrLoadErpCache(ctx);
+            if (cache != null) {
+                String cachedName = cache.get(clean10);
+                if (cachedName != null && !cachedName.isEmpty()) {
+                    return cachedName;
+                }
+            }
+
+            try {
+                SharedPreferences spDir = ctx.getSharedPreferences("ds_erp_directory", Context.MODE_PRIVATE);
+                String spName = spDir.getString(clean10, null);
+                if (spName != null && !spName.trim().isEmpty()) {
+                    return spName.trim();
+                }
+            } catch (Throwable ignored) {}
+
+            String contactName = DurgaCallScreeningService.getCallerPartyName(ctx, clean10);
+            if (contactName != null && !contactName.trim().isEmpty()) {
+                return contactName.trim();
             }
         } catch (Throwable ignored) {}
-
         return null;
     }
 

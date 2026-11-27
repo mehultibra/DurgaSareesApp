@@ -161,6 +161,38 @@ public class NativeContactsPlugin extends Plugin {
         return deleted;
     }
 
+    private int countErpRawContacts() {
+        int count = 0;
+        Cursor c = null;
+        try {
+            c = getContext().getContentResolver().query(
+                ContactsContract.RawContacts.CONTENT_URI,
+                new String[]{ ContactsContract.RawContacts._ID },
+                ContactsContract.RawContacts.ACCOUNT_TYPE + " = ? AND " + ContactsContract.RawContacts.DELETED + " = 0",
+                new String[]{ ACCOUNT_TYPE },
+                null
+            );
+            if (c != null) count = c.getCount();
+        } catch (Throwable ignored) {
+        } finally {
+            if (c != null) try { c.close(); } catch (Throwable ignored) {}
+        }
+        return count;
+    }
+
+    @PluginMethod
+    public void getAccountContactCount(PluginCall call) {
+        try {
+            JSObject ret = new JSObject();
+            ret.put("count", countErpRawContacts());
+            call.resolve(ret);
+        } catch (Throwable t) {
+            JSObject ret = new JSObject();
+            ret.put("count", 0);
+            call.resolve(ret);
+        }
+    }
+
     @PluginMethod
     public void ensureAccount(PluginCall call) {
         try {
@@ -168,6 +200,7 @@ public class NativeContactsPlugin extends Plugin {
             JSObject ret = new JSObject();
             ret.put("name", info.accountName);
             ret.put("type", info.accountType);
+            ret.put("existingCount", countErpRawContacts());
             call.resolve(ret);
         } catch (Throwable t) {
             call.reject("ensureAccount error: " + t.getMessage());

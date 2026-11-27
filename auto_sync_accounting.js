@@ -282,17 +282,17 @@ async function syncAccountingData() {
             party.billDetails.forEach(b => {
                 const billNo = String(b.BILL || b.VNO || '').trim();
                 const billAgent = String(b.BCODE || '').trim();
+                const billAgentUpper = billAgent.toUpperCase();
                 const billHaste = String(b.haste || '').trim();
                 const combinedAgentHaste = billAgent
                     ? (billHaste && billAgent.toUpperCase() !== billHaste.toUpperCase() ? `${billAgent} (Haste: ${billHaste})` : billAgent)
                     : (billHaste || '');
-                if (billAgent) {
+                if (billAgentUpper) {
                     if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
                     allAgentsByParty.get(code).add(billAgent);
-                    const agKey = billAgent.toUpperCase();
-                    if (agKey !== code) {
-                        if (!customersByAgentCode.has(agKey)) customersByAgentCode.set(agKey, new Set());
-                        customersByAgentCode.get(agKey).add(code);
+                    if (billAgentUpper !== code) {
+                        if (!customersByAgentCode.has(billAgentUpper)) customersByAgentCode.set(billAgentUpper, new Set());
+                        customersByAgentCode.get(billAgentUpper).add(code);
                     }
                 }
 
@@ -372,8 +372,8 @@ async function syncAccountingData() {
                         p.finishSales.push(fsRow);
 
                         // Also aggregate bill into Agent's report if brokered
-                        if (billAgent && allowedPartyCodes.has(billAgent) && billAgent !== code) {
-                            const agRep = getPartyReport(billAgent);
+                        if (billAgentUpper && allowedPartyCodes.has(billAgentUpper) && billAgentUpper !== code) {
+                            const agRep = getPartyReport(billAgentUpper);
                             if (agRep) {
                                 const agRow = fsRow.slice();
                                 agRow[18] = m.partyname || m.NAME || code;
@@ -404,8 +404,8 @@ async function syncAccountingData() {
                     ];
                     p.finishSales.push(fsSingleRow);
 
-                    if (billAgent && allowedPartyCodes.has(billAgent) && billAgent !== code) {
-                        const agRep = getPartyReport(billAgent);
+                    if (billAgentUpper && allowedPartyCodes.has(billAgentUpper) && billAgentUpper !== code) {
+                        const agRep = getPartyReport(billAgentUpper);
                         if (agRep) {
                             const agRow = fsSingleRow.slice();
                             agRow[18] = m.partyname || m.NAME || code;
@@ -484,13 +484,13 @@ async function syncAccountingData() {
                     osDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
                 }
                 const bBroker = String(b.BCODE || b.BROKER || '').trim();
-                if (bBroker) {
+                const bBrokerUpper = bBroker.toUpperCase();
+                if (bBrokerUpper) {
                     if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
                     allAgentsByParty.get(code).add(bBroker);
-                    const brKey = bBroker.toUpperCase();
-                    if (brKey !== code) {
-                        if (!customersByAgentCode.has(brKey)) customersByAgentCode.set(brKey, new Set());
-                        customersByAgentCode.get(brKey).add(code);
+                    if (bBrokerUpper !== code) {
+                        if (!customersByAgentCode.has(bBrokerUpper)) customersByAgentCode.set(bBrokerUpper, new Set());
+                        customersByAgentCode.get(bBrokerUpper).add(code);
                     }
                 }
                 const osItem = {
@@ -507,9 +507,9 @@ async function syncAccountingData() {
                 p.outstanding.push(osItem);
 
                 // Also aggregate outstanding bill into Agent's report if brokered
-                if (bBroker && allowedPartyCodes.has(bBroker) && bBroker !== code) {
+                if (bBrokerUpper && allowedPartyCodes.has(bBrokerUpper) && bBrokerUpper !== code) {
                     const mParty = mstPartyMap.get(code) || {};
-                    const agRep = getPartyReport(bBroker);
+                    const agRep = getPartyReport(bBrokerUpper);
                     if (agRep) {
                         const agOs = Object.assign({}, osItem, { party: mParty.partyname || mParty.NAME || code });
                         agRep.outstanding.push(agOs);
@@ -963,7 +963,22 @@ async function syncAccountingData() {
                 });
             });
             agCustomersArr.sort((x, y) => String(x.n || '').localeCompare(String(y.n || '')));
-            docData.agentCustomersJson = JSON.stringify(agCustomersArr);
+            const agDirDoc = {
+                phone: p10,
+                agentCustomersJson: JSON.stringify(agCustomersArr),
+                updatedAt: nowIso
+            };
+            const agDirHashKey = 'agdir_' + p10;
+            const agDirHash = computeHash(agDirDoc);
+            if (existingHashes[agDirHashKey] !== agDirHash) {
+                pendingWrites.push({
+                    collection: 'AgentDirectories',
+                    docId: p10,
+                    data: agDirDoc,
+                    hashKey: agDirHashKey,
+                    hashValue: agDirHash
+                });
+            }
         }
         docData.allowedDocIds = Array.from(allowedSet);
         const hKey = 'phone_' + p10;

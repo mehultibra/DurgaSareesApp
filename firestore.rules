@@ -133,13 +133,22 @@ service cloud.firestore {
     // ==========================================
     // ERP CLOUD COLLECTIONS (Accounting Brain)
     // ==========================================
+    function getPhone10() {
+      return (request.auth != null && request.auth.token.phone_number != null && request.auth.token.phone_number.size() >= 10)
+        ? request.auth.token.phone_number[request.auth.token.phone_number.size() - 10 : request.auth.token.phone_number.size()]
+        : '';
+    }
+
     function isAllowedPartyReport(docId) {
       return isStaffOrAdmin() || (
-        isApprovedUser()
-        && request.auth.token.phone_number != null
-        && request.auth.token.phone_number.size() >= 10
-        && exists(/databases/$(database)/documents/PhoneDirectory/$(request.auth.token.phone_number.replace('+91', '')))
-        && docId in get(/databases/$(database)/documents/PhoneDirectory/$(request.auth.token.phone_number.replace('+91', ''))).data.get('allowedDocIds', [])
+        isApprovedUser() && (
+          (getUserDoc() != null && getUserDoc().get('linkedAccountDocId', '') == docId) ||
+          (
+            getPhone10().size() == 10
+            && exists(/databases/$(database)/documents/PhoneDirectory/$(getPhone10()))
+            && docId in get(/databases/$(database)/documents/PhoneDirectory/$(getPhone10())).data.get('allowedDocIds', [])
+          )
+        )
       );
     }
 
@@ -157,7 +166,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /PhoneDirectory/{phoneId} {
-      allow get: if isStaffOrAdmin() || (request.auth != null && request.auth.token.phone_number == '+91' + phoneId);
+      allow get: if isStaffOrAdmin() || (request.auth != null && getPhone10() == phoneId);
+      allow list, write: if isStaffOrAdmin();
+    }
+    match /AgentDirectories/{phoneId} {
+      allow get: if isStaffOrAdmin() || (isApprovedUser() && getPhone10() == phoneId);
       allow list, write: if isStaffOrAdmin();
     }
 
