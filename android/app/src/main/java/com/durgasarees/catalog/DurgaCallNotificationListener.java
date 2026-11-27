@@ -201,55 +201,35 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 }
             }
 
-            String partyName = null;
-            if (p10 != null) {
-                if (!isGenericDialerStatus(title)) {
-                    partyName = title;
-                } else if (!isGenericDialerStatus(bigTitle)) {
-                    partyName = bigTitle;
-                } else if (!isGenericDialerStatus(text)) {
-                    partyName = text;
-                } else if (!isGenericDialerStatus(bigText)) {
-                    partyName = bigText;
-                } else if (!isGenericDialerStatus(sub)) {
-                    partyName = sub;
-                } else {
-                    partyName = lookupNameByPhone(p10);
-                }
-            } else {
-                // If no phone in notification text, check title, bigTitle, text, bigText, sub against contacts
+            if (p10 == null) {
+                // If no phone in notification text, match against ERP directory / ERP Contacts account ONLY
                 if (!isGenericDialerStatus(title)) {
                     p10 = lookupPhoneByName(title);
-                    if (p10 != null) partyName = title;
                 }
                 if (p10 == null && !isGenericDialerStatus(bigTitle)) {
                     p10 = lookupPhoneByName(bigTitle);
-                    if (p10 != null) partyName = bigTitle;
                 }
                 if (p10 == null && !isGenericDialerStatus(text)) {
                     p10 = lookupPhoneByName(text);
-                    if (p10 != null) partyName = text;
                 }
                 if (p10 == null && !isGenericDialerStatus(bigText)) {
                     p10 = lookupPhoneByName(bigText);
-                    if (p10 != null) partyName = bigText;
                 }
                 if (p10 == null && !isGenericDialerStatus(sub)) {
                     p10 = lookupPhoneByName(sub);
-                    if (p10 != null) partyName = sub;
                 }
             }
 
-            // Strict phone-only: Only process incoming calls matching a valid 10-digit Durga Sarees phone number
+            // Hard Rule: Strictly ERP-only 10-digit callers (never non-ERP / personal calls)
             if (p10 == null || p10.length() != 10) {
                 return;
             }
 
-            // Strict check: Only show notification/popup for numbers matching accounts in our app database
-            partyName = DurgaCallScreeningService.getCallerPartyName(this, p10);
-            if (partyName == null || partyName.trim().isEmpty()) {
+            String erpPartyName = CallMonitorPlugin.lookupErpCaller(this, p10);
+            if (erpPartyName == null || erpPartyName.trim().isEmpty()) {
                 return;
             }
+            String partyName = erpPartyName;
 
             String dedupeKey = (p10.isEmpty() ? partyName : p10) + "|" + partyName;
             long now = System.currentTimeMillis();
@@ -335,6 +315,8 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
             cursor = getContentResolver().query(
                 ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                 new String[]{ ContactsContract.CommonDataKinds.Phone.NUMBER },
+                ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'com.durgasarees.catalog' AND " +
+                ContactsContract.RawContacts.DELETED + " = 0 AND " +
                 ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " = ?",
                 new String[]{ trimmed },
                 null
@@ -356,7 +338,7 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 cursor = null;
             }
 
-            // Fallback: strip [CITY] if present and query DISPLAY_NAME LIKE baseName%
+            // Fallback: strip [CITY] if present and query DISPLAY_NAME LIKE baseName% within ERP account ONLY
             String baseName = trimmed;
             int bracketIdx = baseName.indexOf('[');
             if (bracketIdx > 0) {
@@ -366,6 +348,8 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                 cursor = getContentResolver().query(
                     ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                     new String[]{ ContactsContract.CommonDataKinds.Phone.NUMBER },
+                    ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'com.durgasarees.catalog' AND " +
+                    ContactsContract.RawContacts.DELETED + " = 0 AND " +
                     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " LIKE ?",
                     new String[]{ baseName + "%" },
                     null

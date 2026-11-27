@@ -236,6 +236,7 @@ async function syncAccountingData() {
     const transportByParty = new Map();
     const agentByParty = new Map();
     const allAgentsByParty = new Map();
+    const customersByAgentCode = new Map();
 
     function getPartyReport(code) {
         const k = String(code || '').trim().toUpperCase();
@@ -288,6 +289,11 @@ async function syncAccountingData() {
                 if (billAgent) {
                     if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
                     allAgentsByParty.get(code).add(billAgent);
+                    const agKey = billAgent.toUpperCase();
+                    if (agKey !== code) {
+                        if (!customersByAgentCode.has(agKey)) customersByAgentCode.set(agKey, new Set());
+                        customersByAgentCode.get(agKey).add(code);
+                    }
                 }
 
                 let paidDays = null;
@@ -481,6 +487,11 @@ async function syncAccountingData() {
                 if (bBroker) {
                     if (!allAgentsByParty.has(code)) allAgentsByParty.set(code, new Set());
                     allAgentsByParty.get(code).add(bBroker);
+                    const brKey = bBroker.toUpperCase();
+                    if (brKey !== code) {
+                        if (!customersByAgentCode.has(brKey)) customersByAgentCode.set(brKey, new Set());
+                        customersByAgentCode.get(brKey).add(code);
+                    }
                 }
                 const osItem = {
                     bno: b.BILL || b.VNO || b.BILLNO || '',
@@ -913,6 +924,7 @@ async function syncAccountingData() {
     });
 
     // C. Check PhoneDirectory
+    const custSummaryByCode = new Map(customers.map(c => [String(c.code || '').trim().toUpperCase(), c]));
     Object.keys(phoneDirectoryMap).forEach(p10 => {
         const docData = phoneDirectoryMap[p10];
         if (Array.isArray(docData.matchedAccounts) && docData.matchedAccounts.length > 1) {
@@ -921,6 +933,39 @@ async function syncAccountingData() {
                 docData.matchedAccounts = docData.matchedAccounts.filter(a => a.role === 'agent' || (a.code && String(a.code).startsWith('AG')));
             }
         }
+        const allowedSet = new Set();
+        const isAgentPhone = Array.isArray(docData.matchedAccounts) && docData.matchedAccounts.some(a => a.role === 'agent' || (a.code && String(a.code).startsWith('AG')));
+        (docData.matchedAccounts || []).forEach(a => {
+            const ac = String(a.code || '').trim().toUpperCase();
+            if (ac) allowedSet.add(sanitizeDocId(ac));
+        });
+        if (isAgentPhone) {
+            const agCustCodes = new Set();
+            (docData.matchedAccounts || []).forEach(a => {
+                [a.code, a.name].forEach(k => {
+                    const ku = String(k || '').trim().toUpperCase();
+                    if (ku && customersByAgentCode.has(ku)) {
+                        customersByAgentCode.get(ku).forEach(cc => agCustCodes.add(cc));
+                    }
+                });
+            });
+            const agCustomersArr = [];
+            agCustCodes.forEach(cc => {
+                const cObj = custSummaryByCode.get(cc);
+                if (!cObj || cObj.role === 'agent') return;
+                const cDocId = sanitizeDocId(cc);
+                allowedSet.add(cDocId);
+                agCustomersArr.push({
+                    c: cObj.code,
+                    docId: cDocId,
+                    n: cObj.name || cObj.code,
+                    ct: cObj.station || ''
+                });
+            });
+            agCustomersArr.sort((x, y) => String(x.n || '').localeCompare(String(y.n || '')));
+            docData.agentCustomersJson = JSON.stringify(agCustomersArr);
+        }
+        docData.allowedDocIds = Array.from(allowedSet);
         const hKey = 'phone_' + p10;
         const currentHash = computeHash(docData);
         if (existingHashes[hKey] !== currentHash) {
@@ -1035,14 +1080,29 @@ async function syncAccountingData() {
 
             async function commitWriteOps(itemsWithOps) {
                 const ops = itemsWithOps.map(x => x.writeOp);
-                const commitRes = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:commit`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ writes: ops })
-                });
+                let commitRes = null;
+                let lastNetErr = null;
+                for (let attempt = 1; attempt <= 3; attempt++) {
+                    try {
+                        commitRes = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:commit`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer ' + token,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ writes: ops })
+                        });
+                        lastNetErr = null;
+                        break;
+                    } catch (err) {
+                        lastNetErr = err;
+                        if (attempt < 3) {
+                            console.warn(`⚠️ Batch commit network error (attempt ${attempt}/3): ${err.message}. Retrying in 2s...`);
+                            await new Promise(r => setTimeout(r, 2000));
+                        }
+                    }
+                }
+                if (lastNetErr) throw lastNetErr;
 
                 if (commitRes.ok) {
                     itemsWithOps.forEach(x => {

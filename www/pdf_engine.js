@@ -1160,9 +1160,10 @@ function renderProductCoverPage(doc, product, base64Img, wixUrl, pageWidth, imgY
         doc.text(":  " + String(value), colX + 55, rowY);
     }
 
+    var coverEffPrice = (window.getProductEffectivePrice ? window.getProductEffectivePrice(product) : product.price);
     drawSpec("Quality", product.fabric, col1X, startY);
     drawSpec("Code", product.sku, col2X, startY);
-    drawSpec("D No", product.price, col3X, startY);
+    drawSpec("D No", coverEffPrice, col3X, startY);
 
     drawSpec("Jari", product.jari, col1X, startY + rowH);
     drawSpec("Border", product.border, col2X, startY + rowH);

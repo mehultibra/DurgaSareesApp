@@ -155,6 +155,7 @@ public class CallMonitorPlugin extends Plugin {
 
             if (!isSuperAdmin) {
                 DurgaCallScreeningService.clearCallerDatabase(getContext());
+                try { getContext().getSharedPreferences("ds_erp_directory", Context.MODE_PRIVATE).edit().clear().apply(); } catch (Throwable ignored) {}
                 try { FirebaseMessaging.getInstance().unsubscribeFromTopic(DurgaMessagingService.TOPIC_SUPER_ADMIN); } catch (Throwable ignored) {}
                 call.resolve();
                 return;
@@ -169,6 +170,28 @@ public class CallMonitorPlugin extends Plugin {
         } catch (Throwable t) {
             call.reject("syncCallerDirectory error: " + t.getMessage());
         }
+    }
+
+    public static String lookupErpCaller(Context ctx, String p10) {
+        if (ctx == null || p10 == null) return null;
+        String clean10 = p10.replaceAll("\\D", "");
+        if (clean10.length() < 10) return null;
+        clean10 = clean10.substring(clean10.length() - 10);
+
+        String partyName = DurgaCallScreeningService.getCallerPartyName(ctx, clean10);
+        if (partyName != null && !partyName.trim().isEmpty()) {
+            return partyName.trim();
+        }
+
+        try {
+            SharedPreferences spDir = ctx.getSharedPreferences("ds_erp_directory", Context.MODE_PRIVATE);
+            String spName = spDir.getString(clean10, null);
+            if (spName != null && !spName.trim().isEmpty()) {
+                return spName.trim();
+            }
+        } catch (Throwable ignored) {}
+
+        return null;
     }
 
     @PluginMethod

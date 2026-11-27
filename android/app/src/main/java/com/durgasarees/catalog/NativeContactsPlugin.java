@@ -80,7 +80,7 @@ public class NativeContactsPlugin extends Plugin {
                 Account erpAccount = new Account(ACCOUNT_NAME, ACCOUNT_TYPE);
                 am.addAccountExplicitly(erpAccount, null, null);
                 android.content.ContentResolver.setIsSyncable(erpAccount, ContactsContract.AUTHORITY, 1);
-                android.content.ContentResolver.setSyncAutomatically(erpAccount, ContactsContract.AUTHORITY, true);
+                android.content.ContentResolver.setSyncAutomatically(erpAccount, ContactsContract.AUTHORITY, false);
             } catch (Throwable ignored) {}
 
             // Both update and insert into ContactsContract.Settings
@@ -119,7 +119,7 @@ public class NativeContactsPlugin extends Plugin {
                 "((" + ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'vnd.sec.contact.phone' OR " +
                 ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'com.google') AND (" +
                 ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%[%' OR " +
-                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%(Ag:%)'))" +
+                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%(Ag:%'))" +
                 " AND " + ContactsContract.RawContacts.DELETED + " = 0",
                 null,
                 null
@@ -211,6 +211,7 @@ public class NativeContactsPlugin extends Plugin {
 
             new Thread(() -> {
                 try {
+                    mLastBatchError = null;
                     // 1. Ensure dedicated "Durga Sarees ERP" account exists and get group
                     AccountInfo acctInfo = ensureDurgaAccount();
                     String targetAccountName = acctInfo.accountName;

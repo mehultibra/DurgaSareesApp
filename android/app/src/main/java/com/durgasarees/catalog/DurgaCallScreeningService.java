@@ -30,6 +30,11 @@ public class DurgaCallScreeningService extends CallScreeningService {
         }
 
         try {
+            SharedPreferences sp = getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
+            if (!sp.getBoolean("is_super_admin", false) || !sp.getBoolean("call_popup_enabled", true)) {
+                return;
+            }
+
             Uri handle = callDetails.getHandle();
             if (handle == null)
                 return;
@@ -51,32 +56,27 @@ public class DurgaCallScreeningService extends CallScreeningService {
                 }
             }
 
-            SharedPreferences sp = getSharedPreferences("ds_call_prefs", Context.MODE_PRIVATE);
-            if (!sp.getBoolean("is_super_admin", false) || !sp.getBoolean("call_popup_enabled", true)) {
-                return;
-            }
+            // Look up party name strictly from synced ERP directory or Durga Sarees ERP Contacts account
+            String erpPartyName = CallMonitorPlugin.lookupErpCaller(this, p10);
 
-            // Look up party name directly from ERP software database
-            String partyName = getCallerPartyName(this, p10);
-
-            // Strict check: Only show notification/popup for numbers matching accounts in our app database
-            if (partyName == null || partyName.trim().isEmpty()) {
+            // Hard Rule: Never save prefs, fire JS, or show notification for non-ERP numbers
+            if (erpPartyName == null || erpPartyName.trim().isEmpty()) {
                 return;
             }
 
             long now = System.currentTimeMillis();
             sp.edit()
                     .putString("last_call_phone", p10)
-                    .putString("last_call_name", partyName)
+                    .putString("last_call_name", erpPartyName)
                     .putString("last_call_dir", direction)
                     .putLong("last_call_time", now)
                     .apply();
 
             // Notify running JS WebView instance
-            CallMonitorPlugin.notifyLiveCall(this, p10, partyName, direction);
+            CallMonitorPlugin.notifyLiveCall(this, p10, erpPartyName, direction);
 
             // Show High-Priority Heads-Up Notification
-            showCallNotification(this, p10, partyName, direction);
+            showCallNotification(this, p10, erpPartyName, direction);
         } catch (Throwable ignored) {
         }
     }
@@ -86,9 +86,13 @@ public class DurgaCallScreeningService extends CallScreeningService {
     public static synchronized void saveCallerDatabase(Context context, String jsonStr) {
         if (context == null || jsonStr == null) return;
         try {
-            java.io.FileOutputStream fos = context.openFileOutput("ds_caller_db.json", Context.MODE_PRIVATE);
-            fos.write(jsonStr.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            fos.close();
+            byte[] data = jsonStr.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            try (java.io.FileOutputStream fos = context.openFileOutput("erp_caller_directory.json", Context.MODE_PRIVATE)) {
+                fos.write(data);
+            }
+            try (java.io.FileOutputStream fos2 = context.openFileOutput("ds_caller_db.json", Context.MODE_PRIVATE)) {
+                fos2.write(data);
+            }
             sCallerCache = new JSONObject(jsonStr);
         } catch (Throwable ignored) {}
     }
@@ -97,6 +101,7 @@ public class DurgaCallScreeningService extends CallScreeningService {
         sCallerCache = null;
         if (context == null) return;
         try {
+            context.deleteFile("erp_caller_directory.json");
             context.deleteFile("ds_caller_db.json");
         } catch (Throwable ignored) {}
     }
@@ -105,12 +110,17 @@ public class DurgaCallScreeningService extends CallScreeningService {
         if (sCallerCache != null) return sCallerCache;
         if (context == null) return null;
         try {
-            java.io.File file = new java.io.File(context.getFilesDir(), "ds_caller_db.json");
+            java.io.File file = new java.io.File(context.getFilesDir(), "erp_caller_directory.json");
+            String fname = "erp_caller_directory.json";
+            if (!file.exists()) {
+                file = new java.io.File(context.getFilesDir(), "ds_caller_db.json");
+                fname = "ds_caller_db.json";
+            }
             if (!file.exists()) return null;
-            java.io.FileInputStream fis = context.openFileInput("ds_caller_db.json");
             byte[] bytes = new byte[(int) file.length()];
-            fis.read(bytes);
-            fis.close();
+            try (java.io.FileInputStream fis = context.openFileInput(fname)) {
+                fis.read(bytes);
+            }
             sCallerCache = new JSONObject(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
             return sCallerCache;
         } catch (Throwable ignored) {
