@@ -820,8 +820,8 @@ window.updateLivePresence = function (productId, force = false, activityDesc = n
             cartCount: totalQty,
             cartValue: totalVal,
             cartSummary: cartSummary,
-            approvalStatus: cd.approvalStatus || (cd.linkedAccount ? 'approved' : null),
-            isApproved: cd.isApproved !== undefined ? cd.isApproved : !!cd.linkedAccount,
+            approvalStatus: cd.approvalStatus || 'pending',
+            isApproved: Boolean(cd.isApproved === true),
             linkedAccount: cd.linkedAccount || cd.accountCode || null,
             linkedAccountName: cd.linkedAccountName || cd.name || null,
             pricingTier: window.activePricingTier || cd.pricingTier || 'retail',
@@ -1364,6 +1364,12 @@ window.findAccountsByPhone = async function (phoneStr) {
         var res = await (window.fetchWithRetry ? window.fetchWithRetry(url, { headers: headers }, 1) : fetch(url, { headers: headers }));
         if (res && res.ok) {
             var doc = await res.json();
+            if (doc && doc.fields && doc.fields.agentCustomersJson && doc.fields.agentCustomersJson.stringValue) {
+                try {
+                    window._agentCustomersList = JSON.parse(doc.fields.agentCustomersJson.stringValue);
+                    localStorage.setItem('dsAgentCustomers_' + clean10, doc.fields.agentCustomersJson.stringValue);
+                } catch (e) { }
+            }
             if (doc && doc.fields && doc.fields.matchedAccounts && doc.fields.matchedAccounts.arrayValue && doc.fields.matchedAccounts.arrayValue.values) {
                 var rawMatches = doc.fields.matchedAccounts.arrayValue.values;
                 var matches = rawMatches.map(m => {
@@ -1708,6 +1714,9 @@ window.syncAdminUI = function () {
         }
         if (document.getElementById('superAdminPricingSelect')) {
             document.getElementById('superAdminPricingSelect').value = window.activePricingTier || 'retail';
+        }
+        if (document.getElementById('menuSyncReport')) {
+            document.getElementById('menuSyncReport').style.display = hasCRM ? 'flex' : 'none';
         }
         if (document.getElementById('menuManageSections')) {
             document.getElementById('menuManageSections').style.display = showAdminUI ? 'flex' : 'none';
@@ -6527,7 +6536,7 @@ var backButtonTimer = null;
 
 function handleHardwareBack() {
     // 1. If Bill Invoice modal is open, close it
-    var billM = document.getElementById('billInvoiceModal');
+    var billM = document.getElementById('billDetailModal');
     if (billM && billM.style.display === 'flex') {
         billM.style.display = 'none';
         return;
@@ -6561,7 +6570,7 @@ function handleHardwareBack() {
     // 5. If Cart Panel is open
     var cartPanel = document.getElementById('cartPanel');
     if (cartPanel && cartPanel.classList.contains('open')) {
-        if (typeof toggleCart === 'function') toggleCart(false);
+        if (typeof closeCart === 'function') closeCart(true);
         else cartPanel.classList.remove('open');
         return;
     }
@@ -6569,7 +6578,7 @@ function handleHardwareBack() {
     // 6. If Detail Panel is open
     var detailPanel = document.getElementById('detailPanel');
     if (detailPanel && detailPanel.classList.contains('open')) {
-        if (typeof closeDetailPanel === 'function') closeDetailPanel();
+        if (typeof closeDetail === 'function') closeDetail(true);
         else detailPanel.classList.remove('open');
         return;
     }
@@ -7264,14 +7273,27 @@ async function fetchCustomerDetailsFromDB() {
         var data = await res.json();
         if (data && data.length > 0 && data[0].document) {
             var f = data[0].document.fields;
+            var existingCd = {};
+            try { existingCd = JSON.parse(localStorage.getItem("dsCustomerDetails") || "{}"); } catch (e) { }
             var d = {
                 name: f.name ? f.name.stringValue : "",
                 firm: f.firm ? f.firm.stringValue : "",
                 station: f.station ? f.station.stringValue : "",
                 state: f.state ? f.state.stringValue : "",
                 phone: f.phone ? f.phone.stringValue : "",
-                docId: data[0].document.name.split('/').pop()
+                docId: data[0].document.name.split('/').pop(),
+                isApproved: f.isApproved ? (f.isApproved.booleanValue === true) : Boolean(existingCd.isApproved === true),
+                approvalStatus: f.approvalStatus ? f.approvalStatus.stringValue : (existingCd.approvalStatus || "pending"),
+                linkedAccount: f.linkedAccount ? f.linkedAccount.stringValue : (existingCd.linkedAccount || ""),
+                linkedAccountName: f.linkedAccountName ? f.linkedAccountName.stringValue : (existingCd.linkedAccountName || ""),
+                role: f.role ? f.role.stringValue : (existingCd.role || "customer"),
+                pricingTier: f.pricingTier ? f.pricingTier.stringValue : (existingCd.pricingTier || "retail"),
+                matchedAccounts: existingCd.matchedAccounts || [],
+                agentCustomers: existingCd.agentCustomers || null
             };
+            if (f.matchedAccountsJson && f.matchedAccountsJson.stringValue) {
+                try { d.matchedAccounts = JSON.parse(f.matchedAccountsJson.stringValue); } catch (e) { }
+            }
             localStorage.setItem("dsCustomerDetails", JSON.stringify(d));
             return d;
         }
@@ -14608,7 +14630,7 @@ window.customerMatchesAgent = function (c, agentKeywords) {
     });
 };
 
-window.openMyReportsSelfService = function () {
+window.openMyReportsSelfService = async function () {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
 
@@ -14631,6 +14653,27 @@ window.openMyReportsSelfService = function () {
     var p10 = String(myCd.phone || '').replace(/\D/g, '').slice(-10);
 
     if (isAgentUser) {
+        if (p10.length === 10 && (!window._agentCustomersList || !window._agentCustomersList.length)) {
+            var cachedAgStr = '';
+            try { cachedAgStr = localStorage.getItem('dsAgentCustomers_' + p10) || ''; } catch (e) { }
+            if (cachedAgStr) {
+                try { window._agentCustomersList = JSON.parse(cachedAgStr); } catch (e) { }
+            }
+            if (!window._agentCustomersList || !window._agentCustomersList.length) {
+                try {
+                    var tok = await getCachedAuthToken(false);
+                    var hdrs = tok ? { 'Authorization': 'Bearer ' + tok } : {};
+                    var pdRes = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PhoneDirectory/" + p10, { headers: hdrs });
+                    if (pdRes && pdRes.ok) {
+                        var pdDoc = await pdRes.json();
+                        if (pdDoc && pdDoc.fields && pdDoc.fields.agentCustomersJson && pdDoc.fields.agentCustomersJson.stringValue) {
+                            window._agentCustomersList = JSON.parse(pdDoc.fields.agentCustomersJson.stringValue);
+                            try { localStorage.setItem('dsAgentCustomers_' + p10, pdDoc.fields.agentCustomersJson.stringValue); } catch (e) { }
+                        }
+                    }
+                } catch (e) { }
+            }
+        }
         // Agent user: strictly merge agent sister accounts, NEVER show customer accounts or customer reports
         var agentSisters = list.filter(function (x) {
             if (!window.isAgentAccount(x)) return false;
@@ -15115,12 +15158,52 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
 
     var agentCustomers = [];
     if (isAgentUser) {
-        agentCustomers = list.filter(function (c) {
+        var myP10 = String(myCd.phone || '').replace(/\D/g, '').slice(-10);
+        if (myP10.length === 10 && (!window._agentCustomersList || !window._agentCustomersList.length)) {
+            var agLs = '';
+            try { agLs = localStorage.getItem('dsAgentCustomers_' + myP10) || ''; } catch (e) { }
+            if (agLs) {
+                try { window._agentCustomersList = JSON.parse(agLs); } catch (e) { }
+            }
+            if (!window._agentCustomersList || !window._agentCustomersList.length) {
+                try {
+                    var pdTok = await getCachedAuthToken(false);
+                    var pdHdrs = pdTok ? { 'Authorization': 'Bearer ' + pdTok } : {};
+                    var pdR = await fetch("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/PhoneDirectory/" + myP10, { headers: pdHdrs });
+                    if (pdR && pdR.ok) {
+                        var pdJ = await pdR.json();
+                        if (pdJ && pdJ.fields && pdJ.fields.agentCustomersJson && pdJ.fields.agentCustomersJson.stringValue) {
+                            window._agentCustomersList = JSON.parse(pdJ.fields.agentCustomersJson.stringValue);
+                            try { localStorage.setItem('dsAgentCustomers_' + myP10, pdJ.fields.agentCustomersJson.stringValue); } catch (e) { }
+                        }
+                    }
+                } catch (e) { }
+            }
+        }
+        var cachedAgCusts = Array.isArray(window._agentCustomersList) ? window._agentCustomersList : [];
+        var compiledAgCusts = list.filter(function (c) {
             return window.customerMatchesAgent ? window.customerMatchesAgent(c, agentKeywords) : false;
+        });
+        var seenAgCust = new Set();
+        cachedAgCusts.forEach(function (c) {
+            var cu = String(c.c || c.code || '').trim().toUpperCase();
+            if (cu && !seenAgCust.has(cu)) {
+                seenAgCust.add(cu);
+                agentCustomers.push(c);
+            }
+        });
+        compiledAgCusts.forEach(function (c) {
+            var cu = String(c.c || c.code || '').trim().toUpperCase();
+            if (cu && !seenAgCust.has(cu)) {
+                seenAgCust.add(cu);
+                agentCustomers.push(c);
+            }
         });
         agentCustomers.forEach(function (c) {
             var codeUpper = String(c.c || c.code || '').trim().toUpperCase();
+            var docUpper = String(c.docId || '').trim().toUpperCase();
             if (codeUpper && !allowedCodes.includes(codeUpper)) allowedCodes.push(codeUpper);
+            if (docUpper && !allowedCodes.includes(docUpper)) allowedCodes.push(docUpper);
         });
     }
 
@@ -15148,6 +15231,9 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     }
 
     var cust = list.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm || String(x.n || '').trim().toUpperCase() === pCodeNorm);
+    if (!cust && agentCustomers.length > 0) {
+        cust = agentCustomers.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm || String(x.docId || '').trim().toUpperCase() === pCodeNorm || String(x.n || '').trim().toUpperCase() === pCodeNorm);
+    }
     if (!cust && window._customerDirectoryMaster && window._customerDirectoryMaster.length > 0) {
         cust = window._customerDirectoryMaster.find(x => String(x.c || '').trim().toUpperCase() === pCodeNorm || String(x.n || '').trim().toUpperCase() === pCodeNorm);
     }
@@ -15252,7 +15338,21 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     var acctWrapper = document.getElementById('custRepAccountSelectWrapper');
     var acctSelect = document.getElementById('custRepAccountSelect');
     if (acctWrapper && acctSelect) {
-        if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
+        if (isAgentUser && agentCustomers.length > 0) {
+            var agHomeCode = linkedAcc || myCd.accountCode || pCodeNorm;
+            var agHomeSel = (!pCodeNorm || pCodeNorm === String(agHomeCode).trim().toUpperCase()) ? 'selected' : '';
+            var agOptionsHtml = (agHomeCode ? `<option value="${esc(agHomeCode)}" ${agHomeSel}>★ All Brokered Bills (${agentCustomers.length} parties)</option>` : '') +
+                agentCustomers.map(c => {
+                    var cCode = c.c || c.code || '';
+                    var cName = c.n || c.name || cCode;
+                    var cCity = c.ct ? ` (${c.ct})` : '';
+                    var isSel = (cCode && String(cCode).trim().toUpperCase() === pCodeNorm) ? 'selected' : '';
+                    return `<option value="${esc(cCode)}" ${isSel}>${esc(cName + cCity)} [${esc(cCode)}]</option>`;
+                }).join('');
+            acctSelect.innerHTML = agOptionsHtml;
+            acctSelect.onchange = function () { if (this.value) window.switchCustomerReportsAccount(this.value); };
+            acctWrapper.style.display = 'block';
+        } else if (window._currentReportingSisterAccounts && window._currentReportingSisterAccounts.length > 1) {
             var isAgentTarget = Boolean(cust && (cust.role === 'agent' || cust.isAgent || cust.atype === '12' || (cust.c && String(cust.c).startsWith('AG'))));
             var isMergedDefault = Boolean(sisterAccountsList && sisterAccountsList.length > 1);
             var optMatchesCust = false;
@@ -15308,6 +15408,9 @@ window.openCustomerReportsModal = async function (partyCode, isCallTriggered, si
     }
 
     // Privacy Controls for Customer & Agent Self-Service Mode
+    var crmContainer = document.getElementById('custRepUnifiedCRMContainer');
+    if (crmContainer) crmContainer.style.display = (isSelfService || isAgentUser) ? 'none' : 'block';
+
     var crmTab = document.getElementById('tabBtnCRM');
     if (crmTab) crmTab.style.display = (isSelfService || isAgentUser) ? 'none' : 'inline-block';
 
@@ -15530,9 +15633,13 @@ window.closeCustomerReportsModal = function () {
 window.switchCustomerReportTab = function (tabName) {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
-    var isAgentUser = !window.hasCRMAccess() && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
+    var isSelfService = !window.hasCRMAccess();
+    var isAgentUser = isSelfService && Boolean(myCd.role === 'agent' || myCd.isAgent || (myCd.linkedAccount && String(myCd.linkedAccount).startsWith('AG')));
     if (isAgentUser && tabName === 'ledger') {
         alert("🔒 Ledger statement is restricted for agent accounts.");
+        tabName = 'sales';
+    }
+    if ((isSelfService || isAgentUser) && tabName === 'crm') {
         tabName = 'sales';
     }
     window._activeCustomerReportTab = tabName;
@@ -19376,6 +19483,20 @@ window.toggleCallPopupSetting = async function () {
     }
 
     window.updateCallPopupToggleUI();
+    if (newState && window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.CallMonitor && typeof window.Capacitor.Plugins.CallMonitor.checkCallerIdRole === 'function') {
+        try {
+            var roleStatus = await window.Capacitor.Plugins.CallMonitor.checkCallerIdRole();
+            if (roleStatus && (!roleStatus.held || !roleStatus.notificationListenerEnabled)) {
+                var guideMsg = [];
+                if (!roleStatus.held) guideMsg.push("1. Caller ID & Spam App role");
+                if (!roleStatus.notificationListenerEnabled) guideMsg.push("2. Notification Access for 'Durga Sarees Call Assistant'");
+                if (confirm("Live Call Popup is ON, but Android still needs:\n\n" + guideMsg.join("\n") + "\n\nGrant these permissions now?")) {
+                    await window.enableCallPopupSuperAdmin();
+                    return;
+                }
+            }
+        } catch (roleErr) { }
+    }
     var msg = newState ? "✅ Call Popup ENABLED.\n\nParty reports will pop up when an ERP customer calls." : "⏸️ Call Popup DISABLED.\n\nNo automatic call popups will appear.";
     alert(msg);
 };

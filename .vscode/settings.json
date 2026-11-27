@@ -6,5 +6,18 @@
     "java.gradle.buildServer.openBuildOutput": "neverOpen",
     "java.jdt.ls.androidSupport.enabled": "off",
     "gradle.autoDetect": "off",
-    "gradle.nestedProjects": false
+    "gradle.nestedProjects": false,
+    "files.autoSave": "off",
+    "files.hotExit": "off",
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/**": true,
+        "**/.firebase/**": true,
+        "**/.gradle/**": true,
+        "**/.gradle_project_fresh/**": true,
+        "**/erp_sync_cache/**": true,
+        "**/android/app/build/**": true,
+        "**/android/app/src/main/assets/**": true
+    }
 }
