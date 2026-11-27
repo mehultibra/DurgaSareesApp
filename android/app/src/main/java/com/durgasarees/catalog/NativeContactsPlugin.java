@@ -43,7 +43,10 @@ public class NativeContactsPlugin extends Plugin {
     public void load() {
         super.load();
         try {
-            ensureDurgaAccount();
+            android.content.SharedPreferences sp = getContext().getSharedPreferences("ds_call_prefs", android.content.Context.MODE_PRIVATE);
+            if (sp.getBoolean("is_super_admin", false)) {
+                ensureDurgaAccount();
+            }
         } catch (Throwable ignored) {}
     }
 

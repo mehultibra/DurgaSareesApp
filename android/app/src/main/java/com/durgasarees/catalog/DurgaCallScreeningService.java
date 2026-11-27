@@ -118,8 +118,9 @@ public class DurgaCallScreeningService extends CallScreeningService {
             }
             if (!file.exists()) return null;
             byte[] bytes = new byte[(int) file.length()];
-            try (java.io.FileInputStream fis = context.openFileInput(fname)) {
-                fis.read(bytes);
+            if (bytes.length == 0) return null;
+            try (java.io.DataInputStream dis = new java.io.DataInputStream(context.openFileInput(fname))) {
+                dis.readFully(bytes);
             }
             sCallerCache = new JSONObject(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
             return sCallerCache;
@@ -178,15 +179,16 @@ public class DurgaCallScreeningService extends CallScreeningService {
     }
 
     public static String getCallerPhoneByName(Context context, String name) {
-        if (name == null || name.trim().isEmpty() || context == null) return null;
+        if (name == null || context == null) return null;
         String trimmed = name.trim().toUpperCase();
+        if (trimmed.length() < 4) return null;
         JSONObject db = getCallerCache(context);
         if (db != null) {
             java.util.Iterator<String> keys = db.keys();
             while (keys.hasNext()) {
                 String phone = keys.next();
-                String val = db.optString(phone, "");
-                if (val.toUpperCase().contains(trimmed) || trimmed.contains(val.toUpperCase())) {
+                String val = db.optString(phone, "").trim().toUpperCase();
+                if (val.length() >= 4 && (val.contains(trimmed) || trimmed.contains(val))) {
                     return phone;
                 }
             }

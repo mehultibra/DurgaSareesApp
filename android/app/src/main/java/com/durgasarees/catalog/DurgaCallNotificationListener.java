@@ -278,8 +278,8 @@ public class DurgaCallNotificationListener extends NotificationListenerService {
                lower.contains("jio") ||
                lower.contains("airtel") ||
                lower.contains("carrier") ||
-               lower.contains("hd+") ||
-               lower.contains("hd") ||
+               lower.equals("hd+") ||
+               lower.equals("hd") ||
                lower.contains("volte") ||
                lower.contains("wi-fi call") ||
                lower.contains("wifi call") ||
