@@ -159,7 +159,7 @@
                 style="font-size:11px; font-weight:bold; color:#475569; margin-bottom:4px; display:flex; align-items:center; gap:5px;">
                 <i class="fas fa-tags" style="color:#2563eb;"></i> Pricing Mode
               </div>
-              <select id="superAdminPricingSelect" onchange="window.setPricingTier(this.value)"
+              <select id="superAdminPricingSelect" onchange="window.setPricingTier(this.value, true); var hm=document.getElementById('hdrMenu'); if(hm) hm.style.display='none';"
                 style="width:100%; background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:5px 6px; font-size:12px; font-weight:bold; color:#0f172a; outline:none; cursor:pointer;">
                 <option value="retail">Retail (Col J)</option>
                 <option value="b2b">B2B (Col AB)</option>

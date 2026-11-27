@@ -862,7 +862,8 @@ async function generateCartOrderPDF(actionType) {
             doc.setTextColor(80, 80, 80);
             var infoLine = [];
             if (p.sku) infoLine.push("SKU: " + p.sku);
-            if (p.price) infoLine.push("Rate: Rs." + p.price);
+            var effPdfPrice = (window.getProductEffectivePrice ? window.getProductEffectivePrice(p) : p.price);
+            if (effPdfPrice) infoLine.push("Rate: Rs." + effPdfPrice);
             if (p.packing) infoLine.push("Packing: " + p.packing);
             infoLine.push("Total: " + pTotalQty + " pcs");
             doc.text(infoLine.join("   |   "), margin + 10, y + 34);

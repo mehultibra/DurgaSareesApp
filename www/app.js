@@ -283,6 +283,12 @@ window.getProductEffectivePrice = function (p, explicitTier) {
     var b2b = Number(p.b2bPrice) || 0;
     var superB2b = Number(p.superB2bPrice) || 0;
 
+    if ((tier === 'super_b2b' || tier === 'b2b') && regularPrice > 0 && (b2b <= 0 || superB2b <= 0) && typeof window.calcCategoryTierPrices === 'function') {
+        var est = window.calcCategoryTierPrices(p.cat, regularPrice);
+        if (b2b <= 0 && est.b2bPrice > 0) { b2b = est.b2bPrice; p.b2bPrice = b2b; }
+        if (superB2b <= 0 && est.superB2bPrice > 0) { superB2b = est.superB2bPrice; p.superB2bPrice = superB2b; }
+    }
+
     if (tier === 'super_b2b') {
         if (superB2b > 0) return superB2b;
         if (b2b > 0) return b2b;
@@ -323,6 +329,7 @@ window.setPricingTier = function (tier, fromCustomerLink) {
     } else if (typeof renderProductGrid === 'function' && typeof displayList !== 'undefined' && Array.isArray(displayList)) {
         renderProductGrid(displayList);
     }
+    if (typeof updateCartHeader === 'function') updateCartHeader();
 
     if (typeof curProduct !== 'undefined' && curProduct) {
         var effP = window.getProductEffectivePrice ? window.getProductEffectivePrice(curProduct) : curProduct.price;
@@ -373,6 +380,7 @@ window.toggleCustomerPricingMode = function (forceMode) {
     } else if (typeof renderProductGrid === 'function' && typeof displayList !== 'undefined' && Array.isArray(displayList)) {
         renderProductGrid(displayList);
     }
+    if (typeof updateCartHeader === 'function') updateCartHeader();
 
     if (typeof curProduct !== 'undefined' && curProduct) {
         var effP = window.getProductEffectivePrice ? window.getProductEffectivePrice(curProduct) : curProduct.price;
@@ -5094,11 +5102,12 @@ function openCart(preserveScroll) {
             cHtml.push('<div style="' + (!isEditing ? 'cursor:pointer;' : '') + ' flex:1;" ' + (!isEditing ? 'onclick="closeCart(true); openDetail(\'' + g.p.id + '\');"' : '') + '>');
             cHtml.push('<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"><span style="font-size:10px; font-weight:bold; background:' + pSecColor + '18; color:' + pSecColor + '; border:1px solid ' + pSecColor + '44; padding:2px 6px; border-radius:10px; text-transform:uppercase;">' + safeText(pSecName) + '</span><span style="font-weight:bold; font-size:15px; color:var(--myntra-pink); text-decoration:underline;">' + safeText(g.p.name) + ' <i class="fas fa-external-link-alt" style="font-size:12px;"></i></span></div>');
 
+            var effCartRate = window.getProductEffectivePrice ? window.getProductEffectivePrice(g.p) : g.p.price;
             if (isEditing) {
                 var ratePackHtml = window.isSuperAdmin ?
-                    (' | Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
+                    (' | Retail Rate: ₹<input type="number" id="ie_rate_' + g.p.id + '" value="' + g.p.price + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:60px; padding:2px 4px; border:1px solid #ccc; border-radius:4px; margin-right:4px;">' +
                         ' | Packing: <input type="text" id="ie_pack_' + g.p.id + '" value="' + safeText(g.p.packing || 1) + '" onchange="saveCartInlineEdit(\'' + g.p.id + '\', false)" style="width:40px; padding:2px 4px; border:1px solid #ccc; border-radius:4px;">') :
-                    (' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing || 1));
+                    (' | Rate: ₹' + effCartRate + ' | Packing: ' + safeText(g.p.packing || 1));
                 cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ratePackHtml + '</div>');
                 cHtml.push('</div>');
                 cHtml.push('<div style="display:flex; gap:8px; padding:10px; align-items:center;">');
@@ -5106,7 +5115,7 @@ function openCart(preserveScroll) {
                 cHtml.push('<i class="fas fa-check-circle" onclick="saveCartInlineEdit(\'' + g.p.id + '\', true)" style="cursor:pointer; color:green; font-size:22px;" title="Done"></i>');
                 cHtml.push('</div>');
             } else {
-                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + g.p.price + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
+                cHtml.push('<div style="font-size:12px; color:var(--text-light); margin-top:4px;">SKU: ' + safeText(g.p.sku) + ' | Rate: ₹' + effCartRate + ' | Packing: ' + safeText(g.p.packing) + ' | Total Qty: ' + pTot + ' pcs</div>');
                 cHtml.push('</div>');
                 cHtml.push('<i class="fas fa-edit" onclick="toggleCartInlineEdit(\'' + g.p.id + '\')" style="cursor:pointer; color:var(--myntra-pink); font-size:18px; padding: 10px;"></i>');
             }
@@ -11890,10 +11899,17 @@ window.calcCategoryTierPrices = function (category, retailPrice) {
 
     function estimateTier(samples) {
         if (!samples || samples.length === 0) return 0;
-        var firstDiff = samples[0].diff;
-        var diffConsistent = samples.every(s => Math.abs(s.diff - firstDiff) < 1);
-        if (diffConsistent && firstDiff > 0 && pPrice > firstDiff) {
-            return Math.round(pPrice - firstDiff);
+        var diffCounts = {};
+        var bestDiff = 0, bestCount = 0;
+        samples.forEach(s => {
+            if (s.diff > 0) {
+                var k = Math.round(s.diff);
+                diffCounts[k] = (diffCounts[k] || 0) + 1;
+                if (diffCounts[k] > bestCount) { bestCount = diffCounts[k]; bestDiff = k; }
+            }
+        });
+        if (bestDiff > 0 && bestCount >= samples.length * 0.6 && pPrice > bestDiff) {
+            return Math.round(pPrice - bestDiff);
         }
         var avgRatio = samples.reduce((sum, s) => sum + s.ratio, 0) / samples.length;
         return Math.round(pPrice * avgRatio);
@@ -18233,6 +18249,7 @@ window.updateOrderOnBehalfBanner = function () {
                       <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold; font-size:12px;">${escHtml(partyDisplayName)}${hasSisters ? `<span style="font-weight:normal; opacity:0.9;">${escHtml(mergedBracket)}</span>` : ''}${phoneBadgeHtml}${locStr ? ` • ${escHtml(locStr.replace(/^[ ()•]+|[ ()•]+$/g, ''))}` : ''}</span>
                     </div>
                     <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
+                      <span id="orderOnBehalfPricingBadge" onclick="event.stopPropagation(); window.cycleAdminPricingTier()" style="font-size:9.5px; background:${tierBg}; color:${tierColor}; border:1px solid rgba(255,255,255,0.5); padding:2px 6px; border-radius:4px; font-weight:800; white-space:nowrap; cursor:pointer;" title="Tap to switch pricing">${tierLbl}</span>
                       <button type="button" onclick="event.stopPropagation(); window.openCustomerReportsModal(decodeURIComponent('${safeTargetCode}'), false, window._currentActivePartySisterAccounts)"
                               style="background:#fff; color:#be185d; border:none; padding:3px 7px; border-radius:4px; font-size:10.5px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:3px;" title="${hasSisters ? 'View Merged Reports' : 'View Report'}">
                         <i class="fas fa-chart-line"></i> ${hasSisters ? 'Merged Report' : 'Report'}
@@ -18259,7 +18276,7 @@ window.updateOrderOnBehalfBanner = function () {
                     <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
                       <i class="fas fa-user-shield" style="font-size:13px; color:#93c5fd;"></i>
                       <span id="orderOnBehalfText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(adminName)}${escHtml(adminLoc)}</span>
-                      <span id="orderOnBehalfPricingBadge" style="font-size:9.5px; background:#1e293b; color:#38bdf8; border:1px solid #38bdf8; padding:1px 6px; border-radius:3px; font-weight:800; white-space:nowrap;">${tierLbl}</span>
+                      <span id="orderOnBehalfPricingBadge" onclick="event.stopPropagation(); window.cycleAdminPricingTier()" style="font-size:9.5px; background:${tierBg}; color:${tierColor}; border:1px solid rgba(56,189,248,0.6); padding:1px 6px; border-radius:3px; font-weight:800; white-space:nowrap; cursor:pointer;" title="Tap to switch pricing">${tierLbl}</span>
                     </div>
                     <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
                       <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-weight:600;"><i class="fas fa-user-plus" style="font-size:9px; margin-right:3px;"></i> Select Party</span>
