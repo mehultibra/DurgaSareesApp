@@ -1140,9 +1140,17 @@ async function checkForOTAUpdates(isManual) {
 
         var savedOtaVer = localStorage.getItem("dsOtaVersion");
         if (!savedOtaVer && !isManual) {
-            // Fresh install from Play Store / APK already has latest code built-in
-            if (latestVersion) localStorage.setItem("dsOtaVersion", latestVersion);
-            return;
+            var builtInVer = "";
+            try {
+                if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+                    var bInfo = await window.Capacitor.Plugins.App.getInfo();
+                    builtInVer = (bInfo && bInfo.version) ? String(bInfo.version) : "";
+                }
+            } catch (bvErr) { }
+            if (builtInVer && latestVersion && builtInVer === latestVersion) {
+                localStorage.setItem("dsOtaVersion", latestVersion);
+                return;
+            }
         }
 
         var currentVersion = savedOtaVer || "builtin";
@@ -1824,19 +1832,43 @@ async function checkAdminStatus(phone) {
 
         var cleanPhone10 = String(phone || '').replace(/\D/g, '').slice(-10);
         var isSuperPhone = (cleanPhone10 === '9998232380' || cleanPhone10 === '9712277640' || cleanPhone10 === '9328193525');
+        var phoneVariants = [...new Set([phone, cleanPhone10 ? '+91' + cleanPhone10 : '', cleanPhone10].filter(Boolean))];
 
         if (!f) {
             try {
                 var token = await getCachedAuthToken(false);
                 var hdrs = token ? { 'Authorization': 'Bearer ' + token } : {};
-                var uRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(phone), {
-                    headers: hdrs
-                });
-                if (uRes.ok) {
-                    var uData = await uRes.json();
-                    if (uData && uData.fields) f = uData.fields;
+                for (var pv of phoneVariants) {
+                    var uRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(pv), {
+                        headers: hdrs
+                    });
+                    if (uRes && uRes.ok) {
+                        var uData = await uRes.json();
+                        if (uData && uData.fields) { f = uData.fields; break; }
+                    }
                 }
             } catch (uErr) { }
+        }
+
+        // Also check LiveSessions via REST (works with Capacitor native auth token) for latest admin-assigned tier
+        var liveSessionTier = '';
+        if (!isSuperPhone) {
+            try {
+                var lsToken = await getCachedAuthToken(false);
+                var lsHdrs = lsToken ? { 'Authorization': 'Bearer ' + lsToken } : {};
+                for (var pv2 of phoneVariants) {
+                    var lsRes = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(pv2), {
+                        headers: lsHdrs
+                    });
+                    if (lsRes && lsRes.ok) {
+                        var lsData = await lsRes.json();
+                        if (lsData && lsData.fields && lsData.fields.pricingTier && lsData.fields.pricingTier.stringValue) {
+                            liveSessionTier = lsData.fields.pricingTier.stringValue;
+                            break;
+                        }
+                    }
+                }
+            } catch (lsErr) { }
         }
 
         var isSuper = isSuperPhone || Boolean(f && ((f.isAdmin && f.isAdmin.booleanValue === true) || (f.role && f.role.stringValue === 'admin')));
@@ -1865,32 +1897,42 @@ async function checkAdminStatus(phone) {
         window.isSuperAdmin = isSuper;
         window.isStaff = isStaffUser;
 
-        if (f) {
+        if (f || liveSessionTier) {
             var existingCd = {};
             try { existingCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
+            var fFields = f || {};
+            var resolvedTier = liveSessionTier || (fFields.pricingTier ? fFields.pricingTier.stringValue : (existingCd.pricingTier || "retail"));
             var userProfile = {
-                name: f.name ? f.name.stringValue : (existingCd.name || ""),
-                firm: f.firm ? f.firm.stringValue : (existingCd.firm || ""),
-                station: f.station ? f.station.stringValue : (existingCd.station || ""),
-                state: f.state ? f.state.stringValue : (existingCd.state || ""),
+                name: fFields.name ? fFields.name.stringValue : (existingCd.name || ""),
+                firm: fFields.firm ? fFields.firm.stringValue : (existingCd.firm || ""),
+                station: fFields.station ? fFields.station.stringValue : (existingCd.station || ""),
+                state: fFields.state ? fFields.state.stringValue : (existingCd.state || ""),
                 phone: phone,
                 isStaff: isStaffUser,
                 isAdmin: isSuper,
-                approvalStatus: f.approvalStatus ? f.approvalStatus.stringValue : (existingCd.approvalStatus || "pending"),
-                isApproved: Boolean(f.isApproved ? f.isApproved.booleanValue === true : (existingCd.isApproved === true)),
-                linkedAccount: f.linkedAccount ? f.linkedAccount.stringValue : (existingCd.linkedAccount || ""),
-                role: f.role ? f.role.stringValue : (existingCd.role || "customer"),
-                pricingTier: f.pricingTier ? f.pricingTier.stringValue : (existingCd.pricingTier || "retail"),
+                approvalStatus: fFields.approvalStatus ? fFields.approvalStatus.stringValue : (existingCd.approvalStatus || "pending"),
+                isApproved: Boolean(fFields.isApproved ? fFields.isApproved.booleanValue === true : (existingCd.isApproved === true)),
+                linkedAccount: fFields.linkedAccount ? fFields.linkedAccount.stringValue : (existingCd.linkedAccount || ""),
+                role: fFields.role ? fFields.role.stringValue : (existingCd.role || "customer"),
+                pricingTier: resolvedTier,
                 matchedAccounts: existingCd.matchedAccounts || []
             };
-            if (f.matchedAccountsJson && f.matchedAccountsJson.stringValue) {
-                try { userProfile.matchedAccounts = JSON.parse(f.matchedAccountsJson.stringValue); } catch (e) { }
+            if (fFields.matchedAccountsJson && fFields.matchedAccountsJson.stringValue) {
+                try { userProfile.matchedAccounts = JSON.parse(fFields.matchedAccountsJson.stringValue); } catch (e) { }
             }
             localStorage.setItem("dsAdminOwnProfile", JSON.stringify(userProfile));
             if (!localStorage.getItem("ds_active_on_behalf")) {
                 localStorage.setItem("dsCustomerDetails", JSON.stringify(userProfile));
-                if (!isSuper && !isStaffUser && userProfile.pricingTier && typeof window.setPricingTier === 'function') {
-                    window.setPricingTier(userProfile.pricingTier);
+                if (!isSuper && !isStaffUser && resolvedTier) {
+                    if (existingCd.pricingTier !== resolvedTier || !localStorage.getItem('ds_customer_price_mode')) {
+                        try { localStorage.setItem('ds_customer_price_mode', (resolvedTier === 'retail') ? 'retail' : 'wholesale'); } catch (e) { }
+                    }
+                    if (typeof window.setPricingTier === 'function') {
+                        window.setPricingTier(resolvedTier);
+                    }
+                    if (typeof window.updateCustomerPricingUI === 'function') {
+                        window.updateCustomerPricingUI();
+                    }
                 }
             }
         }
@@ -1993,7 +2035,58 @@ function initApp() {
             }
             if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
         } else if (!window.isAdminMode) {
-            // ⚡ Real-Time Customer Pricing Tier Listener: works for both registered & unregistered/guest users
+            // ⚡ Real-Time Customer Pricing Tier Sync: works on Web SDK + Native Capacitor APK REST auth
+            window.syncMyLivePricingTier = async function () {
+                if (window.isSuperAdmin || window.isStaff || window.isAdminMode) return;
+                try {
+                    var liveDocId = (typeof getActiveUserId === 'function') ? getActiveUserId() : activeUser;
+                    if (!liveDocId) return;
+                    var clean10 = String(liveDocId).replace(/\D/g, '').slice(-10);
+                    var docIds = String(liveDocId).startsWith('guest_') ? [liveDocId] : [...new Set([liveDocId, clean10 ? '+91' + clean10 : '', clean10].filter(Boolean))];
+                    var tok = (typeof getCachedAuthToken === 'function') ? await getCachedAuthToken(false) : '';
+                    var hdrs = tok ? { 'Authorization': 'Bearer ' + tok } : {};
+                    var foundTier = '';
+                    for (var did of docIds) {
+                        var r = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(did), { headers: hdrs });
+                        if (r && r.ok) {
+                            var j = await r.json();
+                            if (j && j.fields && j.fields.pricingTier && j.fields.pricingTier.stringValue) {
+                                foundTier = j.fields.pricingTier.stringValue;
+                                break;
+                            }
+                        }
+                    }
+                    if (!foundTier && !String(liveDocId).startsWith('guest_')) {
+                        for (var did2 of docIds) {
+                            var ur = await window.fetchWithRetry("https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(did2), { headers: hdrs });
+                            if (ur && ur.ok) {
+                                var uj = await ur.json();
+                                if (uj && uj.fields && uj.fields.pricingTier && uj.fields.pricingTier.stringValue) {
+                                    foundTier = uj.fields.pricingTier.stringValue;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (foundTier) {
+                        var cd = {};
+                        try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
+                        var tierChanged = (foundTier !== cd.pricingTier || foundTier !== window.activePricingTier);
+                        cd.pricingTier = foundTier;
+                        localStorage.setItem('dsCustomerDetails', JSON.stringify(cd));
+                        if (tierChanged) {
+                            try { localStorage.setItem('ds_customer_price_mode', (foundTier === 'retail') ? 'retail' : 'wholesale'); } catch (e) { }
+                            if (typeof window.setPricingTier === 'function') window.setPricingTier(foundTier, true);
+                            if (typeof window.updateCustomerPricingUI === 'function') window.updateCustomerPricingUI();
+                        }
+                    }
+                } catch (e) { }
+            };
+            setTimeout(function () { if (typeof window.syncMyLivePricingTier === 'function') window.syncMyLivePricingTier(); }, 400);
+            if (!window._liveTierRestPoll) {
+                window._liveTierRestPoll = setInterval(function () { if (typeof window.syncMyLivePricingTier === 'function') window.syncMyLivePricingTier(); }, 25000);
+                window.addEventListener('dsNativeAppResumed', function () { if (typeof window.syncMyLivePricingTier === 'function') window.syncMyLivePricingTier(); });
+            }
             try {
                 var liveDocId = (typeof getActiveUserId === 'function') ? getActiveUserId() : activeUser;
                 if (liveDocId && typeof firebase !== 'undefined' && firebase.firestore) {
@@ -2945,12 +3038,14 @@ function buildCardDetails(p) {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
     var isApprovedCust = Boolean(myCd.isApproved === true && myCd.approvalStatus === 'approved');
-    var showBadge = Boolean((window.hasCRMAccess && window.hasCRMAccess()) || isApprovedCust);
+    var hasCustomTier = Boolean(myCd.pricingTier === 'b2b' || myCd.pricingTier === 'super_b2b');
+    var showBadge = Boolean((window.hasCRMAccess && window.hasCRMAccess()) || isApprovedCust || hasCustomTier);
 
     if (showBadge) {
         var currentEffectiveTier = window.activePricingTier;
         if (!window.hasCRMAccess || !window.hasCRMAccess()) {
-            var assignedTier = (myCd.pricingTier === 'super_b2b') ? 'super_b2b' : 'b2b';
+            var rawAssignedB = myCd.pricingTier || (isApprovedCust ? 'b2b' : 'retail');
+            var assignedTier = (rawAssignedB === 'super_b2b' || rawAssignedB === 'b2b') ? rawAssignedB : 'retail';
             var custMode = localStorage.getItem('ds_customer_price_mode') || 'wholesale';
             currentEffectiveTier = (custMode === 'retail') ? 'retail' : assignedTier;
         }

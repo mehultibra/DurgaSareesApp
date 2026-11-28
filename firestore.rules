@@ -107,7 +107,11 @@ service cloud.firestore {
                     && request.resource.data.get('isApproved', false) == false
                     && request.resource.data.get('approvalStatus', 'pending') == 'pending'
                     && request.resource.data.get('role', 'customer') in ['customer', 'agent'];
-      allow read: if request.auth != null && (resource.data.phone == request.auth.token.phone_number || userId == request.auth.token.phone_number);
+      allow read: if request.auth != null && (
+                    resource.data.phone == request.auth.token.phone_number ||
+                    userId == request.auth.token.phone_number ||
+                    (getPhone10().size() == 10 && (userId == getPhone10() || userId == '+91' + getPhone10()))
+                  );
       allow update: if request.auth != null
                     && (resource.data.phone == request.auth.token.phone_number || userId == request.auth.token.phone_number)
                     && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'isStaff', 'isApproved', 'approvalStatus', 'approvedByAdmin', 'approvedAt', 'linkedAccount', 'linkedAccountDocId', 'linkedAccountName', 'role', 'pricingTier']);
@@ -179,7 +183,11 @@ service cloud.firestore {
     // ==========================================
     match /LiveSessions/{sessionId} {
       allow read: if isStaffOrAdmin()
-                  || (request.auth != null && (sessionId == request.auth.token.phone_number || '+91' + sessionId == request.auth.token.phone_number));
+                  || (request.auth != null && (
+                    sessionId == request.auth.token.phone_number ||
+                    '+91' + sessionId == request.auth.token.phone_number ||
+                    (getPhone10().size() == 10 && (sessionId == getPhone10() || sessionId == '+91' + getPhone10()))
+                  ));
       allow get: if sessionId.matches('^guest_.*');
       // Allow presence updates from both Web and native Capacitor APK WebViews (which use native Auth rather than Web SDK Auth),
       // while blocking privilege fields and restricting reads strictly to Staff/Admin or the matching phone user.
