@@ -30,6 +30,11 @@ android {
             }
         }
     }
+    packaging {
+        jniLibs {
+            excludes += ['**/libimage_processing_util_jni.so', '**/libsurface_util_jni.so']
+        }
+    }
 }
 
 repositories {
