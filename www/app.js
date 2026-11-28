@@ -271,8 +271,9 @@ window.getProductEffectivePrice = function (p, explicitTier) {
         var myCd = {};
         try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
         var isApproved = Boolean(myCd.isApproved === true && myCd.approvalStatus === 'approved');
-        if (isApproved) {
-            var assignedTier = (myCd.pricingTier === 'super_b2b') ? 'super_b2b' : 'b2b';
+        var rawAssigned = myCd.pricingTier || (isApproved ? 'b2b' : 'retail');
+        var assignedTier = (rawAssigned === 'super_b2b' || rawAssigned === 'b2b') ? rawAssigned : 'retail';
+        if (assignedTier === 'b2b' || assignedTier === 'super_b2b') {
             var custMode = localStorage.getItem('ds_customer_price_mode') || 'wholesale';
             tier = (custMode === 'retail') ? 'retail' : (explicitTier || assignedTier);
         } else {
@@ -361,13 +362,15 @@ window.toggleCustomerPricingMode = function (forceMode) {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
     var isApproved = Boolean(myCd.isApproved === true && myCd.approvalStatus === 'approved');
-    if (!isApproved && (!window.hasCRMAccess || !window.hasCRMAccess())) return;
+    var rawAssigned = myCd.pricingTier || (isApproved ? 'b2b' : 'retail');
+    var assignedTier = (rawAssigned === 'super_b2b' || rawAssigned === 'b2b') ? rawAssigned : 'retail';
+    var hasWholesaleTier = (assignedTier === 'b2b' || assignedTier === 'super_b2b');
+    if (!hasWholesaleTier && (!window.hasCRMAccess || !window.hasCRMAccess())) return;
 
     var currentMode = localStorage.getItem('ds_customer_price_mode') || 'wholesale';
     var newMode = forceMode || (currentMode === 'wholesale' ? 'retail' : 'wholesale');
     try { localStorage.setItem('ds_customer_price_mode', newMode); } catch (e) { }
 
-    var assignedTier = (myCd.pricingTier === 'super_b2b') ? 'super_b2b' : 'b2b';
     var effectiveTier = (newMode === 'retail') ? 'retail' : assignedTier;
     window.activePricingTier = effectiveTier;
 
@@ -407,8 +410,9 @@ window.updateCustomerPricingUI = function () {
     var myCd = {};
     try { myCd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
     var isApproved = Boolean(myCd.isApproved === true && myCd.approvalStatus === 'approved');
-    var assignedTier = (myCd.pricingTier === 'super_b2b') ? 'super_b2b' : 'b2b';
-    var isCustomerEligible = isApproved && (assignedTier === 'b2b' || assignedTier === 'super_b2b');
+    var rawAssigned = myCd.pricingTier || (isApproved ? 'b2b' : 'retail');
+    var assignedTier = (rawAssigned === 'super_b2b' || rawAssigned === 'b2b') ? rawAssigned : 'retail';
+    var isCustomerEligible = (assignedTier === 'b2b' || assignedTier === 'super_b2b');
 
     var toggleContainer = document.getElementById('customerPricingToggleContainer');
     var cdToggleRow = document.getElementById('cdCustomerPricingToggleRow');
@@ -824,13 +828,15 @@ window.updateLivePresence = function (productId, force = false, activityDesc = n
             isApproved: Boolean(cd.isApproved === true),
             linkedAccount: cd.linkedAccount || cd.accountCode || null,
             linkedAccountName: cd.linkedAccountName || cd.name || null,
-            pricingTier: window.activePricingTier || cd.pricingTier || 'retail',
             approvedByAdmin: cd.approvedByAdmin || null,
             approvedAt: cd.approvedAt || null,
             role: cd.role || (cd.isAgent ? 'agent' : 'customer'),
             matchedAccounts: cd.matchedAccounts || null,
             lastActive: firebase.firestore.FieldValue.serverTimestamp()
         };
+        if (cd.pricingTier) {
+            payload.pricingTier = cd.pricingTier;
+        }
 
         firebase.firestore().collection('LiveSessions').doc(uid).set(payload, { merge: true })
             .catch(err => console.warn("Live presence sync skipped:", err));
@@ -1986,22 +1992,32 @@ function initApp() {
                 document.getElementById('superAdminPricingSelect').value = window.activePricingTier || 'retail';
             }
             if (document.getElementById('menuCustomerDirectory')) document.getElementById('menuCustomerDirectory').style.display = 'flex';
-        } else if (!window.isAdminMode && activeUser) {
-            // ⚡ Real-Time Customer Pricing Tier Listener: detects admin tier upgrades instantly
+        } else if (!window.isAdminMode) {
+            // ⚡ Real-Time Customer Pricing Tier Listener: works for both registered & unregistered/guest users
             try {
-                if (typeof firebase !== 'undefined' && firebase.firestore) {
+                var liveDocId = (typeof getActiveUserId === 'function') ? getActiveUserId() : activeUser;
+                if (liveDocId && typeof firebase !== 'undefined' && firebase.firestore) {
                     if (window._liveTierUnsub) window._liveTierUnsub();
-                    window._liveTierUnsub = firebase.firestore().collection('LiveSessions').doc(activeUser).onSnapshot(function (snap) {
+                    window._liveTierUnsub = firebase.firestore().collection('LiveSessions').doc(liveDocId).onSnapshot(function (snap) {
                         if (snap && snap.exists) {
                             var sData = snap.data();
-                            if (sData && sData.pricingTier && sData.pricingTier !== window.activePricingTier) {
-                                if (typeof window.setPricingTier === 'function') {
-                                    window.setPricingTier(sData.pricingTier, true);
-                                }
+                            if (sData && sData.pricingTier) {
                                 var cd = {};
                                 try { cd = JSON.parse(localStorage.getItem('dsCustomerDetails') || '{}'); } catch (e) { }
+                                var tierChanged = (sData.pricingTier !== cd.pricingTier || sData.pricingTier !== window.activePricingTier);
                                 cd.pricingTier = sData.pricingTier;
                                 localStorage.setItem('dsCustomerDetails', JSON.stringify(cd));
+                                if (tierChanged) {
+                                    try {
+                                        localStorage.setItem('ds_customer_price_mode', (sData.pricingTier === 'retail') ? 'retail' : 'wholesale');
+                                    } catch (e) { }
+                                    if (typeof window.setPricingTier === 'function') {
+                                        window.setPricingTier(sData.pricingTier, true);
+                                    }
+                                    if (typeof window.updateCustomerPricingUI === 'function') {
+                                        window.updateCustomerPricingUI();
+                                    }
+                                }
                             }
                         }
                     }, function (e) { });
@@ -10767,7 +10783,7 @@ window.openLiveAdmin = function () {
                     let namePortion = (d.customerName && d.customerName !== "Guest") ? d.customerName : (isGuest ? "Guest #" + docId.replace('guest_', '').substring(0, 6).toUpperCase() : docId);
                     let stationPortion = (d.customerStation && d.customerStation !== "Unknown") ? ' - ' + d.customerStation : '';
                     let dispName = namePortion + stationPortion;
-                    if (!uData && (d.approvalStatus || d.linkedAccount || (d.matchedAccounts && d.matchedAccounts.length))) {
+                    if (!uData && (d.approvalStatus || d.linkedAccount || d.pricingTier || (d.matchedAccounts && d.matchedAccounts.length))) {
                         uData = {
                             actualDocId: d.actualDocId || docId,
                             name: d.customerName || '',
@@ -10780,6 +10796,7 @@ window.openLiveAdmin = function () {
                             approvedAt: d.approvedAt || '',
                             isAdmin: isAdminUser,
                             role: isAdminUser ? 'admin' : (d.role || 'customer'),
+                            pricingTier: d.pricingTier || '',
                             matchedAccounts: d.matchedAccounts || []
                         };
                     }
@@ -10798,6 +10815,7 @@ window.openLiveAdmin = function () {
                                     approvalStatus: 'pending',
                                     isApproved: false,
                                     role: matches[0].role || 'customer',
+                                    pricingTier: (uData && uData.pricingTier) || d.pricingTier || '',
                                     matchedAccounts: matches
                                 };
                                 window.adminCustomerCache[docId] = fallbackData;
@@ -10818,8 +10836,13 @@ window.openLiveAdmin = function () {
                     }
 
                     let approvalHtml = '';
-                    if (!isGuest && !isAdminUser && typeof window.renderApprovalBoxHtml === 'function') {
-                        approvalHtml = window.renderApprovalBoxHtml(docId, safeDocId, uData);
+                    if (!isAdminUser && typeof window.renderApprovalBoxHtml === 'function') {
+                        approvalHtml = window.renderApprovalBoxHtml(docId, safeDocId, uData || {
+                            approvalStatus: 'pending',
+                            isApproved: false,
+                            pricingTier: d.pricingTier || 'retail',
+                            matchedAccounts: []
+                        });
                     }
 
                     let searchHaystack = esc((dispName + ' ' + docId + ' ' + (d.customerStation || '') + ' ' + (d.role || '') + ' ' + (d.linkedAccountName || '') + ' ' + (d.linkedAccount || '')).toLowerCase());
@@ -11137,8 +11160,12 @@ window.updateCustomerPricingTier = async function (docId, partyCode, newTier) {
         var validTier = (newTier === 'super_b2b' || newTier === 'b2b') ? newTier : 'retail';
         var pKey = getPhoneKey(docId) || docId;
         if (!window.adminCustomerCache) window.adminCustomerCache = {};
-        if (window.adminCustomerCache[docId]) window.adminCustomerCache[docId].pricingTier = validTier;
-        if (pKey && window.adminCustomerCache[pKey]) window.adminCustomerCache[pKey].pricingTier = validTier;
+        if (!window.adminCustomerCache[docId]) window.adminCustomerCache[docId] = {};
+        window.adminCustomerCache[docId].pricingTier = validTier;
+        if (pKey) {
+            if (!window.adminCustomerCache[pKey]) window.adminCustomerCache[pKey] = {};
+            window.adminCustomerCache[pKey].pricingTier = validTier;
+        }
 
         var token = await getCachedAuthToken(true);
         var headers = Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {});
@@ -11179,12 +11206,15 @@ window.updateCustomerPricingTier = async function (docId, partyCode, newTier) {
         }
         possibleIds = [...new Set(possibleIds.filter(Boolean))];
 
+        var isGuestId = String(docId || '').startsWith('guest_');
         possibleIds.forEach(function (pId) {
             var lpUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/LiveSessions/" + encodeURIComponent(pId) + "?updateMask.fieldPaths=pricingTier";
             writeTasks.push(fetch(lpUrl, { method: "PATCH", headers: headers, body: patchBody }).catch(function () { }));
 
-            var uUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(pId) + "?updateMask.fieldPaths=pricingTier";
-            writeTasks.push(fetch(uUrl, { method: "PATCH", headers: headers, body: patchBody }).catch(function () { }));
+            if (!isGuestId && !String(pId).startsWith('guest_')) {
+                var uUrl = "https://firestore.googleapis.com/v1/projects/durga-sarees/databases/(default)/documents/Users/" + encodeURIComponent(pId) + "?updateMask.fieldPaths=pricingTier";
+                writeTasks.push(fetch(uUrl, { method: "PATCH", headers: headers, body: patchBody }).catch(function () { }));
+            }
         });
 
         await Promise.all(writeTasks);
@@ -11251,7 +11281,18 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
     }
 
     var matches = uData.matchedAccounts || [];
-    if (matches.length === 0) return '';
+    var unregTier = uData.pricingTier || 'retail';
+    var tierPickerHtml = `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; padding:6px 10px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px;">
+            <span style="font-size:10.5px; font-weight:bold; color:#334155;">Pricing Tier:</span>
+            <select onchange="window.updateCustomerPricingTier('${docId}', '', this.value)" style="font-size:10.5px; font-weight:bold; padding:3px 7px; border-radius:4px; border:1px solid #94a3b8; background:#fff; color:#0f172a; cursor:pointer;">
+                <option value="retail" ${unregTier === 'retail' ? 'selected' : ''}>Retail (Col J)</option>
+                <option value="b2b" ${unregTier === 'b2b' ? 'selected' : ''}>B2B (Col AB)</option>
+                <option value="super_b2b" ${unregTier === 'super_b2b' ? 'selected' : ''}>Super B2B (Col AC)</option>
+            </select>
+        </div>
+    `;
+    if (matches.length === 0) return tierPickerHtml;
 
     if (matches.length === 1) {
         var m = matches[0];
@@ -11295,6 +11336,7 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
                         style="background:#059669; color:#fff; border:none; padding:5px 12px; border-radius:5px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
                     <i class="fas fa-check-circle"></i> Approve &amp; Link Permanently
                 </button>
+                ${tierPickerHtml}
             </div>
         `;
     }
@@ -11355,6 +11397,7 @@ window.renderApprovalBoxHtml = function (docId, safeDocId, uData) {
                     style="background:#059669; color:#fff; border:none; padding:6px 14px; border-radius:5px; font-size:11px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
                 <i class="fas fa-check-circle"></i> Approve Selected &amp; Link Permanently
             </button>
+            ${tierPickerHtml}
         </div>
     `;
 };

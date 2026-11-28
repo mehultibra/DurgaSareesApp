@@ -180,6 +180,7 @@ service cloud.firestore {
     match /LiveSessions/{sessionId} {
       allow read: if isStaffOrAdmin()
                   || (request.auth != null && (sessionId == request.auth.token.phone_number || '+91' + sessionId == request.auth.token.phone_number));
+      allow get: if sessionId.matches('^guest_.*');
       // Allow presence updates from both Web and native Capacitor APK WebViews (which use native Auth rather than Web SDK Auth),
       // while blocking privilege fields and restricting reads strictly to Staff/Admin or the matching phone user.
       allow create, update: if isStaffOrAdmin()
