@@ -37,6 +37,7 @@ public class NativeContactsPlugin extends Plugin {
     public static final String ACCOUNT_TYPE = "com.durgasarees.catalog";
     public static final String ACCOUNT_NAME = "Durga Sarees ERP";
     private static volatile boolean sGmailCleaned = false;
+    private static volatile boolean sErpDeduped = false;
     private String mLastBatchError = null;
 
     @Override
@@ -86,8 +87,14 @@ public class NativeContactsPlugin extends Plugin {
                 android.content.ContentResolver.setSyncAutomatically(erpAccount, ContactsContract.AUTHORITY, false);
             } catch (Throwable ignored) {}
 
-            // Both update and insert into ContactsContract.Settings
+            // Both update and insert into ContactsContract.Settings with CALLER_IS_SYNCADAPTER = true
+            long groupId = -1;
             if (targetType != null && targetName != null) {
+                Uri settingsUri = ContactsContract.Settings.CONTENT_URI.buildUpon()
+                    .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                    .appendQueryParameter(ContactsContract.Settings.ACCOUNT_NAME, targetName)
+                    .appendQueryParameter(ContactsContract.Settings.ACCOUNT_TYPE, targetType)
+                    .build();
                 ContentValues cv = new ContentValues();
                 cv.put(ContactsContract.Settings.ACCOUNT_NAME, targetName);
                 cv.put(ContactsContract.Settings.ACCOUNT_TYPE, targetType);
@@ -95,18 +102,67 @@ public class NativeContactsPlugin extends Plugin {
                 cv.put(ContactsContract.Settings.SHOULD_SYNC, 1);
                 try {
                     int updated = getContext().getContentResolver().update(
-                        ContactsContract.Settings.CONTENT_URI,
+                        settingsUri,
                         cv,
                         ContactsContract.Settings.ACCOUNT_NAME + " = ? AND " + ContactsContract.Settings.ACCOUNT_TYPE + " = ?",
                         new String[]{ targetName, targetType }
                     );
                     if (updated == 0) {
-                        getContext().getContentResolver().insert(ContactsContract.Settings.CONTENT_URI, cv);
+                        getContext().getContentResolver().insert(settingsUri, cv);
                     }
                 } catch (Throwable ignored) {}
+
+                // Ensure a visible Contact Group exists so Samsung Contacts always displays ERP contacts
+                Cursor gc = null;
+                try {
+                    gc = getContext().getContentResolver().query(
+                        ContactsContract.Groups.CONTENT_URI,
+                        new String[]{ ContactsContract.Groups._ID, ContactsContract.Groups.GROUP_VISIBLE },
+                        ContactsContract.Groups.ACCOUNT_NAME + " = ? AND " +
+                        ContactsContract.Groups.ACCOUNT_TYPE + " = ? AND " +
+                        ContactsContract.Groups.DELETED + " = 0",
+                        new String[]{ targetName, targetType },
+                        ContactsContract.Groups._ID + " ASC"
+                    );
+                    if (gc != null && gc.moveToFirst()) {
+                        int gIdx = gc.getColumnIndex(ContactsContract.Groups._ID);
+                        int vIdx = gc.getColumnIndex(ContactsContract.Groups.GROUP_VISIBLE);
+                        if (gIdx >= 0) groupId = gc.getLong(gIdx);
+                        if (groupId > 0 && vIdx >= 0 && gc.getInt(vIdx) == 0) {
+                            Uri gUpdUri = ContentUris.withAppendedId(ContactsContract.Groups.CONTENT_URI, groupId).buildUpon()
+                                .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                                .build();
+                            ContentValues gUpd = new ContentValues();
+                            gUpd.put(ContactsContract.Groups.GROUP_VISIBLE, 1);
+                            gUpd.put(ContactsContract.Groups.AUTO_ADD, 1);
+                            getContext().getContentResolver().update(gUpdUri, gUpd, null, null);
+                        }
+                    }
+                } catch (Throwable ignored) {
+                } finally {
+                    if (gc != null) try { gc.close(); } catch (Throwable ignored) {}
+                }
+
+                if (groupId <= 0) {
+                    try {
+                        ContentValues gv = new ContentValues();
+                        gv.put(ContactsContract.Groups.ACCOUNT_NAME, targetName);
+                        gv.put(ContactsContract.Groups.ACCOUNT_TYPE, targetType);
+                        gv.put(ContactsContract.Groups.TITLE, ACCOUNT_NAME);
+                        gv.put(ContactsContract.Groups.GROUP_VISIBLE, 1);
+                        gv.put(ContactsContract.Groups.AUTO_ADD, 1);
+                        Uri gUri = ContactsContract.Groups.CONTENT_URI.buildUpon()
+                            .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                            .build();
+                        Uri insUri = getContext().getContentResolver().insert(gUri, gv);
+                        if (insUri != null) {
+                            groupId = ContentUris.parseId(insUri);
+                        }
+                    } catch (Throwable ignored) {}
+                }
             }
 
-            return new AccountInfo(targetName, targetType, -1);
+            return new AccountInfo(targetName, targetType, groupId);
         } catch (Throwable ignored) {
             return new AccountInfo(targetName, targetType, -1);
         }
@@ -122,7 +178,8 @@ public class NativeContactsPlugin extends Plugin {
                 "((" + ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'vnd.sec.contact.phone' OR " +
                 ContactsContract.RawContacts.ACCOUNT_TYPE + " = 'com.google') AND (" +
                 ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%[%' OR " +
-                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%(Ag:%'))" +
+                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '%(Ag:%' OR " +
+                ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY + " LIKE '\u2605 Agent:%'))" +
                 " AND " + ContactsContract.RawContacts.DELETED + " = 0",
                 null,
                 null
@@ -261,41 +318,63 @@ public class NativeContactsPlugin extends Plugin {
                         sGmailCleaned = true;
                     }
 
-                    // 3. Map existing contacts inside the target account
+                    // 3. Map existing contacts inside the target account (2-step query safe on all OEM/Samsung ROMs)
                     Map<String, Long> existingPhoneToRawId = new HashMap<>();
                     Map<Long, Set<String>> rawIdToExistingNumbers = new HashMap<>();
+                    Set<Long> erpRawIds = new java.util.LinkedHashSet<>();
 
-                    String querySelection = (targetAccountType != null)
+                    String rawSel = (targetAccountType != null)
                         ? (ContactsContract.RawContacts.ACCOUNT_TYPE + " = ? AND " + ContactsContract.RawContacts.DELETED + " = 0")
                         : (ContactsContract.RawContacts.ACCOUNT_TYPE + " IS NULL AND " + ContactsContract.RawContacts.DELETED + " = 0");
-                    String[] queryArgs = (targetAccountType != null) ? new String[]{ targetAccountType } : null;
+                    String[] rawArgs = (targetAccountType != null) ? new String[]{ targetAccountType } : null;
+
+                    Cursor rc = null;
+                    try {
+                        rc = getContext().getContentResolver().query(
+                            ContactsContract.RawContacts.CONTENT_URI,
+                            new String[]{ ContactsContract.RawContacts._ID },
+                            rawSel,
+                            rawArgs,
+                            ContactsContract.RawContacts._ID + " ASC"
+                        );
+                        if (rc != null) {
+                            int rIdIdx = rc.getColumnIndex(ContactsContract.RawContacts._ID);
+                            while (rc.moveToNext()) {
+                                erpRawIds.add(rc.getLong(rIdIdx));
+                            }
+                        }
+                    } catch (Throwable ignored) {
+                    } finally {
+                        if (rc != null) try { rc.close(); } catch (Throwable ignored) {}
+                    }
+
+                    java.util.LinkedHashMap<Long, Set<String>> rawPhonesMap = new java.util.LinkedHashMap<>();
+                    for (Long rid : erpRawIds) {
+                        rawPhonesMap.put(rid, new HashSet<>());
+                    }
 
                     Cursor cursor = null;
                     try {
                         cursor = getContext().getContentResolver().query(
                             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                             new String[]{ ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.RAW_CONTACT_ID },
-                            querySelection,
-                            queryArgs,
-                            null
+                            null,
+                            null,
+                            ContactsContract.CommonDataKinds.Phone.RAW_CONTACT_ID + " ASC"
                         );
                         if (cursor != null) {
                             int numIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
                             int rawIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.RAW_CONTACT_ID);
                             while (cursor.moveToNext()) {
-                                String num = cursor.getString(numIdx);
                                 long rawId = cursor.getLong(rawIdx);
+                                if (!erpRawIds.contains(rawId)) continue;
+                                String num = cursor.getString(numIdx);
                                 if (num != null) {
                                     String clean10 = num.replaceAll("\\D", "");
                                     if (clean10.length() >= 10) {
                                         clean10 = clean10.substring(clean10.length() - 10);
-                                        existingPhoneToRawId.put(clean10, rawId);
-                                        Set<String> set = rawIdToExistingNumbers.get(rawId);
-                                        if (set == null) {
-                                            set = new HashSet<>();
-                                            rawIdToExistingNumbers.put(rawId, set);
-                                        }
-                                        set.add(clean10);
+                                        Set<String> set = rawPhonesMap.get(rawId);
+                                        if (set != null) set.add(clean10);
                                     }
                                 }
                             }
@@ -307,11 +386,26 @@ public class NativeContactsPlugin extends Plugin {
                         }
                     }
 
-                    ArrayList<ContentProviderOperation> ops = new ArrayList<>();
-                    Set<String> seenInThisBatch = new HashSet<>();
-                    int addedCount = 0;
-                    int updatedCount = 0;
-                    int pendingNewInBatch = 0;
+                    Set<Long> duplicateRawIds = new HashSet<>();
+                    for (Map.Entry<Long, Set<String>> entry : rawPhonesMap.entrySet()) {
+                        long rawId = entry.getKey();
+                        Set<String> phonesSet = entry.getValue();
+                        boolean isDup = false;
+                        for (String p10 : phonesSet) {
+                            if (existingPhoneToRawId.containsKey(p10)) {
+                                isDup = true;
+                                break;
+                            }
+                        }
+                        if (isDup) {
+                            duplicateRawIds.add(rawId);
+                        } else if (!phonesSet.isEmpty()) {
+                            rawIdToExistingNumbers.put(rawId, new HashSet<>(phonesSet));
+                            for (String p10 : phonesSet) {
+                                existingPhoneToRawId.put(p10, rawId);
+                            }
+                        }
+                    }
 
                     Uri.Builder rawBuilderUri = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
                         .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true");
@@ -323,6 +417,72 @@ public class NativeContactsPlugin extends Plugin {
                     Uri dataUriWithSync = ContactsContract.Data.CONTENT_URI.buildUpon()
                         .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
                         .build();
+
+                    // Remove pre-existing double contacts inside the ERP account
+                    if (!duplicateRawIds.isEmpty()) {
+                        ArrayList<ContentProviderOperation> dupOps = new ArrayList<>();
+                        Uri delRawUri = ContactsContract.RawContacts.CONTENT_URI.buildUpon()
+                            .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                            .build();
+                        for (Long dupId : duplicateRawIds) {
+                            dupOps.add(ContentProviderOperation.newDelete(delRawUri)
+                                .withSelection(ContactsContract.RawContacts._ID + " = ?", new String[]{ String.valueOf(dupId) })
+                                .build());
+                            if (dupOps.size() >= 100) {
+                                try { getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, dupOps); } catch (Throwable ignored) {}
+                                dupOps.clear();
+                            }
+                        }
+                        if (!dupOps.isEmpty()) {
+                            try { getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, dupOps); } catch (Throwable ignored) {}
+                        }
+                    }
+
+                    // One-time backfill: ensure any pre-existing ungrouped ERP contacts belong to the visible ERP group
+                    if (!sErpDeduped && groupId > 0 && !erpRawIds.isEmpty()) {
+                        Set<Long> inGroupRawIds = new HashSet<>();
+                        Cursor gc2 = null;
+                        try {
+                            gc2 = getContext().getContentResolver().query(
+                                ContactsContract.Data.CONTENT_URI,
+                                new String[]{ ContactsContract.Data.RAW_CONTACT_ID },
+                                ContactsContract.Data.MIMETYPE + " = ? AND " + ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID + " = ?",
+                                new String[]{ ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE, String.valueOf(groupId) },
+                                null
+                            );
+                            if (gc2 != null) {
+                                int gRawIdx = gc2.getColumnIndex(ContactsContract.Data.RAW_CONTACT_ID);
+                                while (gc2.moveToNext()) inGroupRawIds.add(gc2.getLong(gRawIdx));
+                            }
+                        } catch (Throwable ignored) {
+                        } finally {
+                            if (gc2 != null) try { gc2.close(); } catch (Throwable ignored) {}
+                        }
+                        ArrayList<ContentProviderOperation> grpOps = new ArrayList<>();
+                        for (Long rid : erpRawIds) {
+                            if (!duplicateRawIds.contains(rid) && !inGroupRawIds.contains(rid)) {
+                                grpOps.add(ContentProviderOperation.newInsert(dataUriWithSync)
+                                    .withValue(ContactsContract.Data.RAW_CONTACT_ID, rid)
+                                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)
+                                    .withValue(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID, groupId)
+                                    .build());
+                                if (grpOps.size() >= 100) {
+                                    try { getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, grpOps); } catch (Throwable ignored) {}
+                                    grpOps.clear();
+                                }
+                            }
+                        }
+                        if (!grpOps.isEmpty()) {
+                            try { getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, grpOps); } catch (Throwable ignored) {}
+                        }
+                        sErpDeduped = true;
+                    }
+
+                    ArrayList<ContentProviderOperation> ops = new ArrayList<>();
+                    Set<String> seenInThisBatch = new HashSet<>();
+                    int addedCount = 0;
+                    int updatedCount = 0;
+                    int pendingNewInBatch = 0;
 
                     for (int i = 0; i < items.length(); i++) {
                         JSONObject item = items.optJSONObject(i);
@@ -430,6 +590,14 @@ public class NativeContactsPlugin extends Plugin {
                                     .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
                                     .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, "+91" + p10)
                                     .withValue(ContactsContract.CommonDataKinds.Phone.TYPE, pi == 0 ? ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE : ContactsContract.CommonDataKinds.Phone.TYPE_WORK)
+                                    .build());
+                            }
+
+                            if (groupId > 0) {
+                                ops.add(ContentProviderOperation.newInsert(dataUriWithSync)
+                                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, backRef)
+                                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE)
+                                    .withValue(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID, groupId)
                                     .build());
                             }
 

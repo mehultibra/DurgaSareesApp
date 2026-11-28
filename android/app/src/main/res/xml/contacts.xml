@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ContactsAccountType
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    viewContactNotifyService="com.durgasarees.catalog.DurgaSyncService">
+<ContactsAccountType xmlns:android="http://schemas.android.com/apk/res/android">
     <EditSchema>
-        <DataKind kind="name" maxOccurs="1" supportsDisplayName="true" />
-        <DataKind kind="phone" maxOccurs="5" />
+        <DataKind kind="name" maxOccurs="1" supportsDisplayName="true" supportsPrefix="true" supportsMiddleName="true" supportsSuffix="true" supportsPhoneticFamilyName="true" supportsPhoneticMiddleName="true" supportsPhoneticGivenName="true" />
+        <DataKind kind="phone" maxOccurs="unbounded" />
+        <DataKind kind="email" maxOccurs="unbounded" />
         <DataKind kind="organization" maxOccurs="1" />
+        <DataKind kind="note" maxOccurs="1" />
     </EditSchema>
 </ContactsAccountType>
 

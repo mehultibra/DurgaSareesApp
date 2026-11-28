@@ -3,7 +3,7 @@
     android:contentAuthority="com.android.contacts"
     android:accountType="com.durgasarees.catalog"
     android:userVisible="true"
-    android:supportsUploading="false"
+    android:supportsUploading="true"
     android:allowParallelSyncs="false"
     android:isAlwaysSyncable="true" />
 

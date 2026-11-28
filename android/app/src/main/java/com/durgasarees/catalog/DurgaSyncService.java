@@ -36,7 +36,27 @@ public class DurgaSyncService extends Service {
 
         @Override
         public void onPerformSync(Account account, Bundle extras, String authority, ContentProviderClient provider, SyncResult syncResult) {
-            // Stub sync adapter - contacts are stored locally in the com.durgasarees.catalog account
+            try {
+                if (account != null) {
+                    android.content.ContentValues cv = new android.content.ContentValues();
+                    cv.put(android.provider.ContactsContract.Settings.ACCOUNT_NAME, account.name);
+                    cv.put(android.provider.ContactsContract.Settings.ACCOUNT_TYPE, account.type);
+                    cv.put(android.provider.ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
+                    cv.put(android.provider.ContactsContract.Settings.SHOULD_SYNC, 1);
+                    android.net.Uri settingsUri = android.provider.ContactsContract.Settings.CONTENT_URI.buildUpon()
+                        .appendQueryParameter(android.provider.ContactsContract.CALLER_IS_SYNCADAPTER, "true")
+                        .build();
+                    int updated = getContext().getContentResolver().update(
+                        settingsUri,
+                        cv,
+                        android.provider.ContactsContract.Settings.ACCOUNT_NAME + " = ? AND " + android.provider.ContactsContract.Settings.ACCOUNT_TYPE + " = ?",
+                        new String[]{ account.name, account.type }
+                    );
+                    if (updated == 0) {
+                        getContext().getContentResolver().insert(settingsUri, cv);
+                    }
+                }
+            } catch (Throwable ignored) {}
         }
     }
 }
