@@ -18593,6 +18593,17 @@ window.startAutomaticContactSync = async function (isManual) {
             if (cntRes && typeof cntRes.count === 'number') nativeExistingBefore = cntRes.count;
         } catch (e) { }
     }
+    try {
+        if (window.Capacitor.Plugins.App && typeof window.Capacitor.Plugins.App.getInfo === 'function') {
+            var appInfo = await window.Capacitor.Plugins.App.getInfo();
+            var apkBuild = parseInt(appInfo && appInfo.build, 10) || 0;
+            if (apkBuild > 0 && apkBuild < 18 && nativeExistingBefore > 0) {
+                if (banner) banner.style.display = 'none';
+                if (isManual) alert("⚠️ Contacts already synced (" + nativeExistingBefore + " entries in Durga Sarees ERP).\n\nYour installed APK (build " + apkBuild + ") has an Android contact deduplication/visibility bug that OTA cannot patch.\n\nPlease install the new v1.0.17 APK (build 18), then tap Sync once to automatically remove duplicates and make Durga Sarees ERP contacts visible & editable.");
+                return;
+            }
+        }
+    } catch (e) { }
     if (isManual || nativeExistingBefore === 0) {
         try { localStorage.removeItem('ds_contact_sync_hashes_v2'); } catch (e) { }
     }
