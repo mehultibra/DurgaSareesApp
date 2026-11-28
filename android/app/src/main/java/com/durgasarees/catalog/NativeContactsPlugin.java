@@ -39,6 +39,8 @@ public class NativeContactsPlugin extends Plugin {
     private static volatile boolean sGmailCleaned = false;
     private static volatile boolean sErpDeduped = false;
     private String mLastBatchError = null;
+    private String mLastSetupError = null;
+    private int mUngroupedVisible = -1;
 
     @Override
     public void load() {
@@ -78,39 +80,60 @@ public class NativeContactsPlugin extends Plugin {
     private AccountInfo ensureDurgaAccount() {
         String targetName = ACCOUNT_NAME;
         String targetType = ACCOUNT_TYPE;
+        mLastSetupError = null;
         try {
             AccountManager am = AccountManager.get(getContext());
             try {
                 Account erpAccount = new Account(ACCOUNT_NAME, ACCOUNT_TYPE);
                 am.addAccountExplicitly(erpAccount, null, null);
                 android.content.ContentResolver.setIsSyncable(erpAccount, ContactsContract.AUTHORITY, 1);
-                android.content.ContentResolver.setSyncAutomatically(erpAccount, ContactsContract.AUTHORITY, false);
+                android.content.ContentResolver.setSyncAutomatically(erpAccount, ContactsContract.AUTHORITY, true);
             } catch (Throwable ignored) {}
 
-            // Both update and insert into ContactsContract.Settings with CALLER_IS_SYNCADAPTER = true
+            // Query, then cleanly update or insert ContactsContract.Settings with CALLER_IS_SYNCADAPTER = true
             long groupId = -1;
             if (targetType != null && targetName != null) {
                 Uri settingsUri = ContactsContract.Settings.CONTENT_URI.buildUpon()
                     .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
-                    .appendQueryParameter(ContactsContract.Settings.ACCOUNT_NAME, targetName)
-                    .appendQueryParameter(ContactsContract.Settings.ACCOUNT_TYPE, targetType)
                     .build();
-                ContentValues cv = new ContentValues();
-                cv.put(ContactsContract.Settings.ACCOUNT_NAME, targetName);
-                cv.put(ContactsContract.Settings.ACCOUNT_TYPE, targetType);
-                cv.put(ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
-                cv.put(ContactsContract.Settings.SHOULD_SYNC, 1);
+                String sSel = ContactsContract.Settings.ACCOUNT_NAME + " = ? AND " + ContactsContract.Settings.ACCOUNT_TYPE + " = ?";
+                String[] sArgs = new String[]{ targetName, targetType };
                 try {
-                    int updated = getContext().getContentResolver().update(
-                        settingsUri,
-                        cv,
-                        ContactsContract.Settings.ACCOUNT_NAME + " = ? AND " + ContactsContract.Settings.ACCOUNT_TYPE + " = ?",
-                        new String[]{ targetName, targetType }
-                    );
-                    if (updated == 0) {
-                        getContext().getContentResolver().insert(settingsUri, cv);
+                    boolean hasRow = false;
+                    Cursor sc = null;
+                    try {
+                        sc = getContext().getContentResolver().query(
+                            settingsUri,
+                            new String[]{ ContactsContract.Settings.UNGROUPED_VISIBLE },
+                            sSel,
+                            sArgs,
+                            null
+                        );
+                        if (sc != null && sc.moveToFirst()) {
+                            hasRow = true;
+                            mUngroupedVisible = sc.getInt(0);
+                        }
+                    } finally {
+                        if (sc != null) try { sc.close(); } catch (Throwable ignored) {}
                     }
-                } catch (Throwable ignored) {}
+                    if (hasRow) {
+                        ContentValues updCv = new ContentValues();
+                        updCv.put(ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
+                        updCv.put(ContactsContract.Settings.SHOULD_SYNC, 1);
+                        getContext().getContentResolver().update(settingsUri, updCv, sSel, sArgs);
+                        mUngroupedVisible = 1;
+                    } else {
+                        ContentValues insCv = new ContentValues();
+                        insCv.put(ContactsContract.Settings.ACCOUNT_NAME, targetName);
+                        insCv.put(ContactsContract.Settings.ACCOUNT_TYPE, targetType);
+                        insCv.put(ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
+                        insCv.put(ContactsContract.Settings.SHOULD_SYNC, 1);
+                        getContext().getContentResolver().insert(settingsUri, insCv);
+                        mUngroupedVisible = 1;
+                    }
+                } catch (Throwable st) {
+                    mLastSetupError = "Settings: " + st.getMessage();
+                }
 
                 // Ensure a visible Contact Group exists so Samsung Contacts always displays ERP contacts
                 Cursor gc = null;
@@ -126,19 +149,20 @@ public class NativeContactsPlugin extends Plugin {
                     );
                     if (gc != null && gc.moveToFirst()) {
                         int gIdx = gc.getColumnIndex(ContactsContract.Groups._ID);
-                        int vIdx = gc.getColumnIndex(ContactsContract.Groups.GROUP_VISIBLE);
                         if (gIdx >= 0) groupId = gc.getLong(gIdx);
-                        if (groupId > 0 && vIdx >= 0 && gc.getInt(vIdx) == 0) {
+                        if (groupId > 0) {
                             Uri gUpdUri = ContentUris.withAppendedId(ContactsContract.Groups.CONTENT_URI, groupId).buildUpon()
                                 .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
                                 .build();
                             ContentValues gUpd = new ContentValues();
                             gUpd.put(ContactsContract.Groups.GROUP_VISIBLE, 1);
                             gUpd.put(ContactsContract.Groups.AUTO_ADD, 1);
+                            gUpd.put(ContactsContract.Groups.SHOULD_SYNC, 1);
                             getContext().getContentResolver().update(gUpdUri, gUpd, null, null);
                         }
                     }
-                } catch (Throwable ignored) {
+                } catch (Throwable gt) {
+                    mLastSetupError = (mLastSetupError != null ? mLastSetupError + "; " : "") + "GroupQ: " + gt.getMessage();
                 } finally {
                     if (gc != null) try { gc.close(); } catch (Throwable ignored) {}
                 }
@@ -151,6 +175,7 @@ public class NativeContactsPlugin extends Plugin {
                         gv.put(ContactsContract.Groups.TITLE, ACCOUNT_NAME);
                         gv.put(ContactsContract.Groups.GROUP_VISIBLE, 1);
                         gv.put(ContactsContract.Groups.AUTO_ADD, 1);
+                        gv.put(ContactsContract.Groups.SHOULD_SYNC, 1);
                         Uri gUri = ContactsContract.Groups.CONTENT_URI.buildUpon()
                             .appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "true")
                             .build();
@@ -158,7 +183,9 @@ public class NativeContactsPlugin extends Plugin {
                         if (insUri != null) {
                             groupId = ContentUris.parseId(insUri);
                         }
-                    } catch (Throwable ignored) {}
+                    } catch (Throwable gi) {
+                        mLastSetupError = (mLastSetupError != null ? mLastSetupError + "; " : "") + "GroupI: " + gi.getMessage();
+                    }
                 }
             }
 
@@ -240,11 +267,60 @@ public class NativeContactsPlugin extends Plugin {
         return count;
     }
 
+    private int countVisibleErpContacts() {
+        int visible = 0;
+        Set<Long> rawIds = new HashSet<>();
+        Cursor rc = null;
+        try {
+            rc = getContext().getContentResolver().query(
+                ContactsContract.RawContacts.CONTENT_URI,
+                new String[]{ ContactsContract.RawContacts._ID },
+                ContactsContract.RawContacts.ACCOUNT_TYPE + " = ? AND " + ContactsContract.RawContacts.DELETED + " = 0",
+                new String[]{ ACCOUNT_TYPE },
+                null
+            );
+            if (rc != null) {
+                int idIdx = rc.getColumnIndex(ContactsContract.RawContacts._ID);
+                while (rc.moveToNext()) rawIds.add(rc.getLong(idIdx));
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (rc != null) try { rc.close(); } catch (Throwable ignored) {}
+        }
+        if (rawIds.isEmpty()) return 0;
+
+        Cursor dc = null;
+        try {
+            dc = getContext().getContentResolver().query(
+                ContactsContract.Data.CONTENT_URI,
+                new String[]{ ContactsContract.Data.RAW_CONTACT_ID, ContactsContract.Contacts.IN_VISIBLE_GROUP },
+                ContactsContract.Data.MIMETYPE + " = ?",
+                new String[]{ ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE },
+                null
+            );
+            if (dc != null) {
+                int rIdx = dc.getColumnIndex(ContactsContract.Data.RAW_CONTACT_ID);
+                int vIdx = dc.getColumnIndex(ContactsContract.Contacts.IN_VISIBLE_GROUP);
+                while (dc.moveToNext()) {
+                    if (rawIds.contains(dc.getLong(rIdx)) && vIdx >= 0 && dc.getInt(vIdx) == 1) {
+                        visible++;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (dc != null) try { dc.close(); } catch (Throwable ignored) {}
+        }
+        return visible;
+    }
+
     @PluginMethod
     public void getAccountContactCount(PluginCall call) {
         try {
             JSObject ret = new JSObject();
             ret.put("count", countErpRawContacts());
+            ret.put("visibleCount", countVisibleErpContacts());
+            ret.put("ungroupedVisible", mUngroupedVisible);
             call.resolve(ret);
         } catch (Throwable t) {
             JSObject ret = new JSObject();
@@ -467,13 +543,13 @@ public class NativeContactsPlugin extends Plugin {
                                     .withValue(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID, groupId)
                                     .build());
                                 if (grpOps.size() >= 100) {
-                                    try { getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, grpOps); } catch (Throwable ignored) {}
+                                    applyContactOpsSafely(grpOps, 0);
                                     grpOps.clear();
                                 }
                             }
                         }
                         if (!grpOps.isEmpty()) {
-                            try { getContext().getContentResolver().applyBatch(ContactsContract.AUTHORITY, grpOps); } catch (Throwable ignored) {}
+                            applyContactOpsSafely(grpOps, 0);
                         }
                         sErpDeduped = true;
                     }
@@ -624,9 +700,10 @@ public class NativeContactsPlugin extends Plugin {
                     ret.put("existingCount", existingPhoneToRawId.size());
                     ret.put("gmailCleaned", cleanedCount);
                     ret.put("groupId", groupId);
+                    ret.put("ungroupedVisible", mUngroupedVisible);
                     ret.put("accountUsed", (targetAccountName != null ? targetAccountName : "Local Device") + " (" + (targetAccountType != null ? targetAccountType : "local") + ")");
-                    if (mLastBatchError != null) {
-                        ret.put("lastError", mLastBatchError);
+                    if (mLastBatchError != null || mLastSetupError != null) {
+                        ret.put("lastError", (mLastBatchError != null ? mLastBatchError : "") + (mLastSetupError != null ? " | " + mLastSetupError : ""));
                     }
                     call.resolve(ret);
                 } catch (Throwable t) {

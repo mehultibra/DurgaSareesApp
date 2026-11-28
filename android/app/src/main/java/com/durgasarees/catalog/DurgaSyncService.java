@@ -38,22 +38,31 @@ public class DurgaSyncService extends Service {
         public void onPerformSync(Account account, Bundle extras, String authority, ContentProviderClient provider, SyncResult syncResult) {
             try {
                 if (account != null) {
-                    android.content.ContentValues cv = new android.content.ContentValues();
-                    cv.put(android.provider.ContactsContract.Settings.ACCOUNT_NAME, account.name);
-                    cv.put(android.provider.ContactsContract.Settings.ACCOUNT_TYPE, account.type);
-                    cv.put(android.provider.ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
-                    cv.put(android.provider.ContactsContract.Settings.SHOULD_SYNC, 1);
                     android.net.Uri settingsUri = android.provider.ContactsContract.Settings.CONTENT_URI.buildUpon()
                         .appendQueryParameter(android.provider.ContactsContract.CALLER_IS_SYNCADAPTER, "true")
                         .build();
-                    int updated = getContext().getContentResolver().update(
-                        settingsUri,
-                        cv,
-                        android.provider.ContactsContract.Settings.ACCOUNT_NAME + " = ? AND " + android.provider.ContactsContract.Settings.ACCOUNT_TYPE + " = ?",
-                        new String[]{ account.name, account.type }
-                    );
-                    if (updated == 0) {
-                        getContext().getContentResolver().insert(settingsUri, cv);
+                    String sSel = android.provider.ContactsContract.Settings.ACCOUNT_NAME + " = ? AND " + android.provider.ContactsContract.Settings.ACCOUNT_TYPE + " = ?";
+                    String[] sArgs = new String[]{ account.name, account.type };
+                    boolean hasRow = false;
+                    android.database.Cursor sc = null;
+                    try {
+                        sc = getContext().getContentResolver().query(settingsUri, new String[]{ android.provider.ContactsContract.Settings.UNGROUPED_VISIBLE }, sSel, sArgs, null);
+                        if (sc != null && sc.moveToFirst()) hasRow = true;
+                    } finally {
+                        if (sc != null) try { sc.close(); } catch (Throwable ignored) {}
+                    }
+                    if (hasRow) {
+                        android.content.ContentValues upd = new android.content.ContentValues();
+                        upd.put(android.provider.ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
+                        upd.put(android.provider.ContactsContract.Settings.SHOULD_SYNC, 1);
+                        getContext().getContentResolver().update(settingsUri, upd, sSel, sArgs);
+                    } else {
+                        android.content.ContentValues ins = new android.content.ContentValues();
+                        ins.put(android.provider.ContactsContract.Settings.ACCOUNT_NAME, account.name);
+                        ins.put(android.provider.ContactsContract.Settings.ACCOUNT_TYPE, account.type);
+                        ins.put(android.provider.ContactsContract.Settings.UNGROUPED_VISIBLE, 1);
+                        ins.put(android.provider.ContactsContract.Settings.SHOULD_SYNC, 1);
+                        getContext().getContentResolver().insert(settingsUri, ins);
                     }
                 }
             } catch (Throwable ignored) {}

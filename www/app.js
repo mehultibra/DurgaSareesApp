@@ -18645,6 +18645,9 @@ window.startAutomaticContactSync = async function (isManual) {
     var totalAdded = 0;
     var totalUpdated = 0;
     var totalExisting = 0;
+    var totalVisible = -1;
+    var lastGroupId = -1;
+    var lastUngroupedVis = -1;
     var lastAccountUsed = '';
     var lastError = '';
     var BATCH_SIZE = 100;
@@ -18676,6 +18679,8 @@ window.startAutomaticContactSync = async function (isManual) {
                 totalAdded += (res.added || 0);
                 totalUpdated += (res.updated || 0);
                 if (res.existingCount !== undefined) totalExisting = (res.existingCount || 0);
+                if (res.groupId !== undefined) lastGroupId = res.groupId;
+                if (res.ungroupedVisible !== undefined) lastUngroupedVis = res.ungroupedVisible;
                 if (res.accountUsed) lastAccountUsed = res.accountUsed;
                 if (res.lastError) lastError = res.lastError;
             }
@@ -18703,6 +18708,8 @@ window.startAutomaticContactSync = async function (isManual) {
         try {
             var finalCntRes = await nativePlugin.getAccountContactCount();
             if (finalCntRes && typeof finalCntRes.count === 'number') totalExisting = finalCntRes.count;
+            if (finalCntRes && typeof finalCntRes.visibleCount === 'number') totalVisible = finalCntRes.visibleCount;
+            if (finalCntRes && typeof finalCntRes.ungroupedVisible === 'number') lastUngroupedVis = finalCntRes.ungroupedVisible;
         } catch (e) { }
     }
 
@@ -18716,7 +18723,7 @@ window.startAutomaticContactSync = async function (isManual) {
     }
     window._isSyncingContacts = false;
     if (isManual) {
-        alert("✅ Phonebook Contact Sync Complete!\n\n• Contacts Processed: " + completedCount + "\n• New Added: " + totalAdded + "\n• Existing Updated: " + totalUpdated + "\n• Total in Account: " + totalExisting + (lastAccountUsed ? "\n• Target Account: " + lastAccountUsed : "") + (lastError ? "\n• Last Error: " + lastError : "") + "\n\nOpen Samsung Contacts → ☰ → All contacts (or Durga Sarees ERP) to view.");
+        alert("✅ Phonebook Contact Sync Complete!\n\n• Contacts Processed: " + completedCount + "\n• New Added: " + totalAdded + "\n• Existing Updated: " + totalUpdated + "\n• Total in Account: " + totalExisting + (totalVisible >= 0 ? "\n• Visible in Phonebook: " + totalVisible + " (Grp:" + lastGroupId + ", UnGrpVis:" + lastUngroupedVis + ")" : "") + (lastAccountUsed ? "\n• Target Account: " + lastAccountUsed : "") + (lastError ? "\n• Last Error: " + lastError : "") + "\n\nOpen Samsung Contacts → ☰ → All contacts (or Durga Sarees ERP) to view.");
     }
 };
 
